@@ -395,6 +395,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:openFile', handleOpenFile)
     ipcMain.handle('devscope:getProjectSessions', handleGetProjectSessions)
     ipcMain.handle('devscope:getProjectProcesses', handleGetProjectProcesses)
+    ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
 
     // Terminal - New unified namespace
     registerTerminalHandlers(mainWindow)
@@ -802,6 +803,88 @@ async function handleScanProjects(_event: Electron.IpcMainInvokeEvent, folderPat
     } catch (err: any) {
         log.error('Failed to scan projects:', err)
         return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Index all configured project folders
+ * Recursively scans folders and subfolders to find all projects
+ */
+async function handleIndexAllFolders(_event: Electron.IpcMainInvokeEvent, folders: string[]) {
+    log.info('IPC: indexAllFolders', folders)
+
+    const MAX_DEPTH = 5 // Maximum recursion depth to prevent infinite loops
+    const allProjects: Array<{
+        name: string
+        path: string
+        type: string
+        markers: string[]
+        frameworks: string[]
+        lastModified?: number
+        sourceFolder: string
+        depth: number
+    }> = []
+
+    const errors: Array<{ folder: string; error: string }> = []
+    const scannedPaths = new Set<string>() // Prevent duplicate scans
+
+    // Recursive function to scan a folder and its subfolders
+    async function scanRecursively(folderPath: string, sourceFolder: string, depth: number): Promise<void> {
+        if (depth > MAX_DEPTH) return
+        if (scannedPaths.has(folderPath)) return
+        scannedPaths.add(folderPath)
+
+        try {
+            const result = await handleScanProjects(_event, folderPath)
+
+            if (result.success) {
+                // Add found projects
+                if (result.projects) {
+                    for (const project of result.projects) {
+                        allProjects.push({
+                            ...project,
+                            sourceFolder,
+                            depth
+                        })
+                    }
+                }
+
+                // Recursively scan non-project folders
+                if (result.folders && depth < MAX_DEPTH) {
+                    for (const subfolder of result.folders) {
+                        // Skip obvious non-project folders
+                        const skipFolders = ['node_modules', '.git', 'dist', 'build', 'target', '__pycache__', '.venv', 'venv', '.next', '.nuxt']
+                        if (skipFolders.includes(subfolder.name)) continue
+
+                        await scanRecursively(subfolder.path, sourceFolder, depth + 1)
+                    }
+                }
+            }
+        } catch (err: any) {
+            if (depth === 0) {
+                errors.push({ folder: folderPath, error: err.message })
+            }
+            // Silently ignore errors for nested folders
+        }
+    }
+
+    // Scan each root folder
+    for (const folder of folders) {
+        if (!folder) continue
+        await scanRecursively(folder, folder, 0)
+    }
+
+    // Sort by last modified
+    allProjects.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))
+
+    log.info(`Indexed ${allProjects.length} projects from ${folders.length} folders (max depth: ${MAX_DEPTH})`)
+
+    return {
+        success: errors.length === 0 || allProjects.length > 0,
+        projects: allProjects,
+        totalFolders: folders.length,
+        indexedCount: allProjects.length,
+        errors: errors.length > 0 ? errors : undefined
     }
 }
 

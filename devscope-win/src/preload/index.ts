@@ -55,6 +55,7 @@ const devScopeAPI = {
     openFile: (filePath: string) => ipcRenderer.invoke('devscope:openFile', filePath),
     getProjectSessions: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectSessions', projectPath),
     getProjectProcesses: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectProcesses', projectPath),
+    indexAllFolders: (folders: string[]) => ipcRenderer.invoke('devscope:indexAllFolders', folders),
 
     // Terminal
     terminal: {
