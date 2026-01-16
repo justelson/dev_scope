@@ -168,7 +168,23 @@ export async function getWorkingDiff(projectPath: string, filePath?: string): Pr
 }
 
 /**
+ * Check if remote origin exists
+ */
+export async function hasRemoteOrigin(projectPath: string): Promise<boolean> {
+    try {
+        const { stdout } = await execAsync('git config --get remote.origin.url', {
+            cwd: projectPath
+        }).catch(() => ({ stdout: '' }))
+
+        return !!stdout.trim()
+    } catch (err) {
+        return false
+    }
+}
+
+/**
  * Get unpushed commits (commits that exist locally but not on remote)
+ * If no remote exists, returns all commits on the current branch
  */
 export async function getUnpushedCommits(projectPath: string): Promise<GitCommit[]> {
     try {
@@ -178,12 +194,28 @@ export async function getUnpushedCommits(projectPath: string): Promise<GitCommit
         })
         const currentBranch = branch.trim()
         
-        // Get unpushed commits
+        // Check if remote origin exists
+        const hasRemote = await hasRemoteOrigin(projectPath)
+        
+        // Get unpushed commits (or all commits if no remote)
         const format = "%H|%P|%an|%ad|%s"
-        const { stdout } = await execAsync(`git log origin/${currentBranch}..HEAD --date=iso --pretty=format:"${format}"`, {
-            cwd: projectPath,
-            maxBuffer: 10 * 1024 * 1024
-        }).catch(() => ({ stdout: '' }))
+        let stdout = ''
+        
+        if (hasRemote) {
+            // Get commits that exist locally but not on remote
+            const result = await execAsync(`git log origin/${currentBranch}..HEAD --date=iso --pretty=format:"${format}"`, {
+                cwd: projectPath,
+                maxBuffer: 10 * 1024 * 1024
+            }).catch(() => ({ stdout: '' }))
+            stdout = result.stdout
+        } else {
+            // No remote - all commits are considered "unpushed"
+            const result = await execAsync(`git log HEAD --date=iso --pretty=format:"${format}" -n 50`, {
+                cwd: projectPath,
+                maxBuffer: 10 * 1024 * 1024
+            }).catch(() => ({ stdout: '' }))
+            stdout = result.stdout
+        }
 
         const commits: GitCommit[] = []
         

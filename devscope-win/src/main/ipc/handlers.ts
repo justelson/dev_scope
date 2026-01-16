@@ -18,7 +18,7 @@ import { testGroqConnection, generateCommitMessage } from '../ai/groq'
 import { getToolSuggestions } from '../inspectors/tool-registry'
 import { getUserName } from '../inspectors/system/windows-system'
 import { getTerminalBanner } from '../inspectors/terminal/capabilities'
-import { getGitStatus, GitFileStatus, getGitHistory, getCommitDiff, getWorkingDiff, getUnpushedCommits, getGitUser, getRepoOwner, stageFiles, createCommit, pushCommits, checkIsGitRepo, initGitRepo, createInitialCommit, addRemoteOrigin, getGitignoreTemplates, generateGitignoreContent, getGitignorePatterns, generateCustomGitignoreContent } from '../inspectors/git'
+import { getGitStatus, GitFileStatus, getGitHistory, getCommitDiff, getWorkingDiff, getUnpushedCommits, getGitUser, getRepoOwner, stageFiles, createCommit, pushCommits, checkIsGitRepo, initGitRepo, createInitialCommit, addRemoteOrigin, getGitignoreTemplates, generateGitignoreContent, getGitignorePatterns, generateCustomGitignoreContent, hasRemoteOrigin } from '../inspectors/git'
 import { clearCommandCache } from '../inspectors/safe-exec'
 import type {
     SystemHealth,
@@ -379,6 +379,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getUnpushedCommits', handleGetUnpushedCommits)
     ipcMain.handle('devscope:getGitUser', handleGetGitUser)
     ipcMain.handle('devscope:getRepoOwner', handleGetRepoOwner)
+    ipcMain.handle('devscope:hasRemoteOrigin', handleHasRemoteOrigin)
     ipcMain.handle('devscope:stageFiles', handleStageFiles)
     ipcMain.handle('devscope:createCommit', handleCreateCommit)
     ipcMain.handle('devscope:pushCommits', handlePushCommits)
@@ -1042,6 +1043,19 @@ async function handleGetRepoOwner(_event: Electron.IpcMainInvokeEvent, projectPa
     } catch (err: any) {
         log.error('Failed to get repo owner:', err)
         return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Check if remote origin exists
+ */
+async function handleHasRemoteOrigin(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const hasRemote = await hasRemoteOrigin(projectPath)
+        return { success: true, hasRemote }
+    } catch (err: any) {
+        log.error('Failed to check remote origin:', err)
+        return { success: false, error: err.message, hasRemote: false }
     }
 }
 

@@ -37,6 +37,7 @@ const devScopeAPI = {
     getUnpushedCommits: (projectPath: string) => ipcRenderer.invoke('devscope:getUnpushedCommits', projectPath),
     getGitUser: (projectPath: string) => ipcRenderer.invoke('devscope:getGitUser', projectPath),
     getRepoOwner: (projectPath: string) => ipcRenderer.invoke('devscope:getRepoOwner', projectPath),
+    hasRemoteOrigin: (projectPath: string) => ipcRenderer.invoke('devscope:hasRemoteOrigin', projectPath),
     stageFiles: (projectPath: string, files: string[]) => ipcRenderer.invoke('devscope:stageFiles', projectPath, files),
     createCommit: (projectPath: string, message: string) => ipcRenderer.invoke('devscope:createCommit', projectPath, message),
     pushCommits: (projectPath: string) => ipcRenderer.invoke('devscope:pushCommits', projectPath),
