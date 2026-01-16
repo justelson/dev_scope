@@ -1,0 +1,122 @@
+{
+  "name": "sparkle",
+  "version": "2.6.0",
+  "description": "A Simple Windows Optimizer",
+  "main": "./out/main/index.js",
+  "author": "The Parcoil Network",
+  "homepage": "https://getsparkle.net",
+  "pnpm": {
+    "onlyBuiltDependenciesFile": "./trusted-dependencies-scripts.json"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "start": "electron-vite preview",
+    "dev": "electron-vite dev -w",
+    "build": "npm run build:vite && electron-builder",
+    "build:vite": "electron-vite build",
+    "postinstall": "electron-builder install-app-deps",
+    "build:unpack": "npm run build && electron-builder --dir"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@headlessui/react": "^2.2.2",
+    "@lucide/lab": "^0.1.2",
+    "@sentry/electron": "^6.5.0",
+    "@sentry/react": "^9.13.0",
+    "clsx": "^2.1.1",
+    "discord-rpc": "^4.0.1",
+    "electron-log": "^5.4.1",
+    "electron-store": "8.1.0",
+    "electron-updater": "^6.3.9",
+    "framer-motion": "^12.5.0",
+    "lucide-react": "^0.482.0",
+    "posthog-js": "^1.255.1",
+    "react-icons": "^5.5.0",
+    "react-router-dom": "^7.3.0",
+    "react-toastify": "^11.0.5",
+    "recharts": "^2.15.1",
+    "systeminformation": "^5.25.11",
+    "tailwindcss": "^3.4.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@electron-toolkit/eslint-config": "^2.0.0",
+    "@electron-toolkit/eslint-config-prettier": "^3.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.17",
+    "electron": "^35.0.3",
+    "electron-builder": "^26.0.6",
+    "electron-vite": "^3.1.0",
+    "postcss": "^8.4.35",
+    "prettier": "^3.5.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vite": "^6.2.3"
+  },
+  "repository": "https://github.com/Parcoil/Sparkle",
+  "build": {
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Parcoil",
+        "repo": "Sparkle",
+        "releaseType": "release"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": ".",
+        "filter": [
+          "*.exe",
+          "*.nip",
+          "*.pow"
+        ]
+      },
+      {
+        "from": "resources/tweaks",
+        "to": "tweaks"
+      },
+      {
+        "from": "scripts",
+        "to": "scripts",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "appId": "com.parcoil.sparkle",
+    "productName": "sparkle",
+    "directories": {
+      "buildResources": "build"
+    },
+    "files": [
+      "!**/.vscode/*",
+      "!src/*",
+      "!dist-old",
+      "!dist-2",
+      "!electron-builde.yml",
+      "!images/*",
+      "!electron.vite.config.{js,ts,mjs,cjs}",
+      "!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}",
+      "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
+    ],
+    "asarUnpack": [
+      "resources/**",
+      "scripts/**"
+    ],
+    "win": {
+      "executableName": "sparkle",
+      "requestedExecutionLevel": "requireAdministrator",
+      "icon": "resources/sparkle2.ico"
+    },
+    "nsis": {
+      "artifactName": "${name}-${version}-setup.${ext}",
+      "shortcutName": "${productName}",
+      "uninstallDisplayName": "${productName}",
+      "createDesktopShortcut": "always"
+    },
+    "npmRebuild": false
+  }
+}

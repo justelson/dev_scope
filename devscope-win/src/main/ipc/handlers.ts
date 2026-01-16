@@ -1,0 +1,1347 @@
+/**
+ * DevScope - IPC Handlers
+ * Exposes backend data via Electron IPC
+ */
+
+import { ipcMain, app, dialog, shell, BrowserWindow, clipboard } from 'electron'
+import { writeFile, readFile, readdir, stat, access } from 'fs/promises'
+import { join, relative } from 'path'
+import log from 'electron-log'
+import si from 'systeminformation'
+import {
+    getSystemInfo,
+    getTerminalManager,
+    detectTerminalCapabilities,
+    sensingEngine
+} from '../inspectors'
+import { testGroqConnection, generateCommitMessage } from '../ai/groq'
+import { getToolSuggestions } from '../inspectors/tool-registry'
+import { getUserName } from '../inspectors/system/windows-system'
+import { getTerminalBanner } from '../inspectors/terminal/capabilities'
+import { getGitStatus, GitFileStatus, getGitHistory, getCommitDiff, getWorkingDiff, getUnpushedCommits, getGitUser, getRepoOwner, stageFiles, createCommit, pushCommits, checkIsGitRepo, initGitRepo, createInitialCommit, addRemoteOrigin, getGitignoreTemplates, generateGitignoreContent, getGitignorePatterns, generateCustomGitignoreContent } from '../inspectors/git'
+import { clearCommandCache } from '../inspectors/safe-exec'
+import type {
+    SystemHealth,
+    ToolingReport,
+    AIRuntimeReport,
+    ReadinessReport,
+    FullReport
+} from '../inspectors/types'
+import { calculateReadiness } from '../readiness/scorer'
+// Temporarily inlined to debug ESM issue
+interface ProjectTypeDefinition {
+    id: string
+    displayName: string
+    icon: string
+    themeColor: string
+    markers: string[]
+    description: string
+}
+
+interface FrameworkDefinition {
+    id: string
+    displayName: string
+    icon: string
+    themeColor: string
+    parentType: string
+    detectPatterns: {
+        dependencies?: string[]
+        devDependencies?: string[]
+        files?: string[]
+        configFiles?: string[]
+    }
+}
+
+const PROJECT_TYPES: ProjectTypeDefinition[] = [
+    { id: 'node', displayName: 'Node.js', icon: 'nodedotjs', themeColor: '#339933', markers: ['package.json'], description: 'JavaScript/Node.js project' },
+    { id: 'python', displayName: 'Python', icon: 'python', themeColor: '#3776AB', markers: ['requirements.txt', 'pyproject.toml', 'setup.py', 'Pipfile'], description: 'Python project' },
+    { id: 'rust', displayName: 'Rust', icon: 'rust', themeColor: '#DEA584', markers: ['Cargo.toml'], description: 'Rust project' },
+    { id: 'go', displayName: 'Go', icon: 'go', themeColor: '#00ADD8', markers: ['go.mod'], description: 'Go/Golang project' },
+    { id: 'java', displayName: 'Java', icon: 'openjdk', themeColor: '#007396', markers: ['pom.xml', 'build.gradle', 'build.gradle.kts'], description: 'Java project' },
+    { id: 'dotnet', displayName: '.NET', icon: 'dotnet', themeColor: '#512BD4', markers: ['*.csproj', '*.sln', '*.fsproj'], description: '.NET/C# project' },
+    { id: 'ruby', displayName: 'Ruby', icon: 'ruby', themeColor: '#CC342D', markers: ['Gemfile'], description: 'Ruby project' },
+    { id: 'php', displayName: 'PHP', icon: 'php', themeColor: '#777BB4', markers: ['composer.json'], description: 'PHP project' },
+    { id: 'dart', displayName: 'Dart/Flutter', icon: 'dart', themeColor: '#0175C2', markers: ['pubspec.yaml'], description: 'Dart or Flutter project' },
+    { id: 'elixir', displayName: 'Elixir', icon: 'elixir', themeColor: '#4B275F', markers: ['mix.exs'], description: 'Elixir project' },
+    { id: 'cpp', displayName: 'C/C++', icon: 'cplusplus', themeColor: '#00599C', markers: ['CMakeLists.txt', 'Makefile'], description: 'C or C++ project' },
+    { id: 'git', displayName: 'Git Repository', icon: 'git', themeColor: '#F05032', markers: ['.git'], description: 'Version controlled folder' }
+]
+
+const FRAMEWORKS: FrameworkDefinition[] = [
+    { id: 'react', displayName: 'React', icon: 'react', themeColor: '#61DAFB', parentType: 'node', detectPatterns: { dependencies: ['react', 'react-dom'] } },
+    { id: 'nextjs', displayName: 'Next.js', icon: 'nextdotjs', themeColor: '#000000', parentType: 'node', detectPatterns: { dependencies: ['next'], configFiles: ['next.config.js', 'next.config.mjs', 'next.config.ts'] } },
+    { id: 'vue', displayName: 'Vue.js', icon: 'vuedotjs', themeColor: '#4FC08D', parentType: 'node', detectPatterns: { dependencies: ['vue'] } },
+    { id: 'angular', displayName: 'Angular', icon: 'angular', themeColor: '#DD0031', parentType: 'node', detectPatterns: { dependencies: ['@angular/core'], configFiles: ['angular.json'] } },
+    { id: 'electron', displayName: 'Electron', icon: 'electron', themeColor: '#47848F', parentType: 'node', detectPatterns: { dependencies: ['electron'], devDependencies: ['electron', 'electron-builder', 'electron-vite'] } },
+    { id: 'express', displayName: 'Express', icon: 'express', themeColor: '#000000', parentType: 'node', detectPatterns: { dependencies: ['express'] } },
+    { id: 'vite', displayName: 'Vite', icon: 'vite', themeColor: '#646CFF', parentType: 'node', detectPatterns: { devDependencies: ['vite'], configFiles: ['vite.config.js', 'vite.config.ts'] } },
+    { id: 'tailwind', displayName: 'Tailwind CSS', icon: 'tailwindcss', themeColor: '#06B6D4', parentType: 'node', detectPatterns: { devDependencies: ['tailwindcss'], configFiles: ['tailwind.config.js', 'tailwind.config.ts'] } },
+    { id: 'typescript', displayName: 'TypeScript', icon: 'typescript', themeColor: '#3178C6', parentType: 'node', detectPatterns: { devDependencies: ['typescript'], configFiles: ['tsconfig.json'] } }
+]
+
+function detectProjectTypeFromMarkers(markers: string[]): ProjectTypeDefinition | undefined {
+    for (const type of PROJECT_TYPES) {
+        if (type.id === 'git') continue
+        for (const marker of type.markers) {
+            if (marker.startsWith('*')) {
+                const ext = marker.slice(1)
+                if (markers.some(m => m.endsWith(ext))) return type
+            } else {
+                if (markers.includes(marker)) return type
+            }
+        }
+    }
+    if (markers.includes('.git')) return PROJECT_TYPES.find(t => t.id === 'git')
+    return undefined
+}
+
+function detectFrameworksFromPackageJson(
+    packageJson: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> },
+    fileList: string[]
+): FrameworkDefinition[] {
+    const detected: FrameworkDefinition[] = []
+    const deps = packageJson.dependencies || {}
+    const devDeps = packageJson.devDependencies || {}
+
+    for (const framework of FRAMEWORKS.filter(f => f.parentType === 'node')) {
+        const patterns = framework.detectPatterns
+        let matched = false
+        if (patterns.dependencies?.some(d => d in deps)) matched = true
+        if (patterns.devDependencies?.some(d => d in devDeps)) matched = true
+        if (patterns.configFiles?.some(f => fileList.includes(f))) matched = true
+        if (matched) detected.push(framework)
+    }
+    return detected
+}
+
+/**
+ * Get system overview (CPU, GPU, RAM, Disk, OS)
+ */
+async function handleGetSystemOverview(): Promise<SystemHealth> {
+    log.info('IPC: getSystemOverview')
+    return getSystemInfo()
+}
+
+/**
+ * Get detailed system stats (for System page)
+ */
+async function handleGetDetailedSystemStats() {
+    log.info('IPC: getDetailedSystemStats')
+
+    const [
+        cpuData,
+        cpuCurrentSpeed,
+        cpuTemp,
+        memInfo,
+        memLayout,
+        fsSize,
+        diskIO,
+        networkInterfaces,
+        networkStats,
+        osInfo,
+        battery,
+        processes,
+        currentLoad
+    ] = await Promise.all([
+        si.cpu(),
+        si.cpuCurrentSpeed(),
+        si.cpuTemperature().catch(() => null),
+        si.mem(),
+        si.memLayout(),
+        si.fsSize(),
+        si.disksIO().catch(() => null),
+        si.networkInterfaces(),
+        si.networkStats().catch(() => []),
+        si.osInfo(),
+        si.battery().catch(() => null),
+        si.processes(),
+        si.currentLoad()
+    ])
+
+    return {
+        cpu: {
+            model: cpuData.brand || cpuData.manufacturer,
+            manufacturer: cpuData.manufacturer,
+            cores: cpuData.cores,
+            physicalCores: cpuData.physicalCores,
+            speed: cpuData.speed,
+            speedMin: cpuData.speedMin,
+            speedMax: cpuData.speedMax,
+            currentSpeed: cpuCurrentSpeed.avg,
+            temperature: cpuTemp?.main || null,
+            load: currentLoad.currentLoad
+        },
+        memory: {
+            total: memInfo.total,
+            used: memInfo.used,
+            free: memInfo.free,
+            available: memInfo.available,
+            active: memInfo.active,
+            cached: memInfo.cached,
+            buffcache: memInfo.buffcache,
+            swapTotal: memInfo.swaptotal,
+            swapUsed: memInfo.swapused,
+            swapFree: memInfo.swapfree,
+            layout: memLayout.map(m => ({
+                size: m.size,
+                type: m.type,
+                clockSpeed: m.clockSpeed,
+                manufacturer: m.manufacturer,
+                partNum: m.partNum,
+                formFactor: m.formFactor
+            }))
+        },
+        disks: fsSize.map(fs => ({
+            fs: fs.fs,
+            type: fs.type,
+            size: fs.size,
+            used: fs.used,
+            available: fs.available,
+            use: fs.use,
+            mount: fs.mount
+        })),
+        diskIO: diskIO ? {
+            rIO: diskIO.rIO,
+            wIO: diskIO.wIO,
+            tIO: diskIO.tIO,
+            rIO_sec: diskIO.rIO_sec,
+            wIO_sec: diskIO.wIO_sec
+        } : null,
+        network: {
+            interfaces: networkInterfaces.map((iface: any) => ({
+                iface: iface.iface,
+                ip4: iface.ip4,
+                ip6: iface.ip6,
+                mac: iface.mac,
+                type: iface.type,
+                speed: iface.speed,
+                operstate: iface.operstate
+            })),
+            stats: networkStats.map((stat: any) => ({
+                iface: stat.iface,
+                rx_bytes: stat.rx_bytes,
+                tx_bytes: stat.tx_bytes,
+                rx_sec: stat.rx_sec,
+                tx_sec: stat.tx_sec
+            }))
+        },
+        os: {
+            platform: osInfo.platform,
+            distro: osInfo.distro,
+            release: osInfo.release,
+            codename: osInfo.codename,
+            kernel: osInfo.kernel,
+            arch: osInfo.arch,
+            hostname: osInfo.hostname,
+            build: osInfo.build,
+            serial: osInfo.serial,
+            uefi: osInfo.uefi
+        },
+        battery: battery ? {
+            hasBattery: battery.hasBattery,
+            percent: battery.percent,
+            isCharging: battery.isCharging,
+            acConnected: battery.acConnected,
+            timeRemaining: battery.timeRemaining,
+            voltage: battery.voltage,
+            designedCapacity: battery.designedCapacity,
+            currentCapacity: battery.currentCapacity
+        } : null,
+        processes: {
+            all: processes.all,
+            running: processes.running,
+            blocked: processes.blocked,
+            sleeping: processes.sleeping
+        },
+        timestamp: Date.now()
+    }
+}
+
+/**
+ * Get developer tooling report
+ */
+async function handleGetDeveloperTooling(): Promise<ToolingReport> {
+    log.info('IPC: getDeveloperTooling (SensingEngine)')
+
+    const [languages, packageManagers, buildTools, containers, versionControl, browsers, databases] = await Promise.all([
+        sensingEngine.scanCategory('language'),
+        sensingEngine.scanCategory('package_manager'),
+        sensingEngine.scanCategory('build_tool'),
+        sensingEngine.scanCategory('container'),
+        sensingEngine.scanCategory('version_control'),
+        sensingEngine.scanCategory('browser'),
+        sensingEngine.scanCategory('database')
+    ])
+
+    return {
+        languages,
+        packageManagers,
+        buildTools,
+        containers,
+        versionControl,
+        timestamp: Date.now()
+    }
+}
+
+/**
+ * Get AI runtime status
+ */
+async function handleGetAIRuntimeStatus(): Promise<AIRuntimeReport> {
+    log.info('IPC: getAIRuntimeStatus (SensingEngine)')
+
+    const report = await sensingEngine.getAIRuntimeReport()
+
+    return {
+        ...report,
+        timestamp: Date.now()
+    }
+}
+
+async function handleGetAIAgents() {
+    log.info('IPC: getAIAgents (SensingEngine)')
+    const agents = await sensingEngine.scanCategory('ai_agent')
+    return {
+        agents,
+        fromCache: false,
+        isStale: false,
+        timestamp: Date.now()
+    }
+}
+
+/**
+ * Get readiness report
+ */
+async function handleGetReadinessReport(): Promise<ReadinessReport> {
+    log.info('IPC: getReadinessReport')
+
+    const tooling = await handleGetDeveloperTooling()
+    const aiRuntime = await handleGetAIRuntimeStatus()
+
+    return calculateReadiness(tooling, aiRuntime)
+}
+
+/**
+ * Refresh all data
+ */
+async function handleRefreshAll(): Promise<FullReport> {
+    log.info('IPC: refreshAll')
+
+    // Clear command cache to get fresh data
+    clearCommandCache()
+
+    const [system, tooling, aiRuntime] = await Promise.all([
+        handleGetSystemOverview(),
+        handleGetDeveloperTooling(),
+        handleGetAIRuntimeStatus()
+    ])
+
+    const readiness = calculateReadiness(tooling, aiRuntime)
+
+    return {
+        system,
+        tooling,
+        aiRuntime,
+        readiness,
+        timestamp: Date.now()
+    }
+}
+
+/**
+ * Register all IPC handlers
+ */
+export function registerIpcHandlers(mainWindow: BrowserWindow): void {
+    log.info('Registering IPC handlers...')
+
+    // System & Tooling
+    ipcMain.handle('devscope:getSystemOverview', handleGetSystemOverview)
+    ipcMain.handle('devscope:getDetailedSystemStats', handleGetDetailedSystemStats)
+    ipcMain.handle('devscope:getDeveloperTooling', handleGetDeveloperTooling)
+    ipcMain.handle('devscope:getAIRuntimeStatus', handleGetAIRuntimeStatus)
+    ipcMain.handle('devscope:getAIAgents', handleGetAIAgents)
+    ipcMain.handle('devscope:getReadinessReport', handleGetReadinessReport)
+    ipcMain.handle('devscope:refreshAll', handleRefreshAll)
+
+    // Settings
+    ipcMain.handle('devscope:exportData', handleExportData)
+    ipcMain.handle('devscope:setStartupSettings', handleSetStartupSettings)
+    ipcMain.handle('devscope:getStartupSettings', handleGetStartupSettings)
+
+    // Projects
+    ipcMain.handle('devscope:selectFolder', handleSelectFolder)
+    ipcMain.handle('devscope:scanProjects', handleScanProjects)
+    ipcMain.handle('devscope:openInExplorer', handleOpenInExplorer)
+    ipcMain.handle('devscope:copyToClipboard', handleCopyToClipboard)
+    ipcMain.handle('devscope:getProjectDetails', handleGetProjectDetails)
+    ipcMain.handle('devscope:getFileTree', handleGetFileTree)
+    ipcMain.handle('devscope:getGitHistory', handleGetGitHistory)
+    ipcMain.handle('devscope:getCommitDiff', handleGetCommitDiff)
+    ipcMain.handle('devscope:getWorkingDiff', handleGetWorkingDiff)
+    ipcMain.handle('devscope:getUnpushedCommits', handleGetUnpushedCommits)
+    ipcMain.handle('devscope:getGitUser', handleGetGitUser)
+    ipcMain.handle('devscope:getRepoOwner', handleGetRepoOwner)
+    ipcMain.handle('devscope:stageFiles', handleStageFiles)
+    ipcMain.handle('devscope:createCommit', handleCreateCommit)
+    ipcMain.handle('devscope:pushCommits', handlePushCommits)
+    ipcMain.handle('devscope:checkIsGitRepo', handleCheckIsGitRepo)
+    ipcMain.handle('devscope:initGitRepo', handleInitGitRepo)
+    ipcMain.handle('devscope:createInitialCommit', handleCreateInitialCommit)
+    ipcMain.handle('devscope:addRemoteOrigin', handleAddRemoteOrigin)
+    ipcMain.handle('devscope:getGitignoreTemplates', handleGetGitignoreTemplates)
+    ipcMain.handle('devscope:generateGitignoreContent', handleGenerateGitignoreContent)
+    ipcMain.handle('devscope:getGitignorePatterns', handleGetGitignorePatterns)
+    ipcMain.handle('devscope:generateCustomGitignoreContent', handleGenerateCustomGitignoreContent)
+    ipcMain.handle('devscope:readFileContent', handleReadFileContent)
+    ipcMain.handle('devscope:openFile', handleOpenFile)
+    ipcMain.handle('devscope:getProjectSessions', handleGetProjectSessions)
+    ipcMain.handle('devscope:getProjectProcesses', handleGetProjectProcesses)
+
+    // Terminal - New unified namespace
+    registerTerminalHandlers(mainWindow)
+
+    // AI Features
+    ipcMain.handle('devscope:testGroqConnection', async (_event, apiKey: string) => {
+        return testGroqConnection(apiKey)
+    })
+    ipcMain.handle('devscope:generateCommitMessage', async (_event, apiKey: string, diff: string) => {
+        return generateCommitMessage(apiKey, diff)
+    })
+
+    log.info('IPC handlers registered')
+}
+
+/**
+ * Register terminal IPC handlers
+ */
+function registerTerminalHandlers(mainWindow: BrowserWindow): void {
+    log.info('Registering terminal IPC handlers...')
+
+    const manager = getTerminalManager()
+    manager.setMainWindow(mainWindow)
+
+    // Terminal session management
+    ipcMain.handle('devscope:terminal:create', async (_event, name?: string, cwd?: string, shell?: 'cmd' | 'powershell') => {
+        try {
+            const info = manager.createSession(name, cwd, shell)
+
+            // Don't send banner here - let frontend request it after resize
+
+            return { success: true, session: info }
+        } catch (err: any) {
+            log.error('[Terminal] Create failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle('devscope:terminal:list', async () => {
+        try {
+            const sessions = manager.getAllSessions()
+            return { success: true, sessions }
+        } catch (err: any) {
+            log.error('[Terminal] List failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle('devscope:terminal:kill', async (_event, id: string) => {
+        try {
+            const result = manager.killSession(id)
+            return { success: result }
+        } catch (err: any) {
+            log.error('[Terminal] Kill failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle('devscope:terminal:write', async (_event, id: string, data: string) => {
+        try {
+            manager.write(id, data)
+            return { success: true }
+        } catch (err: any) {
+            log.error('[Terminal] Write failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle('devscope:terminal:resize', async (_event, id: string, cols: number, rows: number) => {
+        try {
+            manager.resize(id, cols, rows)
+            return { success: true }
+        } catch (err: any) {
+            log.error('[Terminal] Resize failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle('devscope:terminal:capabilities', async () => {
+        try {
+            const capabilities = await detectTerminalCapabilities()
+            return { success: true, capabilities }
+        } catch (err: any) {
+            log.error('[Terminal] Capabilities detection failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle('devscope:terminal:suggestions', async (_event, toolId: string) => {
+        try {
+            const suggestions = getToolSuggestions(toolId)
+            return { success: true, suggestions }
+        } catch (err: any) {
+            log.error('[Terminal] Get suggestions failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle('devscope:terminal:banner', async (_event, sessionId?: string) => {
+        try {
+            const username = getUserName()
+            const hostname = require('os').hostname()
+
+            // Get cwd from session if sessionId is provided
+            let cwd: string | undefined
+            if (sessionId) {
+                const session = manager.getSession(sessionId)
+                if (session) {
+                    cwd = session.cwd
+                }
+            }
+
+            const banner = getTerminalBanner(username, hostname, cwd)
+            return { success: true, banner }
+        } catch (err: any) {
+            log.error('[Terminal] Get banner failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    log.info('Terminal IPC handlers registered')
+}
+
+/**
+ * Export data to JSON file
+ */
+async function handleExportData(_event: Electron.IpcMainInvokeEvent, data: any) {
+    log.info('IPC: exportData')
+
+    try {
+        const result = await dialog.showSaveDialog({
+            title: 'Export DevScope Data',
+            defaultPath: `devscope-export-${new Date().toISOString().split('T')[0]}.json`,
+            filters: [
+                { name: 'JSON Files', extensions: ['json'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        })
+
+        if (result.canceled || !result.filePath) {
+            return { success: false, cancelled: true }
+        }
+
+        await writeFile(result.filePath, JSON.stringify(data, null, 2), 'utf-8')
+        return { success: true, filePath: result.filePath }
+    } catch (err: any) {
+        log.error('Export failed:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Set startup settings (start with Windows, start minimized)
+ */
+async function handleSetStartupSettings(_event: Electron.IpcMainInvokeEvent, settings: { openAtLogin: boolean; openAsHidden: boolean }) {
+    log.info('IPC: setStartupSettings', settings)
+
+    try {
+        app.setLoginItemSettings({
+            openAtLogin: settings.openAtLogin,
+            openAsHidden: settings.openAsHidden,
+            args: settings.openAsHidden ? ['--hidden'] : []
+        })
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to set startup settings:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get current startup settings
+ */
+async function handleGetStartupSettings() {
+    log.info('IPC: getStartupSettings')
+
+    try {
+        const settings = app.getLoginItemSettings()
+        return {
+            success: true,
+            openAtLogin: settings.openAtLogin,
+            openAsHidden: settings.openAsHidden
+        }
+    } catch (err: any) {
+        log.error('Failed to get startup settings:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Select a folder using native dialog
+ */
+async function handleSelectFolder(event: Electron.IpcMainInvokeEvent) {
+    log.info('IPC: selectFolder')
+
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        const result = await dialog.showOpenDialog(win!, {
+            title: 'Select Projects Folder',
+            properties: ['openDirectory']
+        })
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return { success: false, cancelled: true }
+        }
+
+        return { success: true, folderPath: result.filePaths[0] }
+    } catch (err: any) {
+        log.error('Failed to select folder:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+// Project markers to detect
+const PROJECT_MARKERS = [
+    // Web/Backend
+    'package.json',      // Node.js
+    'Cargo.toml',        // Rust
+    'go.mod',            // Go
+    'pom.xml',           // Java Maven
+    'build.gradle',      // Java Gradle
+    'build.gradle.kts',  // Java/Kotlin Gradle
+    'requirements.txt',  // Python
+    'pyproject.toml',    // Python
+    'setup.py',          // Python
+    'Gemfile',           // Ruby
+    'composer.json',     // PHP
+    '.git',              // Git repo
+    '*.csproj',          // .NET
+    '*.sln',             // .NET Solution
+    'CMakeLists.txt',    // C/C++ CMake
+    'Makefile',          // Make
+    'pubspec.yaml',      // Dart/Flutter
+    'mix.exs',           // Elixir
+    'deno.json',         // Deno
+    'bun.lockb',         // Bun
+    // Mobile Apps
+    'settings.gradle',       // Android
+    'settings.gradle.kts',   // Android Kotlin
+    'AndroidManifest.xml',   // Android
+    '*.xcodeproj',           // iOS/macOS Xcode
+    '*.xcworkspace',         // iOS/macOS Xcode Workspace
+    'Podfile',               // iOS CocoaPods
+    'metro.config.js',       // React Native
+    'app.json',              // React Native / Expo
+    'ionic.config.json',     // Ionic
+    'capacitor.config.json', // Capacitor
+    'capacitor.config.ts',   // Capacitor
+    // Desktop Apps
+    'electron.vite.config.ts',  // Electron Vite
+    'electron-builder.yml',     // Electron Builder
+    'electron-builder.json',    // Electron Builder
+    'tauri.conf.json',          // Tauri
+    'src-tauri',                // Tauri folder
+    '*.pro',                    // Qt
+    '*.qml',                    // Qt QML
+    '*.xaml',                   // WPF/MAUI
+    '*.Designer.cs',            // WinForms
+    'ContentView.swift',        // SwiftUI
+]
+
+/**
+ * Scan a folder for coding projects with enhanced framework detection
+ */
+async function handleScanProjects(_event: Electron.IpcMainInvokeEvent, folderPath: string) {
+    log.info('IPC: scanProjects', folderPath)
+
+    try {
+        // Check if folder exists
+        await access(folderPath)
+
+        const entries = await readdir(folderPath, { withFileTypes: true })
+        const projects: Array<{
+            name: string
+            path: string
+            type: string
+            typeInfo?: ProjectTypeDefinition
+            markers: string[]
+            frameworks: string[]
+            frameworkInfo?: FrameworkDefinition[]
+            lastModified?: number
+            isProject: boolean
+        }> = []
+        const folders: Array<{
+            name: string
+            path: string
+            lastModified?: number
+            isProject: boolean
+        }> = []
+        const files: Array<{
+            name: string
+            path: string
+            size: number
+            lastModified?: number
+            extension: string
+        }> = []
+
+        for (const entry of entries) {
+            // Handle files
+            if (entry.isFile()) {
+                const isHidden = entry.name.startsWith('.')
+                if (!isHidden) {
+                    try {
+                        const filePath = join(folderPath, entry.name)
+                        const stats = await stat(filePath)
+                        const ext = entry.name.includes('.') ? entry.name.split('.').pop() || '' : ''
+                        files.push({
+                            name: entry.name,
+                            path: filePath,
+                            size: stats.size,
+                            lastModified: stats.mtimeMs,
+                            extension: ext
+                        })
+                    } catch (err) {
+                        // Skip files we can't stat
+                    }
+                }
+                continue
+            }
+
+            if (!entry.isDirectory()) continue
+            // Only skip node_modules folder, NOT .git folders - we want to detect repos
+            if (entry.name === 'node_modules') continue
+
+            const isHidden = entry.name.startsWith('.')
+            const projectPath = join(folderPath, entry.name)
+            const markers: string[] = []
+            let frameworks: string[] = []
+            let frameworkInfo: FrameworkDefinition[] = []
+
+            try {
+                const projectEntries = await readdir(projectPath)
+
+                // Check for .git folder first (git repository)
+                if (projectEntries.includes('.git')) {
+                    markers.push('.git')
+                }
+
+                for (const marker of PROJECT_MARKERS) {
+                    if (marker === '.git') continue // Already handled
+                    if (marker.startsWith('*')) {
+                        const ext = marker.slice(1)
+                        if (projectEntries.some(e => e.endsWith(ext))) {
+                            markers.push(marker)
+                        }
+                    } else {
+                        if (projectEntries.includes(marker)) {
+                            markers.push(marker)
+                        }
+                    }
+                }
+
+                const projectType = detectProjectTypeFromMarkers(markers)
+
+                // Detect frameworks for Node.js projects
+                if (projectType?.id === 'node' && projectEntries.includes('package.json')) {
+                    try {
+                        const pkgPath = join(projectPath, 'package.json')
+                        const pkgContent = await readFile(pkgPath, 'utf-8')
+                        const packageJson = JSON.parse(pkgContent)
+
+                        frameworkInfo = detectFrameworksFromPackageJson(packageJson, projectEntries)
+                        frameworks = frameworkInfo.map(f => f.id)
+                    } catch (err) {
+                        log.warn(`Could not parse package.json in ${projectPath}`, err)
+                    }
+                }
+
+                const stats = await stat(projectPath)
+
+                if (markers.length > 0) {
+                    // This is a project
+                    projects.push({
+                        name: entry.name,
+                        path: projectPath,
+                        type: projectType?.id || 'unknown',
+                        typeInfo: projectType,
+                        markers,
+                        frameworks,
+                        frameworkInfo,
+                        lastModified: stats.mtimeMs,
+                        isProject: true
+                    })
+                } else if (!isHidden) {
+                    // Regular folder that might contain nested projects
+                    folders.push({
+                        name: entry.name,
+                        path: projectPath,
+                        lastModified: stats.mtimeMs,
+                        isProject: false
+                    })
+                }
+            } catch (err) {
+                log.warn(`Could not scan project folder: ${projectPath}`, err)
+            }
+        }
+
+        // Sort projects by last modified (most recent first), folders alphabetically, files by name
+        projects.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))
+        folders.sort((a, b) => a.name.localeCompare(b.name))
+        files.sort((a, b) => a.name.localeCompare(b.name))
+
+        log.info(`Found ${projects.length} projects, ${folders.length} folders, and ${files.length} files in ${folderPath}`)
+        return { success: true, projects, folders, files }
+    } catch (err: any) {
+        log.error('Failed to scan projects:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Detect project type from markers
+ */
+function detectProjectType(markers: string[]): string {
+    if (markers.includes('package.json')) return 'node'
+    if (markers.includes('Cargo.toml')) return 'rust'
+    if (markers.includes('go.mod')) return 'go'
+    if (markers.includes('pom.xml') || markers.includes('build.gradle')) return 'java'
+    if (markers.includes('requirements.txt') || markers.includes('pyproject.toml') || markers.includes('setup.py')) return 'python'
+    if (markers.includes('Gemfile')) return 'ruby'
+    if (markers.includes('composer.json')) return 'php'
+    if (markers.some(m => m.includes('.csproj') || m.includes('.sln'))) return 'dotnet'
+    if (markers.includes('pubspec.yaml')) return 'dart'
+    if (markers.includes('mix.exs')) return 'elixir'
+    if (markers.includes('.git')) return 'git'
+    return 'unknown'
+}
+
+/**
+ * Open a path in the system file explorer
+ */
+async function handleOpenInExplorer(_event: Electron.IpcMainInvokeEvent, path: string) {
+    log.info('IPC: openInExplorer', path)
+
+    try {
+        const result = await shell.openPath(path)
+        if (result) {
+            // shell.openPath returns error string if failed, empty string if success
+            log.error('shell.openPath failed:', result)
+            return { success: false, error: result }
+        }
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to open in explorer:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Open a file with its default application
+ */
+async function handleOpenFile(_event: Electron.IpcMainInvokeEvent, filePath: string) {
+    log.info('IPC: openFile', filePath)
+
+    try {
+        const result = await shell.openPath(filePath)
+        if (result) {
+            // shell.openPath returns error string if failed, empty string if success
+            log.error('shell.openPath failed:', result)
+            return { success: false, error: result }
+        }
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to open file:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+async function handleCopyToClipboard(_event: Electron.IpcMainInvokeEvent, text: string) {
+    try {
+        clipboard.writeText(text)
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to write to clipboard:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get detailed project information including README and structure
+ */
+async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    log.info('IPC: getProjectDetails', projectPath)
+
+    try {
+        await access(projectPath)
+
+        const entries = await readdir(projectPath)
+        const markers: string[] = []
+        let readme: string | null = null
+        let packageJson: any = null
+        let frameworks: FrameworkDefinition[] = []
+
+        // Check for README
+        const readmeFile = entries.find(e =>
+            e.toLowerCase().startsWith('readme') &&
+            (e.endsWith('.md') || e.endsWith('.txt') || !e.includes('.'))
+        )
+        if (readmeFile) {
+            try {
+                readme = await readFile(join(projectPath, readmeFile), 'utf-8')
+            } catch (err) {
+                log.warn('Could not read README', err)
+            }
+        }
+
+        // Detect markers
+        for (const marker of PROJECT_MARKERS) {
+            if (marker.startsWith('*')) {
+                const ext = marker.slice(1)
+                if (entries.some(e => e.endsWith(ext))) {
+                    markers.push(marker)
+                }
+            } else {
+                if (entries.includes(marker)) {
+                    markers.push(marker)
+                }
+            }
+        }
+
+        const projectType = detectProjectTypeFromMarkers(markers)
+
+        // Parse package.json if exists
+        if (entries.includes('package.json')) {
+            try {
+                const pkgContent = await readFile(join(projectPath, 'package.json'), 'utf-8')
+                packageJson = JSON.parse(pkgContent)
+                frameworks = detectFrameworksFromPackageJson(packageJson, entries)
+            } catch (err) {
+                log.warn('Could not parse package.json', err)
+            }
+        }
+
+        const stats = await stat(projectPath)
+        const folderName = projectPath.split(/[\\/]/).pop() || 'Unknown'
+
+        return {
+            success: true,
+            project: {
+                name: packageJson?.name || folderName,
+                displayName: packageJson?.name || folderName,
+                path: projectPath,
+                type: projectType?.id || 'unknown',
+                typeInfo: projectType,
+                markers,
+                frameworks: frameworks.map(f => f.id),
+                frameworkInfo: frameworks,
+                description: packageJson?.description || null,
+                version: packageJson?.version || null,
+                readme,
+                lastModified: stats.mtimeMs,
+                scripts: packageJson?.scripts || null,
+                dependencies: packageJson?.dependencies || null,
+                devDependencies: packageJson?.devDependencies || null
+            }
+        }
+    } catch (err: any) {
+        log.error('Failed to get project details:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+// File tree node interface
+interface FileTreeNode {
+    name: string
+    path: string
+    type: 'file' | 'directory'
+    size?: number
+    children?: FileTreeNode[]
+    isHidden: boolean
+    gitStatus?: GitFileStatus
+}
+
+/**
+ * Get git history for a project
+ */
+async function handleGetGitHistory(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const result = await getGitHistory(projectPath)
+        return { success: true, ...result }
+    } catch (err: any) {
+        log.error('Failed to get git history:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get diff for a specific commit
+ */
+async function handleGetCommitDiff(_event: Electron.IpcMainInvokeEvent, projectPath: string, commitHash: string) {
+    try {
+        const diff = await getCommitDiff(projectPath, commitHash)
+        return { success: true, diff }
+    } catch (err: any) {
+        log.error('Failed to get commit diff:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get diff for working changes
+ */
+async function handleGetWorkingDiff(_event: Electron.IpcMainInvokeEvent, projectPath: string, filePath?: string) {
+    try {
+        const diff = await getWorkingDiff(projectPath, filePath)
+        return { success: true, diff }
+    } catch (err: any) {
+        log.error('Failed to get working diff:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get unpushed commits
+ */
+async function handleGetUnpushedCommits(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const commits = await getUnpushedCommits(projectPath)
+        return { success: true, commits }
+    } catch (err: any) {
+        log.error('Failed to get unpushed commits:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get git user info
+ */
+async function handleGetGitUser(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const user = await getGitUser(projectPath)
+        return { success: true, user }
+    } catch (err: any) {
+        log.error('Failed to get git user:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get repo owner
+ */
+async function handleGetRepoOwner(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const owner = await getRepoOwner(projectPath)
+        return { success: true, owner }
+    } catch (err: any) {
+        log.error('Failed to get repo owner:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Stage files
+ */
+async function handleStageFiles(_event: Electron.IpcMainInvokeEvent, projectPath: string, files: string[]) {
+    try {
+        await stageFiles(projectPath, files)
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to stage files:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Create commit
+ */
+async function handleCreateCommit(_event: Electron.IpcMainInvokeEvent, projectPath: string, message: string) {
+    try {
+        await createCommit(projectPath, message)
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to create commit:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Push commits
+ */
+async function handlePushCommits(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        await pushCommits(projectPath)
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to push commits:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get file tree for a project
+ */
+async function handleGetFileTree(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    options: { showHidden?: boolean; maxDepth?: number } = {}
+) {
+    log.info('IPC: getFileTree', projectPath, options)
+
+    const showHidden = options.showHidden ?? false
+    const maxDepth = options.maxDepth ?? 3
+
+    // Get git status for the whole project
+    let gitStatusMap: Record<string, GitFileStatus> = {}
+    try {
+        gitStatusMap = await getGitStatus(projectPath)
+    } catch (e) {
+        // Ignore git errors
+    }
+
+    async function buildTree(dirPath: string, depth: number): Promise<FileTreeNode[]> {
+        if (depth > maxDepth) return []
+
+        try {
+            const entries = await readdir(dirPath, { withFileTypes: true })
+            const nodes: FileTreeNode[] = []
+
+            for (const entry of entries) {
+                const isHidden = entry.name.startsWith('.')
+                if (!showHidden && isHidden) continue
+                if (entry.name === 'node_modules' || entry.name === '.git') continue
+
+                const fullPath = join(dirPath, entry.name)
+                // Get relative path for git status lookup (handle both slash types just in case)
+                // git status returns relative paths like "src/main.ts"
+                const relativePath = join(relative(projectPath, fullPath)).replace(/\\/g, '/')
+                const status = gitStatusMap[relativePath] || gitStatusMap[fullPath]
+
+                if (entry.isDirectory()) {
+                    const children = await buildTree(fullPath, depth + 1)
+                    nodes.push({
+                        name: entry.name,
+                        path: fullPath,
+                        type: 'directory',
+                        children,
+                        isHidden,
+                        gitStatus: status
+                    })
+                } else {
+                    try {
+                        const stats = await stat(fullPath)
+                        nodes.push({
+                            name: entry.name,
+                            path: fullPath,
+                            type: 'file',
+                            size: stats.size,
+                            isHidden,
+                            gitStatus: status
+                        })
+                    } catch {
+                        nodes.push({
+                            name: entry.name,
+                            path: fullPath,
+                            type: 'file',
+                            isHidden,
+                            gitStatus: status
+                        })
+                    }
+                }
+            }
+
+            // Sort: directories first, then files, both alphabetically
+            nodes.sort((a, b) => {
+                if (a.type !== b.type) {
+                    return a.type === 'directory' ? -1 : 1
+                }
+                return a.name.localeCompare(b.name)
+            })
+
+            return nodes
+        } catch (err) {
+            log.warn(`Could not read directory: ${dirPath}`, err)
+            return []
+        }
+    }
+
+    try {
+        await access(projectPath)
+        const tree = await buildTree(projectPath, 0)
+        return { success: true, tree }
+    } catch (err: any) {
+        log.error('Failed to get file tree:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+
+/**
+ * Read file content (for preview)
+ */
+async function handleReadFileContent(_event: Electron.IpcMainInvokeEvent, filePath: string) {
+    log.info('IPC: readFileContent', filePath)
+
+    try {
+        await access(filePath)
+        const content = await readFile(filePath, 'utf-8')
+        return { success: true, content }
+    } catch (err: any) {
+        log.error('Failed to read file:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Check if directory is a git repository
+ */
+async function handleCheckIsGitRepo(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const isGitRepo = await checkIsGitRepo(projectPath)
+        return { success: true, isGitRepo }
+    } catch (err: any) {
+        log.error('Failed to check git repo:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Initialize git repository
+ */
+async function handleInitGitRepo(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    branchName: string,
+    createGitignore: boolean,
+    gitignoreTemplate?: string
+) {
+    try {
+        const result = await initGitRepo(projectPath, branchName, createGitignore, gitignoreTemplate)
+        return result
+    } catch (err: any) {
+        log.error('Failed to init git repo:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Create initial commit
+ */
+async function handleCreateInitialCommit(_event: Electron.IpcMainInvokeEvent, projectPath: string, message: string) {
+    try {
+        const result = await createInitialCommit(projectPath, message)
+        return result
+    } catch (err: any) {
+        log.error('Failed to create initial commit:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Add remote origin
+ */
+async function handleAddRemoteOrigin(_event: Electron.IpcMainInvokeEvent, projectPath: string, remoteUrl: string) {
+    try {
+        const result = await addRemoteOrigin(projectPath, remoteUrl)
+        return result
+    } catch (err: any) {
+        log.error('Failed to add remote origin:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get gitignore templates
+ */
+async function handleGetGitignoreTemplates() {
+    try {
+        const templates = getGitignoreTemplates()
+        return { success: true, templates }
+    } catch (err: any) {
+        log.error('Failed to get gitignore templates:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Generate gitignore content
+ */
+async function handleGenerateGitignoreContent(_event: Electron.IpcMainInvokeEvent, template: string) {
+    try {
+        const content = generateGitignoreContent(template)
+        return { success: true, content }
+    } catch (err: any) {
+        log.error('Failed to generate gitignore content:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get gitignore patterns
+ */
+async function handleGetGitignorePatterns() {
+    try {
+        const patterns = getGitignorePatterns()
+        return { success: true, patterns }
+    } catch (err: any) {
+        log.error('Failed to get gitignore patterns:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Generate custom gitignore content
+ */
+async function handleGenerateCustomGitignoreContent(_event: Electron.IpcMainInvokeEvent, selectedPatternIds: string[]) {
+    try {
+        const content = generateCustomGitignoreContent(selectedPatternIds)
+        return { success: true, content }
+    } catch (err: any) {
+        log.error('Failed to generate custom gitignore content:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get terminal sessions for a specific project
+ */
+async function handleGetProjectSessions(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const manager = getTerminalManager()
+        const allSessions = manager.getAllSessions()
+
+        // Normalize the project path for comparison
+        const normalizedProjectPath = projectPath.toLowerCase().replace(/\\/g, '/')
+
+        // Filter sessions by cwd matching project path
+        const projectSessions = allSessions.filter(session => {
+            const sessionCwd = session.cwd.toLowerCase().replace(/\\/g, '/')
+            return sessionCwd.startsWith(normalizedProjectPath)
+        })
+
+        return { success: true, sessions: projectSessions }
+    } catch (err: any) {
+        log.error('Failed to get project sessions:', err)
+        return { success: false, error: err.message, sessions: [] }
+    }
+}
+
+/**
+ * Get running processes for a project (dev servers, node, etc.)
+ */
+async function handleGetProjectProcesses(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const { detectProjectProcesses } = await import('../inspectors/process-detector')
+        const status = await detectProjectProcesses(projectPath)
+        return { success: true, ...status }
+    } catch (err: any) {
+        log.error('Failed to get project processes:', err)
+        return { success: false, error: err.message, isLive: false, processes: [], activePorts: [] }
+    }
+}

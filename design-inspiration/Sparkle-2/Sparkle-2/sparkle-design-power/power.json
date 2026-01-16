@@ -1,0 +1,21 @@
+{
+  "name": "sparkle-design",
+  "displayName": "Sparkle Design System",
+  "version": "1.0.0",
+  "description": "A modern, premium design system with dark-first themes, CSS variables, Tailwind integration, and reusable UI components for React applications.",
+  "keywords": [
+    "ui",
+    "design",
+    "design system",
+    "tailwind",
+    "react",
+    "components",
+    "dark mode",
+    "theme",
+    "css",
+    "styling",
+    "sparkle"
+  ],
+  "author": "Sparkle",
+  "repository": "https://github.com/Parcoil/Sparkle"
+}
