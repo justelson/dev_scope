@@ -1,9 +1,0 @@
-{
-  "title": "Disable Core Isolation",
-  "name": "disable-core-isolation",
-  "category": ["Performance", "Gaming"],
-  "restart": true,
-  "description": "Disables Core Isolation Memory Integrity to improve system performance",
-  "deepDescription": "Creates the registry path for Hypervisor-Enforced Code Integrity under DeviceGuard if missing, and disables HVCI by setting Enabled to 0 in the system-wide registry."
-  
-}
