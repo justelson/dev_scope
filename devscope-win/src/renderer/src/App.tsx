@@ -21,6 +21,7 @@ const Settings = lazy(() => import('./pages/Settings'))
 const Projects = lazy(() => import('./pages/Projects'))
 const ProjectDetails = lazy(() => import('./pages/ProjectDetails'))
 const FolderBrowse = lazy(() => import('./pages/FolderBrowse'))
+const AgentScope = lazy(() => import('./pages/AgentScope'))
 
 // Settings sub-pages
 const AppearanceSettings = lazy(() => import('./pages/settings/AppearanceSettings'))
@@ -95,6 +96,7 @@ function MainContent() {
                     <Route path="/devtools/:toolId" element={<ToolDetails />} />
                     <Route path="/ai" element={<AIRuntime />} />
                     <Route path="/ai-agents" element={<AIAgents />} />
+                    <Route path="/agentscope" element={<AgentScope />} />
                     <Route path="/system" element={<System />} />
                     <Route path="/projects" element={<Projects />} />
                     <Route path="/projects/:projectPath" element={<ProjectDetails />} />

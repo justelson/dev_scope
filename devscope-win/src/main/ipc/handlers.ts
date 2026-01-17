@@ -14,6 +14,7 @@ import {
     detectTerminalCapabilities,
     sensingEngine
 } from '../inspectors'
+import { getAgentScopeOrchestrator } from '../agentscope'
 import { testGroqConnection, generateCommitMessage } from '../ai/groq'
 import { getToolSuggestions } from '../inspectors/tool-registry'
 import { getUserName } from '../inspectors/system/windows-system'
@@ -400,6 +401,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     // Terminal - New unified namespace
     registerTerminalHandlers(mainWindow)
 
+    // AgentScope - AI Agent Orchestration (ALPHA)
+    registerAgentScopeHandlers(mainWindow)
+
     // AI Features
     ipcMain.handle('devscope:testGroqConnection', async (_event, apiKey: string) => {
         return testGroqConnection(apiKey)
@@ -517,6 +521,118 @@ function registerTerminalHandlers(mainWindow: BrowserWindow): void {
     })
 
     log.info('Terminal IPC handlers registered')
+}
+
+/**
+ * Register AgentScope IPC handlers (ALPHA feature)
+ */
+function registerAgentScopeHandlers(mainWindow: BrowserWindow): void {
+    log.info('Registering AgentScope IPC handlers...')
+
+    const orchestrator = getAgentScopeOrchestrator()
+    orchestrator.setMainWindow(mainWindow)
+
+    // Wire up terminal output to orchestrator for status parsing
+    const terminalManager = getTerminalManager()
+    terminalManager.setOutputCallback((terminalId: string, data: string) => {
+        // Find session by terminal ID and forward output
+        const sessions = orchestrator.getAllSessions()
+        const session = sessions.find(s => s.terminalId === terminalId)
+        if (session) {
+            log.info(`[AgentScope] Output from ${terminalId} (session ${session.id}): ${data.substring(0, 100)}...`)
+            orchestrator.processOutput(session.id, data)
+        }
+    })
+
+    // Create a new agent session
+    ipcMain.handle('devscope:agentscope:create', async (_event, config: { agentId: string; cwd?: string; task?: string; autoStart?: boolean }) => {
+        try {
+            const session = orchestrator.createSession(config)
+            return { success: true, session }
+        } catch (err: any) {
+            log.error('[AgentScope] Create session failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    // Start an agent session
+    ipcMain.handle('devscope:agentscope:start', async (_event, sessionId: string, task?: string) => {
+        try {
+            const result = orchestrator.startSession(sessionId, task)
+            return { success: result }
+        } catch (err: any) {
+            log.error('[AgentScope] Start session failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    // Write to an agent session
+    ipcMain.handle('devscope:agentscope:write', async (_event, sessionId: string, data: string) => {
+        try {
+            const result = orchestrator.writeToSession(sessionId, data)
+            return { success: result }
+        } catch (err: any) {
+            log.error('[AgentScope] Write failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    // Kill an agent session
+    ipcMain.handle('devscope:agentscope:kill', async (_event, sessionId: string) => {
+        try {
+            const result = orchestrator.killSession(sessionId)
+            return { success: result }
+        } catch (err: any) {
+            log.error('[AgentScope] Kill session failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    // Remove an agent session
+    ipcMain.handle('devscope:agentscope:remove', async (_event, sessionId: string) => {
+        try {
+            const result = orchestrator.removeSession(sessionId)
+            return { success: result }
+        } catch (err: any) {
+            log.error('[AgentScope] Remove session failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    // Get a specific session
+    ipcMain.handle('devscope:agentscope:get', async (_event, sessionId: string) => {
+        try {
+            const session = orchestrator.getSession(sessionId)
+            return { success: true, session }
+        } catch (err: any) {
+            log.error('[AgentScope] Get session failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    // Get all sessions
+    ipcMain.handle('devscope:agentscope:list', async () => {
+        try {
+            const sessions = orchestrator.getAllSessions()
+            return { success: true, sessions }
+        } catch (err: any) {
+            log.error('[AgentScope] List sessions failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    // Resize terminal for a session
+    ipcMain.handle('devscope:agentscope:resize', async (_event, sessionId: string, cols: number, rows: number) => {
+        try {
+            orchestrator.resizeSession(sessionId, cols, rows)
+            return { success: true }
+        } catch (err: any) {
+            log.error('[AgentScope] Resize session failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    log.info('AgentScope IPC handlers registered')
 }
 
 /**
