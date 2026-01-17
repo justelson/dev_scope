@@ -56,6 +56,7 @@ const devScopeAPI = {
     getProjectSessions: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectSessions', projectPath),
     getProjectProcesses: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectProcesses', projectPath),
     indexAllFolders: (folders: string[]) => ipcRenderer.invoke('devscope:indexAllFolders', folders),
+    getFileSystemRoots: () => ipcRenderer.invoke('devscope:getFileSystemRoots'),
 
     // Terminal
     terminal: {
@@ -89,16 +90,20 @@ const devScopeAPI = {
     agentscope: {
         create: (config: { agentId: string; cwd?: string; task?: string; autoStart?: boolean }) =>
             ipcRenderer.invoke('devscope:agentscope:create', config),
-        start: (sessionId: string, task?: string) =>
-            ipcRenderer.invoke('devscope:agentscope:start', sessionId, task),
+        start: (sessionId: string, options?: { task?: string; cwd?: string }) =>
+            ipcRenderer.invoke('devscope:agentscope:start', sessionId, options),
         write: (sessionId: string, data: string) =>
             ipcRenderer.invoke('devscope:agentscope:write', sessionId, data),
+        sendMessage: (sessionId: string, message: string) =>
+            ipcRenderer.invoke('devscope:agentscope:send', sessionId, message),
         kill: (sessionId: string) =>
             ipcRenderer.invoke('devscope:agentscope:kill', sessionId),
         remove: (sessionId: string) =>
             ipcRenderer.invoke('devscope:agentscope:remove', sessionId),
         get: (sessionId: string) =>
             ipcRenderer.invoke('devscope:agentscope:get', sessionId),
+        history: (sessionId: string) =>
+            ipcRenderer.invoke('devscope:agentscope:history', sessionId),
         list: () =>
             ipcRenderer.invoke('devscope:agentscope:list'),
         resize: (sessionId: string, cols: number, rows: number) =>

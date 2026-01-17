@@ -32,6 +32,10 @@ export interface ToolDefinition {
     alternateCommands?: string[] // Fallback commands (e.g. 'python3' for 'python')
     detectRunning?: boolean // Check if process is active (for services like Docker)
     installCommand?: string // Command to install (e.g. 'winget install Node.js')
+    startupCommand?: string // Preferred command to launch the tool
+    versionCheckCommand?: string // Preferred command to check version
+    updateCommand?: string // Preferred command to update
+    logoUrl?: string // Optional direct logo URL
     detection?: DetectionConfig
 }
 
@@ -570,11 +574,15 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         usedFor: ['ai', 'coding', 'terminal', 'automation'],
         capabilities: ['Agentic Editing', 'Terminal Assistant', 'Context Awareness'],
         installCommand: 'npm install -g @anthropic-ai/claude-code',
+        startupCommand: 'claude',
+        versionCheckCommand: 'claude --version',
+        updateCommand: 'npm install -g @anthropic-ai/claude-code',
+        logoUrl: 'https://claude.ai/images/claude_app_icon.png',
         detection: { strategy: 'cli', versionRegex: '(\\d+\\.\\d+\\.\\d+)' }
     },
     {
         id: 'github-copilot-cli',
-        command: 'gh copilot',
+        command: 'copilot',
         displayName: 'GitHub Copilot CLI',
         description: 'GitHub Copilot in the CLI brings AI-powered suggestions to your terminal. Get command suggestions, explanations, and shell command generation powered by GitHub Copilot.',
         themeColor: '#6e40c9',
@@ -585,7 +593,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         usedFor: ['ai', 'coding', 'terminal', 'github'],
         capabilities: ['Shell Suggestions', 'Command Explanation', 'CLI Automation'],
         alternateCommands: ['ghcs'],
-        installCommand: 'gh extension install github/gh-copilot',
+        installCommand: 'npm install -g @github/copilot',
+        startupCommand: 'copilot',
+        versionCheckCommand: 'copilot --version',
+        updateCommand: 'npm install -g @github/copilot',
+        logoUrl: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
         detection: { strategy: 'cli' }
     },
     {
@@ -600,7 +612,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'pair-programming', 'git'],
         capabilities: ['Pair Programming', 'Git Integration', 'Terminal UI'],
-        installCommand: 'pip install aider-install && aider-install',
+        installCommand: 'python -m pip install aider-chat',
+        startupCommand: 'aider',
+        versionCheckCommand: 'aider --version',
+        updateCommand: 'python -m pip install -U aider-chat',
+        logoUrl: 'https://aider.chat/assets/icons/favicon-32x32.png',
         detection: { strategy: 'cli' }
     },
     {
@@ -615,7 +631,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'editor', 'ide'],
         capabilities: ['AI IDE', 'Code Editing', 'Codebase Chat'],
-        installCommand: 'Download from https://cursor.com',
+        installCommand: 'curl -fsSL https://cursor.sh/install.sh | sh',
+        startupCommand: 'cursor',
+        versionCheckCommand: 'cursor --version',
+        updateCommand: 'Auto-updates',
+        logoUrl: 'https://cursor.sh/brand/icon.svg',
         detection: { strategy: 'cli' }
     },
     {
@@ -630,7 +650,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'ide', 'agentic-flow'],
         capabilities: ['Agentic Flow', 'Deep Context', 'AI IDE'],
-        installCommand: 'Download from https://codeium.com/windsurf'
+        installCommand: 'Download from windsurf.com',
+        startupCommand: 'windsurf',
+        versionCheckCommand: 'windsurf --version',
+        updateCommand: 'Built-in auto-update',
+        logoUrl: 'https://windsurf.com/favicon.ico'
     },
     {
         id: 'zed',
@@ -644,7 +668,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'editor', 'performance'],
         capabilities: ['High Performance', 'Multiplayer Coding', 'Native AI'],
-        installCommand: 'winget install Zed.Zed'
+        installCommand: 'curl -f https://zed.dev/install.sh | sh',
+        startupCommand: 'zed',
+        versionCheckCommand: 'zed --version',
+        updateCommand: 'Built-in auto-update',
+        logoUrl: 'https://zed.dev/favicon.ico'
     },
     {
         id: 'cody-cli',
@@ -658,11 +686,15 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'search', 'codebase'],
         capabilities: ['Codebase Awareness', 'Contextual Chat', 'Precise Search'],
-        installCommand: 'npm install -g @sourcegraph/cody-agent'
+        installCommand: 'npm install -g @sourcegraph/cody',
+        startupCommand: 'cody',
+        versionCheckCommand: 'cody --version',
+        updateCommand: 'npm install -g @sourcegraph/cody',
+        logoUrl: 'https://sourcegraph.com/.assets/img/sourcegraph-mark.svg'
     },
     {
         id: 'continue',
-        command: 'continue',
+        command: 'cn',
         displayName: 'Continue',
         description: 'Continue is an open-source AI code assistant. It connects any LLM to your IDE for autocomplete, chat, and embeddings. Supports VS Code and JetBrains.',
         themeColor: '#1389FD',
@@ -672,7 +704,12 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'open-source', 'ide'],
         capabilities: ['Open Source', 'LLM Agnostic', 'IDE Extension'],
-        installCommand: 'Search "Continue" in VS Code Extensions'
+        alternateCommands: ['continue'],
+        installCommand: 'npm install -g @continuedev/cli',
+        startupCommand: 'cn',
+        versionCheckCommand: 'cn --version',
+        updateCommand: 'npm install -g @continuedev/cli',
+        logoUrl: 'https://continue.dev/favicon.ico'
     },
     {
         id: 'open-interpreter',
@@ -686,7 +723,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'automation', 'terminal', 'code-execution'],
         capabilities: ['Code Execution', 'OS Control', 'Task Automation'],
-        installCommand: 'pip install open-interpreter'
+        installCommand: 'pip install open-interpreter',
+        startupCommand: 'interpreter',
+        versionCheckCommand: 'interpreter --version',
+        updateCommand: 'pip install --upgrade open-interpreter',
+        logoUrl: 'https://raw.githubusercontent.com/OpenInterpreter/open-interpreter/main/docs/assets/logo.png'
     },
     {
         id: 'fabric',
@@ -700,7 +741,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'workflow', 'patterns', 'augmentation'],
         capabilities: ['AI Patterns', 'Content Synthesis', 'Modular AI'],
-        installCommand: 'pipx install fabric-ai'
+        installCommand: 'go install github.com/danielmiessler/fabric/cmd/fabric@latest',
+        startupCommand: 'fabric',
+        versionCheckCommand: 'fabric --version',
+        updateCommand: 'go install github.com/danielmiessler/fabric/cmd/fabric@latest',
+        logoUrl: 'https://github.com/danielmiessler/fabric/raw/main/assets/fabric-logo.png'
     },
     {
         id: 'shellgpt',
@@ -715,7 +760,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         usedFor: ['ai', 'terminal', 'productivity', 'shell'],
         capabilities: ['Shell Generation', 'Quick Answers', 'Terminal Native'],
         alternateCommands: ['shell-gpt'],
-        installCommand: 'pip install shell-gpt'
+        installCommand: 'pip install shell-gpt',
+        startupCommand: 'sgpt',
+        versionCheckCommand: 'pip show shell-gpt',
+        updateCommand: 'pip install --upgrade shell-gpt',
+        logoUrl: 'https://raw.githubusercontent.com/TheR1D/shell_gpt/main/assets/logo.png'
     },
     {
         id: 'tabnine',
@@ -729,7 +778,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'autocomplete', 'privacy'],
         capabilities: ['Local Autocomplete', 'Private Training', 'Enterprise Grade'],
-        installCommand: 'Search "Tabnine" in VS Code Extensions'
+        installCommand: 'Install "Tabnine" extension in IDE',
+        startupCommand: 'code (via Extension)',
+        versionCheckCommand: 'N/A (Extension)',
+        updateCommand: 'Extension auto-updates',
+        logoUrl: 'https://tabnine.com/favicon.ico'
     },
     {
         id: 'codeium',
@@ -743,7 +796,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'free', 'autocomplete'],
         capabilities: ['Free Tier', 'Fast Autocomplete', 'Broad IDE Support'],
-        installCommand: 'Search "Codeium" in VS Code Extensions'
+        installCommand: 'Download Windsurf or Install VS Code Extension',
+        startupCommand: 'windsurf',
+        versionCheckCommand: 'windsurf --version',
+        updateCommand: 'Auto-updates / Extension update',
+        logoUrl: 'https://codeium.com/static/favicons/favicon.ico'
     },
     {
         id: 'goose',
@@ -757,7 +814,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'automation', 'open-source'],
         capabilities: ['Autonomous Agent', 'Tool Using', 'Open Source'],
-        installCommand: 'curl -fsSL https://github.com/block/goose/releases/download/stable/install.sh | bash'
+        installCommand: 'curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash',
+        startupCommand: 'goose',
+        versionCheckCommand: 'goose --version',
+        updateCommand: 'goose update',
+        logoUrl: 'https://block.github.io/goose/assets/images/logo.png'
     },
     {
         id: 'mentat',
@@ -771,11 +832,15 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'multi-file', 'context'],
         capabilities: ['Multi-file Edits', 'Graph Context', 'Git Integrated'],
-        installCommand: 'pip install mentat-ai'
+        installCommand: 'npm install -g @abanteai/mentat',
+        startupCommand: 'mentat',
+        versionCheckCommand: 'mentat --version',
+        updateCommand: 'npm install -g @abanteai/mentat',
+        logoUrl: 'https://mentat.ai/assets/logo.png'
     },
     {
         id: 'gpt-engineer',
-        command: 'gpt-engineer',
+        command: 'gpte',
         displayName: 'GPT Engineer',
         description: 'GPT Engineer is an AI agent that generates entire codebases from a prompt. Specify what you want to build and it creates the complete project structure.',
         themeColor: '#10B981',
@@ -785,7 +850,12 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'generation', 'scaffolding'],
         capabilities: ['Project Generation', 'Rapid Scaffolding', 'Prompt to Code'],
-        installCommand: 'pip install gpt-engineer'
+        alternateCommands: ['gpt-engineer'],
+        installCommand: 'python -m pip install gpt-engineer',
+        startupCommand: 'gpte',
+        versionCheckCommand: 'pip show gpt-engineer',
+        updateCommand: 'python -m pip install -U gpt-engineer',
+        logoUrl: 'https://raw.githubusercontent.com/gpt-engineer-org/gpt-engineer/main/assets/logo.png'
     },
     {
         id: 'plandex',
@@ -799,7 +869,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'terminal', 'multi-file'],
         capabilities: ['Complex Tasks', 'Multi-file Editing', 'Terminal Based'],
-        installCommand: 'curl -sL https://plandex.ai/install.sh | bash'
+        installCommand: 'curl -sL https://plandex.ai/install.sh | bash',
+        startupCommand: 'plandex',
+        versionCheckCommand: 'plandex version',
+        updateCommand: 'curl -sL https://plandex.ai/install.sh | bash',
+        logoUrl: 'https://plandex.ai/favicon.ico'
     },
     {
         id: 'openhands',
@@ -813,7 +887,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'automation', 'open-source'],
         capabilities: ['Autonomous Coding', 'Web Browsing', 'Terminal Access'],
-        installCommand: 'docker pull ghcr.io/all-hands-ai/openhands:main'
+        installCommand: 'uv tool install openhands --python 3.12',
+        startupCommand: 'openhands',
+        versionCheckCommand: 'openhands --version',
+        updateCommand: 'pip install -U openhands-ai openhands',
+        logoUrl: 'https://raw.githubusercontent.com/All-Hands-AI/OpenHands/main/docs/static/img/logo.png'
     },
     {
         id: 'supermaven',
@@ -827,7 +905,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'autocomplete', 'fast'],
         capabilities: ['Huge Context', 'Ultra Fast', 'IDE Native'],
-        installCommand: 'Search "Supermaven" in VS Code Extensions'
+        installCommand: 'Install "Supermaven" extension in VS Code/JetBrains',
+        startupCommand: 'code (via Extension)',
+        versionCheckCommand: 'N/A (Extension)',
+        updateCommand: 'Extension auto-updates',
+        logoUrl: 'https://supermaven.com/favicon.ico'
     },
     {
         id: 'phind',
@@ -841,7 +923,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'search', 'coding', 'pair-programming'],
         capabilities: ['AI Search', 'Code Generation', 'Web Integrated'],
-        installCommand: 'Search "Phind" in VS Code Extensions'
+        installCommand: 'Install "Phind" extension in VS Code',
+        startupCommand: 'code (via Extension)',
+        versionCheckCommand: 'N/A (Web/Extension)',
+        updateCommand: 'Extension auto-updates',
+        logoUrl: 'https://phind.com/images/logo-small.png'
     },
     {
         id: 'sweep',
@@ -855,7 +941,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'github', 'automation'],
         capabilities: ['Issue to PR', 'Automated Bug Fix', 'Github Native'],
-        installCommand: 'Install Sweep GitHub App from github.com/apps/sweep-ai'
+        installCommand: 'pip install sweepai',
+        startupCommand: 'sweep (or GitHub App)',
+        versionCheckCommand: 'sweep --version',
+        updateCommand: 'pip install --upgrade sweepai',
+        logoUrl: 'https://avatars.githubusercontent.com/u/108284566'
     },
     {
         id: 'gemini-cli',
@@ -869,7 +959,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'terminal', 'google'],
         capabilities: ['Gemini AI', 'Terminal Native', 'Code Assistance'],
-        installCommand: 'npm install -g @google/gemini-cli'
+        installCommand: 'npm install -g @google/gemini-cli',
+        startupCommand: 'gemini',
+        versionCheckCommand: 'gemini --version',
+        updateCommand: 'npm install -g @google/gemini-cli@latest',
+        logoUrl: 'https://lh3.googleusercontent.com/X-LdC6qj-i8j8-5x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9=s0'
     },
     {
         id: 'opencode',
@@ -883,7 +977,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'terminal', 'open-source'],
         capabilities: ['Terminal UI', 'Code Editing', 'Open Source'],
-        installCommand: 'curl -fsSL https://raw.githubusercontent.com/sst/opencode/main/install.sh | bash'
+        installCommand: 'curl -fsSL https://opencode.ai/install | bash',
+        startupCommand: 'opencode',
+        versionCheckCommand: 'opencode --version',
+        updateCommand: 'opencode upgrade',
+        logoUrl: 'https://opencode.ai/favicon.ico'
     },
     {
         id: 'droid',
@@ -897,7 +995,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'terminal', 'enterprise'],
         capabilities: ['Agentic Coding', 'Enterprise Integration', 'Multi-file Edits'],
-        installCommand: 'curl -fsSL https://factory.ai/install.sh | bash'
+        installCommand: 'curl -fsSL https://app.factory.ai/cli | sh',
+        startupCommand: 'droid',
+        versionCheckCommand: 'droid --version',
+        updateCommand: 'curl -fsSL https://app.factory.ai/cli | sh',
+        logoUrl: 'https://factory.ai/favicon.ico'
     },
     {
         id: 'codex-cli',
@@ -911,7 +1013,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'terminal', 'openai'],
         capabilities: ['OpenAI Models', 'Code Generation', 'Terminal Native'],
-        installCommand: 'npm install -g @openai/codex'
+        installCommand: 'npm install -g @openai/codex',
+        startupCommand: 'codex',
+        versionCheckCommand: 'codex --version',
+        updateCommand: 'npm install -g @openai/codex',
+        logoUrl: 'https://openai.com/favicon.ico'
     },
     {
         id: 'amazon-q',
@@ -925,7 +1031,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'aws', 'cloud'],
         capabilities: ['AWS Integration', 'Code Suggestions', 'Cloud Native'],
-        installCommand: 'Search "Amazon Q" in VS Code Extensions'
+        installCommand: 'brew install --cask amazon-q (macOS) / Download from aws.amazon.com',
+        startupCommand: 'q',
+        versionCheckCommand: 'q --version',
+        updateCommand: 'Auto-updates (or re-run installer)',
+        logoUrl: 'https://d1.awsstatic.com/r2020/q/product-page/Amazon-Q_Icon_64x64.png'
     },
     {
         id: 'amp',
@@ -939,7 +1049,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'terminal', 'agentic-flow'],
         capabilities: ['Agentic Coding', 'Multi-model Support', 'Terminal & IDE'],
-        installCommand: 'Search "Amp" in VS Code Extensions or visit ampcode.com'
+        installCommand: 'cargo install amp',
+        startupCommand: 'amp',
+        versionCheckCommand: 'amp --version',
+        updateCommand: 'cargo install amp --force',
+        logoUrl: 'https://amp.rs/images/logo.svg'
     },
     {
         id: 'roo-code',
@@ -953,7 +1067,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'ide', 'autocomplete'],
         capabilities: ['Smart Completions', 'Code Analysis', 'IDE Integration'],
-        installCommand: 'Search "Roo Code" in VS Code Extensions'
+        installCommand: 'curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh',
+        startupCommand: 'roo',
+        versionCheckCommand: 'roo --version',
+        updateCommand: 'curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh',
+        logoUrl: 'https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/assets/icons/icon.png'
     },
     {
         id: 'cline',
@@ -967,11 +1085,15 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'ide', 'agentic-flow'],
         capabilities: ['Autonomous Agent', 'File Editing', 'Browser Control'],
-        installCommand: 'Search "Cline" in VS Code Extensions'
+        installCommand: 'npm install -g cline',
+        startupCommand: 'cline',
+        versionCheckCommand: 'cline --version',
+        updateCommand: 'npm install -g cline',
+        logoUrl: 'https://raw.githubusercontent.com/cline/cline/main/assets/icons/icon.png'
     },
     {
         id: 'kilo-code',
-        command: 'kilo',
+        command: 'kilocode',
         displayName: 'Kilo Code',
         description: 'Kilo Code is an AI coding assistant focused on helping developers write clean, efficient code with intelligent suggestions.',
         themeColor: '#06B6D4',
@@ -981,7 +1103,12 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         category: 'ai_agent',
         usedFor: ['ai', 'coding', 'terminal', 'efficiency'],
         capabilities: ['Clean Code', 'Efficiency Focus', 'Smart Suggestions'],
-        installCommand: 'Search "Kilo Code" in VS Code Extensions'
+        alternateCommands: ['kilo'],
+        installCommand: 'npm install -g @kilocode/cli',
+        startupCommand: 'kilocode',
+        versionCheckCommand: 'kilocode --version',
+        updateCommand: 'npm update -g @kilocode/cli',
+        logoUrl: 'https://kilo.ai/favicon.ico'
     }
 ]
 

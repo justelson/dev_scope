@@ -348,6 +348,37 @@ async function handleRefreshAll(): Promise<FullReport> {
 }
 
 /**
+ * Get file system roots (drives/mount points)
+ */
+async function handleGetFileSystemRoots() {
+    log.info('IPC: getFileSystemRoots')
+
+    try {
+        const fsList = await si.fsSize().catch(() => [])
+        const roots = Array.from(new Set(
+            fsList
+                .map((entry: any) => entry.mount)
+                .filter((mount: string) => !!mount)
+                .map((mount: string) => {
+                    if (process.platform === 'win32') {
+                        return mount.endsWith('\\') ? mount : `${mount}\\`
+                    }
+                    return mount
+                })
+        )).sort()
+
+        if (roots.length > 0) {
+            return { success: true, roots }
+        }
+
+        return { success: true, roots: [process.platform === 'win32' ? 'C:\\' : '/'] }
+    } catch (err: any) {
+        log.error('Failed to get file system roots:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
  * Register all IPC handlers
  */
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
@@ -397,6 +428,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getProjectSessions', handleGetProjectSessions)
     ipcMain.handle('devscope:getProjectProcesses', handleGetProjectProcesses)
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
+    ipcMain.handle('devscope:getFileSystemRoots', handleGetFileSystemRoots)
 
     // Terminal - New unified namespace
     registerTerminalHandlers(mainWindow)
@@ -556,9 +588,9 @@ function registerAgentScopeHandlers(mainWindow: BrowserWindow): void {
     })
 
     // Start an agent session
-    ipcMain.handle('devscope:agentscope:start', async (_event, sessionId: string, task?: string) => {
+    ipcMain.handle('devscope:agentscope:start', async (_event, sessionId: string, options?: { task?: string; cwd?: string }) => {
         try {
-            const result = orchestrator.startSession(sessionId, task)
+            const result = orchestrator.startSession(sessionId, options)
             return { success: result }
         } catch (err: any) {
             log.error('[AgentScope] Start session failed:', err)
@@ -573,6 +605,17 @@ function registerAgentScopeHandlers(mainWindow: BrowserWindow): void {
             return { success: result }
         } catch (err: any) {
             log.error('[AgentScope] Write failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    // Send a full message to an agent session (UI mode)
+    ipcMain.handle('devscope:agentscope:send', async (_event, sessionId: string, message: string) => {
+        try {
+            const result = orchestrator.sendMessage(sessionId, message)
+            return { success: result }
+        } catch (err: any) {
+            log.error('[AgentScope] Send message failed:', err)
             return { success: false, error: err.message }
         }
     })
@@ -606,6 +649,31 @@ function registerAgentScopeHandlers(mainWindow: BrowserWindow): void {
             return { success: true, session }
         } catch (err: any) {
             log.error('[AgentScope] Get session failed:', err)
+            return { success: false, error: err.message }
+        }
+    })
+
+    // Get session history from disk
+    ipcMain.handle('devscope:agentscope:history', async (_event, sessionId: string) => {
+        try {
+            const dir = orchestrator.getSessionStoragePath(sessionId)
+            if (!dir) return { success: false, error: 'Session storage not found' }
+            const content = await readFile(join(dir, 'messages.jsonl'), 'utf-8').catch(() => '')
+            const messages = content
+                .split('\n')
+                .map(line => line.trim())
+                .filter(Boolean)
+                .map(line => {
+                    try {
+                        return JSON.parse(line)
+                    } catch {
+                        return null
+                    }
+                })
+                .filter(Boolean)
+            return { success: true, messages }
+        } catch (err: any) {
+            log.error('[AgentScope] Get history failed:', err)
             return { success: false, error: err.message }
         }
     })
