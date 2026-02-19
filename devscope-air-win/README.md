@@ -10,10 +10,10 @@
   </pre>
 </div>
 
-<h1 align="center">DevScope</h1>
+<h1 align="center">DevScope Air</h1>
 
 <p align="center">
-  <strong>Unified Tool Sensing & AI Orchestration for Modern Developers</strong>
+  <strong>Projects-First Developer Workspace for Windows</strong>
 </p>
 
 <p align="center">
@@ -24,7 +24,10 @@
 
 ## Overview
 
-DevScope is a high-performance, unified sensing system designed to give developers an crystal-clear view of their local development environment. It automatically discovers your tools, AI runtimes, and agentic frameworks, providing a centralized dashboard and integrated terminal experience.
+> **Air Variant Note**
+> This build focuses on Projects workflows (scan, browse, details, Git, commit-assist)
+> and removes in-app Terminal and Agent orchestration surfaces.
+DevScope Air is a projects-focused Windows Electron app that gives developers a clear view of local projects, tooling, and Git status. It keeps the DevScope desktop architecture while excluding AgentScope and integrated terminal features.
 
 Mainly targeted for Windows developers, DevScope eliminates the "fragmented environment" problem by providing a single source of truth for your developer stack.
 
@@ -34,9 +37,9 @@ Mainly targeted for Windows developers, DevScope eliminates the "fragmented envi
 | :--- | :--- |
 | **Unified Tool Sensing** | Automatically detects 50+ developer tools (Languages, Package Managers, Build Tools, Containers, Version Control). |
 | **AI Runtime Discovery** | Deep-scans for Ollama, CUDA, Jan, LM Studio, and other local LLM runtimes. |
-| **Agentic Frameworks** | Seamlessly detects and launches AI coding assistants like Claude Code, Aider, and Codex. |
+| **Projects Workflows** | Deep project scanning, folder browsing, file preview, and repository insights. |
 | **AI Commit Assistant** | Integrated Groq-powered AI that generates detailed, conventional commit messages based on your diffs. |
-| **Integrated Terminal** | A premium, XTerm-powered terminal with persistent context and PTY support. |
+| **Git Productivity** | Commit history, diffs, staging, commit/push, and repo initialization utilities. |
 | **Modern Aesthetics** | A high-end UI built with the Sparkle Design System, featuring glassmorphism and smooth animations. |
 
 ## Supported Tool Categories
@@ -131,3 +134,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 <p align="center">
   Built with ❤️ for the developer community.
 </p>
+
+
+

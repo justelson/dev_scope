@@ -19,6 +19,9 @@ import { testGroqConnection, generateCommitMessage } from '../ai/groq'
 import { getToolSuggestions } from '../inspectors/tool-registry'
 import { getUserName } from '../inspectors/system/windows-system'
 import { getTerminalBanner } from '../inspectors/terminal/capabilities'
+import { getOptimizedSystemInfo, getInstantSystemInfo } from '../inspectors/system/system-cache'
+import { persistentCache } from '../inspectors/persistent-cache'
+import { invalidateUnifiedBatchCache } from '../inspectors/unified-batch-scanner'
 import { getGitStatus, GitFileStatus, getGitHistory, getCommitDiff, getWorkingDiff, getUnpushedCommits, getGitUser, getRepoOwner, stageFiles, createCommit, pushCommits, checkIsGitRepo, initGitRepo, createInitialCommit, addRemoteOrigin, getGitignoreTemplates, generateGitignoreContent, getGitignorePatterns, generateCustomGitignoreContent, hasRemoteOrigin } from '../inspectors/git'
 import { clearCommandCache } from '../inspectors/safe-exec'
 import type {
@@ -327,8 +330,9 @@ async function handleGetReadinessReport(): Promise<ReadinessReport> {
 async function handleRefreshAll(): Promise<FullReport> {
     log.info('IPC: refreshAll')
 
-    // Clear command cache to get fresh data
+    // Clear ALL caches for truly fresh data
     clearCommandCache()
+    invalidateUnifiedBatchCache()
 
     const [system, tooling, aiRuntime] = await Promise.all([
         handleGetSystemOverview(),
@@ -344,6 +348,93 @@ async function handleRefreshAll(): Promise<FullReport> {
         aiRuntime,
         readiness,
         timestamp: Date.now()
+    }
+}
+
+/**
+ * Get cached snapshot for instant UI load (Phase 1: 0ms)
+ * Returns persistent disk cache + instant OS data — no scanning at all.
+ */
+async function handleGetCachedSnapshot() {
+    log.info('IPC: getCachedSnapshot (instant)')
+    const startTime = Date.now()
+
+    // Instant OS info from Node.js os module (no async calls)
+    const instantSystem = getInstantSystemInfo()
+
+    // Read persistent tool cache from disk (already loaded in memory)
+    const cachedTools = persistentCache.hasData()
+        ? {
+            hasData: true,
+            isStale: persistentCache.isStale(),
+            age: persistentCache.getAge(),
+            tools: {
+                languages: persistentCache.getToolsByCategory('language'),
+                packageManagers: persistentCache.getToolsByCategory('package_manager'),
+                buildTools: persistentCache.getToolsByCategory('build_tool'),
+                containers: persistentCache.getToolsByCategory('container'),
+                versionControl: persistentCache.getToolsByCategory('version_control'),
+                aiRuntimes: persistentCache.getToolsByCategory('ai_runtime'),
+                aiAgents: persistentCache.getToolsByCategory('ai_agent'),
+                gpuAcceleration: persistentCache.getToolsByCategory('gpu_acceleration'),
+                aiFrameworks: persistentCache.getToolsByCategory('ai_framework'),
+            }
+        }
+        : { hasData: false, isStale: true, age: 'Never scanned', tools: null }
+
+    const duration = Date.now() - startTime
+    log.info(`IPC: getCachedSnapshot completed in ${duration}ms`)
+
+    return {
+        system: instantSystem,
+        tooling: cachedTools,
+        timestamp: Date.now()
+    }
+}
+
+/**
+ * Stream refresh: runs parallel scans and pushes each category result
+ * to the renderer as it completes (Phase 2+3: progressive loading).
+ */
+async function handleStreamRefreshAll(mainWindow: BrowserWindow) {
+    log.info('IPC: streamRefreshAll (parallel + streaming)')
+    const startTime = Date.now()
+
+    // Clear caches
+    clearCommandCache()
+    invalidateUnifiedBatchCache()
+
+    try {
+        await sensingEngine.scanAllParallel((category, results) => {
+            // Push each category to renderer as it completes
+            mainWindow.webContents.send('devscope:scanProgress', {
+                category,
+                results,
+                timestamp: Date.now()
+            })
+        })
+
+        // Also get fresh system info in parallel
+        const system = await getOptimizedSystemInfo()
+        mainWindow.webContents.send('devscope:scanProgress', {
+            category: 'system',
+            results: system,
+            timestamp: Date.now()
+        })
+
+        const duration = Date.now() - startTime
+        log.info(`IPC: streamRefreshAll completed in ${duration}ms`)
+
+        // Signal completion
+        mainWindow.webContents.send('devscope:scanComplete', {
+            duration,
+            timestamp: Date.now()
+        })
+
+        return { success: true, duration }
+    } catch (err: any) {
+        log.error('IPC: streamRefreshAll failed:', err)
+        return { success: false, error: err.message }
     }
 }
 
@@ -392,6 +483,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getAIAgents', handleGetAIAgents)
     ipcMain.handle('devscope:getReadinessReport', handleGetReadinessReport)
     ipcMain.handle('devscope:refreshAll', handleRefreshAll)
+
+    // Fast loading system
+    ipcMain.handle('devscope:getCachedSnapshot', handleGetCachedSnapshot)
+    ipcMain.handle('devscope:streamRefreshAll', () => handleStreamRefreshAll(mainWindow))
 
     // Settings
     ipcMain.handle('devscope:exportData', handleExportData)

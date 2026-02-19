@@ -116,8 +116,8 @@ export default function Dropdown({
                 <div
                     className={cn(
                         "absolute z-50 w-full mt-2 py-1.5 rounded-xl",
-                        "bg-sparkle-card/95 backdrop-blur-xl border border-white/[0.08]",
-                        "shadow-xl shadow-black/40",
+                        "bg-[#1a1a2e] border border-white/[0.12]",
+                        "shadow-2xl shadow-black/60",
                         "animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150",
                         "max-h-[280px] overflow-y-auto",
                         menuClassName

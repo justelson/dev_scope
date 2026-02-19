@@ -3,7 +3,7 @@
  */
 
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Home, Wrench, Bot, Sparkles, Server, Settings, RefreshCw, Terminal, FolderOpen } from 'lucide-react'
+import { Home, Wrench, Bot, Sparkles, Server, Settings, RefreshCw, Terminal, FolderOpen, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { updateCache } from '@/lib/refreshCache'
 import { useState } from 'react'
@@ -14,12 +14,14 @@ interface NavItem {
     label: string
     path: string
     icon: typeof Home
+    badge?: string
 }
 
 const NAV_ITEMS: NavItem[] = [
     { id: 'home', label: 'Dashboard', path: '/', icon: Home },
     { id: 'devtools', label: 'Dev Tools', path: '/devtools', icon: Wrench },
     { id: 'ai-agents', label: 'AI Agents', path: '/ai-agents', icon: Sparkles },
+    { id: 'agentscope', label: 'AgentScope', path: '/agentscope', icon: Layers, badge: 'ALPHA' },
     { id: 'ai', label: 'AI Runtime', path: '/ai', icon: Bot },
     { id: 'projects', label: 'Projects', path: '/projects', icon: FolderOpen },
     { id: 'system', label: 'System', path: '/system', icon: Server },
@@ -69,6 +71,11 @@ export default function Sidebar() {
                         >
                             <Icon size={18} />
                             <span className="text-sm font-medium">{item.label}</span>
+                            {item.badge && (
+                                <span className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                    {item.badge}
+                                </span>
+                            )}
                         </button>
                     )
                 })}
@@ -96,7 +103,7 @@ export default function Sidebar() {
                     )}
 
                     {activeSessionCount === 0 && (
-                        <span className="ml-auto text-xs text-white/30 hidden hover:block">Ctrl+`</span>
+                        <span className="ml-auto text-xs text-sparkle-text-muted hidden hover:block">Ctrl+`</span>
                     )}
                 </button>
 

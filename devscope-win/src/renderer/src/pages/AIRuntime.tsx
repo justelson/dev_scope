@@ -67,15 +67,22 @@ export default function AIRuntime() {
     const cachedAIRuntime = getCache<AIRuntimeReport>('aiRuntime')
     const [data, setData] = useState<AIRuntimeReport | null>(cachedAIRuntime)
     const [loading, setLoading] = useState(!cachedAIRuntime)
+    const [isRefreshing, setIsRefreshing] = useState(false)
 
     // UI State
     const [searchQuery, setSearchQuery] = useState('')
     const [filterCategory, setFilterCategory] = useState<FilterCategory>('all')
     const [viewMode, setViewMode] = useState<ViewMode>('grid')
 
-    const fetchData = async () => {
-        try {
+    const fetchData = async (showRefreshIndicator = true) => {
+        // Only show subtle refresh, not full loading if we have data
+        if (showRefreshIndicator && data) {
+            setIsRefreshing(true)
+        } else if (!data) {
             setLoading(true)
+        }
+
+        try {
             const result = await window.devscope.getAIRuntimeStatus()
             updateCache({ aiRuntime: result })
             setData(result)
@@ -83,12 +90,15 @@ export default function AIRuntime() {
             console.error('Failed to fetch AI runtime status:', err)
         } finally {
             setLoading(false)
+            setIsRefreshing(false)
         }
     }
 
     useEffect(() => {
-        // Always fetch fresh data on mount (cache is used for instant display only)
-        fetchData()
+        // Fetch if no cache or stale
+        if (!cachedAIRuntime || isCacheStale('aiRuntime')) {
+            fetchData(!cachedAIRuntime)
+        }
 
         const handleRefresh = (event: Event) => {
             const detail = (event as CustomEvent<RefreshDetail>).detail
@@ -96,9 +106,10 @@ export default function AIRuntime() {
                 updateCache({ aiRuntime: detail.aiRuntime })
                 setData(detail.aiRuntime)
                 setLoading(false)
+                setIsRefreshing(false)
                 return
             }
-            fetchData()
+            fetchData(true)
         }
 
         window.addEventListener('devscope:refresh', handleRefresh)
@@ -422,7 +433,9 @@ export default function AIRuntime() {
                                         {runtime.installed ? (
                                             <div className="flex items-center gap-2">
                                                 <Check size={14} className="text-green-500" />
-                                                <p className="text-sm text-sparkle-text-secondary font-mono">v{runtime.version}</p>
+                                                <p className="text-sm text-sparkle-text-secondary font-mono">
+                                                    {runtime.version && runtime.version !== 'Installed' && /\d/.test(runtime.version) ? `v${runtime.version}` : 'Installed'}
+                                                </p>
                                             </div>
                                         ) : (
                                             <div className="flex items-center gap-2">
@@ -512,7 +525,7 @@ export default function AIRuntime() {
 
                                 <div className="flex-1 min-w-0">
                                     <h3 className="font-bold text-white">{gpu.displayName}</h3>
-                                    {gpu.version && (
+                                    {gpu.version && gpu.version !== 'Installed' && /\d/.test(gpu.version) && (
                                         <p className="text-xs text-sparkle-text-secondary font-mono">v{gpu.version}</p>
                                     )}
                                 </div>
@@ -558,7 +571,7 @@ export default function AIRuntime() {
 
                                 <div className="flex-1 min-w-0">
                                     <h3 className="font-bold text-white">{framework.displayName}</h3>
-                                    {framework.version && (
+                                    {framework.version && framework.version !== 'Installed' && /\d/.test(framework.version) && (
                                         <p className="text-xs text-sparkle-text-secondary font-mono">v{framework.version}</p>
                                     )}
                                 </div>

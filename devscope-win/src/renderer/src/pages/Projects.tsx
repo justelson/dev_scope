@@ -91,19 +91,61 @@ export default function Projects() {
     } | null>(null)
 
     const loadProjects = async () => {
-        if (!settings.projectsFolder) return
+        // Get all folders to scan (main + additional)
+        const foldersToScan = [
+            settings.projectsFolder,
+            ...(settings.additionalFolders || [])
+        ].filter(Boolean)
+
+        if (foldersToScan.length === 0) return
 
         setLoading(true)
         setError(null)
 
         try {
-            const result = await window.devscope.scanProjects(settings.projectsFolder)
-            if (result.success) {
-                setProjects(result.projects || [])
-                setFolders(result.folders || [])
-                setFiles(result.files || [])
-            } else {
-                setError(result.error || 'Failed to scan projects')
+            // Scan all folders in parallel
+            const results = await Promise.all(
+                foldersToScan.map(folder => window.devscope.scanProjects(folder))
+            )
+
+            // Merge results from all folders
+            const allProjects: Project[] = []
+            const allFolders: FolderItem[] = []
+            const allFiles: FileItem[] = []
+            const seenPaths = new Set<string>()
+
+            for (const result of results) {
+                if (result.success) {
+                    // Deduplicate by path
+                    for (const project of (result.projects || [])) {
+                        if (!seenPaths.has(project.path)) {
+                            seenPaths.add(project.path)
+                            allProjects.push(project)
+                        }
+                    }
+                    for (const folder of (result.folders || [])) {
+                        if (!seenPaths.has(folder.path)) {
+                            seenPaths.add(folder.path)
+                            allFolders.push(folder)
+                        }
+                    }
+                    for (const file of (result.files || [])) {
+                        if (!seenPaths.has(file.path)) {
+                            seenPaths.add(file.path)
+                            allFiles.push(file)
+                        }
+                    }
+                }
+            }
+
+            setProjects(allProjects)
+            setFolders(allFolders)
+            setFiles(allFiles)
+
+            // Set error only if ALL scans failed
+            const allFailed = results.every(r => !r.success)
+            if (allFailed && results.length > 0) {
+                setError(results[0].error || 'Failed to scan projects')
             }
         } catch (err: any) {
             setError(err.message || 'Failed to scan projects')
@@ -114,7 +156,7 @@ export default function Projects() {
 
     useEffect(() => {
         loadProjects()
-    }, [settings.projectsFolder])
+    }, [settings.projectsFolder, settings.additionalFolders])
 
     // Deep search function - searches recursively through all subfolders
     const performDeepSearch = useCallback(async (query: string) => {
@@ -473,11 +515,13 @@ export default function Projects() {
                     {/* Search & Filter */}
                     <div className="flex flex-1 w-full gap-3">
                         <div className="relative flex-1 group/search">
-                            {isSearching ? (
-                                <Loader2 className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400 animate-spin" size={16} />
-                            ) : (
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/25 group-focus-within/search:text-indigo-400 transition-colors duration-200" size={16} />
-                            )}
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center w-4 h-4">
+                                {isSearching ? (
+                                    <Loader2 className="text-indigo-400 animate-spin" size={16} />
+                                ) : (
+                                    <Search className="text-white/25 group-focus-within/search:text-indigo-400 transition-colors duration-200" size={16} />
+                                )}
+                            </div>
                             <input
                                 type="text"
                                 placeholder="Deep search all files and folders..."

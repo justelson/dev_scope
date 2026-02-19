@@ -4,14 +4,15 @@
  */
 
 import { useState, useEffect } from 'react'
-import { 
-    Cpu, Monitor, MemoryStick, HardDrive, Wifi, Battery, 
-    Activity, Thermometer, Server
+import {
+    Cpu, Monitor, MemoryStick, HardDrive, Wifi, Battery,
+    Activity, Thermometer, Server, RefreshCw
 } from 'lucide-react'
-import { 
+import {
     PieChart, Pie, Cell, ResponsiveContainer
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { getCache, updateCache, isCacheStale } from '@/lib/refreshCache'
 import { LoadingSpinner, LoadingOverlay, SystemStatsSkeleton } from '@/components/ui/LoadingState'
 
 interface DetailedStats {
@@ -129,24 +130,38 @@ const formatSpeed = (bytes: number) => {
 }
 
 export default function System() {
-    const [stats, setStats] = useState<DetailedStats | null>(null)
-    const [loading, setLoading] = useState(true)
+    // Load cached data immediately
+    const cachedStats = getCache<DetailedStats>('detailedSystem')
+    const [stats, setStats] = useState<DetailedStats | null>(cachedStats)
+    const [loading, setLoading] = useState(!cachedStats) // Only show loading if no cache
+    const [isRefreshing, setIsRefreshing] = useState(false)
 
-    const fetchData = async () => {
+    const fetchData = async (showRefreshIndicator = true) => {
+        // Show subtle refresh indicator, not full loading
+        if (showRefreshIndicator && stats) {
+            setIsRefreshing(true)
+        }
+
         try {
             const data = await (window as any).devscope.getDetailedSystemStats()
+            updateCache({ detailedSystem: data })
             setStats(data)
         } catch (err) {
             console.error('Failed to fetch system stats:', err)
         } finally {
             setLoading(false)
+            setIsRefreshing(false)
         }
     }
 
     useEffect(() => {
-        fetchData()
-        // Refresh every 30 seconds instead of 5 (less aggressive)
-        const interval = setInterval(fetchData, 30000)
+        // If no cache or cache is stale, fetch new data
+        if (!cachedStats || isCacheStale('detailedSystem')) {
+            fetchData(!cachedStats) // Only show full loading if no cached data
+        }
+
+        // Refresh every 30 seconds
+        const interval = setInterval(() => fetchData(true), 30000)
         return () => clearInterval(interval)
     }, [])
 
@@ -157,9 +172,9 @@ export default function System() {
                     <h1 className="text-3xl font-bold text-sparkle-text mb-2">System Information</h1>
                     <p className="text-sparkle-text-secondary text-lg">Gathering hardware information...</p>
                 </div>
-                
+
                 <SystemStatsSkeleton />
-                
+
                 <LoadingOverlay message="Scanning hardware..." />
             </div>
         )
@@ -183,68 +198,73 @@ export default function System() {
             {/* Header */}
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-sparkle-text mb-2">System Information</h1>
-                <p className="text-sparkle-text-secondary text-lg">
-                    Real-time hardware monitoring and system specifications.
-                </p>
+                <div className="flex items-center gap-2">
+                    <p className="text-sparkle-text-secondary text-lg">
+                        Real-time hardware monitoring and system specifications.
+                    </p>
+                    {isRefreshing && (
+                        <RefreshCw size={14} className="text-sparkle-accent animate-spin" />
+                    )}
+                </div>
             </div>
 
             {/* Top Stats Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-white/5">
+                <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-sparkle-border">
                     <div className="flex items-center gap-3 mb-3">
                         <div className="p-2 rounded-lg bg-blue-500/10">
                             <Cpu className="text-blue-400" size={18} />
                         </div>
-                        <span className="text-xs text-white/40 uppercase tracking-wider font-bold">CPU Load</span>
+                        <span className="text-xs text-sparkle-text-muted uppercase tracking-wider font-bold">CPU Load</span>
                     </div>
-                    <p className="text-3xl font-bold text-white">{Math.round(stats.cpu.load)}%</p>
-                    <p className="text-xs text-white/40 mt-1">{stats.cpu.currentSpeed.toFixed(2)} GHz</p>
+                    <p className="text-3xl font-bold text-sparkle-text">{Math.round(stats.cpu.load)}%</p>
+                    <p className="text-xs text-sparkle-text-muted mt-1">{stats.cpu.currentSpeed.toFixed(2)} GHz</p>
                 </div>
 
-                <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-white/5">
+                <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-sparkle-border">
                     <div className="flex items-center gap-3 mb-3">
                         <div className="p-2 rounded-lg bg-purple-500/10">
                             <MemoryStick className="text-purple-400" size={18} />
                         </div>
-                        <span className="text-xs text-white/40 uppercase tracking-wider font-bold">Memory</span>
+                        <span className="text-xs text-sparkle-text-muted uppercase tracking-wider font-bold">Memory</span>
                     </div>
-                    <p className="text-3xl font-bold text-white">{memoryUsagePercent}%</p>
-                    <p className="text-xs text-white/40 mt-1">{formatBytes(stats.memory.used)} / {formatBytes(stats.memory.total)}</p>
+                    <p className="text-3xl font-bold text-sparkle-text">{memoryUsagePercent}%</p>
+                    <p className="text-xs text-sparkle-text-muted mt-1">{formatBytes(stats.memory.used)} / {formatBytes(stats.memory.total)}</p>
                 </div>
 
-                <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-white/5">
+                <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-sparkle-border">
                     <div className="flex items-center gap-3 mb-3">
                         <div className="p-2 rounded-lg bg-green-500/10">
                             <Activity className="text-green-400" size={18} />
                         </div>
-                        <span className="text-xs text-white/40 uppercase tracking-wider font-bold">Processes</span>
+                        <span className="text-xs text-sparkle-text-muted uppercase tracking-wider font-bold">Processes</span>
                     </div>
-                    <p className="text-3xl font-bold text-white">{stats.processes.all}</p>
-                    <p className="text-xs text-white/40 mt-1">{stats.processes.running} running</p>
+                    <p className="text-3xl font-bold text-sparkle-text">{stats.processes.all}</p>
+                    <p className="text-xs text-sparkle-text-muted mt-1">{stats.processes.running} running</p>
                 </div>
 
                 {stats.cpu.temperature && (
-                    <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-white/5">
+                    <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-sparkle-border">
                         <div className="flex items-center gap-3 mb-3">
                             <div className="p-2 rounded-lg bg-orange-500/10">
                                 <Thermometer className="text-orange-400" size={18} />
                             </div>
-                            <span className="text-xs text-white/40 uppercase tracking-wider font-bold">CPU Temp</span>
+                            <span className="text-xs text-sparkle-text-muted uppercase tracking-wider font-bold">CPU Temp</span>
                         </div>
-                        <p className="text-3xl font-bold text-white">{Math.round(stats.cpu.temperature)}°C</p>
+                        <p className="text-3xl font-bold text-sparkle-text">{Math.round(stats.cpu.temperature)}°C</p>
                     </div>
                 )}
 
                 {stats.battery?.hasBattery && (
-                    <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-white/5">
+                    <div className="bg-sparkle-card/50 rounded-2xl p-5 border border-sparkle-border">
                         <div className="flex items-center gap-3 mb-3">
                             <div className="p-2 rounded-lg bg-yellow-500/10">
                                 <Battery className="text-yellow-400" size={18} />
                             </div>
-                            <span className="text-xs text-white/40 uppercase tracking-wider font-bold">Battery</span>
+                            <span className="text-xs text-sparkle-text-muted uppercase tracking-wider font-bold">Battery</span>
                         </div>
-                        <p className="text-3xl font-bold text-white">{stats.battery.percent}%</p>
-                        <p className="text-xs text-white/40 mt-1">{stats.battery.isCharging ? 'Charging' : 'On Battery'}</p>
+                        <p className="text-3xl font-bold text-sparkle-text">{stats.battery.percent}%</p>
+                        <p className="text-xs text-sparkle-text-muted mt-1">{stats.battery.isCharging ? 'Charging' : 'On Battery'}</p>
                     </div>
                 )}
             </div>
@@ -252,46 +272,46 @@ export default function System() {
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                 {/* CPU Details */}
-                <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-white/5">
+                <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-sparkle-border">
                     <div className="flex items-center gap-3 mb-6">
                         <div className="p-3 rounded-xl bg-blue-500/10">
                             <Cpu className="text-blue-400" size={22} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-white">Processor</h2>
-                            <p className="text-sm text-white/40">{stats.cpu.model}</p>
+                            <h2 className="text-lg font-bold text-sparkle-text">Processor</h2>
+                            <p className="text-sm text-sparkle-text-muted">{stats.cpu.model}</p>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white/5 rounded-xl p-4">
-                            <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Cores</p>
-                            <p className="text-xl font-bold text-white">{stats.cpu.physicalCores} Physical</p>
-                            <p className="text-sm text-white/50">{stats.cpu.cores} Logical</p>
+                        <div className="bg-sparkle-card rounded-xl p-4">
+                            <p className="text-xs text-sparkle-text-muted uppercase tracking-wider mb-1">Cores</p>
+                            <p className="text-xl font-bold text-sparkle-text">{stats.cpu.physicalCores} Physical</p>
+                            <p className="text-sm text-sparkle-text-secondary">{stats.cpu.cores} Logical</p>
                         </div>
-                        <div className="bg-white/5 rounded-xl p-4">
-                            <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Speed</p>
-                            <p className="text-xl font-bold text-white">{stats.cpu.speed} GHz</p>
-                            <p className="text-sm text-white/50">Max: {stats.cpu.speedMax} GHz</p>
+                        <div className="bg-sparkle-card rounded-xl p-4">
+                            <p className="text-xs text-sparkle-text-muted uppercase tracking-wider mb-1">Speed</p>
+                            <p className="text-xl font-bold text-sparkle-text">{stats.cpu.speed} GHz</p>
+                            <p className="text-sm text-sparkle-text-secondary">Max: {stats.cpu.speedMax} GHz</p>
                         </div>
-                        <div className="bg-white/5 rounded-xl p-4">
-                            <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Current Speed</p>
-                            <p className="text-xl font-bold text-white">{stats.cpu.currentSpeed.toFixed(2)} GHz</p>
+                        <div className="bg-sparkle-card rounded-xl p-4">
+                            <p className="text-xs text-sparkle-text-muted uppercase tracking-wider mb-1">Current Speed</p>
+                            <p className="text-xl font-bold text-sparkle-text">{stats.cpu.currentSpeed.toFixed(2)} GHz</p>
                         </div>
-                        <div className="bg-white/5 rounded-xl p-4">
-                            <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Manufacturer</p>
-                            <p className="text-xl font-bold text-white">{stats.cpu.manufacturer}</p>
+                        <div className="bg-sparkle-card rounded-xl p-4">
+                            <p className="text-xs text-sparkle-text-muted uppercase tracking-wider mb-1">Manufacturer</p>
+                            <p className="text-xl font-bold text-sparkle-text">{stats.cpu.manufacturer}</p>
                         </div>
                     </div>
 
                     {/* CPU Load Bar */}
                     <div className="mt-6">
                         <div className="flex justify-between text-sm mb-2">
-                            <span className="text-white/40">CPU Usage</span>
+                            <span className="text-sparkle-text-muted">CPU Usage</span>
                             <span className="text-blue-400 font-mono">{Math.round(stats.cpu.load)}%</span>
                         </div>
-                        <div className="h-3 bg-white/5 rounded-full overflow-hidden">
-                            <div 
+                        <div className="h-3 bg-sparkle-card rounded-full overflow-hidden">
+                            <div
                                 className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-500"
                                 style={{ width: `${stats.cpu.load}%` }}
                             />
@@ -300,14 +320,14 @@ export default function System() {
                 </div>
 
                 {/* Memory Details */}
-                <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-white/5">
+                <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-sparkle-border">
                     <div className="flex items-center gap-3 mb-6">
                         <div className="p-3 rounded-xl bg-purple-500/10">
                             <MemoryStick className="text-purple-400" size={22} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-white">Memory</h2>
-                            <p className="text-sm text-white/40">{formatBytes(stats.memory.total)} Total</p>
+                            <h2 className="text-lg font-bold text-sparkle-text">Memory</h2>
+                            <p className="text-sm text-sparkle-text-muted">{formatBytes(stats.memory.total)} Total</p>
                         </div>
                     </div>
 
@@ -331,7 +351,7 @@ export default function System() {
                                 </PieChart>
                             </ResponsiveContainer>
                             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-2xl font-bold text-white">{memoryUsagePercent}%</span>
+                                <span className="text-2xl font-bold text-sparkle-text">{memoryUsagePercent}%</span>
                             </div>
                         </div>
 
@@ -340,36 +360,36 @@ export default function System() {
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <div className="w-3 h-3 rounded-full bg-blue-500" />
-                                    <span className="text-sm text-white/60">Used</span>
+                                    <span className="text-sm text-sparkle-text-secondary">Used</span>
                                 </div>
-                                <span className="text-sm font-mono text-white">{formatBytes(stats.memory.used)}</span>
+                                <span className="text-sm font-mono text-sparkle-text">{formatBytes(stats.memory.used)}</span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <div className="w-3 h-3 rounded-full bg-purple-500" />
-                                    <span className="text-sm text-white/60">Cached</span>
+                                    <span className="text-sm text-sparkle-text-secondary">Cached</span>
                                 </div>
-                                <span className="text-sm font-mono text-white">{formatBytes(stats.memory.cached)}</span>
+                                <span className="text-sm font-mono text-sparkle-text">{formatBytes(stats.memory.cached)}</span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <div className="w-3 h-3 rounded-full bg-slate-800" />
-                                    <span className="text-sm text-white/60">Free</span>
+                                    <span className="text-sm text-sparkle-text-secondary">Free</span>
                                 </div>
-                                <span className="text-sm font-mono text-white">{formatBytes(stats.memory.free)}</span>
+                                <span className="text-sm font-mono text-sparkle-text">{formatBytes(stats.memory.free)}</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Memory Modules */}
                     {stats.memory.layout.length > 0 && stats.memory.layout[0].size > 0 && (
-                        <div className="mt-6 pt-4 border-t border-white/5">
-                            <p className="text-xs text-white/40 uppercase tracking-wider mb-3">Memory Modules</p>
+                        <div className="mt-6 pt-4 border-t border-sparkle-border">
+                            <p className="text-xs text-sparkle-text-muted uppercase tracking-wider mb-3">Memory Modules</p>
                             <div className="space-y-2">
                                 {stats.memory.layout.filter(m => m.size > 0).map((module, i) => (
-                                    <div key={i} className="flex items-center justify-between text-sm bg-white/5 rounded-lg px-3 py-2">
-                                        <span className="text-white/60">Slot {i + 1}</span>
-                                        <span className="text-white font-mono">
+                                    <div key={i} className="flex items-center justify-between text-sm bg-sparkle-card rounded-lg px-3 py-2">
+                                        <span className="text-sparkle-text-secondary">Slot {i + 1}</span>
+                                        <span className="text-sparkle-text font-mono">
                                             {formatBytes(module.size)} {module.type} @ {module.clockSpeed} MHz
                                         </span>
                                     </div>
@@ -381,31 +401,31 @@ export default function System() {
             </div>
 
             {/* Storage Section */}
-            <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-white/5 mb-8">
+            <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-sparkle-border mb-8">
                 <div className="flex items-center gap-3 mb-6">
                     <div className="p-3 rounded-xl bg-orange-500/10">
                         <HardDrive className="text-orange-400" size={22} />
                     </div>
                     <div>
-                        <h2 className="text-lg font-bold text-white">Storage</h2>
-                        <p className="text-sm text-white/40">{stats.disks.length} drive(s) detected</p>
+                        <h2 className="text-lg font-bold text-sparkle-text">Storage</h2>
+                        <p className="text-sm text-sparkle-text-muted">{stats.disks.length} drive(s) detected</p>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {stats.disks.map((disk, i) => (
-                        <div key={i} className="bg-white/5 rounded-xl p-4">
+                        <div key={i} className="bg-sparkle-card rounded-xl p-4">
                             <div className="flex items-center justify-between mb-3">
-                                <span className="text-white font-medium truncate">{disk.mount}</span>
-                                <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded">{disk.type}</span>
+                                <span className="text-sparkle-text font-medium truncate">{disk.mount}</span>
+                                <span className="text-xs text-sparkle-text-muted bg-sparkle-card px-2 py-1 rounded">{disk.type}</span>
                             </div>
                             <div className="mb-2">
                                 <div className="flex justify-between text-xs mb-1">
-                                    <span className="text-white/40">{formatBytes(disk.used)} used</span>
-                                    <span className="text-white/40">{formatBytes(disk.size)} total</span>
+                                    <span className="text-sparkle-text-muted">{formatBytes(disk.used)} used</span>
+                                    <span className="text-sparkle-text-muted">{formatBytes(disk.size)} total</span>
                                 </div>
                                 <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                                    <div 
+                                    <div
                                         className={cn(
                                             "h-full rounded-full transition-all",
                                             disk.use > 90 ? "bg-red-500" : disk.use > 70 ? "bg-yellow-500" : "bg-orange-500"
@@ -416,7 +436,7 @@ export default function System() {
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-orange-400 font-mono">{disk.use.toFixed(1)}%</span>
-                                <span className="text-white/40">{formatBytes(disk.available)} free</span>
+                                <span className="text-sparkle-text-muted">{formatBytes(disk.available)} free</span>
                             </div>
                         </div>
                     ))}
@@ -424,15 +444,15 @@ export default function System() {
 
                 {/* Disk I/O */}
                 {stats.diskIO && (
-                    <div className="mt-6 pt-4 border-t border-white/5">
-                        <p className="text-xs text-white/40 uppercase tracking-wider mb-3">Disk I/O</p>
+                    <div className="mt-6 pt-4 border-t border-sparkle-border">
+                        <p className="text-xs text-sparkle-text-muted uppercase tracking-wider mb-3">Disk I/O</p>
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-white/5 rounded-lg p-3 flex items-center justify-between">
-                                <span className="text-white/60 text-sm">Read Speed</span>
+                            <div className="bg-sparkle-card rounded-lg p-3 flex items-center justify-between">
+                                <span className="text-sparkle-text-secondary text-sm">Read Speed</span>
                                 <span className="text-green-400 font-mono">{formatSpeed(stats.diskIO.rIO_sec || 0)}</span>
                             </div>
-                            <div className="bg-white/5 rounded-lg p-3 flex items-center justify-between">
-                                <span className="text-white/60 text-sm">Write Speed</span>
+                            <div className="bg-sparkle-card rounded-lg p-3 flex items-center justify-between">
+                                <span className="text-sparkle-text-secondary text-sm">Write Speed</span>
                                 <span className="text-blue-400 font-mono">{formatSpeed(stats.diskIO.wIO_sec || 0)}</span>
                             </div>
                         </div>
@@ -443,14 +463,14 @@ export default function System() {
             {/* Network & OS Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Network */}
-                <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-white/5">
+                <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-sparkle-border">
                     <div className="flex items-center gap-3 mb-6">
                         <div className="p-3 rounded-xl bg-cyan-500/10">
                             <Wifi className="text-cyan-400" size={22} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-white">Network</h2>
-                            <p className="text-sm text-white/40">{stats.network.interfaces.filter(i => i.operstate === 'up').length} active interface(s)</p>
+                            <h2 className="text-lg font-bold text-sparkle-text">Network</h2>
+                            <p className="text-sm text-sparkle-text-muted">{stats.network.interfaces.filter(i => i.operstate === 'up').length} active interface(s)</p>
                         </div>
                     </div>
 
@@ -458,9 +478,9 @@ export default function System() {
                         {stats.network.interfaces.filter(i => i.ip4 && i.operstate === 'up').slice(0, 4).map((iface, i) => {
                             const netStat = stats.network.stats.find(s => s.iface === iface.iface)
                             return (
-                                <div key={i} className="bg-white/5 rounded-xl p-4">
+                                <div key={i} className="bg-sparkle-card rounded-xl p-4">
                                     <div className="flex items-center justify-between mb-2">
-                                        <span className="text-white font-medium">{iface.iface}</span>
+                                        <span className="text-sparkle-text font-medium">{iface.iface}</span>
                                         <span className={cn(
                                             "text-xs px-2 py-1 rounded",
                                             iface.operstate === 'up' ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
@@ -470,16 +490,16 @@ export default function System() {
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 text-sm">
                                         <div>
-                                            <span className="text-white/40">IP: </span>
-                                            <span className="text-white font-mono">{iface.ip4}</span>
+                                            <span className="text-sparkle-text-muted">IP: </span>
+                                            <span className="text-sparkle-text font-mono">{iface.ip4}</span>
                                         </div>
                                         <div>
-                                            <span className="text-white/40">Type: </span>
-                                            <span className="text-white">{iface.type}</span>
+                                            <span className="text-sparkle-text-muted">Type: </span>
+                                            <span className="text-sparkle-text">{iface.type}</span>
                                         </div>
                                     </div>
                                     {netStat && (
-                                        <div className="flex gap-4 mt-2 pt-2 border-t border-white/5 text-xs">
+                                        <div className="flex gap-4 mt-2 pt-2 border-t border-sparkle-border text-xs">
                                             <span className="text-green-400">↓ {formatSpeed(netStat.rx_sec || 0)}</span>
                                             <span className="text-blue-400">↑ {formatSpeed(netStat.tx_sec || 0)}</span>
                                         </div>
@@ -491,59 +511,59 @@ export default function System() {
                 </div>
 
                 {/* Operating System */}
-                <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-white/5">
+                <div className="bg-sparkle-card/50 rounded-2xl p-6 border border-sparkle-border">
                     <div className="flex items-center gap-3 mb-6">
                         <div className="p-3 rounded-xl bg-red-500/10">
                             <Server className="text-red-400" size={22} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-white">Operating System</h2>
-                            <p className="text-sm text-white/40">{stats.os.distro}</p>
+                            <h2 className="text-lg font-bold text-sparkle-text">Operating System</h2>
+                            <p className="text-sm text-sparkle-text-muted">{stats.os.distro}</p>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white/5 rounded-lg p-3">
-                            <p className="text-xs text-white/40 mb-1">Version</p>
-                            <p className="text-white font-mono text-sm">{stats.os.release}</p>
+                        <div className="bg-sparkle-card rounded-lg p-3">
+                            <p className="text-xs text-sparkle-text-muted mb-1">Version</p>
+                            <p className="text-sparkle-text font-mono text-sm">{stats.os.release}</p>
                         </div>
-                        <div className="bg-white/5 rounded-lg p-3">
-                            <p className="text-xs text-white/40 mb-1">Build</p>
-                            <p className="text-white font-mono text-sm">{stats.os.build || 'N/A'}</p>
+                        <div className="bg-sparkle-card rounded-lg p-3">
+                            <p className="text-xs text-sparkle-text-muted mb-1">Build</p>
+                            <p className="text-sparkle-text font-mono text-sm">{stats.os.build || 'N/A'}</p>
                         </div>
-                        <div className="bg-white/5 rounded-lg p-3">
-                            <p className="text-xs text-white/40 mb-1">Architecture</p>
-                            <p className="text-white font-mono text-sm">{stats.os.arch}</p>
+                        <div className="bg-sparkle-card rounded-lg p-3">
+                            <p className="text-xs text-sparkle-text-muted mb-1">Architecture</p>
+                            <p className="text-sparkle-text font-mono text-sm">{stats.os.arch}</p>
                         </div>
-                        <div className="bg-white/5 rounded-lg p-3">
-                            <p className="text-xs text-white/40 mb-1">Kernel</p>
-                            <p className="text-white font-mono text-sm truncate">{stats.os.kernel}</p>
+                        <div className="bg-sparkle-card rounded-lg p-3">
+                            <p className="text-xs text-sparkle-text-muted mb-1">Kernel</p>
+                            <p className="text-sparkle-text font-mono text-sm truncate">{stats.os.kernel}</p>
                         </div>
-                        <div className="bg-white/5 rounded-lg p-3">
-                            <p className="text-xs text-white/40 mb-1">Hostname</p>
-                            <p className="text-white font-mono text-sm">{stats.os.hostname}</p>
+                        <div className="bg-sparkle-card rounded-lg p-3">
+                            <p className="text-xs text-sparkle-text-muted mb-1">Hostname</p>
+                            <p className="text-sparkle-text font-mono text-sm">{stats.os.hostname}</p>
                         </div>
-                        <div className="bg-white/5 rounded-lg p-3">
-                            <p className="text-xs text-white/40 mb-1">Boot Mode</p>
-                            <p className="text-white font-mono text-sm">{stats.os.uefi ? 'UEFI' : 'Legacy BIOS'}</p>
+                        <div className="bg-sparkle-card rounded-lg p-3">
+                            <p className="text-xs text-sparkle-text-muted mb-1">Boot Mode</p>
+                            <p className="text-sparkle-text font-mono text-sm">{stats.os.uefi ? 'UEFI' : 'Legacy BIOS'}</p>
                         </div>
                     </div>
 
                     {/* Processes Summary */}
-                    <div className="mt-6 pt-4 border-t border-white/5">
-                        <p className="text-xs text-white/40 uppercase tracking-wider mb-3">Processes</p>
+                    <div className="mt-6 pt-4 border-t border-sparkle-border">
+                        <p className="text-xs text-sparkle-text-muted uppercase tracking-wider mb-3">Processes</p>
                         <div className="flex gap-4">
-                            <div className="flex-1 bg-white/5 rounded-lg p-3 text-center">
-                                <p className="text-2xl font-bold text-white">{stats.processes.all}</p>
-                                <p className="text-xs text-white/40">Total</p>
+                            <div className="flex-1 bg-sparkle-card rounded-lg p-3 text-center">
+                                <p className="text-2xl font-bold text-sparkle-text">{stats.processes.all}</p>
+                                <p className="text-xs text-sparkle-text-muted">Total</p>
                             </div>
-                            <div className="flex-1 bg-white/5 rounded-lg p-3 text-center">
+                            <div className="flex-1 bg-sparkle-card rounded-lg p-3 text-center">
                                 <p className="text-2xl font-bold text-green-400">{stats.processes.running}</p>
-                                <p className="text-xs text-white/40">Running</p>
+                                <p className="text-xs text-sparkle-text-muted">Running</p>
                             </div>
-                            <div className="flex-1 bg-white/5 rounded-lg p-3 text-center">
+                            <div className="flex-1 bg-sparkle-card rounded-lg p-3 text-center">
                                 <p className="text-2xl font-bold text-yellow-400">{stats.processes.sleeping}</p>
-                                <p className="text-xs text-white/40">Sleeping</p>
+                                <p className="text-xs text-sparkle-text-muted">Sleeping</p>
                             </div>
                         </div>
                     </div>

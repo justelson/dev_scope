@@ -1,0 +1,513 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   Sparkle Design System - Dark Theme (Default)
+   ============================================================================ */
+:root {
+  --color-bg: #0c121f;
+  --color-text: #f0f4f8;
+  --color-text-dark: #d3dbe4;
+  --color-text-darker: #aab4c3;
+  --color-text-secondary: #7e92a9;
+  --color-text-muted: #3b4658;
+  --color-card: #131c2c;
+  --color-border: #1f2a3d;
+  --color-border-secondary: #212f44;
+  --color-primary: #4f90e6;
+  --color-secondary: #3db58a;
+  --color-accent: #243144;
+  
+  /* Customizable accent colors (set via JS) */
+  --accent-primary: #3b82f6;
+  --accent-secondary: #60a5fa;
+  
+  /* Terminal font size */
+  --terminal-font-size: 14px;
+}
+
+/* Light Theme */
+.light {
+  --color-bg: #f9fafb;
+  --color-text: #1e293b;
+  --color-text-dark: #334155;
+  --color-text-darker: #475569;
+  --color-text-secondary: #64748b;
+  --color-text-muted: #94a3b8;
+  --color-card: #ffffff;
+  --color-border: #e2e8f0;
+  --color-border-secondary: #cbd5e1;
+  --color-primary: #3b82f6;
+  --color-secondary: #2dac7d;
+  --color-accent: #f1f5f9;
+}
+
+/* Purple Theme */
+.purple {
+  --color-bg: #151122;
+  --color-text: #dac9f5;
+  --color-text-dark: #c6aef5;
+  --color-text-darker: #b091e6;
+  --color-text-secondary: #a48adf;
+  --color-text-muted: #3c305a;
+  --color-card: #1e1830;
+  --color-border: #301a54;
+  --color-border-secondary: #341d5a;
+  --color-primary: #7c32cc;
+  --color-secondary: #6a1cb4;
+  --color-accent: #341a4c;
+}
+
+/* Green Theme */
+.green {
+  --color-bg: #0a1a11;
+  --color-text: #cceccc;
+  --color-text-dark: #9fd9a3;
+  --color-text-darker: #76b981;
+  --color-text-secondary: #4fd19c;
+  --color-text-muted: #365542;
+  --color-card: #122c1d;
+  --color-border: #1a3f28;
+  --color-border-secondary: #153422;
+  --color-primary: #1ebd87;
+  --color-secondary: #047857;
+  --color-accent: #254335;
+}
+
+/* Midnight Theme */
+.midnight {
+  --color-bg: #0a0e1a;
+  --color-text: #d4dff7;
+  --color-text-dark: #b8c9f0;
+  --color-text-darker: #9bb0e3;
+  --color-text-secondary: #7a92d6;
+  --color-text-muted: #2d3548;
+  --color-card: #0f1420;
+  --color-border: #1a2235;
+  --color-border-secondary: #1e2740;
+  --color-primary: #5b8def;
+  --color-secondary: #4a7dd9;
+  --color-accent: #1a2438;
+}
+
+/* Ocean Deep Theme */
+.ocean {
+  --color-bg: #0a1520;
+  --color-text: #c8e6f5;
+  --color-text-dark: #a3d5ed;
+  --color-text-darker: #7ec4e5;
+  --color-text-secondary: #5ab3dd;
+  --color-text-muted: #2d4a5a;
+  --color-card: #0f1d2a;
+  --color-border: #1a2f3f;
+  --color-border-secondary: #1e3545;
+  --color-primary: #3ba5d9;
+  --color-secondary: #2891c7;
+  --color-accent: #1a3040;
+}
+
+/* Forest Night Theme */
+.forest {
+  --color-bg: #0a1a11;
+  --color-text: #cceccc;
+  --color-text-dark: #9fd9a3;
+  --color-text-darker: #76b981;
+  --color-text-secondary: #4fd19c;
+  --color-text-muted: #365542;
+  --color-card: #122c1d;
+  --color-border: #1a3f28;
+  --color-border-secondary: #153422;
+  --color-primary: #1ebd87;
+  --color-secondary: #047857;
+  --color-accent: #254335;
+}
+
+/* Slate Theme */
+.slate {
+  --color-bg: #1a1d23;
+  --color-text: #e2e8f0;
+  --color-text-dark: #cbd5e1;
+  --color-text-darker: #94a3b8;
+  --color-text-secondary: #64748b;
+  --color-text-muted: #3d4451;
+  --color-card: #22252c;
+  --color-border: #2d3139;
+  --color-border-secondary: #353942;
+  --color-primary: #60a5fa;
+  --color-secondary: #3b82f6;
+  --color-accent: #2a2e36;
+}
+
+/* Charcoal Theme */
+.charcoal {
+  --color-bg: #16181d;
+  --color-text: #e8e6e3;
+  --color-text-dark: #d1cfc9;
+  --color-text-darker: #b8b5ad;
+  --color-text-secondary: #9a9790;
+  --color-text-muted: #3a3c40;
+  --color-card: #1e2025;
+  --color-border: #292b30;
+  --color-border-secondary: #31333a;
+  --color-primary: #f59e0b;
+  --color-secondary: #d97706;
+  --color-accent: #26282d;
+}
+
+/* Navy Theme */
+.navy {
+  --color-bg: #0d1520;
+  --color-text: #d4e4f7;
+  --color-text-dark: #b8d0f0;
+  --color-text-darker: #9bbce3;
+  --color-text-secondary: #7aa8d6;
+  --color-text-muted: #2d3d52;
+  --color-card: #131d2c;
+  --color-border: #1a2a3f;
+  --color-border-secondary: #1e3047;
+  --color-primary: #4f90e6;
+  --color-secondary: #3d7dd9;
+  --color-accent: #1a2a40;
+}
+
+/* ============================================================================
+   Base Styles
+   ============================================================================ */
+@layer base {
+  html {
+    font-family: 'Poppins', system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-sparkle-bg text-sparkle-text;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply text-sparkle-text;
+    background-color: color-mix(in srgb, var(--color-primary), transparent 70%);
+  }
+}
+
+/* ============================================================================
+   Custom Scrollbar
+   ============================================================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-secondary);
+}
+
+/* ============================================================================
+   Smooth Physics-Based Scrolling
+   ============================================================================ */
+.smooth-scroll {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Momentum scrolling for touch/trackpad - physics-like deceleration */
+.momentum-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior-y: contain;
+}
+
+/* ============================================================================
+   Utilities
+   ============================================================================ */
+@layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
+
+/* ============================================================================
+   Animations
+   ============================================================================ */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 5px var(--color-primary);
+  }
+
+  50% {
+    box-shadow: 0 0 20px var(--color-primary);
+  }
+}
+
+@keyframes modalBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalBackdropOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modalSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.96);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-modal-backdrop {
+  animation: modalBackdropIn 0.2s ease-out;
+}
+
+.animate-modal-backdrop-out {
+  animation: modalBackdropOut 0.2s ease-in;
+}
+
+.animate-modal-in {
+  animation: modalSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-modal-out {
+  animation: modalSlideOut 0.2s cubic-bezier(0.4, 0, 1, 1);
+}
+
+
+/* ============================================================================
+   Compact Mode
+   ============================================================================ */
+.compact-mode {
+  --spacing-scale: 0.85;
+}
+
+.compact-mode .p-4 {
+  padding: 0.75rem;
+}
+
+.compact-mode .p-5 {
+  padding: 1rem;
+}
+
+.compact-mode .p-6 {
+  padding: 1.25rem;
+}
+
+.compact-mode .gap-4 {
+  gap: 0.75rem;
+}
+
+.compact-mode .gap-6 {
+  gap: 1rem;
+}
+
+.compact-mode .mb-4 {
+  margin-bottom: 0.75rem;
+}
+
+.compact-mode .mb-6 {
+  margin-bottom: 1rem;
+}
+
+.compact-mode .text-2xl {
+  font-size: 1.25rem;
+}
+
+.compact-mode .rounded-xl {
+  border-radius: 0.625rem;
+}
+
+/* ============================================================================
+   Theme Adaptation Layer (Non-settings Tabs)
+   Maps legacy white/black utility tones to theme tokens.
+   ============================================================================ */
+.theme-adaptive .text-white {
+  color: var(--color-text) !important;
+}
+
+.theme-adaptive .text-white\/90 {
+  color: color-mix(in srgb, var(--color-text), transparent 10%) !important;
+}
+
+.theme-adaptive .text-white\/80 {
+  color: color-mix(in srgb, var(--color-text), transparent 20%) !important;
+}
+
+.theme-adaptive .text-white\/70 {
+  color: color-mix(in srgb, var(--color-text), transparent 30%) !important;
+}
+
+.theme-adaptive .text-white\/60 {
+  color: var(--color-text-dark) !important;
+}
+
+.theme-adaptive .text-white\/50 {
+  color: color-mix(in srgb, var(--color-text-dark), transparent 20%) !important;
+}
+
+.theme-adaptive .text-white\/40 {
+  color: var(--color-text-secondary) !important;
+}
+
+.theme-adaptive .text-white\/30 {
+  color: color-mix(in srgb, var(--color-text-secondary), transparent 25%) !important;
+}
+
+.theme-adaptive .text-white\/20 {
+  color: color-mix(in srgb, var(--color-text-secondary), transparent 45%) !important;
+}
+
+.theme-adaptive .text-white\/10,
+.theme-adaptive .text-white\/5 {
+  color: color-mix(in srgb, var(--color-text-secondary), transparent 65%) !important;
+}
+
+.theme-adaptive .bg-white\/10 {
+  background-color: color-mix(in srgb, var(--color-text), transparent 90%) !important;
+}
+
+.theme-adaptive .bg-white\/5 {
+  background-color: color-mix(in srgb, var(--color-text), transparent 95%) !important;
+}
+
+.theme-adaptive .bg-white\/\[0\.02\] {
+  background-color: color-mix(in srgb, var(--color-text), transparent 98%) !important;
+}
+
+.theme-adaptive .bg-black\/40 {
+  background-color: color-mix(in srgb, var(--color-bg), transparent 60%) !important;
+}
+
+.theme-adaptive .bg-black\/30 {
+  background-color: color-mix(in srgb, var(--color-bg), transparent 70%) !important;
+}
+
+.theme-adaptive .bg-black\/20,
+.theme-adaptive .bg-black\/10 {
+  background-color: color-mix(in srgb, var(--color-bg), transparent 80%) !important;
+}
+
+.theme-adaptive .border-white\/30 {
+  border-color: color-mix(in srgb, var(--color-text), transparent 70%) !important;
+}
+
+.theme-adaptive .border-white\/20 {
+  border-color: color-mix(in srgb, var(--color-border-secondary), transparent 45%) !important;
+}
+
+.theme-adaptive .border-white\/10 {
+  border-color: color-mix(in srgb, var(--color-border-secondary), transparent 25%) !important;
+}
+
+.theme-adaptive .border-white\/5 {
+  border-color: color-mix(in srgb, var(--color-border), transparent 10%) !important;
+}
+
+.theme-adaptive .shadow-black\/20,
+.theme-adaptive .shadow-black\/30 {
+  --tw-shadow-color: color-mix(in srgb, var(--color-bg), transparent 75%) !important;
+}
+
+.theme-adaptive .hover\:text-white:hover {
+  color: var(--color-text) !important;
+}
+
+.theme-adaptive .hover\:text-white\/60:hover {
+  color: color-mix(in srgb, var(--color-text), transparent 40%) !important;
+}
+
+.theme-adaptive .hover\:bg-white\/5:hover {
+  background-color: color-mix(in srgb, var(--color-text), transparent 95%) !important;
+}
+
+.theme-adaptive .hover\:bg-white\/10:hover {
+  background-color: color-mix(in srgb, var(--color-text), transparent 90%) !important;
+}
+
+.theme-adaptive .group:hover .group-hover\:text-white {
+  color: var(--color-text) !important;
+}
+
+.theme-adaptive .group:hover .group-hover\:text-white\/90 {
+  color: color-mix(in srgb, var(--color-text), transparent 10%) !important;
+}
+
+.theme-adaptive .group:hover .group-hover\:text-white\/80 {
+  color: color-mix(in srgb, var(--color-text), transparent 20%) !important;
+}
+
+.theme-adaptive .group:hover .group-hover\:text-white\/60 {
+  color: color-mix(in srgb, var(--color-text), transparent 40%) !important;
+}

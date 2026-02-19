@@ -510,7 +510,7 @@ export default function DevTools() {
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-bold text-sm text-white truncate">{tool.displayName}</span>
-                                                        {tool.installed && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-white/50 font-mono">v{tool.version}</span>}
+                                                        {tool.installed && tool.version && tool.version !== 'Installed' && /\d/.test(tool.version) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-white/50 font-mono">v{tool.version}</span>}
                                                     </div>
                                                 </div>
                                                 {tool.installed ? (
@@ -553,7 +553,9 @@ export default function DevTools() {
                                                     {tool.installed ? (
                                                         <div className="flex items-center gap-2">
                                                             <Check size={14} className="text-green-500" />
-                                                            <p className="text-sm text-sparkle-text-secondary font-mono">v{tool.version}</p>
+                                                            <p className="text-sm text-sparkle-text-secondary font-mono">
+                                                                {tool.version && tool.version !== 'Installed' && /\d/.test(tool.version) ? `v${tool.version}` : 'Installed'}
+                                                            </p>
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-2">

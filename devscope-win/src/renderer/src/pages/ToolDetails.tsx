@@ -57,7 +57,7 @@ export default function ToolDetails() {
     if (tooling) {
         Object.values(tooling).forEach((category: any) => {
             if (Array.isArray(category)) {
-                const found = category.find((t: any) => t.tool.toLowerCase() === toolId?.toLowerCase())
+                const found = category.find((t: any) => t.id?.toLowerCase() === toolId?.toLowerCase())
                 if (found) {
                     toolData = found
                     dataSource = 'tooling'
@@ -73,7 +73,7 @@ export default function ToolDetails() {
             ...(aiRuntime.gpuAcceleration || []),
             ...(aiRuntime.aiFrameworks || [])
         ]
-        const found = allAiTools.find((t: any) => t.tool.toLowerCase() === toolId?.toLowerCase())
+        const found = allAiTools.find((t: any) => t.id?.toLowerCase() === toolId?.toLowerCase())
         if (found) {
             toolData = found
             dataSource = 'aiRuntime'
@@ -82,7 +82,7 @@ export default function ToolDetails() {
 
     // Check AI agents
     if (!toolData && aiAgents?.agents) {
-        const found = aiAgents.agents.find((t: any) => t.tool.toLowerCase() === toolId?.toLowerCase())
+        const found = aiAgents.agents.find((t: any) => t.id?.toLowerCase() === toolId?.toLowerCase())
         if (found) {
             toolData = found
             dataSource = 'aiAgents'
@@ -219,7 +219,7 @@ export default function ToolDetails() {
         <div className="max-w-6xl mx-auto animate-fadeIn pb-10">
             <Button
                 variant="ghost"
-                className="mb-8 pl-0 hover:pl-2 transition-all gap-2 text-sparkle-text-secondary hover:text-white"
+                className="mb-8 pl-0 hover:pl-2 transition-all gap-2 text-sparkle-text-secondary hover:text-sparkle-text"
                 onClick={() => navigate(-1)}
             >
                 <ArrowLeft size={18} />
@@ -239,14 +239,14 @@ export default function ToolDetails() {
 
                 <div className="relative z-10 flex flex-col md:flex-row items-center gap-10">
                     <div className="relative group">
-                        <div className="relative p-6 bg-black/40 backdrop-blur-md rounded-2xl shadow-2xl border border-white/10">
+                        <div className="relative p-6 bg-black/40 backdrop-blur-md rounded-2xl shadow-2xl border border-sparkle-border">
                             <ToolIcon tool={toolId || 'unknown'} size={96} className={cn("drop-shadow-lg", !toolData?.installed && "grayscale opacity-60")} />
                         </div>
                     </div>
 
                     <div className="flex-1 text-center md:text-left space-y-4">
                         <div className="flex flex-col md:flex-row items-center gap-4">
-                            <h1 className="text-5xl font-bold text-white tracking-tight">
+                            <h1 className="text-5xl font-bold text-sparkle-text tracking-tight">
                                 {toolData?.displayName || toolId}
                             </h1>
                             <span className={cn(
@@ -260,14 +260,14 @@ export default function ToolDetails() {
 
                         <div className="flex flex-wrap justify-center md:justify-start gap-3">
                             {toolData?.version && toolData.installed && (
-                                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-                                    <span className="text-white/60 text-sm">Version</span>
-                                    <span className="font-mono text-white text-sm">v{toolData.version}</span>
+                                <div className="flex items-center gap-2 bg-sparkle-card px-3 py-1.5 rounded-lg border border-sparkle-border">
+                                    <span className="text-sparkle-text-secondary text-sm">Version</span>
+                                    <span className="font-mono text-sparkle-text text-sm">v{toolData.version}</span>
                                 </div>
                             )}
                             {toolData?.category && (
-                                <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-                                    <span className="capitalize text-white/80 text-sm">{toolData.category.replace('_', ' ')}</span>
+                                <div className="flex items-center gap-2 bg-sparkle-card px-3 py-1.5 rounded-lg border border-sparkle-border">
+                                    <span className="capitalize text-sparkle-text-secondary text-sm">{toolData.category.replace('_', ' ')}</span>
                                 </div>
                             )}
                             {toolData?.capabilities?.map((cap: string) => (
@@ -283,7 +283,7 @@ export default function ToolDetails() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="bg-white/5 hover:bg-white/10 border border-white/10"
+                            className="bg-sparkle-card hover:bg-sparkle-card border border-sparkle-border"
                             onClick={handleRefreshTool}
                             disabled={isRefreshing}
                         >
@@ -297,8 +297,8 @@ export default function ToolDetails() {
                 {/* Main Content */}
                 <div className="lg:col-span-2 space-y-6">
                     {/* Quick Actions Card */}
-                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-white/5">
-                        <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-sparkle-border">
+                        <h2 className="text-lg font-bold text-sparkle-text mb-4 flex items-center gap-2">
                             <Terminal size={20} className="text-sparkle-accent" />
                             Quick Actions
                         </h2>
@@ -307,7 +307,7 @@ export default function ToolDetails() {
                             {/* Copy Command */}
                             <button
                                 onClick={() => handleCopy(`${toolData?.command || toolData?.tool} --version`, 'version-cmd')}
-                                className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-left group"
+                                className="flex items-center gap-3 p-4 rounded-xl bg-sparkle-card border border-sparkle-border hover:bg-sparkle-card hover:border-sparkle-border transition-all text-left group"
                             >
                                 <div className={cn(
                                     "p-2 rounded-lg transition-colors",
@@ -316,8 +316,8 @@ export default function ToolDetails() {
                                     {copiedItem === 'version-cmd' ? <Check size={18} /> : <Copy size={18} />}
                                 </div>
                                 <div>
-                                    <p className="text-white font-medium text-sm">Copy Version Command</p>
-                                    <p className="text-white/40 text-xs font-mono">{toolData?.command || toolData?.tool} --version</p>
+                                    <p className="text-sparkle-text font-medium text-sm">Copy Version Command</p>
+                                    <p className="text-sparkle-text-muted text-xs font-mono">{toolData?.command || toolData?.tool} --version</p>
                                 </div>
                             </button>
 
@@ -325,7 +325,7 @@ export default function ToolDetails() {
                             {toolData?.path && (
                                 <button
                                     onClick={() => handleCopy(toolData.path, 'path')}
-                                    className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-left group"
+                                    className="flex items-center gap-3 p-4 rounded-xl bg-sparkle-card border border-sparkle-border hover:bg-sparkle-card hover:border-sparkle-border transition-all text-left group"
                                 >
                                     <div className={cn(
                                         "p-2 rounded-lg transition-colors",
@@ -334,8 +334,8 @@ export default function ToolDetails() {
                                         {copiedItem === 'path' ? <Check size={18} /> : <FolderOpen size={18} />}
                                     </div>
                                     <div>
-                                        <p className="text-white font-medium text-sm">Copy Install Path</p>
-                                        <p className="text-white/40 text-xs font-mono truncate max-w-[200px]">{toolData.path}</p>
+                                        <p className="text-sparkle-text font-medium text-sm">Copy Install Path</p>
+                                        <p className="text-sparkle-text-muted text-xs font-mono truncate max-w-[200px]">{toolData.path}</p>
                                     </div>
                                 </button>
                             )}
@@ -343,7 +343,7 @@ export default function ToolDetails() {
                             {/* Run in Terminal */}
                             <button
                                 onClick={() => handleCopy(toolData?.command || toolData?.tool, 'cmd')}
-                                className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-left group"
+                                className="flex items-center gap-3 p-4 rounded-xl bg-sparkle-card border border-sparkle-border hover:bg-sparkle-card hover:border-sparkle-border transition-all text-left group"
                             >
                                 <div className={cn(
                                     "p-2 rounded-lg transition-colors",
@@ -352,8 +352,8 @@ export default function ToolDetails() {
                                     {copiedItem === 'cmd' ? <Check size={18} /> : <Terminal size={18} />}
                                 </div>
                                 <div>
-                                    <p className="text-white font-medium text-sm">Copy Command</p>
-                                    <p className="text-white/40 text-xs font-mono">{toolData?.command || toolData?.tool}</p>
+                                    <p className="text-sparkle-text font-medium text-sm">Copy Command</p>
+                                    <p className="text-sparkle-text-muted text-xs font-mono">{toolData?.command || toolData?.tool}</p>
                                 </div>
                             </button>
 
@@ -366,8 +366,8 @@ export default function ToolDetails() {
                                     <CirclePlay size={18} />
                                 </div>
                                 <div>
-                                    <p className="text-white font-medium text-sm">Open in Terminal</p>
-                                    <p className="text-white/40 text-xs">Launch context-aware console</p>
+                                    <p className="text-sparkle-text font-medium text-sm">Open in Terminal</p>
+                                    <p className="text-sparkle-text-muted text-xs">Launch context-aware console</p>
                                 </div>
                             </button>
 
@@ -394,7 +394,7 @@ export default function ToolDetails() {
                             {toolData?.website && (
                                 <button
                                     onClick={() => handleCopy(toolData.website, 'website')}
-                                    className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-left group"
+                                    className="flex items-center gap-3 p-4 rounded-xl bg-sparkle-card border border-sparkle-border hover:bg-sparkle-card hover:border-sparkle-border transition-all text-left group"
                                 >
                                     <div className={cn(
                                         "p-2 rounded-lg transition-colors",
@@ -403,8 +403,8 @@ export default function ToolDetails() {
                                         {copiedItem === 'website' ? <Check size={18} /> : <ExternalLink size={18} />}
                                     </div>
                                     <div>
-                                        <p className="text-white font-medium text-sm">Copy Website URL</p>
-                                        <p className="text-white/40 text-xs font-mono truncate max-w-[200px]">{toolData.website}</p>
+                                        <p className="text-sparkle-text font-medium text-sm">Copy Website URL</p>
+                                        <p className="text-sparkle-text-muted text-xs font-mono truncate max-w-[200px]">{toolData.website}</p>
                                     </div>
                                 </button>
                             )}
@@ -413,7 +413,7 @@ export default function ToolDetails() {
                             {toolData?.docsUrl && (
                                 <button
                                     onClick={() => handleCopy(toolData.docsUrl, 'docs')}
-                                    className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all text-left group"
+                                    className="flex items-center gap-3 p-4 rounded-xl bg-sparkle-card border border-sparkle-border hover:bg-sparkle-card hover:border-sparkle-border transition-all text-left group"
                                 >
                                     <div className={cn(
                                         "p-2 rounded-lg transition-colors",
@@ -422,8 +422,8 @@ export default function ToolDetails() {
                                         {copiedItem === 'docs' ? <Check size={18} /> : <ExternalLink size={18} />}
                                     </div>
                                     <div>
-                                        <p className="text-white font-medium text-sm">Copy Docs URL</p>
-                                        <p className="text-white/40 text-xs font-mono truncate max-w-[200px]">{toolData.docsUrl}</p>
+                                        <p className="text-sparkle-text font-medium text-sm">Copy Docs URL</p>
+                                        <p className="text-sparkle-text-muted text-xs font-mono truncate max-w-[200px]">{toolData.docsUrl}</p>
                                     </div>
                                 </button>
                             )}
@@ -432,14 +432,14 @@ export default function ToolDetails() {
 
                     {/* Context-Aware Terminal Card */}
                     {templateCommands.length > 0 && (
-                        <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-white/5">
+                        <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-sparkle-border">
                             <div className="flex items-center justify-between mb-6">
                                 <div>
-                                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <h2 className="text-lg font-bold text-sparkle-text flex items-center gap-2">
                                         <Zap size={20} className="text-yellow-400" />
                                         {toolData?.displayName} Commands
                                     </h2>
-                                    <p className="text-white/40 text-sm mt-1">
+                                    <p className="text-sparkle-text-muted text-sm mt-1">
                                         Useful commands for working with {toolData?.displayName}
                                     </p>
                                 </div>
@@ -458,7 +458,7 @@ export default function ToolDetails() {
                                 {templateCommands.map((item, index) => (
                                     <div
                                         key={index}
-                                        className="group rounded-xl bg-black/30 border border-white/5 hover:border-white/10 transition-all overflow-hidden"
+                                        className="group rounded-xl bg-black/30 border border-sparkle-border hover:border-sparkle-border transition-all overflow-hidden"
                                     >
                                         <div className="flex items-center justify-between p-4">
                                             <div className="flex-1 min-w-0 mr-4">
@@ -466,7 +466,7 @@ export default function ToolDetails() {
                                                     {item.command}
                                                 </code>
                                                 {item.description && (
-                                                    <p className="text-xs text-white/50">
+                                                    <p className="text-xs text-sparkle-text-secondary">
                                                         {item.description}
                                                     </p>
                                                 )}
@@ -486,7 +486,7 @@ export default function ToolDetails() {
                                                         "p-2.5 rounded-lg transition-all",
                                                         copiedItem === `template-${index}`
                                                             ? "bg-green-500/20 text-green-400"
-                                                            : "bg-white/5 text-white/40 hover:bg-white/10 hover:text-white"
+                                                            : "bg-sparkle-card text-sparkle-text-muted hover:bg-sparkle-card hover:text-sparkle-text"
                                                     )}
                                                     title="Copy command"
                                                 >
@@ -501,12 +501,12 @@ export default function ToolDetails() {
                     )}
 
                     {/* About Card */}
-                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-white/5">
-                        <h2 className="text-lg font-bold text-white mb-4">About</h2>
+                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-sparkle-border">
+                        <h2 className="text-lg font-bold text-sparkle-text mb-4">About</h2>
                         {isLoading && !toolData?.description ? (
                             <div className="flex flex-col gap-3 animate-pulse">
-                                <div className="h-4 bg-white/5 rounded w-3/4"></div>
-                                <div className="h-4 bg-white/5 rounded w-1/2"></div>
+                                <div className="h-4 bg-sparkle-card rounded w-3/4"></div>
+                                <div className="h-4 bg-sparkle-card rounded w-1/2"></div>
                             </div>
                         ) : (
                             <p className="text-sparkle-text-secondary leading-relaxed">
@@ -515,11 +515,11 @@ export default function ToolDetails() {
                         )}
 
                         {toolData?.usedFor && toolData.usedFor.length > 0 && (
-                            <div className="mt-6 pt-4 border-t border-white/5">
-                                <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-3">Use Cases</p>
+                            <div className="mt-6 pt-4 border-t border-sparkle-border">
+                                <p className="text-xs font-semibold text-sparkle-text-muted uppercase tracking-widest mb-3">Use Cases</p>
                                 <div className="flex flex-wrap gap-2">
                                     {toolData.usedFor.map((tag: string) => (
-                                        <span key={tag} className="px-3 py-1.5 rounded-lg text-sm bg-white/5 text-white/70">
+                                        <span key={tag} className="px-3 py-1.5 rounded-lg text-sm bg-sparkle-card text-sparkle-text-secondary">
                                             {tag}
                                         </span>
                                     ))}
@@ -576,12 +576,12 @@ export default function ToolDetails() {
                 {/* Sidebar */}
                 <div className="space-y-6">
                     {/* Status Card */}
-                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-white/5">
-                        <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">Status</h3>
+                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-sparkle-border">
+                        <h3 className="text-xs font-bold text-sparkle-text-muted uppercase tracking-widest mb-4">Status</h3>
 
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-white/50">Installed</span>
+                                <span className="text-sm text-sparkle-text-secondary">Installed</span>
                                 <span className={cn(
                                     "flex items-center gap-1.5 text-sm font-medium",
                                     toolData?.installed ? "text-green-400" : "text-red-400"
@@ -592,7 +592,7 @@ export default function ToolDetails() {
                             </div>
 
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-white/50">Health</span>
+                                <span className="text-sm text-sparkle-text-secondary">Health</span>
                                 <span className={cn("text-sm font-medium capitalize", statusColor)}>
                                     {toolData?.status || 'Unknown'}
                                 </span>
@@ -600,20 +600,20 @@ export default function ToolDetails() {
 
                             {toolData?.version && toolData.installed && (
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm text-white/50">Version</span>
-                                    <span className="text-sm font-mono text-white">{toolData.version}</span>
+                                    <span className="text-sm text-sparkle-text-secondary">Version</span>
+                                    <span className="text-sm font-mono text-sparkle-text">{toolData.version}</span>
                                 </div>
                             )}
                         </div>
                     </div>
 
                     {/* System Info */}
-                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-white/5">
-                        <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">System</h3>
+                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-sparkle-border">
+                        <h3 className="text-xs font-bold text-sparkle-text-muted uppercase tracking-widest mb-4">System</h3>
 
                         <div className="space-y-4">
                             <div>
-                                <span className="text-xs text-white/40 block mb-1">Command</span>
+                                <span className="text-xs text-sparkle-text-muted block mb-1">Command</span>
                                 <code className="text-sm font-mono text-sparkle-accent bg-sparkle-accent/10 px-2 py-1 rounded block">
                                     {toolData?.command || toolData?.tool || 'unknown'}
                                 </code>
@@ -621,23 +621,23 @@ export default function ToolDetails() {
 
                             {toolData?.path && (
                                 <div>
-                                    <span className="text-xs text-white/40 block mb-1">Path</span>
-                                    <code className="text-xs font-mono text-white/60 bg-white/5 px-2 py-1 rounded block truncate" title={toolData.path}>
+                                    <span className="text-xs text-sparkle-text-muted block mb-1">Path</span>
+                                    <code className="text-xs font-mono text-sparkle-text-secondary bg-sparkle-card px-2 py-1 rounded block truncate" title={toolData.path}>
                                         {toolData.path}
                                     </code>
                                 </div>
                             )}
 
                             <div>
-                                <span className="text-xs text-white/40 block mb-1">Category</span>
-                                <span className="text-sm text-white/80 capitalize">{toolData?.category?.replace('_', ' ') || 'Unknown'}</span>
+                                <span className="text-xs text-sparkle-text-muted block mb-1">Category</span>
+                                <span className="text-sm text-sparkle-text-secondary capitalize">{toolData?.category?.replace('_', ' ') || 'Unknown'}</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Quick Links */}
-                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-white/5">
-                        <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">Links</h3>
+                    <div className="rounded-2xl p-6 bg-sparkle-card/30 backdrop-blur-sm border border-sparkle-border">
+                        <h3 className="text-xs font-bold text-sparkle-text-muted uppercase tracking-widest mb-4">Links</h3>
 
                         <div className="space-y-3">
                             {toolData?.website && (
@@ -645,10 +645,10 @@ export default function ToolDetails() {
                                     href={toolData.website}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-all group"
+                                    className="flex items-center justify-between p-3 rounded-xl bg-sparkle-card hover:bg-sparkle-card transition-all group"
                                 >
-                                    <span className="text-sm text-white/70 group-hover:text-white">Website</span>
-                                    <ExternalLink size={14} className="text-white/40 group-hover:text-white" />
+                                    <span className="text-sm text-sparkle-text-secondary group-hover:text-sparkle-text">Website</span>
+                                    <ExternalLink size={14} className="text-sparkle-text-muted group-hover:text-sparkle-text" />
                                 </a>
                             )}
 
@@ -657,15 +657,15 @@ export default function ToolDetails() {
                                     href={toolData.docsUrl}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-all group"
+                                    className="flex items-center justify-between p-3 rounded-xl bg-sparkle-card hover:bg-sparkle-card transition-all group"
                                 >
-                                    <span className="text-sm text-white/70 group-hover:text-white">Documentation</span>
-                                    <ExternalLink size={14} className="text-white/40 group-hover:text-white" />
+                                    <span className="text-sm text-sparkle-text-secondary group-hover:text-sparkle-text">Documentation</span>
+                                    <ExternalLink size={14} className="text-sparkle-text-muted group-hover:text-sparkle-text" />
                                 </a>
                             )}
 
                             {!toolData?.website && !toolData?.docsUrl && (
-                                <p className="text-sm text-white/30 italic">No links available</p>
+                                <p className="text-sm text-sparkle-text-muted italic">No links available</p>
                             )}
                         </div>
                     </div>

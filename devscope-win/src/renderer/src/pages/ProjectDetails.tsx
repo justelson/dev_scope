@@ -11,7 +11,7 @@ import {
     Clock, Tag, Hash, ChevronRight, Monitor, Command, Search, Sparkles,
     GitBranch, GitCommitHorizontal, GitPullRequest, Calendar, User,
     File, Folder, X, Code, Image, FileJson, FileCode, ChevronDown, ChevronUp,
-    Eye, EyeOff, ChevronsUpDown, ChevronsDownUp, Bot, Plus
+    Eye, EyeOff, ChevronsUpDown, ChevronsDownUp, Bot, Plus, Link
 } from 'lucide-react'
 import { useTerminal } from '@/App'
 import { cn } from '@/lib/utils'
@@ -1541,6 +1541,7 @@ export default function ProjectDetailsPage() {
     const [isInitializing, setIsInitializing] = useState(false)
     const [remoteUrl, setRemoteUrl] = useState('')
     const [isAddingRemote, setIsAddingRemote] = useState(false)
+    const [hasRemote, setHasRemote] = useState<boolean | null>(null)
 
     // Custom Gitignore State
     const [showCustomGitignore, setShowCustomGitignore] = useState(false)
@@ -1645,9 +1646,10 @@ export default function ProjectDetailsPage() {
                             window.devscope.getGitHistory(decodedPath),
                             window.devscope.getUnpushedCommits(decodedPath),
                             window.devscope.getGitUser(decodedPath),
-                            window.devscope.getRepoOwner(decodedPath)
+                            window.devscope.getRepoOwner(decodedPath),
+                            window.devscope.hasRemoteOrigin(decodedPath)
                         ])
-                            .then(([historyResult, unpushedResult, userResult, ownerResult]) => {
+                            .then(([historyResult, unpushedResult, userResult, ownerResult, remoteResult]) => {
                                 if (historyResult && historyResult.commits) {
                                     setGitHistory(historyResult.commits)
                                 }
@@ -1659,6 +1661,9 @@ export default function ProjectDetailsPage() {
                                 }
                                 if (ownerResult && ownerResult.owner) {
                                     setRepoOwner(ownerResult.owner)
+                                }
+                                if (remoteResult && remoteResult.success) {
+                                    setHasRemote(remoteResult.hasRemote)
                                 }
                             })
                             .finally(() => setLoadingGit(false))
@@ -2050,6 +2055,7 @@ export default function ProjectDetailsPage() {
             setInitStep('config')
             setRemoteUrl('')
             setIsGitRepo(true)
+            setHasRemote(true)
 
             // Reload project and git data
             await loadProjectDetails()
@@ -2077,6 +2083,7 @@ export default function ProjectDetailsPage() {
         setInitStep('config')
         setRemoteUrl('')
         setIsGitRepo(true)
+        setHasRemote(false)
 
         // Reload project and git data
         await loadProjectDetails()
@@ -2851,8 +2858,28 @@ export default function ProjectDetailsPage() {
                                                     </div>
                                                 )}
 
-                                                {/* Push Section */}
-                                                {unpushedCommits.length > 0 && (
+                                                {/* Push Section - Show Add Remote if no remote, otherwise show push when there are unpushed commits */}
+                                                {hasRemote === false ? (
+                                                    <div className="bg-amber-500/10 rounded-xl border border-amber-500/20 p-4">
+                                                        <h3 className="text-sm font-medium text-amber-400 mb-3 flex items-center gap-2">
+                                                            <Link size={16} />
+                                                            No Remote Repository
+                                                        </h3>
+                                                        <p className="text-xs text-white/50 mb-3">
+                                                            Add a remote repository to push your commits to GitHub, GitLab, or other Git hosting services.
+                                                        </p>
+                                                        <button
+                                                            onClick={() => {
+                                                                setInitStep('remote')
+                                                                setShowInitModal(true)
+                                                            }}
+                                                            className="w-full px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 border border-amber-500/30"
+                                                        >
+                                                            <Plus size={16} />
+                                                            Add Remote Repository
+                                                        </button>
+                                                    </div>
+                                                ) : unpushedCommits.length > 0 && (
                                                     <div className="bg-black/20 rounded-xl border border-white/5 p-4">
                                                         <h3 className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
                                                             <GitPullRequest size={16} />
@@ -3155,7 +3182,7 @@ export default function ProjectDetailsPage() {
                                                         )}
                                                     </div>
                                                     <p className="text-xs text-white/40 truncate">
-                                                        {runtime.description || `v${runtime.version}`}
+                                                        {runtime.description || (runtime.version && runtime.version !== 'Installed' && /\d/.test(runtime.version) ? `v${runtime.version}` : 'Installed')}
                                                     </p>
                                                 </div>
                                             </div>
@@ -3251,7 +3278,7 @@ export default function ProjectDetailsPage() {
                                             <p className="text-xs text-white/40 flex items-center gap-1.5 mt-0.5">
                                                 <Terminal size={10} />
                                                 {agent.metadata?.command || agent.id}
-                                                {agent.version && agent.version !== 'Installed' && (
+                                                {agent.version && agent.version !== 'Installed' && /\d/.test(agent.version) && (
                                                     <span className="text-white/30">v{agent.version}</span>
                                                 )}
                                             </p>
@@ -3277,7 +3304,7 @@ export default function ProjectDetailsPage() {
                                     {Object.keys(project.scripts).length}
                                 </span>
                             </div>
-                            <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-2">
+                            <div className="max-h-[380px] overflow-y-auto custom-scrollbar p-2">
                                 {Object.entries(project.scripts).map(([name, cmd]) => (
                                     <div key={name} className="group flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/5">
                                         <button

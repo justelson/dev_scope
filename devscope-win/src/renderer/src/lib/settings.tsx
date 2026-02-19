@@ -56,6 +56,9 @@ export interface Settings {
 
     // Projects
     projectsFolder: string
+    additionalFolders: string[]
+    enableFolderIndexing: boolean
+    autoIndexOnStartup: boolean
 
     // AI
     groqApiKey: string
@@ -74,6 +77,9 @@ const DEFAULT_SETTINGS: Settings = {
     enabledCategories: ['language', 'package_manager', 'build_tool', 'container', 'version_control', 'ai_runtime', 'ai_agent'],
     customToolPaths: {},
     projectsFolder: '',
+    additionalFolders: [],
+    enableFolderIndexing: true,
+    autoIndexOnStartup: false,
     groqApiKey: ''
 }
 

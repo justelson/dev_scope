@@ -18,6 +18,20 @@ const devScopeAPI = {
     getReadinessReport: () => ipcRenderer.invoke('devscope:getReadinessReport'),
     refreshAll: () => ipcRenderer.invoke('devscope:refreshAll'),
 
+    // Fast loading system
+    getCachedSnapshot: () => ipcRenderer.invoke('devscope:getCachedSnapshot'),
+    streamRefreshAll: () => ipcRenderer.invoke('devscope:streamRefreshAll'),
+    onScanProgress: (callback: (data: { category: string; results: any; timestamp: number }) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, payload: any) => callback(payload)
+        ipcRenderer.on('devscope:scanProgress', handler)
+        return () => ipcRenderer.removeListener('devscope:scanProgress', handler)
+    },
+    onScanComplete: (callback: (data: { duration: number; timestamp: number }) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, payload: any) => callback(payload)
+        ipcRenderer.on('devscope:scanComplete', handler)
+        return () => ipcRenderer.removeListener('devscope:scanComplete', handler)
+    },
+
     // Settings
     exportData: (data: any) => ipcRenderer.invoke('devscope:exportData', data),
     setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) =>

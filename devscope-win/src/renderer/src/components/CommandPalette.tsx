@@ -32,7 +32,7 @@ function QuickChips({ onSelect }: { onSelect: (v: string) => void }) {
                 <button
                     key={c.label}
                     onClick={() => onSelect(c.value)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10 text-sm"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sparkle-accent/40 border border-sparkle-border-secondary text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-accent/60 text-sm"
                 >
                     {c.icon}
                     <span>{c.label}</span>
@@ -253,12 +253,12 @@ export function CommandPalette() {
     return (
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md flex items-start justify-center pt-24" onClick={close}>
             <div
-                className="w-full max-w-3xl mx-4 bg-sparkle-card/90 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+                className="w-full max-w-3xl mx-4 bg-sparkle-card/90 border border-sparkle-border-secondary rounded-2xl shadow-2xl overflow-hidden"
                 onClick={e => e.stopPropagation()}
                 style={{ animation: 'scaleIn 0.14s ease-out' }}
             >
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-white/[0.03]">
-                    <div className="p-2 rounded-xl bg-white/5 text-white/70">
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-sparkle-border-secondary bg-sparkle-accent/40">
+                    <div className="p-2 rounded-xl bg-sparkle-accent/40 text-sparkle-text-secondary">
                         <Search size={16} />
                     </div>
                     <input
@@ -266,30 +266,30 @@ export function CommandPalette() {
                         value={query}
                         onChange={e => setQuery(e.target.value)}
                         placeholder="Search — # devtools, $ agents, / projects, // files"
-                        className="flex-1 bg-transparent text-white placeholder:text-white/40 text-base outline-none"
+                        className="flex-1 bg-transparent text-sparkle-text placeholder:text-sparkle-text-muted text-base outline-none"
                     />
-                    <div className="flex items-center gap-2 text-[11px] text-white/40">
-                        <Kbd>Ctrl</Kbd><span className="text-white/20">+</span><Kbd>K</Kbd>
-                        <button onClick={close} className="p-2 rounded-lg hover:bg-white/10 text-white/60">
+                    <div className="flex items-center gap-2 text-[11px] text-sparkle-text-muted">
+                        <Kbd>Ctrl</Kbd><span className="text-sparkle-text-muted">+</span><Kbd>K</Kbd>
+                        <button onClick={close} className="p-2 rounded-lg hover:bg-sparkle-accent/60 text-sparkle-text-secondary">
                             <X size={16} />
                         </button>
                     </div>
                 </div>
 
-                <div className="max-h-[420px] overflow-auto custom-scrollbar divide-y divide-white/5">
+                <div className="max-h-[420px] overflow-auto custom-scrollbar divide-y divide-sparkle-border-secondary">
                     {/* Empty / Quick area */}
                     {query.trim() === '' && (
                         <div className="p-4 space-y-3">
                             <QuickChips onSelect={(text) => setQuery(text + ' ')} />
                             {recent.length > 0 && (
                                 <div>
-                                    <div className="text-[11px] uppercase tracking-widest text-white/40 mb-2">Recent</div>
+                                    <div className="text-[11px] uppercase tracking-widest text-sparkle-text-muted mb-2">Recent</div>
                                     <div className="flex flex-wrap gap-2">
                                         {recent.map((r) => (
                                             <button
                                                 key={r}
                                                 onClick={() => setQuery(r + ' ')}
-                                                className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10 text-sm"
+                                                className="px-3 py-1.5 rounded-lg bg-sparkle-accent/40 border border-sparkle-border-secondary text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-accent/60 text-sm"
                                             >
                                                 {r}
                                             </button>
@@ -301,10 +301,10 @@ export function CommandPalette() {
                     )}
 
                     {results.length === 0 && query.trim() !== '' && !loadingFiles && (
-                        <div className="p-6 text-center text-white/40 text-sm">No matches yet. Try a prefix like #, $, /, //.</div>
+                        <div className="p-6 text-center text-sparkle-text-muted text-sm">No matches yet. Try a prefix like #, $, /, //.</div>
                     )}
                     {loadingFiles && (
-                        <div className="p-3 text-center text-white/50 text-sm">Searching files…</div>
+                        <div className="p-3 text-center text-sparkle-text-secondary text-sm">Searching files…</div>
                     )}
                     {results.map((r, idx) => (
                         <button
@@ -312,22 +312,22 @@ export function CommandPalette() {
                             onClick={() => { r.action(); pushRecent(query); close() }}
                             className={cn(
                                 "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors",
-                                idx === selectedIndex ? "bg-white/10" : "hover:bg-white/5"
+                                idx === selectedIndex ? "bg-sparkle-accent/60" : "hover:bg-sparkle-accent/40"
                             )}
                         >
-                            <div className="p-2 rounded-lg bg-white/10 text-white/80" style={{ border: `1px solid ${r.color || '#ffffff22'}` }}>
+                            <div className="p-2 rounded-lg bg-sparkle-accent/50 text-sparkle-text-secondary" style={{ border: `1px solid ${r.color || '#ffffff22'}` }}>
                                 {r.icon || <Terminal size={16} />}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-white font-semibold truncate">{r.title}</span>
+                                    <span className="text-sparkle-text font-semibold truncate">{r.title}</span>
                                     {r.badge && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-white/10 text-white/60">{r.badge}</span>
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-sparkle-border-secondary text-sparkle-text-muted">{r.badge}</span>
                                     )}
                                 </div>
-                                {r.subtitle && <p className="text-xs text-white/50 truncate">{r.subtitle}</p>}
+                                {r.subtitle && <p className="text-xs text-sparkle-text-muted truncate">{r.subtitle}</p>}
                             </div>
-                            <ArrowRight size={14} className="text-white/30" />
+                            <ArrowRight size={14} className="text-sparkle-text-muted" />
                         </button>
                     ))}
                 </div>
@@ -337,7 +337,7 @@ export function CommandPalette() {
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {
-    return <span className="px-2 py-1 rounded-md border border-white/10 bg-white/5 text-white/70">{children}</span>
+    return <span className="px-2 py-1 rounded-md border border-sparkle-border-secondary bg-sparkle-accent/50 text-sparkle-text-secondary">{children}</span>
 }
 
 function PrefixLegend() {
@@ -348,9 +348,9 @@ function PrefixLegend() {
         { icon: <Slash size={14} />, label: '// Files' },
     ]
     return (
-        <div className="px-4 py-2 flex items-center gap-2 bg-white/[0.02] border-b border-white/5 text-[11px] text-white/50">
+        <div className="px-4 py-2 flex items-center gap-2 bg-sparkle-accent/40 border-b border-sparkle-border-secondary text-[11px] text-sparkle-text-muted">
             {items.map(item => (
-                <span key={item.label} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
+                <span key={item.label} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-sparkle-accent/50 border border-sparkle-border-secondary text-sparkle-text-secondary">
                     {item.icon}
                     <span>{item.label}</span>
                 </span>

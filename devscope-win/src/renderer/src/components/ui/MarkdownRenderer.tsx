@@ -215,6 +215,20 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                             {children}
                         </h1>
                     ),
+
+                    // Div with alignment support
+                    div: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement> & { align?: string }) => {
+                        const isCenter = props.align === 'center'
+                        return (
+                            <div
+                                className={cn(
+                                    className,
+                                    isCenter && "flex flex-col items-center text-center"
+                                )}
+                                {...props}
+                            />
+                        )
+                    },
                     h2: ({ children }) => (
                         <h2 className="text-xl font-semibold text-white pb-2 mb-3 border-b border-white/10 mt-8 first:mt-0">
                             {children}
@@ -287,8 +301,12 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                         )
                     },
 
-                    // Pre wrapper (handled by code block)
-                    pre: ({ children }) => <>{children}</>,
+                    // Pre wrapper - ensure whitespace preservation for ASCII art
+                    pre: ({ children, ...props }) => (
+                        <pre className="whitespace-pre overflow-x-auto font-mono text-sm leading-none" {...props}>
+                            {children}
+                        </pre>
+                    ),
 
                     // Lists
                     ul: ({ children }) => (
@@ -317,14 +335,14 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
 
                     // Images
                     img: ({ src, alt }) => (
-                        <span className="block my-4">
+                        <span className="inline-flex flex-col items-center align-bottom mr-2 mb-2">
                             <img
                                 src={resolveImageSrc(src || '', filePath)}
                                 alt={alt || ''}
                                 className="max-w-full h-auto rounded-lg border border-white/10"
                             />
                             {alt && (
-                                <span className="block text-center text-sm text-white/40 mt-2">
+                                <span className="hidden text-center text-sm text-white/40 mt-2 group-hover:block">
                                     {alt}
                                 </span>
                             )}

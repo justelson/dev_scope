@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { 
+import {
     Wrench, Bot, Server, ArrowRight, Check, Code, Cpu, HardDrive, MemoryStick,
     AlertTriangle, Zap, PieChart as PieChartIcon, Sparkles, Monitor, Gauge, Terminal as TerminalIcon, FolderTree
 } from 'lucide-react'
@@ -91,7 +91,7 @@ export default function Home() {
     const cachedSystemInfo = getCache<SystemInfo>('system')
     const cachedReadiness = getCache<ReadinessInfo>('readiness')
     const cachedTooling = getCache<ToolingReport>('tooling')
-    
+
     const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(cachedSystemInfo)
     const [readiness, setReadiness] = useState<ReadinessInfo | null>(cachedReadiness)
     const [tooling, setTooling] = useState<ToolingReport | null>(cachedTooling)
@@ -166,7 +166,7 @@ export default function Home() {
             loadProjects()
             loadSessions()
         }
-        
+
         window.addEventListener('devscope:refresh', handleRefresh)
         return () => window.removeEventListener('devscope:refresh', handleRefresh)
     }, [settings.projectsFolder])
@@ -300,29 +300,29 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <Link
                     to="/projects"
-                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-white/5 relative overflow-hidden flex items-center gap-4 shadow-xl shadow-black/20 group hover:border-white/10 transition-all hover:-translate-y-1"
+                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-sparkle-border relative overflow-hidden flex items-center gap-4 shadow-xl shadow-black/20 group hover:border-sparkle-border-secondary transition-all hover:-translate-y-1"
                 >
                     <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-300">
                         <FolderTree size={22} />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Projects</p>
-                        <p className="text-2xl font-bold text-white">{projectsLoading ? 'Scanning...' : totalProjects}</p>
-                        <p className="text-xs text-white/50 truncate">
+                        <p className="text-[10px] font-bold text-sparkle-text-muted uppercase tracking-widest mb-1">Projects</p>
+                        <p className="text-2xl font-bold text-sparkle-text">{projectsLoading ? 'Scanning...' : totalProjects}</p>
+                        <p className="text-xs text-sparkle-text-secondary truncate">
                             {projectFrameworks.length > 0 ? `${projectFrameworks.length} frameworks detected` : 'Open projects hub'}
                         </p>
                     </div>
-                    <ArrowRight size={14} className="text-white/30 group-hover:text-white/60 transition-colors" />
+                    <ArrowRight size={14} className="text-sparkle-text-muted group-hover:text-sparkle-text-secondary transition-colors" />
                 </Link>
 
-                <div className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-white/5 relative overflow-hidden flex items-center gap-4 shadow-xl shadow-black/20">
+                <div className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-sparkle-border relative overflow-hidden flex items-center gap-4 shadow-xl shadow-black/20">
                     <div className="p-3 rounded-xl bg-purple-500/10 text-purple-300">
                         <TerminalIcon size={22} />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Active Sessions</p>
-                        <p className="text-2xl font-bold text-white">{activeSessionsCount}</p>
-                        <p className="text-xs text-white/50 truncate">
+                        <p className="text-[10px] font-bold text-sparkle-text-muted uppercase tracking-widest mb-1">Active Sessions</p>
+                        <p className="text-2xl font-bold text-sparkle-text">{activeSessionsCount}</p>
+                        <p className="text-xs text-sparkle-text-secondary truncate">
                             {activeSessionsCount > 0 ? 'Linked to project folders' : 'No running sessions'}
                         </p>
                     </div>
@@ -330,30 +330,30 @@ export default function Home() {
 
                 <Link
                     to="/ai-agents"
-                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-white/5 relative overflow-hidden flex items-center gap-4 shadow-xl shadow-black/20 group hover:border-white/10 transition-all hover:-translate-y-1"
+                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-sparkle-border relative overflow-hidden flex items-center gap-4 shadow-xl shadow-black/20 group hover:border-sparkle-border-secondary transition-all hover:-translate-y-1"
                 >
                     <div className="p-3 rounded-xl bg-pink-500/10 text-pink-300">
                         <Sparkles size={22} />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">AI Agents</p>
-                        <p className="text-2xl font-bold text-white">{installedAgents}/{totalAgents}</p>
-                        <p className="text-xs text-white/50 truncate">Installed / detected</p>
+                        <p className="text-[10px] font-bold text-sparkle-text-muted uppercase tracking-widest mb-1">AI Agents</p>
+                        <p className="text-2xl font-bold text-sparkle-text">{installedAgents}/{totalAgents}</p>
+                        <p className="text-xs text-sparkle-text-secondary truncate">Installed / detected</p>
                     </div>
-                    <ArrowRight size={14} className="text-white/30 group-hover:text-white/60 transition-colors" />
+                    <ArrowRight size={14} className="text-sparkle-text-muted group-hover:text-sparkle-text-secondary transition-colors" />
                 </Link>
             </div>
 
             {/* Main Analytics Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 {/* Ecosystem Pie Chart */}
-                <Link 
+                <Link
                     to="/devtools"
-                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-white/5 relative overflow-hidden flex flex-col shadow-xl shadow-black/20 group hover:border-white/10 transition-all hover:-translate-y-1"
+                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-sparkle-border relative overflow-hidden flex flex-col shadow-xl shadow-black/20 group hover:border-sparkle-border-secondary transition-all hover:-translate-y-1"
                 >
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-xs font-bold text-sparkle-text-secondary uppercase tracking-widest">Dev Tools</h3>
-                        <PieChartIcon className="text-white/20 group-hover:text-white/40 transition-colors" size={18} />
+                        <PieChartIcon className="text-sparkle-text-muted group-hover:text-sparkle-text-muted transition-colors" size={18} />
                     </div>
 
                     <div className="flex items-center gap-4 flex-1">
@@ -369,8 +369,8 @@ export default function Home() {
                                 </PieChart>
                             </ResponsiveContainer>
                             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-2xl font-bold text-white">{totalInstalled}</span>
-                                <span className="text-[9px] text-white/40 uppercase">Installed</span>
+                                <span className="text-2xl font-bold text-sparkle-text">{totalInstalled}</span>
+                                <span className="text-[9px] text-sparkle-text-muted uppercase">Installed</span>
                             </div>
                         </div>
 
@@ -381,12 +381,12 @@ export default function Home() {
                                         <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
                                         <span className="text-sparkle-text-secondary truncate">{entry.name}</span>
                                     </div>
-                                    <span className="font-mono text-white/60 bg-white/5 px-1.5 py-0.5 rounded text-[10px]">{entry.value}</span>
+                                    <span className="font-mono text-sparkle-text-secondary bg-sparkle-card px-1.5 py-0.5 rounded text-[10px]">{entry.value}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2 mt-4 text-xs text-sparkle-accent opacity-0 group-hover:opacity-100 transition-opacity">
                         <span>View All Tools</span>
                         <ArrowRight size={12} />
@@ -394,40 +394,40 @@ export default function Home() {
                 </Link>
 
                 {/* AI Agents Summary */}
-                <Link 
+                <Link
                     to="/ai-agents"
-                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-white/5 relative overflow-hidden flex flex-col shadow-xl shadow-black/20 group hover:border-white/10 transition-all hover:-translate-y-1"
+                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-sparkle-border relative overflow-hidden flex flex-col shadow-xl shadow-black/20 group hover:border-sparkle-border-secondary transition-all hover:-translate-y-1"
                 >
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-xs font-bold text-sparkle-text-secondary uppercase tracking-widest">AI Agents</h3>
-                        <Sparkles className="text-white/20 group-hover:text-white/40 transition-colors" size={18} />
+                        <Sparkles className="text-sparkle-text-muted group-hover:text-sparkle-text-muted transition-colors" size={18} />
                     </div>
 
                     <div className="flex-1 flex flex-col justify-center">
                         <div className="text-center mb-4">
-                            <div className="text-5xl font-black text-white mb-1">{installedAgents}</div>
-                            <div className="text-xs text-white/40">of {totalAgents} agents installed</div>
+                            <div className="text-5xl font-black text-sparkle-text mb-1">{installedAgents}</div>
+                            <div className="text-xs text-sparkle-text-muted">of {totalAgents} agents installed</div>
                         </div>
-                        
-                        <div className="h-2 bg-white/5 rounded-full overflow-hidden mb-4">
-                            <div 
+
+                        <div className="h-2 bg-sparkle-card rounded-full overflow-hidden mb-4">
+                            <div
                                 className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full transition-all"
                                 style={{ width: `${totalAgents > 0 ? (installedAgents / totalAgents) * 100 : 0}%` }}
                             />
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="bg-white/5 rounded-lg p-2 text-center">
-                                <div className="text-white font-semibold">{installedAgents}</div>
-                                <div className="text-white/40">Ready</div>
+                            <div className="bg-sparkle-card rounded-lg p-2 text-center">
+                                <div className="text-sparkle-text font-semibold">{installedAgents}</div>
+                                <div className="text-sparkle-text-muted">Ready</div>
                             </div>
-                            <div className="bg-white/5 rounded-lg p-2 text-center">
-                                <div className="text-white font-semibold">{totalAgents - installedAgents}</div>
-                                <div className="text-white/40">Available</div>
+                            <div className="bg-sparkle-card rounded-lg p-2 text-center">
+                                <div className="text-sparkle-text font-semibold">{totalAgents - installedAgents}</div>
+                                <div className="text-sparkle-text-muted">Available</div>
                             </div>
                         </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2 mt-4 text-xs text-sparkle-accent opacity-0 group-hover:opacity-100 transition-opacity">
                         <span>View AI Agents</span>
                         <ArrowRight size={12} />
@@ -435,23 +435,23 @@ export default function Home() {
                 </Link>
 
                 {/* Readiness Score */}
-                <Link 
+                <Link
                     to="/devtools"
-                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-white/5 relative overflow-hidden flex flex-col items-center justify-center shadow-xl shadow-black/20 group hover:border-white/10 transition-all hover:-translate-y-1"
+                    className="bg-sparkle-card/80 backdrop-blur-sm rounded-2xl p-6 border border-sparkle-border relative overflow-hidden flex flex-col items-center justify-center shadow-xl shadow-black/20 group hover:border-sparkle-border-secondary transition-all hover:-translate-y-1"
                 >
                     <div className="absolute top-6 left-6 right-6 flex items-center justify-between">
                         <h3 className="text-xs font-bold text-sparkle-text-secondary uppercase tracking-widest">Readiness</h3>
-                        <Gauge className="text-white/20 group-hover:text-white/40 transition-colors" size={18} />
+                        <Gauge className="text-sparkle-text-muted group-hover:text-sparkle-text-muted transition-colors" size={18} />
                     </div>
 
                     <div className="relative w-36 h-36 flex items-center justify-center">
                         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 140 140">
-                            <circle className="text-white/5" strokeWidth="8" stroke="currentColor" fill="transparent" r="55" cx="70" cy="70" />
+                            <circle className="text-sparkle-text/5" strokeWidth="8" stroke="currentColor" fill="transparent" r="55" cx="70" cy="70" />
                             <circle
                                 className={cn(
                                     "transition-all duration-1000 ease-out",
-                                    (readiness?.score || 0) >= 80 ? "text-green-500" : 
-                                    (readiness?.score || 0) >= 50 ? "text-yellow-500" : "text-red-500"
+                                    (readiness?.score || 0) >= 80 ? "text-green-500" :
+                                        (readiness?.score || 0) >= 50 ? "text-yellow-500" : "text-red-500"
                                 )}
                                 strokeWidth="8"
                                 strokeDasharray={345}
@@ -465,12 +465,12 @@ export default function Home() {
                             />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-4xl font-black text-white">{readiness?.score || 0}</span>
-                            <span className="text-[10px] text-white/40 uppercase">Score</span>
+                            <span className="text-4xl font-black text-sparkle-text">{readiness?.score || 0}</span>
+                            <span className="text-[10px] text-sparkle-text-muted uppercase">Score</span>
                         </div>
                     </div>
 
-                    <Badge 
+                    <Badge
                         variant={readiness?.level === 'ready' ? 'success' : readiness?.level === 'partial' ? 'warning' : 'error'}
                         className="mt-2"
                     >
@@ -494,8 +494,8 @@ export default function Home() {
                         <div className="p-2 rounded-lg bg-purple-500/10">
                             <TerminalIcon className="text-purple-300" size={18} />
                         </div>
-                        <h2 className="text-sm font-semibold text-white">Active Sessions by Folder</h2>
-                        <span className="text-xs text-white/40">{activeSessionsCount}</span>
+                        <h2 className="text-sm font-semibold text-sparkle-text">Active Sessions by Folder</h2>
+                        <span className="text-xs text-sparkle-text-muted">{activeSessionsCount}</span>
                     </div>
                     <div className="space-y-2">
                         {activeProjectSessions.slice(0, 6).map(session => {
@@ -505,23 +505,23 @@ export default function Home() {
                                 <Link
                                     key={session.id}
                                     to={`/folder-browse/${targetPath}`}
-                                    className="flex items-center gap-3 p-3 bg-sparkle-card/50 rounded-xl border border-white/5 hover:border-white/10 hover:bg-white/5 transition-all group"
+                                    className="flex items-center gap-3 p-3 bg-sparkle-card/50 rounded-xl border border-sparkle-border hover:border-sparkle-border-secondary hover:bg-sparkle-card transition-all group"
                                 >
-                                    <div className="p-2 rounded-lg bg-sparkle-bg border border-white/5">
+                                    <div className="p-2 rounded-lg bg-sparkle-bg border border-sparkle-border">
                                         <TerminalIcon size={16} className="text-purple-300" />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-sm font-semibold text-white truncate">{session.name}</span>
-                                            <Badge variant="default" className="bg-white/5 text-white/50 border-white/10">
+                                            <span className="text-sm font-semibold text-sparkle-text truncate">{session.name}</span>
+                                            <Badge variant="default" className="bg-sparkle-card text-sparkle-text-secondary border-white/10">
                                                 {session.shell}
                                             </Badge>
                                         </div>
-                                        <p className="text-xs text-white/40 truncate">
+                                        <p className="text-xs text-sparkle-text-muted truncate">
                                             {session.projectName ? `${session.projectName} • ${folderName}` : folderName}
                                         </p>
                                     </div>
-                                    <ArrowRight size={14} className="text-white/20 group-hover:text-white/60 transition-colors" />
+                                    <ArrowRight size={14} className="text-sparkle-text-muted group-hover:text-sparkle-text-secondary transition-colors" />
                                 </Link>
                             )
                         })}
@@ -547,7 +547,7 @@ export default function Home() {
     )
 }
 
-function SystemStatCard({ icon, label, value, subValue, color }: { 
+function SystemStatCard({ icon, label, value, subValue, color }: {
     icon: React.ReactNode
     label: string
     value: string
@@ -560,16 +560,16 @@ function SystemStatCard({ icon, label, value, subValue, color }: {
         orange: 'bg-orange-500/10 text-orange-400',
         green: 'bg-green-500/10 text-green-400'
     }
-    
+
     return (
-        <div className="bg-sparkle-card/50 rounded-xl p-4 border border-white/5">
+        <div className="bg-sparkle-card/50 rounded-xl p-4 border border-sparkle-border">
             <div className="flex items-center gap-3 mb-2">
                 <div className={cn('p-2 rounded-lg', colors[color])}>
                     {icon}
                 </div>
                 <span className="text-xs text-sparkle-text-muted uppercase tracking-wide">{label}</span>
             </div>
-            <p className="text-sm font-semibold text-white truncate" title={value}>{value}</p>
+            <p className="text-sm font-semibold text-sparkle-text truncate" title={value}>{value}</p>
             <p className="text-xs text-sparkle-text-muted">{subValue}</p>
         </div>
     )
@@ -588,18 +588,18 @@ function QuickLinkCard({ to, icon, color, title, subtitle }: {
         pink: 'bg-pink-500/10 text-pink-400',
         blue: 'bg-blue-500/10 text-blue-400'
     }
-    
+
     return (
-        <Link 
-            to={to} 
-            className="group p-4 bg-sparkle-card/50 rounded-xl border border-white/5 hover:border-white/10 hover:bg-sparkle-card transition-all hover:-translate-y-1"
+        <Link
+            to={to}
+            className="group p-4 bg-sparkle-card/50 rounded-xl border border-sparkle-border hover:border-sparkle-border-secondary hover:bg-sparkle-card transition-all hover:-translate-y-1"
         >
             <div className="flex items-center gap-3">
                 <div className={cn('p-2.5 rounded-lg', colors[color])}>
                     {icon}
                 </div>
                 <div className="min-w-0">
-                    <h3 className="font-semibold text-white text-sm group-hover:text-sparkle-accent transition-colors">{title}</h3>
+                    <h3 className="font-semibold text-sparkle-text text-sm group-hover:text-sparkle-accent transition-colors">{title}</h3>
                     <p className="text-xs text-sparkle-text-secondary truncate">{subtitle}</p>
                 </div>
             </div>

@@ -1,0 +1,74 @@
+{
+    "name": "devscope-air-win",
+    "version": "1.0.0",
+    "description": "DevScope Air - Projects-focused Windows Electron app with project scanning and Git workflows",
+    "main": "./out/main/index.js",
+    "author": "DevScope",
+    "license": "MIT",
+    "type": "module",
+    "scripts": {
+        "dev": "electron-vite dev",
+        "build": "electron-vite build",
+        "preview": "electron-vite preview",
+        "postinstall": "echo DevScope Air: skipping native terminal rebuild",
+        "build:win": "npm run build && electron-builder --win",
+        "build:unpack": "npm run build && electron-builder --dir"
+    },
+    "dependencies": {
+        "@monaco-editor/react": "^4.7.0",
+        "@types/react-syntax-highlighter": "^15.5.13",
+        "ansi-to-html": "^0.7.2",
+        "clsx": "^2.1.1",
+        "electron-log": "^5.1.7",
+        "lucide-react": "^0.469.0",
+        "monaco-editor": "^0.55.1",
+        "node-pty": "^1.1.0",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "react-markdown": "^10.1.0",
+        "react-router-dom": "^7.1.1",
+        "react-syntax-highlighter": "^16.1.0",
+        "recharts": "^3.6.0",
+        "rehype-raw": "^7.0.0",
+        "remark-gfm": "^4.0.1",
+        "simple-git": "^3.31.1",
+        "systeminformation": "^5.23.5",
+        "xterm": "^5.3.0",
+        "xterm-addon-fit": "^0.8.0",
+        "xterm-addon-web-links": "^0.9.0",
+        "zustand": "^5.0.2"
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.5",
+        "@types/react": "^18.3.17",
+        "@types/react-dom": "^18.3.5",
+        "@vitejs/plugin-react": "^4.3.4",
+        "autoprefixer": "^10.4.20",
+        "electron": "^33.3.0",
+        "electron-builder": "^25.1.8",
+        "electron-vite": "^2.3.0",
+        "postcss": "^8.4.49",
+        "tailwindcss": "^3.4.17",
+        "typescript": "^5.7.3",
+        "vite": "^5.4.11",
+        "vite-plugin-static-copy": "^3.1.4"
+    },
+    "build": {
+        "appId": "com.devscope.air.win",
+        "productName": "DevScope Air",
+        "directories": {
+            "output": "dist"
+        },
+        "asarUnpack": [],
+        "win": {
+            "target": [
+                "nsis"
+            ],
+            "icon": "resources/icon.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
+        }
+    }
+}

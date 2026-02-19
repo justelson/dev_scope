@@ -43,15 +43,15 @@ export default function TitleBar() {
             <div className="flex-1 h-full flex items-center justify-center px-4" style={{ WebkitAppRegion: 'drag' } as any}>
                 <button
                     onClick={(e) => { e.stopPropagation(); open() }}
-                    className="group flex items-center gap-2 w-full max-w-md px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white/70 hover:text-white hover:bg-white/8 transition-all"
+                    className="group flex items-center gap-2 w-full max-w-md px-3 py-1.5 rounded-lg bg-sparkle-card/70 border border-sparkle-border-secondary text-sm text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-accent/50 transition-all"
                     style={{ WebkitAppRegion: 'no-drag' } as any}
                     title="Open command palette (Ctrl+K)"
                 >
-                    <Search size={15} className="text-white/50 group-hover:text-white/80" />
-                    <span className="flex-1 text-left truncate text-white/45 group-hover:text-white/70 text-[13px]">
+                    <Search size={15} className="text-sparkle-text-muted group-hover:text-sparkle-text" />
+                    <span className="flex-1 text-left truncate text-sparkle-text-muted group-hover:text-sparkle-text-secondary text-[13px]">
                         Search everywhere… (Ctrl+K)
                     </span>
-                    <span className="hidden sm:flex items-center gap-1 text-[10px] text-white/60 bg-white/10 px-2 py-0.5 rounded-md border border-white/10">
+                    <span className="hidden sm:flex items-center gap-1 text-[10px] text-sparkle-text-secondary bg-sparkle-accent/50 px-2 py-0.5 rounded-md border border-sparkle-border-secondary">
                         Ctrl + K
                     </span>
                 </button>

@@ -13,7 +13,7 @@ import Dropdown from '@/components/ui/Dropdown'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import Badge from '@/components/ui/Badge'
 import { cn } from '@/lib/utils'
-import { getCache, updateCache } from '@/lib/refreshCache'
+import { getCache, updateCache, isCacheStale } from '@/lib/refreshCache'
 import ToolIcon from '@/components/ui/ToolIcon'
 import { getToolById } from '../../../shared/tool-registry'
 import { LoadingOverlay, AnalyticsCardSkeleton, ToolGridSkeleton } from '@/components/ui/LoadingState'
@@ -86,8 +86,10 @@ const getTagColor = (tag: string) => {
 }
 
 export default function AIAgents() {
-    const [data, setData] = useState<AIAgentsReport | null>(getCache<AIAgentsReport>('aiAgents'))
-    const [loading, setLoading] = useState(!data)
+    const cachedAgents = getCache<AIAgentsReport>('aiAgents')
+    const [data, setData] = useState<AIAgentsReport | null>(cachedAgents)
+    const [loading, setLoading] = useState(!cachedAgents)
+    const [isRefreshing, setIsRefreshing] = useState(false)
 
     // UI State
     const [searchQuery, setSearchQuery] = useState('')
@@ -95,9 +97,15 @@ export default function AIAgents() {
     const [filterTag, setFilterTag] = useState<string>('all')
     const [viewMode, setViewMode] = useState<ViewMode>('grid')
 
-    const fetchData = async () => {
-        try {
+    const fetchData = async (showRefreshIndicator = true) => {
+        // Only show subtle refresh, not full loading if we have data
+        if (showRefreshIndicator && data) {
+            setIsRefreshing(true)
+        } else if (!data) {
             setLoading(true)
+        }
+
+        try {
             const result = await window.devscope.getAIAgents()
             updateCache({ aiAgents: result })
             setData(result)
@@ -105,12 +113,15 @@ export default function AIAgents() {
             console.error('Failed to fetch AI agents:', err)
         } finally {
             setLoading(false)
+            setIsRefreshing(false)
         }
     }
 
     useEffect(() => {
-        // Always fetch fresh data on mount (cache is used for instant display only)
-        fetchData()
+        // Fetch if no cache or stale
+        if (!cachedAgents || isCacheStale('aiAgents')) {
+            fetchData(!cachedAgents)
+        }
 
         const handleRefresh = (event: Event) => {
             const detail = (event as CustomEvent).detail
@@ -118,9 +129,10 @@ export default function AIAgents() {
                 updateCache({ aiAgents: detail.aiAgents })
                 setData(detail.aiAgents)
                 setLoading(false)
+                setIsRefreshing(false)
                 return
             }
-            fetchData()
+            fetchData(true)
         }
 
         window.addEventListener('devscope:refresh', handleRefresh)
@@ -424,8 +436,8 @@ export default function AIAgents() {
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
                                             <h3 className="font-bold text-white truncate">{agent.displayName}</h3>
-                                            {agent.installed && agent.version && (
-                                                <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-white/50 font-mono">{agent.version}</span>
+                                            {agent.installed && agent.version && agent.version !== 'Installed' && /\d/.test(agent.version) && (
+                                                <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-white/50 font-mono">v{agent.version}</span>
                                             )}
                                         </div>
                                         <p className="text-xs text-white/40 truncate mt-0.5">{agent.description}</p>
@@ -457,7 +469,9 @@ export default function AIAgents() {
                                         {agent.installed ? (
                                             <div className="flex items-center gap-2 mb-2">
                                                 <Check size={14} className="text-green-500" />
-                                                <span className="text-sm text-sparkle-text-secondary font-mono">{agent.version}</span>
+                                                <span className="text-sm text-sparkle-text-secondary font-mono">
+                                                    {agent.version && agent.version !== 'Installed' && /\d/.test(agent.version) ? `v${agent.version}` : 'Installed'}
+                                                </span>
                                             </div>
                                         ) : (
                                             <div className="flex items-center gap-2 mb-2">
@@ -490,16 +504,19 @@ export default function AIAgents() {
 
                                     {/* Quick Actions */}
                                     <div className="flex items-center gap-2 pt-3 border-t border-white/5 relative z-10">
-                                        <a
-                                            href={staticData?.website}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            onClick={(e) => e.stopPropagation()}
+                                        <button
+                                            onClick={(e) => {
+                                                e.preventDefault()
+                                                e.stopPropagation()
+                                                if (staticData?.website) {
+                                                    window.open(staticData.website, '_blank', 'noopener,noreferrer')
+                                                }
+                                            }}
                                             className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white transition-colors"
                                         >
                                             <ExternalLink size={12} />
                                             Website
-                                        </a>
+                                        </button>
                                         <span className="text-white/10">•</span>
                                         <span className="flex items-center gap-1.5 text-xs text-white/40">
                                             <Terminal size={12} />
