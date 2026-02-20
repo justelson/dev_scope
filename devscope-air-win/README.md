@@ -69,7 +69,7 @@ DevScope is built with a focus on performance and native Windows integration:
 ### Prerequisites
 
 - **Node.js**: v18.x or higher
-- **npm**: v9.x or higher
+- **npm**: v9.x or higher (or **Bun** v1.0+)
 - **Windows 10/11**: (Current primary target)
 
 ### Installation
@@ -84,17 +84,29 @@ DevScope is built with a focus on performance and native Windows integration:
    ```bash
    npm install
    ```
+   or
+   ```bash
+   bun install
+   ```
 
 ### Running in Development
 
 ```bash
 npm run dev
 ```
+or
+```bash
+bun run dev
+```
 
 ### Building for Production
 
 ```bash
 npm run build
+```
+or
+```bash
+bun run build
 ```
 
 ## Project Structure

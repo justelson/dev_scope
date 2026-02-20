@@ -5,7 +5,8 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Settings, FolderOpen, House, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
+import { useSettings } from '@/lib/settings'
 
 interface SidebarContextType {
     isCollapsed: boolean
@@ -23,7 +24,14 @@ export function useSidebar() {
 }
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
-    const [isCollapsed, setIsCollapsed] = useState(false)
+    const { settings, updateSettings } = useSettings()
+
+    const setIsCollapsed = (collapsed: boolean) => {
+        updateSettings({ sidebarCollapsed: collapsed })
+    }
+
+    const isCollapsed = settings.sidebarCollapsed
+
     return (
         <SidebarContext.Provider value={{ isCollapsed, setIsCollapsed }}>
             {children}

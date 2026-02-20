@@ -24,6 +24,7 @@ const AboutSettings = lazy(() => import('./pages/settings/AboutSettings'))
 const ProjectsSettings = lazy(() => import('./pages/settings/ProjectsSettings'))
 const AISettings = lazy(() => import('./pages/settings/AISettings'))
 const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
+const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
 
 // Terminal Context
 interface TerminalContextType {
@@ -98,6 +99,7 @@ function MainContent() {
                     <Route path="/settings/projects" element={<ProjectsSettings />} />
                     <Route path="/settings/ai" element={<AISettings />} />
                     <Route path="/settings/terminal" element={<TerminalSettings />} />
+                    <Route path="/settings/logs" element={<LogsSettings />} />
                     <Route path="*" element={<Navigate to="/home" replace />} />
                 </Routes>
             </Suspense>

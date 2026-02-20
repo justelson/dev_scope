@@ -98,6 +98,8 @@ const devScopeAPI = {
     setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) =>
         ipcRenderer.invoke('devscope:setStartupSettings', settings),
     getStartupSettings: () => ipcRenderer.invoke('devscope:getStartupSettings'),
+    getAiDebugLogs: (limit?: number) => ipcRenderer.invoke('devscope:getAiDebugLogs', limit),
+    clearAiDebugLogs: () => ipcRenderer.invoke('devscope:clearAiDebugLogs'),
 
     // Projects
     selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),
@@ -111,6 +113,7 @@ const devScopeAPI = {
     getGitHistory: (projectPath: string) => ipcRenderer.invoke('devscope:getGitHistory', projectPath),
     getCommitDiff: (projectPath: string, commitHash: string) => ipcRenderer.invoke('devscope:getCommitDiff', projectPath, commitHash),
     getWorkingDiff: (projectPath: string, filePath?: string) => ipcRenderer.invoke('devscope:getWorkingDiff', projectPath, filePath),
+    getWorkingChangesForAI: (projectPath: string) => ipcRenderer.invoke('devscope:getWorkingChangesForAI', projectPath),
     getGitStatus: (projectPath: string) => ipcRenderer.invoke('devscope:getGitStatus', projectPath),
     getUnpushedCommits: (projectPath: string) => ipcRenderer.invoke('devscope:getUnpushedCommits', projectPath),
     getGitUser: (projectPath: string) => ipcRenderer.invoke('devscope:getGitUser', projectPath),

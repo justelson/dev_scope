@@ -13,8 +13,8 @@
         "maint:loc": "node scripts/maint/check-loc.mjs",
         "maint:loc:strict": "node scripts/maint/check-loc.mjs --strict",
         "postinstall": "echo DevScope Air: skipping native terminal rebuild",
-        "build:win": "npm run build && electron-builder --win",
-        "build:unpack": "npm run build && electron-builder --dir"
+        "build:win": "electron-vite build && electron-builder --win",
+        "build:unpack": "electron-vite build && electron-builder --dir"
     },
     "dependencies": {
         "@monaco-editor/react": "^4.7.0",
@@ -23,6 +23,7 @@
         "clsx": "^2.1.1",
         "electron-log": "^5.1.7",
         "lucide-react": "^0.469.0",
+        "mermaid": "^11.12.3",
         "monaco-editor": "^0.55.1",
         "node-pty": "^1.1.0",
         "react": "^18.3.1",

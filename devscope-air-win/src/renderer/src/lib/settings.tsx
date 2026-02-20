@@ -51,6 +51,7 @@ export interface Settings {
     theme: Theme
     accentColor: AccentColor
     compactMode: boolean
+    sidebarCollapsed: boolean
 
     // Terminal
     defaultShell: Shell
@@ -75,6 +76,7 @@ const DEFAULT_SETTINGS: Settings = {
     theme: 'dark',
     accentColor: ACCENT_COLORS[0],
     compactMode: false,
+    sidebarCollapsed: false,
     defaultShell: 'powershell',
     startMinimized: false,
     startWithWindows: false,
@@ -102,6 +104,7 @@ function loadSettings(): Settings {
                 theme: candidate.theme,
                 accentColor: candidate.accentColor,
                 compactMode: candidate.compactMode,
+                sidebarCollapsed: candidate.sidebarCollapsed,
                 defaultShell: candidate.defaultShell,
                 startMinimized: candidate.startMinimized,
                 startWithWindows: candidate.startWithWindows,

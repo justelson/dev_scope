@@ -49,6 +49,19 @@ export interface CheckoutBranchResult {
     stashMessage?: string
 }
 
+interface CompactPatchResult {
+    text: string
+    omittedFiles: string[]
+    totalFiles: number
+    includedFiles: number
+    wasTruncated: boolean
+}
+
+const AI_NOISY_PATCH_FILE_PATTERN = /(?:^|\/)(?:package-lock\.json|yarn\.lock|pnpm-lock\.ya?ml|bun\.lockb?|bun\.lock|min\.(?:js|css)|dist\/|build\/|coverage\/)/i
+const AI_PATCH_MAX_FILES = 16
+const AI_PATCH_MAX_LINES_PER_FILE = 120
+const AI_PATCH_MAX_LINES_TOTAL = 900
+
 function createGit(projectPath: string): SimpleGit {
     return simpleGit({
         baseDir: projectPath,
@@ -168,6 +181,96 @@ function toError(err: unknown, fallback: string): Error {
 function toErrorMessage(err: unknown, fallback: string): string {
     if (err instanceof Error && err.message) return err.message
     return fallback
+}
+
+function parseDiffBlocks(patch: string): string[][] {
+    const lines = patch.split('\n')
+    const blocks: string[][] = []
+    let current: string[] = []
+
+    for (const line of lines) {
+        if (line.startsWith('diff --git ')) {
+            if (current.length > 0) blocks.push(current)
+            current = [line]
+            continue
+        }
+        if (current.length > 0) {
+            current.push(line)
+        }
+    }
+
+    if (current.length > 0) blocks.push(current)
+    return blocks
+}
+
+function extractDiffFilePath(headerLine: string): string {
+    const match = headerLine.match(/^diff --git a\/(.+?) b\/.+$/)
+    return match?.[1] || headerLine
+}
+
+function compactPatchForAI(patch: string): CompactPatchResult {
+    const blocks = parseDiffBlocks(patch)
+    if (blocks.length === 0) {
+        return {
+            text: '',
+            omittedFiles: [],
+            totalFiles: 0,
+            includedFiles: 0,
+            wasTruncated: false
+        }
+    }
+
+    const outputBlocks: string[] = []
+    const omittedFiles: string[] = []
+    let includedFiles = 0
+    let usedLines = 0
+    let wasTruncated = false
+
+    for (const block of blocks) {
+        if (block.length === 0) continue
+        const filePath = extractDiffFilePath(block[0])
+
+        if (AI_NOISY_PATCH_FILE_PATTERN.test(filePath)) {
+            omittedFiles.push(`${filePath} (noisy/generated)`)
+            continue
+        }
+
+        if (includedFiles >= AI_PATCH_MAX_FILES) {
+            omittedFiles.push(`${filePath} (file limit reached)`)
+            wasTruncated = true
+            continue
+        }
+
+        const remainingLines = AI_PATCH_MAX_LINES_TOTAL - usedLines
+        if (remainingLines <= 0) {
+            omittedFiles.push(`${filePath} (global line budget reached)`)
+            wasTruncated = true
+            continue
+        }
+
+        const allowedForFile = Math.min(AI_PATCH_MAX_LINES_PER_FILE, remainingLines)
+        let selected = block.slice(0, allowedForFile)
+
+        if (block.length > allowedForFile) {
+            selected = [
+                ...selected,
+                `... (${block.length - allowedForFile} more lines omitted for ${filePath})`
+            ]
+            wasTruncated = true
+        }
+
+        outputBlocks.push(selected.join('\n'))
+        includedFiles += 1
+        usedLines += selected.length
+    }
+
+    return {
+        text: outputBlocks.join('\n\n').trim(),
+        omittedFiles,
+        totalFiles: blocks.length,
+        includedFiles,
+        wasTruncated
+    }
 }
 
 function countTrackedChanges(statusMap: GitStatusMap): number {
@@ -385,6 +488,81 @@ export async function getWorkingDiff(projectPath: string, filePath?: string): Pr
 }
 
 /**
+ * Build richer git context for commit-message AI.
+ * Includes status + stats for all files, plus staged/unstaged patches.
+ */
+export async function getWorkingChangesForAI(projectPath: string): Promise<string> {
+    try {
+        const git = createGit(projectPath)
+
+        const [statusShortRaw, stagedStatRaw, unstagedStatRaw, stagedPatchRaw, unstagedPatchRaw] = await Promise.all([
+            git.raw(['status', '--short']).catch(() => ''),
+            git.raw(['diff', '--cached', '--stat']).catch(() => ''),
+            git.raw(['diff', '--stat']).catch(() => ''),
+            git.raw(['diff', '--cached', '--unified=2']).catch(() => ''),
+            git.raw(['diff', '--unified=2']).catch(() => '')
+        ])
+
+        const toText = (value: string | string[]): string =>
+            Array.isArray(value) ? value.join('\n') : value
+
+        const statusShort = toText(statusShortRaw)
+        const stagedStat = toText(stagedStatRaw)
+        const unstagedStat = toText(unstagedStatRaw)
+        const stagedPatch = toText(stagedPatchRaw)
+        const unstagedPatch = toText(unstagedPatchRaw)
+
+        if (!statusShort.trim() && !stagedPatch.trim() && !unstagedPatch.trim()) {
+            return 'No changes'
+        }
+
+        const stagedPatchCompact = compactPatchForAI(stagedPatch)
+        const unstagedPatchCompact = compactPatchForAI(unstagedPatch)
+
+        const sections: string[] = []
+        sections.push('## WORKING TREE STATUS (SHORT)')
+        sections.push(statusShort.trim() || '(none)')
+        sections.push('')
+
+        sections.push('## STAGED CHANGES STAT')
+        sections.push(stagedStat.trim() || '(none)')
+        sections.push('')
+
+        sections.push('## UNSTAGED CHANGES STAT')
+        sections.push(unstagedStat.trim() || '(none)')
+        sections.push('')
+
+        sections.push('## STAGED PATCH')
+        sections.push(stagedPatchCompact.text || '(none)')
+        if (stagedPatchCompact.omittedFiles.length > 0) {
+            sections.push('')
+            sections.push('### STAGED PATCH OMITTED FILES')
+            sections.push(stagedPatchCompact.omittedFiles.slice(0, 30).join('\n'))
+            if (stagedPatchCompact.omittedFiles.length > 30) {
+                sections.push(`... (${stagedPatchCompact.omittedFiles.length - 30} more omitted files)`)
+            }
+        }
+        sections.push('')
+
+        sections.push('## UNSTAGED PATCH')
+        sections.push(unstagedPatchCompact.text || '(none)')
+        if (unstagedPatchCompact.omittedFiles.length > 0) {
+            sections.push('')
+            sections.push('### UNSTAGED PATCH OMITTED FILES')
+            sections.push(unstagedPatchCompact.omittedFiles.slice(0, 30).join('\n'))
+            if (unstagedPatchCompact.omittedFiles.length > 30) {
+                sections.push(`... (${unstagedPatchCompact.omittedFiles.length - 30} more omitted files)`)
+            }
+        }
+
+        return sections.join('\n')
+    } catch (err) {
+        log.error('Failed to get working changes context for AI', err)
+        throw toError(err, 'Failed to get working changes context')
+    }
+}
+
+/**
  * Check if remote origin exists
  */
 export async function hasRemoteOrigin(projectPath: string): Promise<boolean> {
@@ -461,8 +639,11 @@ export async function getGitUser(projectPath: string): Promise<{ name: string; e
     try {
         const git = createGit(projectPath)
         const config = await git.listConfig().catch(() => ({ all: {} as Record<string, string> }))
-        const name = (config.all?.['user.name'] || '').trim()
-        const email = (config.all?.['user.email'] || '').trim()
+        const toSingleValue = (value: string | string[] | undefined): string =>
+            (Array.isArray(value) ? value[0] : value) || ''
+
+        const name = toSingleValue(config.all?.['user.name']).trim()
+        const email = toSingleValue(config.all?.['user.email']).trim()
 
         if (!name && !email) return null
 

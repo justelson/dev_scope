@@ -20,6 +20,7 @@ import {
     getGitHistory,
     getCommitDiff,
     getWorkingDiff,
+    getWorkingChangesForAI,
     getUnpushedCommits,
     getGitUser,
     getRepoOwner,
@@ -66,6 +67,7 @@ import { calculateReadiness } from '../readiness/scorer'
 import { systemMetricsBridge } from '../system-metrics/manager'
 import { testGroqConnection, generateCommitMessage as generateGroqCommitMessage } from '../ai/groq'
 import { testGeminiConnection, generateGeminiCommitMessage } from '../ai/gemini'
+import { getAiDebugLogs, clearAiDebugLogs } from '../ai/ai-debug-log'
 // Temporarily inlined to debug ESM issue
 interface ProjectTypeDefinition {
     id: string
@@ -307,6 +309,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:testGroqConnection', handleTestGroqConnection)
     ipcMain.handle('devscope:testGeminiConnection', handleTestGeminiConnection)
     ipcMain.handle('devscope:generateCommitMessage', handleGenerateCommitMessage)
+    ipcMain.handle('devscope:getAiDebugLogs', handleGetAiDebugLogs)
+    ipcMain.handle('devscope:clearAiDebugLogs', handleClearAiDebugLogs)
 
     // Projects
     ipcMain.handle('devscope:selectFolder', handleSelectFolder)
@@ -319,6 +323,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getGitHistory', handleGetGitHistory)
     ipcMain.handle('devscope:getCommitDiff', handleGetCommitDiff)
     ipcMain.handle('devscope:getWorkingDiff', handleGetWorkingDiff)
+    ipcMain.handle('devscope:getWorkingChangesForAI', handleGetWorkingChangesForAI)
     ipcMain.handle('devscope:getGitStatus', handleGetGitStatus)
     ipcMain.handle('devscope:getUnpushedCommits', handleGetUnpushedCommits)
     ipcMain.handle('devscope:getGitUser', handleGetGitUser)
@@ -466,6 +471,25 @@ async function handleGenerateCommitMessage(
     }
 
     return generateGroqCommitMessage(apiKey.trim(), diff)
+}
+
+async function handleGetAiDebugLogs(_event: Electron.IpcMainInvokeEvent, limit?: number) {
+    try {
+        return { success: true, logs: getAiDebugLogs(limit) }
+    } catch (err: any) {
+        log.error('Failed to read AI debug logs:', err)
+        return { success: false, error: err.message, logs: [] }
+    }
+}
+
+async function handleClearAiDebugLogs() {
+    try {
+        clearAiDebugLogs()
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to clear AI debug logs:', err)
+        return { success: false, error: err.message }
+    }
 }
 
 /**
@@ -988,6 +1012,19 @@ async function handleGetWorkingDiff(_event: Electron.IpcMainInvokeEvent, project
         return { success: true, diff }
     } catch (err: any) {
         log.error('Failed to get working diff:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Get rich working-changes context for AI commit generation.
+ */
+async function handleGetWorkingChangesForAI(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const context = await getWorkingChangesForAI(projectPath)
+        return { success: true, context }
+    } catch (err: any) {
+        log.error('Failed to get working changes context for AI:', err)
         return { success: false, error: err.message }
     }
 }

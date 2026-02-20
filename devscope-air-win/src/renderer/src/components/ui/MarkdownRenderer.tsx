@@ -8,8 +8,10 @@ import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Copy, Check, ExternalLink } from 'lucide-react'
-import { Children, cloneElement, isValidElement, useState, type ReactNode } from 'react'
+import { Children, cloneElement, isValidElement, useState, useEffect, memo, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import mermaid from 'mermaid'
+import rehypeRaw from 'rehype-raw'
 
 interface MarkdownRendererProps {
     content: string
@@ -28,6 +30,27 @@ const flatCodeTheme = Object.fromEntries(
         }
     ])
 )
+
+// Initialize Mermaid
+mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    themeVariables: {
+        primaryColor: '#6366f1',
+        primaryTextColor: '#e2e8f0',
+        primaryBorderColor: '#4f46e5',
+        lineColor: '#64748b',
+        secondaryColor: '#8b5cf6',
+        tertiaryColor: '#ec4899',
+        background: '#1e293b',
+        mainBkg: '#1e293b',
+        secondBkg: '#334155',
+        textColor: '#e2e8f0',
+        fontSize: '14px'
+    }
+})
+
+const mermaidSvgCache = new Map<string, string>()
 
 const COLOR_TOKEN_REGEX = /#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\(\s*[^)\n]+\)/g
 
@@ -168,6 +191,80 @@ function resolveImageSrc(src: string, methodFilePath?: string): string {
     return getFileUrl(resolvedPath)
 }
 
+function hashString(input: string): string {
+    let hash = 0
+    for (let i = 0; i < input.length; i++) {
+        hash = ((hash << 5) - hash) + input.charCodeAt(i)
+        hash |= 0
+    }
+    return Math.abs(hash).toString(36)
+}
+
+// Mermaid diagram component - memoized to prevent re-renders
+const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: string }) {
+    const [svg, setSvg] = useState<string>(() => mermaidSvgCache.get(chart) || '')
+    const [error, setError] = useState<string>('')
+
+    useEffect(() => {
+        const cachedSvg = mermaidSvgCache.get(chart)
+        if (cachedSvg) {
+            setSvg(prev => (prev === cachedSvg ? prev : cachedSvg))
+            setError(prev => (prev ? '' : prev))
+            return
+        }
+
+        let cancelled = false
+        setSvg('')
+        setError('')
+
+        const renderDiagram = async () => {
+            try {
+                const id = `mermaid-${hashString(chart)}`
+                const { svg: renderedSvg } = await mermaid.render(id, chart)
+
+                if (!cancelled) {
+                    mermaidSvgCache.set(chart, renderedSvg)
+                    setSvg(renderedSvg)
+                }
+            } catch (err: any) {
+                if (!cancelled) {
+                    console.error('Mermaid render error:', err)
+                    setError(err.message || 'Failed to render diagram')
+                }
+            }
+        }
+
+        renderDiagram()
+
+        return () => {
+            cancelled = true
+        }
+    }, [chart])
+
+    if (error) {
+        return (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                <strong>Mermaid Error:</strong> {error}
+            </div>
+        )
+    }
+
+    if (!svg) {
+        return (
+            <div className="p-4 bg-sparkle-card rounded-lg text-sparkle-text-secondary text-sm">
+                Rendering diagram...
+            </div>
+        )
+    }
+
+    return (
+        <div 
+            className="mermaid-diagram flex justify-center items-center p-4 bg-sparkle-card rounded-lg overflow-x-auto"
+            dangerouslySetInnerHTML={{ __html: svg }}
+        />
+    )
+}, (prevProps, nextProps) => prevProps.chart === nextProps.chart)
+
 // Code block with copy button
 function CodeBlock({ language, children }: { language?: string; children: string }) {
     const [copied, setCopied] = useState(false)
@@ -176,6 +273,15 @@ function CodeBlock({ language, children }: { language?: string; children: string
         await navigator.clipboard.writeText(children)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
+    }
+
+    // Check if this is a Mermaid diagram
+    if (language === 'mermaid') {
+        return (
+            <div className="my-4">
+                <MermaidDiagram chart={children} />
+            </div>
+        )
     }
 
     // Detect if this looks like a folder structure
@@ -314,11 +420,9 @@ function InlineCode({ children }: { children: React.ReactNode }) {
     )
 }
 
-import rehypeRaw from 'rehype-raw'
-
 // ... existing imports
 
-export default function MarkdownRenderer({ content, className, filePath }: MarkdownRendererProps) {
+function MarkdownRenderer({ content, className, filePath }: MarkdownRendererProps) {
     return (
         <div className={cn("markdown-body", className)}>
             <Markdown
@@ -525,4 +629,10 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
         </div>
     )
 }
+
+export default memo(MarkdownRenderer, (prev, next) =>
+    prev.content === next.content &&
+    prev.className === next.className &&
+    prev.filePath === next.filePath
+)
 

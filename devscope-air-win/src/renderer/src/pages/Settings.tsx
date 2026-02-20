@@ -5,7 +5,7 @@
 import { Link } from 'react-router-dom'
 import {
     Palette, RefreshCw, Download, Info,
-    ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal
+    ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal, Bug
 } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
@@ -109,6 +109,15 @@ export default function Settings() {
                     title="Terminal"
                     description="Set default terminal and shell behavior"
                     preview={settings.defaultShell === 'cmd' ? 'Default: CMD' : 'Default: PowerShell'}
+                />
+
+                <SettingsCard
+                    to="/settings/logs"
+                    icon={<Bug className="text-amber-400" size={24} />}
+                    iconBg="bg-amber-500/10"
+                    title="Logs"
+                    description="Inspect AI request/response logs"
+                    preview="Commit AI traces"
                 />
 
                 <SettingsCard

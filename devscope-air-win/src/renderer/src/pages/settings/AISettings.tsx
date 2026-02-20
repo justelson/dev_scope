@@ -12,7 +12,7 @@ import { useSettings, type CommitAIProvider } from '@/lib/settings'
 type ProviderStatus = 'idle' | 'testing' | 'success' | 'error'
 const PROVIDER_MODELS: Record<CommitAIProvider, string> = {
     groq: 'llama-3.1-8b-instant',
-    gemini: 'gemini-1.5-flash'
+    gemini: 'auto (Gemini Flash)'
 }
 
 export default function AISettings() {
@@ -348,4 +348,3 @@ function ProviderKeyCard({
         </div>
     )
 }
-
