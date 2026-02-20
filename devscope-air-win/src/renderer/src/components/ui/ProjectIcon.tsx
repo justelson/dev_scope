@@ -117,7 +117,8 @@ export default function ProjectIcon({
 
     // Use Simple Icons CDN if we have an icon slug
     if (iconSlug && !imgError) {
-        const iconUrl = `https://cdn.simpleicons.org/${iconSlug}/white`
+        // Use the theme color directly instead of white, with fallback to white for dark mode
+        const iconUrl = `https://cdn.simpleicons.org/${iconSlug}`
 
         return (
             <div
@@ -131,8 +132,12 @@ export default function ProjectIcon({
                     alt={`${displayName} logo`}
                     width={size}
                     height={size}
-                    className="w-full h-full object-contain"
-                    style={{ filter: themeColor ? `drop-shadow(0 0 1px ${themeColor})` : undefined }}
+                    className="w-full h-full object-contain icon-adaptive"
+                    style={{ 
+                        filter: themeColor ? `drop-shadow(0 0 1px ${themeColor}40)` : undefined,
+                        // Use CSS filter to adapt icon color based on theme
+                        // In light mode, icons will be darker; in dark mode, they'll be lighter
+                    }}
                     onError={() => setImgError(true)}
                     loading="lazy"
                 />
@@ -175,16 +180,24 @@ export function FrameworkBadge({ framework, size = 'sm', showLabel = true, class
 
     return (
         <span
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${className}`}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded framework-badge ${className}`}
             style={{
                 backgroundColor: `${frameworkData.themeColor}15`,
-                color: frameworkData.themeColor,
-                border: `1px solid ${frameworkData.themeColor}30`
+                border: `1px solid ${frameworkData.themeColor}40`
             }}
         >
             <ProjectIcon framework={framework} size={iconSize} showFallback={false} />
             {showLabel && (
-                <span className={`font-medium ${textSize}`}>{frameworkData.displayName}</span>
+                <span 
+                    className={`font-medium ${textSize}`}
+                    style={{ 
+                        color: frameworkData.themeColor,
+                        // Ensure text is readable in both light and dark modes
+                        textShadow: '0 0 0.5px currentColor'
+                    }}
+                >
+                    {frameworkData.displayName}
+                </span>
             )}
         </span>
     )

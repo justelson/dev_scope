@@ -259,6 +259,44 @@
 }
 
 /* ============================================================================
+   Icon Adaptations for Light/Dark Mode
+   ============================================================================ */
+/* Dark themes - keep icons bright */
+:root .icon-adaptive,
+.purple .icon-adaptive,
+.green .icon-adaptive,
+.midnight .icon-adaptive,
+.ocean .icon-adaptive,
+.forest .icon-adaptive,
+.slate .icon-adaptive,
+.charcoal .icon-adaptive,
+.navy .icon-adaptive {
+  filter: brightness(1.2) contrast(1.1);
+}
+
+/* Light theme - darken icons for visibility */
+.light .icon-adaptive {
+  filter: brightness(0.7) contrast(1.2);
+}
+
+/* Framework badges - ensure good contrast */
+.light .framework-badge {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+:root .framework-badge,
+.purple .framework-badge,
+.green .framework-badge,
+.midnight .framework-badge,
+.ocean .framework-badge,
+.forest .framework-badge,
+.slate .framework-badge,
+.charcoal .framework-badge,
+.navy .framework-badge {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================================================
    Animations
    ============================================================================ */
 @keyframes fadeIn {

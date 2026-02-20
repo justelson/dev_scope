@@ -319,23 +319,23 @@ export default function FolderBrowse() {
                     {/* Search & Filter */}
                     <div className="flex flex-1 w-full gap-3">
                         <div className="relative flex-1 group/search">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 group-focus-within/search:text-sparkle-accent transition-colors" size={18} />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-sparkle-text-secondary group-focus-within/search:text-sparkle-primary transition-colors" size={18} />
                             <input
                                 type="text"
                                 placeholder="Search in folder..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-sparkle-card border border-white/10 rounded-2xl py-3 pl-11 pr-4 text-sm text-white focus:outline-none focus:border-sparkle-accent/50 focus:ring-4 focus:ring-sparkle-accent/5 transition-all placeholder:text-white/20 shadow-sm"
+                                className="w-full bg-sparkle-card border border-sparkle-border rounded-2xl py-3 pl-11 pr-4 text-sm text-sparkle-text focus:outline-none focus:border-sparkle-primary/50 focus:ring-4 focus:ring-sparkle-primary/10 transition-all placeholder:text-sparkle-text-muted shadow-sm"
                             />
                         </div>
 
                         {projectTypes.length > 0 && (
                             <div className="relative min-w-[180px] group/filter">
-                                <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none group-focus-within/filter:text-sparkle-accent transition-colors" size={16} />
+                                <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-sparkle-text-secondary pointer-events-none group-focus-within/filter:text-sparkle-primary transition-colors" size={16} />
                                 <select
                                     value={filterType}
                                     onChange={(e) => setFilterType(e.target.value)}
-                                    className="w-full appearance-none bg-sparkle-card border border-white/10 rounded-2xl py-3 pl-11 pr-10 text-sm text-white focus:outline-none focus:border-sparkle-accent/50 focus:ring-4 focus:ring-sparkle-accent/5 transition-all cursor-pointer shadow-sm"
+                                    className="w-full appearance-none bg-sparkle-card border border-sparkle-border rounded-2xl py-3 pl-11 pr-10 text-sm text-sparkle-text focus:outline-none focus:border-sparkle-primary/50 focus:ring-4 focus:ring-sparkle-primary/10 transition-all cursor-pointer shadow-sm"
                                 >
                                     <option value="all">All Types</option>
                                     {projectTypes.map(type => {

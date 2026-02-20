@@ -2,7 +2,7 @@
 import { useRef, lazy, Suspense, useEffect, useMemo, createContext, useContext, type ReactNode } from 'react'
 import { HashRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import TitleBar from './components/layout/TitleBar'
-import Sidebar from './components/layout/Sidebar'
+import Sidebar, { SidebarProvider, useSidebar } from './components/layout/Sidebar'
 import { useSmoothScroll } from './lib/useSmoothScroll'
 import { LoadingSpinner } from './components/ui/LoadingState'
 import { SettingsProvider, useSettings } from './lib/settings'
@@ -58,6 +58,7 @@ function MainContent() {
     const mainRef = useRef<HTMLElement>(null)
     const location = useLocation()
     const isSettingsRoute = location.pathname.startsWith('/settings')
+    const { isCollapsed } = useSidebar()
 
     const { targetY, currentY, animationFrame, isAnimating } = useSmoothScroll(mainRef, { ease: 0.12 })
 
@@ -79,7 +80,7 @@ function MainContent() {
     return (
         <main
             ref={mainRef}
-            className={`flex-1 ml-64 p-6 overflow-y-auto overflow-x-hidden min-h-0 focus:outline-none${isSettingsRoute ? '' : ' theme-adaptive'}`}
+            className={`flex-1 p-6 overflow-y-auto overflow-x-hidden min-h-0 focus:outline-none transition-[margin] duration-300 ease-in-out${isSettingsRoute ? '' : ' theme-adaptive'} ${isCollapsed ? 'ml-16' : 'ml-64'}`}
             tabIndex={0}
         >
             <Suspense fallback={<PageLoader />}>
@@ -180,10 +181,12 @@ function AppContent() {
     return (
         <div className={`flex flex-col h-screen bg-sparkle-bg text-sparkle-text overflow-hidden ${settings.compactMode ? 'compact-mode' : ''}`}>
             <TitleBar />
-            <div className="flex flex-1 pt-[46px] min-h-0">
-                <Sidebar />
-                <MainContent />
-            </div>
+            <SidebarProvider>
+                <div className="flex flex-1 pt-[46px] min-h-0">
+                    <Sidebar />
+                    <MainContent />
+                </div>
+            </SidebarProvider>
             <LinkHoverStatus />
         </div>
     )

@@ -16,6 +16,7 @@ import { cn, parseFileSearchQuery } from '@/lib/utils'
 import ProjectIcon, { FrameworkBadge } from '@/components/ui/ProjectIcon'
 import Dropdown from '@/components/ui/Dropdown'
 import { buildFileSearchIndex, searchFileIndex, type FileSearchIndex } from '@/lib/fileSearchIndex'
+import { ProjectsStatsModal, type StatsModalKey } from './projects/ProjectsStatsModal'
 
 // Inline project type lookup to avoid ESM import issues
 const PROJECT_TYPES_MAP: Record<string, { displayName: string; themeColor: string }> = {
@@ -90,8 +91,6 @@ interface IndexedInventory {
     projects: IndexedProject[]
     folderPaths: string[]
 }
-
-type StatsModalKey = 'projects' | 'frameworks' | 'types'
 
 type ViewMode = 'grid' | 'detailed' | 'list'
 
@@ -724,7 +723,6 @@ export default function Projects() {
                         <div className="flex items-center gap-6 min-w-0 flex-1">
                             {/* Icon with gradient background */}
                             <div className="relative shrink-0">
-                                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 opacity-25 blur-xl" />
                                 <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-300/35 bg-gradient-to-br from-amber-400/20 via-orange-400/15 to-transparent backdrop-blur-sm shadow-[0_0_0_1px_rgba(251,191,36,0.18)_inset]">
                                     <FolderTree className="text-amber-300" size={28} />
                                 </div>
@@ -736,10 +734,16 @@ export default function Projects() {
                                     <h1 className="text-3xl font-bold tracking-tight text-sparkle-text">
                                         Projects
                                     </h1>
-                                    {!loading && totalProjects > 0 && (
+                                    {totalProjects > 0 && (
                                         <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/40 bg-gradient-to-r from-amber-400/20 to-orange-400/15 px-3 py-1 text-sm font-semibold text-amber-300">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" />
-                                            {totalProjects}
+                                            {loading ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                <>
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" />
+                                                    {totalProjects}
+                                                </>
+                                            )}
                                         </span>
                                     )}
                                 </div>
@@ -749,7 +753,7 @@ export default function Projects() {
                                 
                                 {/* Stats row + folder path */}
                                 <div className="flex items-center gap-3 flex-wrap">
-                                    {!loading && totalProjects > 0 && (
+                                    {totalProjects > 0 && (
                                         <>
                                             {statChips.map(chip => {
                                                 const Icon = chip.icon
@@ -757,14 +761,19 @@ export default function Projects() {
                                                     <button
                                                         key={chip.key}
                                                         onClick={() => setStatsModal(chip.key as StatsModalKey)}
-                                                        className="flex items-center gap-2 rounded-lg border px-3 py-1.5"
+                                                        disabled={loading}
+                                                        className="flex items-center gap-2 rounded-lg border px-3 py-1.5 disabled:cursor-not-allowed"
                                                         style={{
                                                             borderColor: `color-mix(in srgb, ${chip.color}, transparent 35%)`,
                                                             background: `linear-gradient(135deg, color-mix(in srgb, ${chip.color}, transparent 72%), color-mix(in srgb, ${chip.color}, transparent 82%))`
                                                         }}
                                                     >
                                                         <Icon size={14} color={chip.color} strokeWidth={2.1} />
-                                                        <span className="text-sm font-bold text-sparkle-text">{chip.value}</span>
+                                                        {loading ? (
+                                                            <Loader2 size={14} className="animate-spin text-sparkle-text" />
+                                                        ) : (
+                                                            <span className="text-sm font-bold text-sparkle-text">{chip.value}</span>
+                                                        )}
                                                         <span
                                                             className="text-xs font-semibold tracking-wide"
                                                             style={{ color: chip.color }}
@@ -774,12 +783,6 @@ export default function Projects() {
                                                     </button>
                                                 )
                                             })}
-                                            {indexingTotals && (
-                                                <div className="inline-flex items-center gap-1.5 text-xs text-sparkle-text-secondary">
-                                                    <Loader2 size={12} className="animate-spin" />
-                                                    <span>Updating index totals...</span>
-                                                </div>
-                                            )}
                                             <div className="h-4 w-px bg-sparkle-border" />
                                         </>
                                     )}
@@ -1207,114 +1210,23 @@ export default function Projects() {
                 </div>
             )}
 
-            {statsModal && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-                    onClick={() => setStatsModal(null)}
-                >
-                    <div
-                        className="w-full max-w-5xl max-h-[85vh] rounded-2xl border border-sparkle-border bg-sparkle-card overflow-hidden"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between border-b border-sparkle-border px-5 py-3">
-                            <div className="flex items-center gap-3">
-                                <h3 className="text-sm font-semibold text-sparkle-text">{modalTitle}</h3>
-                                <span className="rounded-full bg-sparkle-border-secondary px-2 py-0.5 text-xs text-sparkle-text-secondary">
-                                    {modalCount}
-                                </span>
-                            </div>
-                            <button
-                                onClick={() => setStatsModal(null)}
-                                className="rounded-md border border-sparkle-border px-2 py-1 text-xs text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
-                            >
-                                Close
-                            </button>
-                        </div>
-
-                        <div className="max-h-[calc(85vh-56px)] overflow-y-auto p-4">
-                            {statsModal === 'projects' && (
-                                <div>
-                                    <div className="relative mb-3">
-                                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-sparkle-text-muted" />
-                                        <input
-                                            type="text"
-                                            value={projectsModalQuery}
-                                            onChange={(event) => setProjectsModalQuery(event.target.value)}
-                                            placeholder="Search projects by name, path, type, framework..."
-                                            className="w-full rounded-lg border border-sparkle-border bg-sparkle-bg py-2 pl-9 pr-3 text-sm text-sparkle-text placeholder:text-sparkle-text-muted focus:outline-none focus:border-[var(--accent-primary)]/40"
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                        {filteredModalProjects.map((project) => {
-                                        const typeInfo = getProjectTypeById(project.type)
-                                        return (
-                                            <div key={project.path} className="rounded-lg border border-sparkle-border p-3 bg-sparkle-bg/40">
-                                                <div className="flex items-center justify-between gap-2 mb-1.5">
-                                                    <button
-                                                        onClick={() => handleProjectClick(project)}
-                                                        className="text-left text-sm font-semibold text-sparkle-text hover:text-[var(--accent-primary)] transition-colors truncate"
-                                                        title={project.name}
-                                                    >
-                                                        {project.name}
-                                                    </button>
-                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-sparkle-border-secondary text-sparkle-text-secondary shrink-0">
-                                                        {typeInfo?.displayName || project.type}
-                                                    </span>
-                                                </div>
-                                                <div className="text-[11px] text-sparkle-text-muted truncate mb-2" title={project.path}>
-                                                    {project.path}
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[11px] text-sparkle-text-secondary truncate">
-                                                        {project.frameworks?.length ? project.frameworks.join(', ') : 'No frameworks'}
-                                                    </span>
-                                                    <button
-                                                        onClick={() => window.devscope.openInExplorer?.(project.path)}
-                                                        className="text-[11px] px-2 py-1 rounded border border-sparkle-border text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors shrink-0"
-                                                    >
-                                                        Open
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {statsModal === 'frameworks' && (
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                                    {modalFrameworks.map((framework) => (
-                                        <div key={framework.name} className="rounded-lg border border-sparkle-border bg-sparkle-bg/40 px-3 py-2">
-                                            <div className="text-sm text-sparkle-text font-medium truncate">{framework.name}</div>
-                                            <div className="text-[11px] text-sparkle-text-secondary">{framework.count} projects</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {statsModal === 'types' && (
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                                    {modalTypes.map((type) => (
-                                        <div key={type.name} className="rounded-lg border border-sparkle-border bg-sparkle-bg/40 px-3 py-2">
-                                            <div className="text-sm text-sparkle-text font-medium truncate">
-                                                {getProjectTypeById(type.name)?.displayName || type.name}
-                                            </div>
-                                            <div className="text-[11px] text-sparkle-text-secondary">{type.count} projects</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ProjectsStatsModal
+                statsModal={statsModal}
+                modalTitle={modalTitle}
+                modalCount={modalCount}
+                projectsModalQuery={projectsModalQuery}
+                setProjectsModalQuery={setProjectsModalQuery}
+                filteredModalProjects={filteredModalProjects}
+                modalFrameworks={modalFrameworks}
+                modalTypes={modalTypes}
+                onClose={() => setStatsModal(null)}
+                onProjectClick={handleProjectClick}
+                getProjectTypeLabel={(type) => getProjectTypeById(type)?.displayName || type}
+                onOpenInExplorer={(path) => window.devscope.openInExplorer?.(path)}
+            />
         </div>
     )
 }
-
 
 
 

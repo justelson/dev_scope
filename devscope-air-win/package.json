@@ -10,6 +10,8 @@
         "dev": "electron-vite dev",
         "build": "electron-vite build",
         "preview": "electron-vite preview",
+        "maint:loc": "node scripts/maint/check-loc.mjs",
+        "maint:loc:strict": "node scripts/maint/check-loc.mjs --strict",
         "postinstall": "echo DevScope Air: skipping native terminal rebuild",
         "build:win": "npm run build && electron-builder --win",
         "build:unpack": "npm run build && electron-builder --dir"

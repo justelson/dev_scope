@@ -192,15 +192,15 @@ function CodeBlock({ language, children }: { language?: string; children: string
     const hasColorPreviewTokens = hasColorToken(children)
 
     return (
-        <div className="relative group rounded-lg overflow-hidden my-4 border border-white/10">
+        <div className="relative group rounded-lg overflow-hidden my-4 border border-sparkle-border">
             {/* Language badge & copy button */}
-            <div className="flex items-center justify-between px-4 py-2 bg-[#1a1a1a] border-b border-white/10">
-                <span className="text-xs font-mono text-white/50 uppercase tracking-wide">
+            <div className="flex items-center justify-between px-4 py-2 bg-sparkle-accent border-b border-sparkle-border">
+                <span className="text-xs font-mono text-sparkle-text-secondary uppercase tracking-wide">
                     {displayLanguage}
                 </span>
                 <button
                     onClick={handleCopy}
-                    className="flex items-center gap-1.5 px-2 py-1 text-xs text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors"
+                    className="flex items-center gap-1.5 px-2 py-1 text-xs text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-border rounded transition-colors"
                 >
                     {copied ? (
                         <>
@@ -216,7 +216,7 @@ function CodeBlock({ language, children }: { language?: string; children: string
                 </button>
             </div>
             {isFolderStructure ? (
-                <pre className="p-4 bg-[#1e1e1e] overflow-x-auto m-0">
+                <pre className="p-4 bg-sparkle-card overflow-x-auto m-0">
                     <code className="text-sm font-mono leading-6 whitespace-pre">
                         {children.split('\n').map((line, i) => {
                             // Split line into tree prefix and name
@@ -226,21 +226,21 @@ function CodeBlock({ language, children }: { language?: string; children: string
                                 const trimmedName = name.trim()
                                 const isFolder = trimmedName.endsWith('/') || (!trimmedName.includes('.') && trimmedName.length > 0)
                                 return (
-                                    <div key={i} className="hover:bg-white/5">
-                                        <span className="text-white/30">{prefix}</span>
+                                    <div key={i} className="hover:bg-sparkle-border">
+                                        <span className="text-sparkle-text-muted">{prefix}</span>
                                         <span className={isFolder ? 'text-blue-400' : 'text-emerald-400'}>{name}</span>
                                     </div>
                                 )
                             }
-                            return <div key={i} className="text-white/70">{line}</div>
+                            return <div key={i} className="text-sparkle-text-dark">{line}</div>
                         })}
                     </code>
                 </pre>
             ) : hasColorPreviewTokens ? (
-                <pre className="p-4 bg-[#1e1e1e] overflow-x-auto m-0">
-                    <code className="text-sm font-mono leading-6 whitespace-pre text-white/80">
+                <pre className="p-4 bg-sparkle-card overflow-x-auto m-0">
+                    <code className="text-sm font-mono leading-6 whitespace-pre text-sparkle-text-dark">
                         {children.split('\n').map((line, i) => (
-                            <div key={i} className="hover:bg-white/5 -mx-4 px-4">
+                            <div key={i} className="hover:bg-sparkle-border -mx-4 px-4">
                                 {line.length > 0
                                     ? renderColorAwareText(line, `code-color-${i}`)
                                     : '\u00A0'}
@@ -255,12 +255,12 @@ function CodeBlock({ language, children }: { language?: string; children: string
                     customStyle={{
                         margin: 0,
                         padding: '1rem',
-                        background: '#1e1e1e',
+                        background: 'var(--color-card)',
                         fontSize: '0.875rem',
                         lineHeight: '1.6',
                     }}
                     showLineNumbers={children.split('\n').length > 3}
-                    lineNumberStyle={{ color: '#4a4a4a', paddingRight: '1rem' }}
+                    lineNumberStyle={{ color: 'var(--color-text-muted)', paddingRight: '1rem' }}
                     wrapLines
                     lineProps={{ style: { background: 'transparent', display: 'block', width: '100%' } }}
                 >
@@ -285,8 +285,8 @@ function InlineCode({ children }: { children: React.ReactNode }) {
 
     if (isFolderStructure) {
         return (
-            <pre className="my-4 p-4 bg-[#1e1e1e] rounded-lg overflow-x-auto border border-white/10">
-                <code className="text-sm font-mono leading-relaxed whitespace-pre text-white/80">
+            <pre className="my-4 p-4 bg-sparkle-card rounded-lg overflow-x-auto border border-sparkle-border">
+                <code className="text-sm font-mono leading-relaxed whitespace-pre text-sparkle-text-dark">
                     {text.split('\n').map((line, i) => {
                         // Highlight folder/file names
                         const match = line.match(/([├└│─\s]+)?(.+)/)
@@ -294,8 +294,8 @@ function InlineCode({ children }: { children: React.ReactNode }) {
                             const [, prefix = '', name] = match
                             const isFolder = name.endsWith('/')
                             return (
-                                <div key={i} className="hover:bg-white/5 -mx-4 px-4">
-                                    <span className="text-white/30">{prefix}</span>
+                                <div key={i} className="hover:bg-sparkle-border -mx-4 px-4">
+                                    <span className="text-sparkle-text-muted">{prefix}</span>
                                     <span className={isFolder ? 'text-blue-400' : 'text-green-400'}>{name}</span>
                                 </div>
                             )
@@ -308,7 +308,7 @@ function InlineCode({ children }: { children: React.ReactNode }) {
     }
 
     return (
-        <code className="px-1.5 py-0.5 mx-0.5 text-sm font-mono bg-white/10 text-pink-300 rounded border border-white/5">
+        <code className="px-1.5 py-0.5 mx-0.5 text-sm font-mono bg-sparkle-accent text-pink-300 rounded border border-sparkle-border">
             {renderColorAwareText(text, 'inline-code', true)}
         </code>
     )
@@ -327,7 +327,7 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                 components={{
                     // Headings with GitHub-style anchor links
                     h1: ({ children }) => (
-                        <h1 className="text-2xl font-bold text-white pb-2 mb-4 border-b border-white/10 first:mt-0 mt-8">
+                        <h1 className="text-2xl font-bold text-sparkle-text pb-2 mb-4 border-b border-sparkle-border first:mt-0 mt-8">
                             {children}
                         </h1>
                     ),
@@ -346,34 +346,34 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                         )
                     },
                     h2: ({ children }) => (
-                        <h2 className="text-xl font-semibold text-white pb-2 mb-3 border-b border-white/10 mt-8 first:mt-0">
+                        <h2 className="text-xl font-semibold text-sparkle-text pb-2 mb-3 border-b border-sparkle-border mt-8 first:mt-0">
                             {children}
                         </h2>
                     ),
                     h3: ({ children }) => (
-                        <h3 className="text-lg font-semibold text-white mt-6 mb-3 first:mt-0">
+                        <h3 className="text-lg font-semibold text-sparkle-text mt-6 mb-3 first:mt-0">
                             {children}
                         </h3>
                     ),
                     h4: ({ children }) => (
-                        <h4 className="text-base font-semibold text-white mt-4 mb-2">
+                        <h4 className="text-base font-semibold text-sparkle-text mt-4 mb-2">
                             {children}
                         </h4>
                     ),
                     h5: ({ children }) => (
-                        <h5 className="text-sm font-semibold text-white mt-4 mb-2">
+                        <h5 className="text-sm font-semibold text-sparkle-text mt-4 mb-2">
                             {children}
                         </h5>
                     ),
                     h6: ({ children }) => (
-                        <h6 className="text-sm font-semibold text-white/70 mt-4 mb-2">
+                        <h6 className="text-sm font-semibold text-sparkle-text-dark mt-4 mb-2">
                             {children}
                         </h6>
                     ),
 
                     // Paragraphs
                     p: ({ children }) => (
-                        <p className="text-white/70 leading-relaxed mb-4 last:mb-0">
+                        <p className="text-sparkle-text-dark leading-relaxed mb-4 last:mb-0">
                             {renderColorAwareChildren(children, 'p')}
                         </p>
                     ),
@@ -393,14 +393,14 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
 
                     // Strong/Bold
                     strong: ({ children }) => (
-                        <strong className="font-semibold text-white">
+                        <strong className="font-semibold text-sparkle-text">
                             {renderColorAwareChildren(children, 'strong')}
                         </strong>
                     ),
 
                     // Emphasis/Italic
                     em: ({ children }) => (
-                        <em className="italic text-white/80">
+                        <em className="italic text-sparkle-text-dark">
                             {renderColorAwareChildren(children, 'em')}
                         </em>
                     ),
@@ -430,12 +430,12 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
 
                     // Lists
                     ul: ({ children }) => (
-                        <ul className="list-disc list-outside ml-6 mb-4 space-y-1 text-white/70">
+                        <ul className="list-disc list-outside ml-6 mb-4 space-y-1 text-sparkle-text-dark">
                             {children}
                         </ul>
                     ),
                     ol: ({ children }) => (
-                        <ol className="list-decimal list-outside ml-6 mb-4 space-y-1 text-white/70">
+                        <ol className="list-decimal list-outside ml-6 mb-4 space-y-1 text-sparkle-text-dark">
                             {children}
                         </ol>
                     ),
@@ -447,13 +447,13 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
 
                     // Blockquotes
                     blockquote: ({ children }) => (
-                        <blockquote className="border-l-4 border-blue-500/50 pl-4 py-1 my-4 bg-blue-500/5 rounded-r-lg text-white/60 italic">
+                        <blockquote className="border-l-4 border-blue-500/50 pl-4 py-1 my-4 bg-blue-500/5 rounded-r-lg text-sparkle-text-secondary italic">
                             {renderColorAwareChildren(children, 'blockquote')}
                         </blockquote>
                     ),
 
                     // Horizontal rule
-                    hr: () => <hr className="border-white/10 my-6" />,
+                    hr: () => <hr className="border-sparkle-border my-6" />,
 
                     // Images
                     img: ({ src, alt }) => (
@@ -461,10 +461,10 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                             <img
                                 src={resolveImageSrc(src || '', filePath)}
                                 alt={alt || ''}
-                                className="max-w-full h-auto rounded-lg border border-white/10"
+                                className="max-w-full h-auto rounded-lg border border-sparkle-border"
                             />
                             {alt && (
-                                <span className="hidden text-center text-sm text-white/40 mt-2 group-hover:block">
+                                <span className="hidden text-center text-sm text-sparkle-text-secondary mt-2 group-hover:block">
                                     {alt}
                                 </span>
                             )}
@@ -473,28 +473,28 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
 
                     // Tables (GitHub-style)
                     table: ({ children }) => (
-                        <div className="overflow-x-auto my-4 rounded-lg border border-white/10">
+                        <div className="overflow-x-auto my-4 rounded-lg border border-sparkle-border">
                             <table className="w-full border-collapse text-sm">
                                 {children}
                             </table>
                         </div>
                     ),
                     thead: ({ children }) => (
-                        <thead className="bg-white/5">{children}</thead>
+                        <thead className="bg-sparkle-accent">{children}</thead>
                     ),
                     tbody: ({ children }) => <tbody>{children}</tbody>,
                     tr: ({ children }) => (
-                        <tr className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                        <tr className="border-b border-sparkle-border last:border-0 hover:bg-sparkle-accent transition-colors">
                             {children}
                         </tr>
                     ),
                     th: ({ children }) => (
-                        <th className="px-4 py-3 text-left font-semibold text-white border-r border-white/5 last:border-r-0">
+                        <th className="px-4 py-3 text-left font-semibold text-sparkle-text border-r border-sparkle-border last:border-r-0">
                             {renderColorAwareChildren(children, 'th')}
                         </th>
                     ),
                     td: ({ children }) => (
-                        <td className="px-4 py-3 text-white/70 border-r border-white/5 last:border-r-0">
+                        <td className="px-4 py-3 text-sparkle-text-dark border-r border-sparkle-border last:border-r-0">
                             {renderColorAwareChildren(children, 'td')}
                         </td>
                     ),
@@ -507,7 +507,7 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                                     type="checkbox"
                                     checked={checked}
                                     readOnly
-                                    className="mr-2 rounded border-white/30 bg-transparent checked:bg-blue-500 checked:border-blue-500"
+                                    className="mr-2 rounded border-sparkle-border bg-transparent checked:bg-blue-500 checked:border-blue-500"
                                 />
                             )
                         }
@@ -516,7 +516,7 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
 
                     // Delete/Strikethrough
                     del: ({ children }) => (
-                        <del className="text-white/40 line-through">{children}</del>
+                        <del className="text-sparkle-text-secondary line-through">{children}</del>
                     ),
                 }}
             >
