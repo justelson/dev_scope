@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
     ExternalLink,
@@ -97,8 +97,11 @@ export default function Home() {
     const [items, setItems] = useState<ProjectOverviewItem[]>([])
     const [initialLoading, setInitialLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
+    const [gitOverviewLoading, setGitOverviewLoading] = useState(false)
+    const [gitLoadingPaths, setGitLoadingPaths] = useState<Set<string>>(new Set())
     const [error, setError] = useState<string | null>(null)
     const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
+    const refreshRequestRef = useRef(0)
 
     const projectRoots = useMemo(() => {
         const allRoots = [settings.projectsFolder, ...(settings.additionalFolders || [])]
@@ -115,12 +118,18 @@ export default function Home() {
     }, [settings.projectsFolder, settings.additionalFolders])
 
     const refreshHome = useCallback(async (mode: 'initial' | 'background' = 'background') => {
+        const refreshRequestId = ++refreshRequestRef.current
+        const isStale = () => refreshRequestId !== refreshRequestRef.current
+
         if (mode === 'initial') setInitialLoading(true)
         if (mode !== 'initial') setRefreshing(true)
 
         try {
             if (projectRoots.length === 0) {
+                if (isStale()) return
                 setItems([])
+                setGitOverviewLoading(false)
+                setGitLoadingPaths(new Set())
                 setError(null)
                 setLastRefreshAt(Date.now())
                 return
@@ -155,22 +164,31 @@ export default function Home() {
             mergedProjects.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))
 
             const recentProjects = getRecentProjects()
+            if (isStale()) return
             setItems(mergeProjectOverview(mergedProjects, undefined, recentProjects))
+            if (mode === 'initial') setInitialLoading(false)
 
-            let overviewResult: ProjectsGitOverviewResult = { success: true, items: [] }
+            const failedScans = scanResults.filter((result) => !result.success)
             const gitCandidates = mergedProjects.filter(
                 (project) => project.type === 'git' || project.markers?.includes('.git')
             )
+            const gitCandidatePathKeys = new Set(gitCandidates.map((project) => normalizePathKey(project.path)))
+            setGitOverviewLoading(gitCandidates.length > 0)
+            setGitLoadingPaths(gitCandidatePathKeys)
+
+            let overviewResult: ProjectsGitOverviewResult = { success: true, items: [] }
             if (gitCandidates.length > 0) {
                 overviewResult = await window.devscope.getProjectsGitOverview(
                     gitCandidates.map((project) => project.path)
                 ) as ProjectsGitOverviewResult
             }
 
+            if (isStale()) return
             const hydrated = mergeProjectOverview(mergedProjects, overviewResult.items, recentProjects)
             setItems(hydrated)
+            setGitOverviewLoading(false)
+            setGitLoadingPaths(new Set())
 
-            const failedScans = scanResults.filter((result) => !result.success)
             if (failedScans.length === scanResults.length) {
                 const firstError = failedScans[0]?.error || 'Failed to scan configured project roots'
                 setError(firstError)
@@ -182,8 +200,12 @@ export default function Home() {
 
             setLastRefreshAt(Date.now())
         } catch (refreshError: any) {
+            if (isStale()) return
             setError(refreshError?.message || 'Failed to load Home overview')
+            setGitOverviewLoading(false)
+            setGitLoadingPaths(new Set())
         } finally {
+            if (isStale()) return
             if (mode === 'initial') setInitialLoading(false)
             if (mode !== 'initial') setRefreshing(false)
         }
@@ -214,7 +236,20 @@ export default function Home() {
         }
     }, [items])
 
+    const gitCandidates = useMemo(() => {
+        return [...items]
+            .filter((item) => item.type === 'git' || item.markers?.includes('.git'))
+            .sort((a, b) => {
+                const recentA = a.lastOpenedAt || 0
+                const recentB = b.lastOpenedAt || 0
+                if (recentA !== recentB) return recentB - recentA
+                return (b.lastModified || 0) - (a.lastModified || 0)
+            })
+    }, [items])
+
     const needsCommitProjects = useMemo(() => {
+        if (gitOverviewLoading) return gitCandidates
+
         return [...items]
             .filter((item) => item.changedCount > 0)
             .sort((a, b) => {
@@ -224,9 +259,11 @@ export default function Home() {
                 if (a.changedCount !== b.changedCount) return b.changedCount - a.changedCount
                 return (b.lastModified || 0) - (a.lastModified || 0)
             })
-    }, [items])
+    }, [items, gitCandidates, gitOverviewLoading])
 
     const needsPushProjects = useMemo(() => {
+        if (gitOverviewLoading) return gitCandidates
+
         return [...items]
             .filter((item) => item.unpushedCount > 0)
             .sort((a, b) => {
@@ -236,7 +273,7 @@ export default function Home() {
                 if (a.unpushedCount !== b.unpushedCount) return b.unpushedCount - a.unpushedCount
                 return (b.lastModified || 0) - (a.lastModified || 0)
             })
-    }, [items])
+    }, [items, gitCandidates, gitOverviewLoading])
 
     const recentActivity = useMemo(() => {
         return [...items].sort((a, b) => {
@@ -308,9 +345,9 @@ export default function Home() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
                 <SummaryCard icon={<FolderTree size={18} />} label="Total Projects" value={totals.totalProjects} />
-                <SummaryCard icon={<GitBranch size={18} />} label="Git Enabled" value={totals.gitEnabled} />
-                <SummaryCard icon={<GitCommitHorizontal size={18} />} label="Needs Commit" value={totals.needsCommit} />
-                <SummaryCard icon={<Upload size={18} />} label="Needs Push" value={totals.needsPush} />
+                <SummaryCard icon={<GitBranch size={18} />} label="Git Enabled" value={totals.gitEnabled} loading={gitOverviewLoading} />
+                <SummaryCard icon={<GitCommitHorizontal size={18} />} label="Needs Commit" value={totals.needsCommit} loading={gitOverviewLoading} />
+                <SummaryCard icon={<Upload size={18} />} label="Needs Push" value={totals.needsPush} loading={gitOverviewLoading} />
             </div>
 
             {initialLoading ? (
@@ -323,16 +360,18 @@ export default function Home() {
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                     <ProjectListSection
                         title="Needs Commit"
-                        subtitle="Working changes detected"
+                        subtitle={gitOverviewLoading ? 'Git changes are loading...' : 'Working changes detected'}
                         projects={needsCommitProjects}
                         emptyMessage="No projects with working changes."
+                        gitLoadingPaths={gitLoadingPaths}
                         onOpen={openProject}
                     />
                     <ProjectListSection
                         title="Needs Push"
-                        subtitle="Local commits waiting to push"
+                        subtitle={gitOverviewLoading ? 'Git push status is loading...' : 'Local commits waiting to push'}
                         projects={needsPushProjects}
                         emptyMessage="No projects with unpushed commits."
+                        gitLoadingPaths={gitLoadingPaths}
                         onOpen={openProject}
                     />
                     <ProjectListSection
@@ -340,6 +379,7 @@ export default function Home() {
                         subtitle="Recently opened first, then modified"
                         projects={recentActivity}
                         emptyMessage="No discovered projects yet."
+                        gitLoadingPaths={gitLoadingPaths}
                         onOpen={openProject}
                     />
                 </div>
@@ -348,14 +388,24 @@ export default function Home() {
     )
 }
 
-function SummaryCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+function SummaryCard({
+    icon,
+    label,
+    value,
+    loading = false
+}: {
+    icon: React.ReactNode
+    label: string
+    value: number
+    loading?: boolean
+}) {
     return (
         <div className="rounded-xl border border-sparkle-border bg-sparkle-card p-4">
             <div className="flex items-center justify-between mb-2 text-sparkle-text-secondary">
                 <span className="text-sm">{label}</span>
                 {icon}
             </div>
-            <div className="text-2xl font-semibold text-sparkle-text">{value}</div>
+            <div className="text-2xl font-semibold text-sparkle-text">{loading ? '...' : value}</div>
         </div>
     )
 }
@@ -377,12 +427,14 @@ function ProjectListSection({
     title,
     subtitle,
     projects,
+    gitLoadingPaths,
     emptyMessage,
     onOpen
 }: {
     title: string
     subtitle: string
     projects: ProjectOverviewItem[]
+    gitLoadingPaths: Set<string>
     emptyMessage: string
     onOpen: (project: ProjectOverviewItem) => void
 }) {
@@ -402,7 +454,12 @@ function ProjectListSection({
             ) : (
                 <div className="space-y-2">
                     {visibleProjects.map((project) => (
-                        <ProjectRow key={project.path} project={project} onOpen={onOpen} />
+                        <ProjectRow
+                            key={project.path}
+                            project={project}
+                            isGitLoading={gitLoadingPaths.has(normalizePathKey(project.path))}
+                            onOpen={onOpen}
+                        />
                     ))}
                 </div>
             )}
@@ -412,9 +469,11 @@ function ProjectListSection({
 
 function ProjectRow({
     project,
+    isGitLoading,
     onOpen
 }: {
     project: ProjectOverviewItem
+    isGitLoading: boolean
     onOpen: (project: ProjectOverviewItem) => void
 }) {
     const lastSeenLabel = project.lastOpenedAt
@@ -436,10 +495,14 @@ function ProjectRow({
                         <span
                             className={cn(
                                 'text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wide',
-                                project.hasRemote ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-sparkle-text-secondary'
+                                isGitLoading
+                                    ? 'bg-amber-500/20 text-amber-300'
+                                    : project.hasRemote
+                                        ? 'bg-emerald-500/20 text-emerald-300'
+                                        : 'bg-white/10 text-sparkle-text-secondary'
                             )}
                         >
-                            {project.hasRemote ? 'remote' : 'local only'}
+                            {isGitLoading ? 'git...' : project.hasRemote ? 'remote' : 'local only'}
                         </span>
                     </div>
                     <div className="text-[11px] text-sparkle-text-muted truncate">{project.path}</div>
@@ -453,11 +516,11 @@ function ProjectRow({
                     <div className="flex items-center gap-1.5 text-[11px] text-sparkle-text-secondary">
                         <span className="inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5" title="Changed files">
                             <GitCommitHorizontal size={11} />
-                            {project.changedCount}
+                            {isGitLoading ? '...' : project.changedCount}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5" title="Unpushed commits">
                             <Upload size={11} />
-                            {project.unpushedCount}
+                            {isGitLoading ? '...' : project.unpushedCount}
                         </span>
                     </div>
                     <div className="flex items-center gap-1.5">

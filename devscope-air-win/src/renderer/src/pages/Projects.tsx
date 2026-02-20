@@ -62,6 +62,37 @@ interface FileItem {
     extension: string
 }
 
+interface IndexedProject extends Project {
+    sourceFolder: string
+    depth: number
+}
+
+interface IndexAllFoldersResult {
+    success: boolean
+    projects?: IndexedProject[]
+    indexedCount?: number
+    indexedFolders?: number
+    scannedFolderPaths?: string[]
+    errors?: Array<{ folder: string; error: string }>
+    error?: string
+}
+
+interface IndexedTotals {
+    scanKey: string
+    projects: number
+    frameworks: number
+    types: number
+    folders: number
+}
+
+interface IndexedInventory {
+    scanKey: string
+    projects: IndexedProject[]
+    folderPaths: string[]
+}
+
+type StatsModalKey = 'projects' | 'frameworks' | 'types'
+
 type ViewMode = 'grid' | 'detailed' | 'list'
 
 export default function Projects() {
@@ -75,7 +106,13 @@ export default function Projects() {
     const [error, setError] = useState<string | null>(null)
     const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
     const [showBlockingLoader, setShowBlockingLoader] = useState(false)
+    const [indexedTotals, setIndexedTotals] = useState<IndexedTotals | null>(null)
+    const [indexedInventory, setIndexedInventory] = useState<IndexedInventory | null>(null)
+    const [indexingTotals, setIndexingTotals] = useState(false)
+    const [statsModal, setStatsModal] = useState<StatsModalKey | null>(null)
+    const [projectsModalQuery, setProjectsModalQuery] = useState('')
     const inFlightScanKeyRef = useRef<string | null>(null)
+    const indexTotalsRunRef = useRef(0)
 
     // UI State
     const [searchQuery, setSearchQuery] = useState('')
@@ -171,6 +208,9 @@ export default function Projects() {
         ].filter(Boolean)
 
         if (foldersToScan.length === 0) {
+            setIndexedTotals(null)
+            setIndexedInventory(null)
+            setIndexingTotals(false)
             setHasLoadedOnce(true)
             return
         }
@@ -183,6 +223,55 @@ export default function Projects() {
 
         setLoading(true)
         setError(null)
+
+        const indexRunId = ++indexTotalsRunRef.current
+        setIndexingTotals(true)
+
+        void (async () => {
+            try {
+                const indexResult = await window.devscope.indexAllFolders(foldersToScan) as IndexAllFoldersResult
+                if (indexRunId !== indexTotalsRunRef.current) return
+                if (!indexResult?.success || !Array.isArray(indexResult.projects)) return
+
+                const dedupedProjects = new Map<string, IndexedProject>()
+                for (const project of indexResult.projects) {
+                    const key = project.path.toLowerCase()
+                    if (!dedupedProjects.has(key)) dedupedProjects.set(key, project)
+                }
+
+                const frameworkSet = new Set<string>()
+                const typeSet = new Set<string>()
+                for (const project of dedupedProjects.values()) {
+                    for (const framework of project.frameworks || []) {
+                        if (framework) frameworkSet.add(framework)
+                    }
+                    if (project.type && project.type !== 'unknown' && project.type !== 'git') {
+                        typeSet.add(project.type)
+                    }
+                }
+
+                setIndexedTotals({
+                    scanKey,
+                    projects: dedupedProjects.size,
+                    frameworks: frameworkSet.size,
+                    types: typeSet.size,
+                    folders: typeof indexResult.indexedFolders === 'number'
+                        ? indexResult.indexedFolders
+                        : foldersToScan.length
+                })
+                setIndexedInventory({
+                    scanKey,
+                    projects: Array.from(dedupedProjects.values()),
+                    folderPaths: Array.isArray(indexResult.scannedFolderPaths) ? indexResult.scannedFolderPaths : []
+                })
+            } catch (indexErr) {
+                console.warn('Failed to compute indexed totals:', indexErr)
+            } finally {
+                if (indexRunId === indexTotalsRunRef.current) {
+                    setIndexingTotals(false)
+                }
+            }
+        })()
 
         try {
             // Scan all folders in parallel
@@ -437,12 +526,16 @@ export default function Projects() {
     }, [files, searchResults, showHiddenFiles])
 
     // Stats
-    const totalProjects = projects.length
-    const frameworkCount = useMemo(() => {
+    const frameworkCountFromScan = useMemo(() => {
         const frameworks = new Set<string>()
         projects.forEach(p => p.frameworks?.forEach(f => frameworks.add(f)))
         return frameworks.size
     }, [projects])
+    const activeIndexedTotals = indexedTotals?.scanKey === searchRootsKey ? indexedTotals : null
+    const activeIndexedInventory = indexedInventory?.scanKey === searchRootsKey ? indexedInventory : null
+    const totalProjects = activeIndexedTotals?.projects ?? projects.length
+    const frameworkCount = activeIndexedTotals?.frameworks ?? frameworkCountFromScan
+    const typeCount = activeIndexedTotals?.types ?? projectTypes.length
 
     const statChips = useMemo(() => ([
         {
@@ -462,18 +555,85 @@ export default function Projects() {
         {
             key: 'types',
             label: 'types',
-            value: projectTypes.length,
+            value: typeCount,
             icon: GitBranch,
             color: '#f59e0b'
-        },
-        {
-            key: 'folders',
-            label: 'folders',
-            value: folders.length,
-            icon: Folder,
-            color: '#a855f7'
         }
-    ]), [totalProjects, frameworkCount, projectTypes.length, folders.length])
+    ]), [totalProjects, frameworkCount, typeCount])
+
+    const modalProjects = useMemo(() => {
+        if (activeIndexedInventory?.projects?.length) {
+            return [...activeIndexedInventory.projects].sort((a, b) => a.name.localeCompare(b.name))
+        }
+        return [...projects].sort((a, b) => a.name.localeCompare(b.name))
+    }, [activeIndexedInventory, projects])
+
+    const modalFrameworks = useMemo(() => {
+        const source = activeIndexedInventory?.projects ?? projects
+        const counts = new Map<string, number>()
+        for (const project of source) {
+            for (const framework of project.frameworks || []) {
+                if (!framework) continue
+                counts.set(framework, (counts.get(framework) || 0) + 1)
+            }
+        }
+        return Array.from(counts.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+    }, [activeIndexedInventory, projects])
+
+    const modalTypes = useMemo(() => {
+        const source = activeIndexedInventory?.projects ?? projects
+        const counts = new Map<string, number>()
+        for (const project of source) {
+            if (!project.type || project.type === 'unknown' || project.type === 'git') continue
+            counts.set(project.type, (counts.get(project.type) || 0) + 1)
+        }
+        return Array.from(counts.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+    }, [activeIndexedInventory, projects])
+
+    const filteredModalProjects = useMemo(() => {
+        const query = projectsModalQuery.trim().toLowerCase()
+        if (!query) return modalProjects
+
+        return modalProjects.filter((project) =>
+            project.name.toLowerCase().includes(query) ||
+            project.path.toLowerCase().includes(query) ||
+            project.type.toLowerCase().includes(query) ||
+            (project.frameworks || []).some((framework) => framework.toLowerCase().includes(query))
+        )
+    }, [modalProjects, projectsModalQuery])
+
+    useEffect(() => {
+        if (!statsModal) {
+            setProjectsModalQuery('')
+            return
+        }
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setStatsModal(null)
+        }
+        window.addEventListener('keydown', onKeyDown)
+        return () => window.removeEventListener('keydown', onKeyDown)
+    }, [statsModal])
+
+    const modalTitle = statsModal === 'projects'
+        ? 'Projects'
+        : statsModal === 'frameworks'
+            ? 'Frameworks'
+            : statsModal === 'types'
+                ? 'Types'
+                : ''
+
+    const modalCount = statsModal === 'projects'
+        ? filteredModalProjects.length
+        : statsModal === 'frameworks'
+            ? modalFrameworks.length
+            : statsModal === 'types'
+                ? modalTypes.length
+                : 0
 
     const formatRelativeTime = (timestamp?: number) => {
         if (!timestamp) return ''
@@ -594,8 +754,9 @@ export default function Projects() {
                                             {statChips.map(chip => {
                                                 const Icon = chip.icon
                                                 return (
-                                                    <div
+                                                    <button
                                                         key={chip.key}
+                                                        onClick={() => setStatsModal(chip.key as StatsModalKey)}
                                                         className="flex items-center gap-2 rounded-lg border px-3 py-1.5"
                                                         style={{
                                                             borderColor: `color-mix(in srgb, ${chip.color}, transparent 35%)`,
@@ -610,9 +771,15 @@ export default function Projects() {
                                                         >
                                                             {chip.label}
                                                         </span>
-                                                    </div>
+                                                    </button>
                                                 )
                                             })}
+                                            {indexingTotals && (
+                                                <div className="inline-flex items-center gap-1.5 text-xs text-sparkle-text-secondary">
+                                                    <Loader2 size={12} className="animate-spin" />
+                                                    <span>Updating index totals...</span>
+                                                </div>
+                                            )}
                                             <div className="h-4 w-px bg-sparkle-border" />
                                         </>
                                     )}
@@ -666,7 +833,7 @@ export default function Projects() {
                                 {isSearching ? (
                                     <Loader2 className="text-indigo-400 animate-spin" size={16} />
                                 ) : (
-                                    <Search className="text-white/25 group-focus-within/search:text-indigo-400 transition-colors duration-200" size={16} />
+                                    <Search className="text-sparkle-text-muted group-focus-within/search:text-indigo-400 transition-colors duration-200" size={16} />
                                 )}
                             </div>
                             <input
@@ -675,14 +842,14 @@ export default function Projects() {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className={cn(
-                                    "w-full bg-white/[0.03] border border-white/[0.06] rounded-xl py-2.5 pl-11 pr-10 text-sm text-white focus:outline-none focus:bg-white/[0.05] focus:border-indigo-500/30 transition-all duration-200 placeholder:text-white/20",
-                                    searchQuery && "border-indigo-500/30 bg-indigo-500/5"
+                                    "w-full rounded-xl border border-sparkle-border bg-sparkle-card py-2.5 pl-11 pr-10 text-sm text-sparkle-text transition-all duration-200 placeholder:text-sparkle-text-muted focus:outline-none focus:bg-sparkle-card-hover focus:border-indigo-500/30",
+                                    searchQuery && "border-indigo-500/30 bg-indigo-500/10"
                                 )}
                             />
                             {searchQuery && (
                                 <button
                                     onClick={clearSearch}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-white/30 hover:text-white/60 rounded-md hover:bg-white/10 transition-colors"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover transition-colors"
                                 >
                                     <X size={14} />
                                 </button>
@@ -717,7 +884,7 @@ export default function Projects() {
                                 "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all duration-200 text-sm",
                                 showHiddenFiles
                                     ? "bg-indigo-500/15 border-indigo-500/30 text-indigo-300"
-                                    : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/60 hover:bg-white/[0.05]"
+                                    : "bg-sparkle-card border-sparkle-border text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover"
                             )}
                             title={showHiddenFiles ? "Hide hidden files" : "Show hidden files"}
                         >
@@ -726,7 +893,7 @@ export default function Projects() {
                         </button>
 
                         {/* View Toggles */}
-                        <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/[0.06]">
+                        <div className="flex items-center gap-1 rounded-xl border border-sparkle-border bg-sparkle-card p-1">
                             {[
                                 { id: 'grid', icon: LayoutGrid, label: 'Grid' },
                                 { id: 'detailed', icon: AlignJustify, label: 'Detailed' },
@@ -738,8 +905,8 @@ export default function Projects() {
                                     className={cn(
                                         "p-2 rounded-lg transition-all duration-200",
                                         viewMode === id
-                                            ? "bg-white/[0.1] text-white"
-                                            : "text-white/30 hover:text-white/60 hover:bg-white/[0.04]"
+                                            ? "bg-sparkle-card-hover text-sparkle-text"
+                                            : "text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover"
                                     )}
                                 >
                                     <Icon size={16} />
@@ -751,20 +918,20 @@ export default function Projects() {
 
                 {/* Search Results Header */}
                 {searchResults && (
-                    <div className="mt-4 pt-4 border-t border-white/[0.04]">
+                    <div className="mt-4 pt-4 border-t border-sparkle-border">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <Search size={16} className="text-indigo-400" />
-                                <span className="text-sm text-white/60">
-                                    Search results for "<span className="text-white font-medium">{searchQuery}</span>"
+                                <span className="text-sm text-sparkle-text-secondary">
+                                    Search results for "<span className="text-sparkle-text font-medium">{searchQuery}</span>"
                                 </span>
-                                <span className="text-xs text-white/30">
+                                <span className="text-xs text-sparkle-text-muted">
                                     {searchResults.projects.length + searchResults.folders.length + searchResults.files.length} items found
                                 </span>
                             </div>
                             <button
                                 onClick={clearSearch}
-                                className="text-xs text-white/40 hover:text-white/60 transition-colors"
+                                className="text-xs text-sparkle-text-muted hover:text-sparkle-text-secondary transition-colors"
                             >
                                 Clear search
                             </button>
@@ -1003,14 +1170,14 @@ export default function Projects() {
                                             <File size={15} className="text-cyan-300/80 flex-shrink-0" />
                                             <div className="min-w-0 flex-1">
                                                 <div className="truncate text-sm text-white/80 group-hover:text-white">{file.name}</div>
-                                                <div className="truncate text-[11px] text-white/35">{parentPath}</div>
+                                                <div className="truncate text-[11px] text-sparkle-text-muted">{parentPath}</div>
                                             </div>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation()
                                                     window.devscope.openInExplorer?.(file.path)
                                                 }}
-                                                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-white/55 hover:text-white hover:bg-white/10 transition-colors"
+                                                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
                                                 title="Open in Explorer"
                                             >
                                                 <ExternalLink size={12} />
@@ -1037,6 +1204,111 @@ export default function Projects() {
                             </p>
                         </div>
                     )}
+                </div>
+            )}
+
+            {statsModal && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                    onClick={() => setStatsModal(null)}
+                >
+                    <div
+                        className="w-full max-w-5xl max-h-[85vh] rounded-2xl border border-sparkle-border bg-sparkle-card overflow-hidden"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between border-b border-sparkle-border px-5 py-3">
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-sm font-semibold text-sparkle-text">{modalTitle}</h3>
+                                <span className="rounded-full bg-sparkle-border-secondary px-2 py-0.5 text-xs text-sparkle-text-secondary">
+                                    {modalCount}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setStatsModal(null)}
+                                className="rounded-md border border-sparkle-border px-2 py-1 text-xs text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+
+                        <div className="max-h-[calc(85vh-56px)] overflow-y-auto p-4">
+                            {statsModal === 'projects' && (
+                                <div>
+                                    <div className="relative mb-3">
+                                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-sparkle-text-muted" />
+                                        <input
+                                            type="text"
+                                            value={projectsModalQuery}
+                                            onChange={(event) => setProjectsModalQuery(event.target.value)}
+                                            placeholder="Search projects by name, path, type, framework..."
+                                            className="w-full rounded-lg border border-sparkle-border bg-sparkle-bg py-2 pl-9 pr-3 text-sm text-sparkle-text placeholder:text-sparkle-text-muted focus:outline-none focus:border-[var(--accent-primary)]/40"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                        {filteredModalProjects.map((project) => {
+                                        const typeInfo = getProjectTypeById(project.type)
+                                        return (
+                                            <div key={project.path} className="rounded-lg border border-sparkle-border p-3 bg-sparkle-bg/40">
+                                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                                    <button
+                                                        onClick={() => handleProjectClick(project)}
+                                                        className="text-left text-sm font-semibold text-sparkle-text hover:text-[var(--accent-primary)] transition-colors truncate"
+                                                        title={project.name}
+                                                    >
+                                                        {project.name}
+                                                    </button>
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-sparkle-border-secondary text-sparkle-text-secondary shrink-0">
+                                                        {typeInfo?.displayName || project.type}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[11px] text-sparkle-text-muted truncate mb-2" title={project.path}>
+                                                    {project.path}
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[11px] text-sparkle-text-secondary truncate">
+                                                        {project.frameworks?.length ? project.frameworks.join(', ') : 'No frameworks'}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => window.devscope.openInExplorer?.(project.path)}
+                                                        className="text-[11px] px-2 py-1 rounded border border-sparkle-border text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors shrink-0"
+                                                    >
+                                                        Open
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {statsModal === 'frameworks' && (
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                    {modalFrameworks.map((framework) => (
+                                        <div key={framework.name} className="rounded-lg border border-sparkle-border bg-sparkle-bg/40 px-3 py-2">
+                                            <div className="text-sm text-sparkle-text font-medium truncate">{framework.name}</div>
+                                            <div className="text-[11px] text-sparkle-text-secondary">{framework.count} projects</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {statsModal === 'types' && (
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                    {modalTypes.map((type) => (
+                                        <div key={type.name} className="rounded-lg border border-sparkle-border bg-sparkle-bg/40 px-3 py-2">
+                                            <div className="text-sm text-sparkle-text font-medium truncate">
+                                                {getProjectTypeById(type.name)?.displayName || type.name}
+                                            </div>
+                                            <div className="text-[11px] text-sparkle-text-secondary">{type.count} projects</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

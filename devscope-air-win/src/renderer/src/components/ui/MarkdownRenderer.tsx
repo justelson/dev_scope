@@ -8,7 +8,7 @@ import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Copy, Check, ExternalLink } from 'lucide-react'
-import { useState } from 'react'
+import { Children, cloneElement, isValidElement, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 interface MarkdownRendererProps {
@@ -28,6 +28,95 @@ const flatCodeTheme = Object.fromEntries(
         }
     ])
 )
+
+const COLOR_TOKEN_REGEX = /#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\(\s*[^)\n]+\)/g
+
+function isCssColorToken(token: string): boolean {
+    const normalized = token.trim()
+    if (!normalized) return false
+    if (typeof window !== 'undefined' && window.CSS && typeof window.CSS.supports === 'function') {
+        return window.CSS.supports('color', normalized)
+    }
+    return /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(normalized)
+}
+
+function hasColorToken(text: string): boolean {
+    COLOR_TOKEN_REGEX.lastIndex = 0
+    return COLOR_TOKEN_REGEX.test(text)
+}
+
+function renderColorToken(token: string, key: string, compact = false): ReactNode {
+    return (
+        <span key={key} className={cn("inline-flex items-center align-middle", compact ? "gap-1" : "gap-1.5")}>
+            <span
+                className={cn("rounded-sm border border-white/30 shadow-sm shrink-0", compact ? "w-2 h-2" : "w-2.5 h-2.5")}
+                style={{ backgroundColor: token }}
+            />
+            <span
+                className="font-mono"
+                style={{
+                    color: token,
+                    textShadow: '0 0 0.25px currentColor'
+                }}
+            >
+                {token}
+            </span>
+        </span>
+    )
+}
+
+function renderColorAwareText(text: string, keyPrefix: string, compact = false): ReactNode {
+    if (!text) return text
+    const matches = Array.from(text.matchAll(COLOR_TOKEN_REGEX))
+    if (matches.length === 0) return text
+
+    const parts: ReactNode[] = []
+    let cursor = 0
+
+    for (const [index, match] of matches.entries()) {
+        const token = match[0]
+        const start = match.index ?? 0
+        const end = start + token.length
+
+        if (start > cursor) {
+            parts.push(<span key={`${keyPrefix}-txt-${index}`}>{text.slice(cursor, start)}</span>)
+        }
+
+        if (isCssColorToken(token)) {
+            parts.push(renderColorToken(token, `${keyPrefix}-color-${index}`, compact))
+        } else {
+            parts.push(<span key={`${keyPrefix}-raw-${index}`}>{token}</span>)
+        }
+
+        cursor = end
+    }
+
+    if (cursor < text.length) {
+        parts.push(<span key={`${keyPrefix}-tail`}>{text.slice(cursor)}</span>)
+    }
+
+    return <>{parts}</>
+}
+
+function renderColorAwareChildren(children: ReactNode, keyPrefix: string, compact = false): ReactNode {
+    return Children.map(children, (child, index) => {
+        const key = `${keyPrefix}-${index}`
+        if (typeof child === 'string') {
+            return renderColorAwareText(child, key, compact)
+        }
+
+        if (!isValidElement(child)) return child
+        if (!('props' in child)) return child
+
+        const element = child as React.ReactElement<{ children?: ReactNode }>
+        if (element.props?.children === undefined || element.props?.children === null) return child
+
+        return cloneElement(element, {
+            ...element.props,
+            children: renderColorAwareChildren(element.props.children, key, compact)
+        })
+    })
+}
 
 function getFileUrl(path: string) {
     if (path.startsWith('http') || path.startsWith('data:')) return path
@@ -100,6 +189,7 @@ function CodeBlock({ language, children }: { language?: string; children: string
     )
 
     const displayLanguage = language || (isFolderStructure ? 'structure' : 'code')
+    const hasColorPreviewTokens = hasColorToken(children)
 
     return (
         <div className="relative group rounded-lg overflow-hidden my-4 border border-white/10">
@@ -144,6 +234,18 @@ function CodeBlock({ language, children }: { language?: string; children: string
                             }
                             return <div key={i} className="text-white/70">{line}</div>
                         })}
+                    </code>
+                </pre>
+            ) : hasColorPreviewTokens ? (
+                <pre className="p-4 bg-[#1e1e1e] overflow-x-auto m-0">
+                    <code className="text-sm font-mono leading-6 whitespace-pre text-white/80">
+                        {children.split('\n').map((line, i) => (
+                            <div key={i} className="hover:bg-white/5 -mx-4 px-4">
+                                {line.length > 0
+                                    ? renderColorAwareText(line, `code-color-${i}`)
+                                    : '\u00A0'}
+                            </div>
+                        ))}
                     </code>
                 </pre>
             ) : (
@@ -207,7 +309,7 @@ function InlineCode({ children }: { children: React.ReactNode }) {
 
     return (
         <code className="px-1.5 py-0.5 mx-0.5 text-sm font-mono bg-white/10 text-pink-300 rounded border border-white/5">
-            {children}
+            {renderColorAwareText(text, 'inline-code', true)}
         </code>
     )
 }
@@ -272,7 +374,7 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                     // Paragraphs
                     p: ({ children }) => (
                         <p className="text-white/70 leading-relaxed mb-4 last:mb-0">
-                            {children}
+                            {renderColorAwareChildren(children, 'p')}
                         </p>
                     ),
 
@@ -284,19 +386,23 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                             rel="noopener noreferrer"
                             className="text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1"
                         >
-                            {children}
+                            {renderColorAwareChildren(children, 'a')}
                             <ExternalLink size={12} className="opacity-50" />
                         </a>
                     ),
 
                     // Strong/Bold
                     strong: ({ children }) => (
-                        <strong className="font-semibold text-white">{children}</strong>
+                        <strong className="font-semibold text-white">
+                            {renderColorAwareChildren(children, 'strong')}
+                        </strong>
                     ),
 
                     // Emphasis/Italic
                     em: ({ children }) => (
-                        <em className="italic text-white/80">{children}</em>
+                        <em className="italic text-white/80">
+                            {renderColorAwareChildren(children, 'em')}
+                        </em>
                     ),
 
                     // Code blocks
@@ -334,13 +440,15 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                         </ol>
                     ),
                     li: ({ children }) => (
-                        <li className="leading-relaxed pl-1">{children}</li>
+                        <li className="leading-relaxed pl-1">
+                            {renderColorAwareChildren(children, 'li')}
+                        </li>
                     ),
 
                     // Blockquotes
                     blockquote: ({ children }) => (
                         <blockquote className="border-l-4 border-blue-500/50 pl-4 py-1 my-4 bg-blue-500/5 rounded-r-lg text-white/60 italic">
-                            {children}
+                            {renderColorAwareChildren(children, 'blockquote')}
                         </blockquote>
                     ),
 
@@ -382,12 +490,12 @@ export default function MarkdownRenderer({ content, className, filePath }: Markd
                     ),
                     th: ({ children }) => (
                         <th className="px-4 py-3 text-left font-semibold text-white border-r border-white/5 last:border-r-0">
-                            {children}
+                            {renderColorAwareChildren(children, 'th')}
                         </th>
                     ),
                     td: ({ children }) => (
                         <td className="px-4 py-3 text-white/70 border-r border-white/5 last:border-r-0">
-                            {children}
+                            {renderColorAwareChildren(children, 'td')}
                         </td>
                     ),
 

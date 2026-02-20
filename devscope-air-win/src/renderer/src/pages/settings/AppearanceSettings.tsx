@@ -2,26 +2,42 @@
  * DevScope - Appearance Settings Page
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Palette, Check } from 'lucide-react'
+import { ArrowLeft, Palette, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { useSettings, THEMES, ACCENT_COLORS } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 
 export default function AppearanceSettings() {
     const { settings, updateSettings } = useSettings()
+    const [advancedOpen, setAdvancedOpen] = useState(false)
 
     const handleThemeChange = (themeId: string) => {
-        const selectedTheme = THEMES.find(t => t.id === themeId)
-        if (selectedTheme) {
-            const matchingAccent = ACCENT_COLORS.find(c => c.name === selectedTheme.accentColor)
-            if (matchingAccent) {
-                updateSettings({ 
-                    theme: selectedTheme.id,
-                    accentColor: matchingAccent
-                })
-            } else {
-                updateSettings({ theme: selectedTheme.id })
-            }
+        const selectedTheme = THEMES.find((t) => t.id === themeId)
+        if (!selectedTheme) return
+
+        const matchingAccent = ACCENT_COLORS.find((c) => c.name === selectedTheme.accentColor)
+        if (matchingAccent) {
+            updateSettings({
+                theme: selectedTheme.id,
+                accentColor: matchingAccent
+            })
+            return
+        }
+
+        updateSettings({ theme: selectedTheme.id })
+    }
+
+    const isLightModeEnabled = settings.theme === 'light'
+    const handleLightModeToggle = (enabled: boolean) => {
+        if (enabled) {
+            updateSettings({ theme: 'light' })
+            return
+        }
+
+        // Return to a safe default dark theme when disabling light mode.
+        if (settings.theme === 'light') {
+            updateSettings({ theme: 'dark' })
         }
     }
 
@@ -76,11 +92,6 @@ export default function AppearanceSettings() {
                             </button>
                         ))}
                     </div>
-                    <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                        <p className="text-xs text-yellow-200/80">
-                            💡 Real devs don't use light mode. Get back to work.
-                        </p>
-                    </div>
                 </SettingsSection>
 
                 {/* Accent Color */}
@@ -118,6 +129,30 @@ export default function AppearanceSettings() {
                         label={settings.compactMode ? 'Enabled' : 'Disabled'}
                     />
                 </SettingsSection>
+
+                {/* Advanced (bottom-right edge) */}
+                <div className="flex justify-end">
+                    <div className="w-full max-w-sm text-right">
+                        <button
+                            onClick={() => setAdvancedOpen((prev) => !prev)}
+                            className="ml-auto inline-flex items-center gap-1 rounded-md border border-sparkle-border px-2.5 py-1 text-[11px] text-sparkle-text-secondary hover:text-sparkle-text hover:border-sparkle-border-secondary transition-colors"
+                        >
+                            <span>Advanced</span>
+                            {advancedOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+
+                        {advancedOpen && (
+                            <div className="mt-2 rounded-xl border border-sparkle-border bg-sparkle-card p-4 text-left">
+                                <p className="mb-3 text-xs text-sparkle-text-secondary">Light mode</p>
+                                <ToggleOption
+                                    checked={isLightModeEnabled}
+                                    onChange={handleLightModeToggle}
+                                    label={isLightModeEnabled ? 'Enabled' : 'Disabled'}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     )
@@ -154,5 +189,3 @@ function ToggleOption({ checked, onChange, label }: { checked: boolean; onChange
         </div>
     )
 }
-
-

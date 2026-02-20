@@ -766,6 +766,8 @@ async function handleIndexAllFolders(_event: Electron.IpcMainInvokeEvent, folder
         success: errors.length === 0 || allProjects.length > 0,
         projects: allProjects,
         totalFolders: folders.length,
+        indexedFolders: scannedPaths.size,
+        scannedFolderPaths: Array.from(scannedPaths).sort((a, b) => a.localeCompare(b)),
         indexedCount: allProjects.length,
         errors: errors.length > 0 ? errors : undefined
     }

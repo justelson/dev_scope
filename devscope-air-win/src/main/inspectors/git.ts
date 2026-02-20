@@ -62,12 +62,102 @@ function normalizeGitPath(path: string): string {
     return path.replace(/^"|"$/g, '').replace(/\\/g, '/')
 }
 
-function toPathSpec(projectPath: string, filePath: string): string {
-    const candidateInput = isAbsolute(filePath) ? relative(projectPath, filePath) : filePath
-    const candidate = candidateInput && !candidateInput.startsWith('..') && !candidateInput.includes(':')
-        ? candidateInput
-        : filePath
-    return normalizeGitPath(candidate)
+function sanitizePathSpec(pathSpec: string): string {
+    return normalizeGitPath(pathSpec).replace(/^\.\/+/, '').replace(/\/{2,}/g, '/')
+}
+
+function isWindowsLikePath(pathSpec: string): boolean {
+    return /^[A-Za-z]:\//.test(pathSpec)
+}
+
+function normalizeForCompare(pathSpec: string): string {
+    const normalized = sanitizePathSpec(pathSpec).replace(/\/+$/, '')
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function stripPrefixedPath(pathSpec: string, prefix: string): string {
+    if (!prefix) return sanitizePathSpec(pathSpec)
+
+    let current = sanitizePathSpec(pathSpec)
+    const normalizedPrefix = sanitizePathSpec(prefix).replace(/\/+$/, '')
+    if (!normalizedPrefix) return current
+
+    while (current.length > 0) {
+        const currentCompare = normalizeForCompare(current)
+        const prefixCompare = normalizeForCompare(normalizedPrefix)
+
+        if (currentCompare === prefixCompare) {
+            current = ''
+            continue
+        }
+
+        const prefixedCompare = `${prefixCompare}/`
+        if (currentCompare.startsWith(prefixedCompare)) {
+            current = current.slice(normalizedPrefix.length + 1)
+            continue
+        }
+
+        break
+    }
+
+    return sanitizePathSpec(current)
+}
+
+interface RepoContext {
+    repoRoot: string
+    projectRelativeToRepo: string
+}
+
+async function getRepoContext(git: SimpleGit, projectPath: string): Promise<RepoContext> {
+    const repoRootRaw = await git.raw(['rev-parse', '--show-toplevel']).catch(() => projectPath)
+    const repoRoot = sanitizePathSpec(repoRootRaw.trim() || projectPath)
+    const relativeToRepoRaw = sanitizePathSpec(relative(repoRoot, projectPath))
+    const projectRelativeToRepo = relativeToRepoRaw === '.' ? '' : relativeToRepoRaw
+
+    return {
+        repoRoot,
+        projectRelativeToRepo
+    }
+}
+
+async function toPathSpec(
+    git: SimpleGit,
+    projectPath: string,
+    filePath: string,
+    repoContext?: RepoContext
+): Promise<string> {
+    const context = repoContext ?? await getRepoContext(git, projectPath)
+    const normalizedInput = sanitizePathSpec(filePath)
+
+    const directRelativeRaw = isAbsolute(filePath)
+        ? sanitizePathSpec(relative(projectPath, filePath))
+        : normalizedInput
+
+    const directRelative = stripPrefixedPath(directRelativeRaw, context.projectRelativeToRepo)
+    if (
+        directRelative &&
+        directRelative !== '.' &&
+        !directRelative.startsWith('..') &&
+        !isWindowsLikePath(directRelative)
+    ) {
+        return directRelative
+    }
+
+    if (isAbsolute(filePath)) {
+        const repoRelativeRaw = sanitizePathSpec(relative(context.repoRoot, filePath))
+        const repoRelative = stripPrefixedPath(repoRelativeRaw, context.projectRelativeToRepo)
+        if (
+            repoRelative &&
+            repoRelative !== '.' &&
+            !repoRelative.startsWith('..') &&
+            !isWindowsLikePath(repoRelative)
+        ) {
+            return repoRelative
+        }
+    }
+
+    const strippedInput = stripPrefixedPath(normalizedInput, context.projectRelativeToRepo)
+    return strippedInput || normalizedInput
 }
 
 function toError(err: unknown, fallback: string): Error {
@@ -170,7 +260,8 @@ async function cleanupStaleIndexLock(projectPath: string, staleMs: number = 15_0
 export async function getGitStatus(projectPath: string): Promise<GitStatusMap> {
     try {
         const git = createGit(projectPath)
-        const stdout = await git.raw(['status', '--porcelain=v1', '--ignored', '-z'])
+        const repoContext = await getRepoContext(git, projectPath)
+        const stdout = await git.raw(['-c', 'status.relativePaths=true', 'status', '--porcelain=v1', '--ignored', '-z'])
 
         const statusMap: GitStatusMap = {}
         const entries = stdout.split('\0').filter(Boolean)
@@ -191,7 +282,8 @@ export async function getGitStatus(projectPath: string): Promise<GitStatusMap> {
             else if (statusPart.includes('D')) status = 'deleted'
             else if (statusPart.includes('M')) status = 'modified'
 
-            const normalizedPath = normalizeGitPath(rawPath)
+            const normalizedPath = stripPrefixedPath(normalizeGitPath(rawPath), repoContext.projectRelativeToRepo)
+            if (!normalizedPath) continue
             statusMap[normalizedPath] = status
             statusMap[normalizedPath.replace(/\//g, '\\')] = status
 
@@ -199,7 +291,11 @@ export async function getGitStatus(projectPath: string): Promise<GitStatusMap> {
             if (status === 'renamed') {
                 const previousPath = entries[i + 1]
                 if (previousPath) {
-                    const normalizedPrevious = normalizeGitPath(previousPath)
+                    const normalizedPrevious = stripPrefixedPath(normalizeGitPath(previousPath), repoContext.projectRelativeToRepo)
+                    if (!normalizedPrevious) {
+                        i += 1
+                        continue
+                    }
                     statusMap[normalizedPrevious] = 'renamed'
                     statusMap[normalizedPrevious.replace(/\//g, '\\')] = 'renamed'
                     i += 1
@@ -269,7 +365,10 @@ export async function getCommitDiff(projectPath: string, commitHash: string): Pr
 export async function getWorkingDiff(projectPath: string, filePath?: string): Promise<string> {
     try {
         const git = createGit(projectPath)
-        const pathSpec = filePath ? ['--', toPathSpec(projectPath, filePath)] : []
+        const repoContext = filePath ? await getRepoContext(git, projectPath) : null
+        const pathSpec = filePath
+            ? ['--', await toPathSpec(git, projectPath, filePath, repoContext ?? undefined)]
+            : []
         const staged = await git.raw(['diff', '--cached', ...pathSpec]).catch(() => '')
         const unstaged = await git.raw(['diff', ...pathSpec]).catch(() => '')
 
@@ -396,7 +495,12 @@ export async function stageFiles(projectPath: string, files: string[]): Promise<
         if (files.length === 0) return
 
         const git = createGit(projectPath)
-        const pathSpecs = files.map(file => toPathSpec(projectPath, file))
+        const repoContext = await getRepoContext(git, projectPath)
+        const pathSpecs = Array.from(new Set(
+            (await Promise.all(files.map(file => toPathSpec(git, projectPath, file, repoContext))))
+                .filter((pathSpec) => pathSpec && pathSpec.trim().length > 0)
+        ))
+        if (pathSpecs.length === 0) return
         // `-A` is required to stage deletions/renames reliably, not just added/modified files.
         await git.add(['-A', '--', ...pathSpecs])
     } catch (err) {
@@ -612,7 +716,12 @@ export async function unstageFiles(projectPath: string, files: string[]): Promis
     try {
         if (files.length === 0) return
         const git = createGit(projectPath)
-        const pathSpecs = files.map(file => toPathSpec(projectPath, file))
+        const repoContext = await getRepoContext(git, projectPath)
+        const pathSpecs = Array.from(new Set(
+            (await Promise.all(files.map(file => toPathSpec(git, projectPath, file, repoContext))))
+                .filter((pathSpec) => pathSpec && pathSpec.trim().length > 0)
+        ))
+        if (pathSpecs.length === 0) return
         await git.raw(['reset', 'HEAD', '--', ...pathSpecs])
     } catch (err) {
         log.error('Failed to unstage files', err)
@@ -624,7 +733,12 @@ export async function discardChanges(projectPath: string, files: string[]): Prom
     try {
         if (files.length === 0) return
         const git = createGit(projectPath)
-        const pathSpecs = files.map(file => toPathSpec(projectPath, file))
+        const repoContext = await getRepoContext(git, projectPath)
+        const pathSpecs = Array.from(new Set(
+            (await Promise.all(files.map(file => toPathSpec(git, projectPath, file, repoContext))))
+                .filter((pathSpec) => pathSpec && pathSpec.trim().length > 0)
+        ))
+        if (pathSpecs.length === 0) return
         await git.raw(['restore', '--staged', '--worktree', '--', ...pathSpecs]).catch(async () => {
             await git.raw(['checkout', '--', ...pathSpecs])
         })
