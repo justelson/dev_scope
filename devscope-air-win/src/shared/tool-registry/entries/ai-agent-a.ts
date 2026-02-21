@@ -1,0 +1,295 @@
+import type { ToolDefinition } from '../types'
+
+export const AI_AGENT_TOOLS_A: ToolDefinition[] = [
+    {
+                id: 'claude-code',
+                command: 'claude',
+                displayName: 'Claude Code',
+                description: 'Claude Code is an agentic coding tool by Anthropic that lives in your terminal. It can understand your codebase, edit files, run commands, and help you code faster with AI assistance.',
+                themeColor: '#D97757',
+                icon: 'anthropic',
+                website: 'https://docs.anthropic.com/en/docs/claude-code',
+                docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'terminal', 'automation'],
+                capabilities: ['Agentic Editing', 'Terminal Assistant', 'Context Awareness'],
+                installCommand: 'npm install -g @anthropic-ai/claude-code',
+                startupCommand: 'claude',
+                versionCheckCommand: 'claude --version',
+                updateCommand: 'npm install -g @anthropic-ai/claude-code',
+                logoUrl: 'https://claude.ai/images/claude_app_icon.png',
+                detection: { strategy: 'cli', versionRegex: '(\\d+\\.\\d+\\.\\d+)' }
+            },
+
+    {
+                id: 'github-copilot-cli',
+                command: 'copilot',
+                displayName: 'GitHub Copilot CLI',
+                description: 'GitHub Copilot in the CLI brings AI-powered suggestions to your terminal. Get command suggestions, explanations, and shell command generation powered by GitHub Copilot.',
+                themeColor: '#6e40c9',
+                icon: 'githubcopilot',
+                website: 'https://docs.github.com/en/copilot/github-copilot-in-the-cli',
+                docsUrl: 'https://docs.github.com/en/copilot/github-copilot-in-the-cli',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'terminal', 'github'],
+                capabilities: ['Shell Suggestions', 'Command Explanation', 'CLI Automation'],
+                alternateCommands: ['ghcs'],
+                installCommand: 'npm install -g @github/copilot',
+                startupCommand: 'copilot',
+                versionCheckCommand: 'copilot --version',
+                updateCommand: 'npm install -g @github/copilot',
+                logoUrl: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                detection: { strategy: 'cli' }
+            },
+
+    {
+                id: 'aider',
+                command: 'aider',
+                displayName: 'Aider',
+                description: 'Aider is an AI pair programming tool in your terminal. It lets you pair program with LLMs to edit code in your local git repo. Works with GPT-4, Claude, and other models.',
+                themeColor: '#14B8A6',
+                icon: '',  // No Simple Icon - will use category fallback
+                website: 'https://aider.chat',
+                docsUrl: 'https://aider.chat/docs/',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'pair-programming', 'git'],
+                capabilities: ['Pair Programming', 'Git Integration', 'Terminal UI'],
+                installCommand: 'python -m pip install aider-chat',
+                startupCommand: 'aider',
+                versionCheckCommand: 'aider --version',
+                updateCommand: 'python -m pip install -U aider-chat',
+                logoUrl: 'https://aider.chat/assets/icons/favicon-32x32.png',
+                detection: { strategy: 'cli' }
+            },
+
+    {
+                id: 'cursor',
+                command: 'cursor',
+                displayName: 'Cursor',
+                description: 'Cursor is an AI-first code editor built for pair programming with AI. It features intelligent code completion, chat, and the ability to edit code with natural language.',
+                themeColor: '#00D8FF',
+                icon: 'cursor',  // Has Simple Icon
+                website: 'https://cursor.com',
+                docsUrl: 'https://docs.cursor.com',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'editor', 'ide'],
+                capabilities: ['AI IDE', 'Code Editing', 'Codebase Chat'],
+                installCommand: 'curl -fsSL https://cursor.sh/install.sh | sh',
+                startupCommand: 'cursor',
+                versionCheckCommand: 'cursor --version',
+                updateCommand: 'Auto-updates',
+                logoUrl: 'https://cursor.sh/brand/icon.svg',
+                detection: { strategy: 'cli' }
+            },
+
+    {
+                id: 'windsurf',
+                command: 'windsurf',
+                displayName: 'Windsurf',
+                description: 'Windsurf is the first agentic IDE, built by Codeium. It features "Flow" which allows agents and humans to work together seamlessly on complex coding tasks with deep context awareness.',
+                themeColor: '#09B6A2',
+                icon: '',  // Codeium not on simpleicons
+                website: 'https://codeium.com/windsurf',
+                docsUrl: 'https://codeium.com/docs',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'ide', 'agentic-flow'],
+                capabilities: ['Agentic Flow', 'Deep Context', 'AI IDE'],
+                installCommand: 'Download from windsurf.com',
+                startupCommand: 'windsurf',
+                versionCheckCommand: 'windsurf --version',
+                updateCommand: 'Built-in auto-update',
+                logoUrl: 'https://windsurf.com/favicon.ico'
+            },
+
+    {
+                id: 'zed',
+                command: 'zed',
+                displayName: 'Zed',
+                description: 'Zed is a high-performance, multiplayer code editor from the creators of Atom and Tree-sitter. It features native AI integration and is built for speed.',
+                themeColor: '#000000',
+                icon: '',  // Zed not on simpleicons
+                website: 'https://zed.dev',
+                docsUrl: 'https://zed.dev/docs',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'editor', 'performance'],
+                capabilities: ['High Performance', 'Multiplayer Coding', 'Native AI'],
+                installCommand: 'curl -f https://zed.dev/install.sh | sh',
+                startupCommand: 'zed',
+                versionCheckCommand: 'zed --version',
+                updateCommand: 'Built-in auto-update',
+                logoUrl: 'https://zed.dev/favicon.ico'
+            },
+
+    {
+                id: 'cody-cli',
+                command: 'cody',
+                displayName: 'Sourcegraph Cody',
+                description: 'Cody is an AI coding assistant by Sourcegraph that understands your entire codebase. It provides context-aware code completions, explanations, and can answer questions about your code.',
+                themeColor: '#FF5543',
+                icon: '',  // Sourcegraph not on simpleicons
+                website: 'https://sourcegraph.com/cody',
+                docsUrl: 'https://sourcegraph.com/docs/cody',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'search', 'codebase'],
+                capabilities: ['Codebase Awareness', 'Contextual Chat', 'Precise Search'],
+                installCommand: 'npm install -g @sourcegraph/cody',
+                startupCommand: 'cody',
+                versionCheckCommand: 'cody --version',
+                updateCommand: 'npm install -g @sourcegraph/cody',
+                logoUrl: 'https://sourcegraph.com/.assets/img/sourcegraph-mark.svg'
+            },
+
+    {
+                id: 'continue',
+                command: 'cn',
+                displayName: 'Continue',
+                description: 'Continue is an open-source AI code assistant. It connects any LLM to your IDE for autocomplete, chat, and embeddings. Supports VS Code and JetBrains.',
+                themeColor: '#1389FD',
+                icon: '',  // Continue not on simpleicons
+                website: 'https://continue.dev',
+                docsUrl: 'https://docs.continue.dev',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'open-source', 'ide'],
+                capabilities: ['Open Source', 'LLM Agnostic', 'IDE Extension'],
+                alternateCommands: ['continue'],
+                installCommand: 'npm install -g @continuedev/cli',
+                startupCommand: 'cn',
+                versionCheckCommand: 'cn --version',
+                updateCommand: 'npm install -g @continuedev/cli',
+                logoUrl: 'https://continue.dev/favicon.ico'
+            },
+
+    {
+                id: 'open-interpreter',
+                command: 'interpreter',
+                displayName: 'Open Interpreter',
+                description: 'Open Interpreter lets LLMs run code (Python, Javascript, Shell, and more) locally. You can chat with it in your terminal to control your computer and automate tasks.',
+                themeColor: '#9333EA',
+                icon: 'python',
+                website: 'https://openinterpreter.com',
+                docsUrl: 'https://docs.openinterpreter.com',
+                category: 'ai_agent',
+                usedFor: ['ai', 'automation', 'terminal', 'code-execution'],
+                capabilities: ['Code Execution', 'OS Control', 'Task Automation'],
+                installCommand: 'pip install open-interpreter',
+                startupCommand: 'interpreter',
+                versionCheckCommand: 'interpreter --version',
+                updateCommand: 'pip install --upgrade open-interpreter',
+                logoUrl: 'https://raw.githubusercontent.com/OpenInterpreter/open-interpreter/main/docs/assets/logo.png'
+            },
+
+    {
+                id: 'fabric',
+                command: 'fabric',
+                displayName: 'Fabric',
+                description: 'Fabric is an open-source framework for augmenting humans using AI. It provides a set of crowdsourced "patterns" for common AI tasks like summarizing, extracting wisdom, and more.',
+                themeColor: '#7C3AED',
+                icon: 'markdown',
+                website: 'https://github.com/danielmiessler/fabric',
+                docsUrl: 'https://github.com/danielmiessler/fabric',
+                category: 'ai_agent',
+                usedFor: ['ai', 'workflow', 'patterns', 'augmentation'],
+                capabilities: ['AI Patterns', 'Content Synthesis', 'Modular AI'],
+                installCommand: 'go install github.com/danielmiessler/fabric/cmd/fabric@latest',
+                startupCommand: 'fabric',
+                versionCheckCommand: 'fabric --version',
+                updateCommand: 'go install github.com/danielmiessler/fabric/cmd/fabric@latest',
+                logoUrl: 'https://github.com/danielmiessler/fabric/raw/main/assets/fabric-logo.png'
+            },
+
+    {
+                id: 'shellgpt',
+                command: 'sgpt',
+                displayName: 'ShellGPT',
+                description: 'ShellGPT is a command-line productivity tool powered by AI. It helps you generate shell commands, write code, and get answers directly in your terminal.',
+                themeColor: '#4A5568',
+                icon: 'gnubash',
+                website: 'https://github.com/khulnasoft/shell-gpt',
+                docsUrl: 'https://github.com/khulnasoft/shell-gpt',
+                category: 'ai_agent',
+                usedFor: ['ai', 'terminal', 'productivity', 'shell'],
+                capabilities: ['Shell Generation', 'Quick Answers', 'Terminal Native'],
+                alternateCommands: ['shell-gpt'],
+                installCommand: 'pip install shell-gpt',
+                startupCommand: 'sgpt',
+                versionCheckCommand: 'pip show shell-gpt',
+                updateCommand: 'pip install --upgrade shell-gpt',
+                logoUrl: 'https://raw.githubusercontent.com/TheR1D/shell_gpt/main/assets/logo.png'
+            },
+
+    {
+                id: 'tabnine',
+                command: 'tabnine',
+                displayName: 'Tabnine',
+                description: 'Tabnine is an AI code assistant that provides intelligent code completions. It learns from your codebase and supports multiple languages and IDEs.',
+                themeColor: '#6B54D3',
+                icon: '',  // Tabnine not on simpleicons
+                website: 'https://www.tabnine.com',
+                docsUrl: 'https://docs.tabnine.com',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'autocomplete', 'privacy'],
+                capabilities: ['Local Autocomplete', 'Private Training', 'Enterprise Grade'],
+                installCommand: 'Install "Tabnine" extension in IDE',
+                startupCommand: 'code (via Extension)',
+                versionCheckCommand: 'N/A (Extension)',
+                updateCommand: 'Extension auto-updates',
+                logoUrl: 'https://tabnine.com/favicon.ico'
+            },
+
+    {
+                id: 'codeium',
+                command: 'codeium',
+                displayName: 'Codeium',
+                description: 'Codeium is a free AI-powered code acceleration toolkit. It provides autocomplete, search, and chat features across 70+ languages and 40+ IDEs.',
+                themeColor: '#09B6A2',
+                icon: '',  // Codeium not on simpleicons
+                website: 'https://codeium.com',
+                docsUrl: 'https://codeium.com/documentation',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'free', 'autocomplete'],
+                capabilities: ['Free Tier', 'Fast Autocomplete', 'Broad IDE Support'],
+                installCommand: 'Download Windsurf or Install VS Code Extension',
+                startupCommand: 'windsurf',
+                versionCheckCommand: 'windsurf --version',
+                updateCommand: 'Auto-updates / Extension update',
+                logoUrl: 'https://codeium.com/static/favicons/favicon.ico'
+            },
+
+    {
+                id: 'goose',
+                command: 'goose',
+                displayName: 'Goose',
+                description: 'Goose is an open-source AI developer agent that automates engineering tasks. It can write code, run shell commands, and manage files autonomously.',
+                themeColor: '#F97316',
+                icon: 'go',  // Goose uses Go - keeping
+                website: 'https://github.com/block/goose',
+                docsUrl: 'https://github.com/block/goose',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'automation', 'open-source'],
+                capabilities: ['Autonomous Agent', 'Tool Using', 'Open Source'],
+                installCommand: 'curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash',
+                startupCommand: 'goose',
+                versionCheckCommand: 'goose --version',
+                updateCommand: 'goose update',
+                logoUrl: 'https://block.github.io/goose/assets/images/logo.png'
+            },
+
+    {
+                id: 'mentat',
+                command: 'mentat',
+                displayName: 'Mentat',
+                description: 'Mentat is an AI coding assistant that coordinates edits across multiple files. It understands your codebase context and can make complex multi-file changes.',
+                themeColor: '#8B5CF6',
+                icon: 'python',
+                website: 'https://mentat.ai',
+                docsUrl: 'https://github.com/AbanteAI/mentat',
+                category: 'ai_agent',
+                usedFor: ['ai', 'coding', 'multi-file', 'context'],
+                capabilities: ['Multi-file Edits', 'Graph Context', 'Git Integrated'],
+                installCommand: 'npm install -g @abanteai/mentat',
+                startupCommand: 'mentat',
+                versionCheckCommand: 'mentat --version',
+                updateCommand: 'npm install -g @abanteai/mentat',
+                logoUrl: 'https://mentat.ai/assets/logo.png'
+            }
+]
