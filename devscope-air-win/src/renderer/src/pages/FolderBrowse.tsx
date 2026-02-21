@@ -3,24 +3,50 @@
  * Browse folder contents with same layout as Projects main page
  */
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
 import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
 import { trackRecentProject } from '@/lib/recentProjects'
+import { useSettings } from '@/lib/settings'
 import { FolderBrowseContent } from './folder-browse/FolderBrowseContent'
 import { FolderBrowseHeader } from './folder-browse/FolderBrowseHeader'
 import { FolderBrowseToolbar } from './folder-browse/FolderBrowseToolbar'
-import type { FileItem, FolderItem, Project, ViewMode } from './folder-browse/types'
+import type { FileItem, FolderItem, Project } from './folder-browse/types'
 import { formatFileSize, formatRelativeTime, getFileColor, getProjectTypes } from './folder-browse/utils'
 
+const FILES_PAGE_SIZE = 300
+
+function getParentFolderPath(currentPath: string): string | null {
+    const raw = String(currentPath || '').trim().replace(/[\\/]+$/, '')
+    if (!raw) return null
+
+    if (/^[A-Za-z]:$/.test(raw)) return null
+    if (/^\\\\[^\\]+\\[^\\]+$/.test(raw)) return null
+
+    const lastSepIndex = Math.max(raw.lastIndexOf('\\'), raw.lastIndexOf('/'))
+    if (lastSepIndex < 0) return null
+    if (lastSepIndex === 0 && raw.startsWith('/')) return '/'
+
+    const parent = raw.slice(0, lastSepIndex)
+    if (!parent || parent === raw) return null
+
+    if (/^[A-Za-z]:$/.test(parent)) {
+        return `${parent}\\`
+    }
+
+    return parent
+}
+
 export default function FolderBrowse() {
+    const { settings, updateSettings } = useSettings()
     const { folderPath } = useParams<{ folderPath: string }>()
     const navigate = useNavigate()
 
     const decodedPath = folderPath ? decodeURIComponent(folderPath) : ''
     const folderName = decodedPath.split(/[/\\]/).pop() || 'Folder'
+    const folderHistoryRef = useRef<string[]>([])
 
     const [projects, setProjects] = useState<Project[]>([])
     const [folders, setFolders] = useState<FolderItem[]>([])
@@ -30,8 +56,8 @@ export default function FolderBrowse() {
     const [searchQuery, setSearchQuery] = useState('')
     const deferredSearchQuery = useDeferredValue(searchQuery)
     const [filterType, setFilterType] = useState('all')
-    const [viewMode, setViewMode] = useState<ViewMode>('grid')
     const [isCurrentFolderGitRepo, setIsCurrentFolderGitRepo] = useState(false)
+    const [visibleFileCount, setVisibleFileCount] = useState(FILES_PAGE_SIZE)
 
     const {
         previewFile,
@@ -89,6 +115,20 @@ export default function FolderBrowse() {
         loadContents()
     }, [loadContents])
 
+    useEffect(() => {
+        if (!decodedPath) return
+
+        const history = folderHistoryRef.current
+        const existingIndex = history.lastIndexOf(decodedPath)
+
+        if (existingIndex >= 0) {
+            folderHistoryRef.current = history.slice(0, existingIndex + 1)
+            return
+        }
+
+        history.push(decodedPath)
+    }, [decodedPath])
+
     const parsedSearchQuery = useMemo(
         () => parseFileSearchQuery(deferredSearchQuery),
         [deferredSearchQuery]
@@ -119,6 +159,21 @@ export default function FolderBrowse() {
         return files.filter((file) => fileNameMatchesQuery(file.name, parsedSearchQuery))
     }, [files, deferredSearchQuery, parsedSearchQuery])
 
+    useEffect(() => {
+        setVisibleFileCount(FILES_PAGE_SIZE)
+    }, [decodedPath, deferredSearchQuery, files.length])
+
+    const displayedFiles = useMemo(
+        () => filteredFiles.slice(0, visibleFileCount),
+        [filteredFiles, visibleFileCount]
+    )
+
+    const hasMoreFiles = displayedFiles.length < filteredFiles.length
+
+    const loadMoreFiles = useCallback(() => {
+        setVisibleFileCount((current) => current + FILES_PAGE_SIZE)
+    }, [])
+
     const handleProjectClick = (project: Project) => {
         navigate(`/projects/${encodeURIComponent(project.path)}`)
     }
@@ -131,6 +186,24 @@ export default function FolderBrowse() {
         navigate(`/projects/${encodeURIComponent(decodedPath)}`)
     }
 
+    const handleBack = () => {
+        const history = folderHistoryRef.current
+        if (history.length > 1) {
+            history.pop()
+            const previousFolder = history[history.length - 1]
+            navigate(`/folder-browse/${encodeURIComponent(previousFolder)}`)
+            return
+        }
+
+        const parentPath = getParentFolderPath(decodedPath)
+        if (parentPath && parentPath !== decodedPath) {
+            navigate(`/folder-browse/${encodeURIComponent(parentPath)}`)
+            return
+        }
+
+        navigate(-1)
+    }
+
     return (
         <div className="max-w-[1600px] mx-auto animate-fadeIn pb-20">
             <FolderBrowseHeader
@@ -139,7 +212,7 @@ export default function FolderBrowse() {
                 totalProjects={projects.length}
                 isCurrentFolderGitRepo={isCurrentFolderGitRepo}
                 loading={loading}
-                onBack={() => navigate(-1)}
+                onBack={handleBack}
                 onViewAsProject={handleViewAsProject}
                 onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}
                 onRefresh={loadContents}
@@ -149,10 +222,12 @@ export default function FolderBrowse() {
                 searchQuery={searchQuery}
                 filterType={filterType}
                 projectTypes={projectTypes}
-                viewMode={viewMode}
+                viewMode={settings.browserViewMode}
+                contentLayout={settings.browserContentLayout}
                 onSearchQueryChange={setSearchQuery}
                 onFilterTypeChange={setFilterType}
-                onViewModeChange={setViewMode}
+                onViewModeChange={(value) => updateSettings({ browserViewMode: value })}
+                onContentLayoutChange={(value) => updateSettings({ browserContentLayout: value })}
             />
 
             {error && (
@@ -172,9 +247,13 @@ export default function FolderBrowse() {
                 <FolderBrowseContent
                     filteredFolders={filteredFolders}
                     gitRepos={gitRepos}
-                    filteredFiles={filteredFiles}
+                    visibleFiles={displayedFiles}
+                    totalFilteredFiles={filteredFiles.length}
+                    hasMoreFiles={hasMoreFiles}
+                    onLoadMoreFiles={loadMoreFiles}
                     displayedProjects={filteredProjects}
-                    viewMode={viewMode}
+                    viewMode={settings.browserViewMode}
+                    contentLayout={settings.browserContentLayout}
                     searchQuery={searchQuery}
                     error={error}
                     onFolderClick={handleFolderClick}

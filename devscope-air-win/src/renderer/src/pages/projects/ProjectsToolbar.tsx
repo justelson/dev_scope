@@ -1,7 +1,7 @@
-import { Search, Loader2, X, Filter, Eye, EyeOff, LayoutGrid, AlignJustify, List } from 'lucide-react'
+import { Search, Loader2, X, Filter, Eye, EyeOff, LayoutGrid, Grid3x3 } from 'lucide-react'
 import Dropdown from '@/components/ui/Dropdown'
 import { cn } from '@/lib/utils'
-import type { ViewMode } from './projectsTypes'
+import type { ContentLayout, ViewMode } from './projectsTypes'
 
 interface ProjectsToolbarProps {
     searchQuery: string
@@ -17,6 +17,8 @@ interface ProjectsToolbarProps {
     setShowHiddenFiles: (value: boolean) => void
     viewMode: ViewMode
     setViewMode: (value: ViewMode) => void
+    contentLayout: ContentLayout
+    setContentLayout: (value: ContentLayout) => void
     hasSearchResults: boolean
     searchResultsCount: number
 }
@@ -35,6 +37,8 @@ export function ProjectsToolbar({
     setShowHiddenFiles,
     viewMode,
     setViewMode,
+    contentLayout,
+    setContentLayout,
     hasSearchResults,
     searchResultsCount
 }: ProjectsToolbarProps) {
@@ -101,11 +105,35 @@ export function ProjectsToolbar({
                         <span className="hidden sm:inline">Hidden</span>
                     </button>
 
+                    <div className="flex items-center gap-1.5 rounded-xl border border-sparkle-border bg-sparkle-card p-1">
+                        <button
+                            onClick={() => setContentLayout('grouped')}
+                            className={cn(
+                                'px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200',
+                                contentLayout === 'grouped'
+                                    ? 'bg-sparkle-card-hover text-sparkle-text'
+                                    : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'
+                            )}
+                        >
+                            Grouped
+                        </button>
+                        <button
+                            onClick={() => setContentLayout('explorer')}
+                            className={cn(
+                                'px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200',
+                                contentLayout === 'explorer'
+                                    ? 'bg-sparkle-card-hover text-sparkle-text'
+                                    : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'
+                            )}
+                        >
+                            Explorer
+                        </button>
+                    </div>
+
                     <div className="flex items-center gap-1 rounded-xl border border-sparkle-border bg-sparkle-card p-1">
                         {[
-                            { id: 'grid', icon: LayoutGrid },
-                            { id: 'detailed', icon: AlignJustify },
-                            { id: 'list', icon: List }
+                            { id: 'finder', icon: Grid3x3 },
+                            { id: 'grid', icon: LayoutGrid }
                         ].map(({ id, icon: Icon }) => (
                             <button
                                 key={id}

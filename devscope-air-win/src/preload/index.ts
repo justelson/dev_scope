@@ -100,6 +100,111 @@ const devScopeAPI = {
     getStartupSettings: () => ipcRenderer.invoke('devscope:getStartupSettings'),
     getAiDebugLogs: (limit?: number) => ipcRenderer.invoke('devscope:getAiDebugLogs', limit),
     clearAiDebugLogs: () => ipcRenderer.invoke('devscope:clearAiDebugLogs'),
+    assistant: {
+        subscribe: () => ipcRenderer.invoke('devscope:assistant:subscribe'),
+        unsubscribe: () => ipcRenderer.invoke('devscope:assistant:unsubscribe'),
+        connect: (options?: {
+            approvalMode?: 'safe' | 'yolo'
+            provider?: 'codex'
+            model?: string
+            profile?: string
+        }) => ipcRenderer.invoke('devscope:assistant:connect', options),
+        disconnect: () => ipcRenderer.invoke('devscope:assistant:disconnect'),
+        status: (query?: {
+            kind?: string
+            limit?: number
+            types?: string[]
+            search?: string
+        }) => ipcRenderer.invoke('devscope:assistant:status', query),
+        send: (prompt: string, options?: {
+            model?: string
+            approvalMode?: 'safe' | 'yolo'
+            regenerateFromTurnId?: string
+            projectPath?: string
+            profile?: string
+            contextFiles?: Array<{ path: string; content?: string }>
+            contextDiff?: string
+            promptTemplate?: string
+        }) => ipcRenderer.invoke('devscope:assistant:send', prompt, options),
+        regenerate: (turnId: string, options?: {
+            model?: string
+            approvalMode?: 'safe' | 'yolo'
+            projectPath?: string
+            profile?: string
+            contextFiles?: Array<{ path: string; content?: string }>
+            contextDiff?: string
+            promptTemplate?: string
+        }) => ipcRenderer.invoke('devscope:assistant:send', '', {
+            ...(options || {}),
+            regenerateFromTurnId: turnId
+        }),
+        cancelTurn: (turnId?: string) => ipcRenderer.invoke('devscope:assistant:cancelTurn', turnId),
+        setApprovalMode: (mode: 'safe' | 'yolo') => ipcRenderer.invoke('devscope:assistant:setApprovalMode', mode),
+        getApprovalMode: () => ipcRenderer.invoke('devscope:assistant:getApprovalMode'),
+        getHistory: (query?: {
+            kind?: string
+            limit?: number
+            types?: string[]
+            search?: string
+        }) => ipcRenderer.invoke('devscope:assistant:getHistory', query),
+        clearHistory: (request?: { kind?: string }) => ipcRenderer.invoke('devscope:assistant:clearHistory', request),
+        getEvents: (query?: {
+            limit?: number
+            types?: string[]
+            search?: string
+        }) => ipcRenderer.invoke('devscope:assistant:getHistory', { kind: 'events', ...(query || {}) }),
+        clearEvents: () => ipcRenderer.invoke('devscope:assistant:clearHistory', { kind: 'events' }),
+        exportEvents: () => ipcRenderer.invoke('devscope:assistant:status', { kind: 'events:export' }),
+        listSessions: () => ipcRenderer.invoke('devscope:assistant:status', { kind: 'sessions:list' }),
+        createSession: (title?: string) => ipcRenderer.invoke('devscope:assistant:status', { kind: 'sessions:create', title }),
+        selectSession: (sessionId: string) => ipcRenderer.invoke('devscope:assistant:status', { kind: 'sessions:select', sessionId }),
+        renameSession: (sessionId: string, title: string) =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'sessions:rename', sessionId, title }),
+        deleteSession: (sessionId: string) => ipcRenderer.invoke('devscope:assistant:status', { kind: 'sessions:delete', sessionId }),
+        archiveSession: (sessionId: string, archived: boolean = true) =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'sessions:archive', sessionId, archived }),
+        newThread: () => ipcRenderer.invoke('devscope:assistant:status', { kind: 'thread:new' }),
+        estimateTokens: (input: {
+            prompt: string
+            contextDiff?: string
+            contextFiles?: Array<{ path: string; content?: string }>
+            promptTemplate?: string
+        }) => ipcRenderer.invoke('devscope:assistant:status', { kind: 'tokens:estimate', ...(input || {}) }),
+        listProfiles: () => ipcRenderer.invoke('devscope:assistant:status', { kind: 'profiles:list' }),
+        setProfile: (profile: string) => ipcRenderer.invoke('devscope:assistant:status', { kind: 'profiles:set', profile }),
+        getProjectModel: (projectPath: string) =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'project-model:get', projectPath }),
+        setProjectModel: (projectPath: string, model: string) =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'project-model:set', projectPath, model }),
+        getTelemetryIntegrity: () => ipcRenderer.invoke('devscope:assistant:status', { kind: 'telemetry:integrity' }),
+        runWorkflowExplainDiff: (projectPath: string, filePath?: string, model?: string) =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'workflow:explain-diff', projectPath, filePath, model }),
+        runWorkflowReviewStaged: (projectPath: string, model?: string) =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'workflow:review-staged', projectPath, model }),
+        runWorkflowDraftCommit: (projectPath: string, model?: string) =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'workflow:draft-commit', projectPath, model }),
+        exportConversation: (input?: { format?: 'json' | 'markdown'; sessionId?: string }) =>
+            ipcRenderer.invoke('devscope:assistant:getHistory', {
+                kind: 'conversation:export',
+                ...(input || {})
+            }),
+        listModels: () => ipcRenderer.invoke('devscope:assistant:listModels'),
+        onEvent: (callback: (event: { type: string; timestamp: number; payload: Record<string, unknown> }) => void) => {
+            const listener = (_event: Electron.IpcRendererEvent, payload: {
+                type: string
+                timestamp: number
+                payload: Record<string, unknown>
+            }) => {
+                callback(payload)
+            }
+            ipcRenderer.on('devscope:assistant:event', listener)
+            void ipcRenderer.invoke('devscope:assistant:subscribe').catch(() => undefined)
+            return () => {
+                ipcRenderer.removeListener('devscope:assistant:event', listener)
+                void ipcRenderer.invoke('devscope:assistant:unsubscribe').catch(() => undefined)
+            }
+        }
+    },
 
     // Projects
     selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),

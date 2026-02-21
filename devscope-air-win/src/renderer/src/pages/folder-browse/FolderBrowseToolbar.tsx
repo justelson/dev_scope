@@ -1,21 +1,22 @@
-import { AlignJustify, Filter, LayoutGrid, List, Search } from 'lucide-react'
+import { Filter, Grid3x3, LayoutGrid, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getProjectTypeById, type ViewMode } from './types'
+import { getProjectTypeById, type ContentLayout, type ViewMode } from './types'
 
 interface FolderBrowseToolbarProps {
     searchQuery: string
     filterType: string
     projectTypes: string[]
     viewMode: ViewMode
+    contentLayout: ContentLayout
     onSearchQueryChange: (value: string) => void
     onFilterTypeChange: (value: string) => void
     onViewModeChange: (value: ViewMode) => void
+    onContentLayoutChange: (value: ContentLayout) => void
 }
 
 const VIEW_MODES: Array<{ id: ViewMode; icon: typeof LayoutGrid }> = [
-    { id: 'grid', icon: LayoutGrid },
-    { id: 'detailed', icon: AlignJustify },
-    { id: 'list', icon: List }
+    { id: 'finder', icon: Grid3x3 },
+    { id: 'grid', icon: LayoutGrid }
 ]
 
 export function FolderBrowseToolbar({
@@ -23,12 +24,14 @@ export function FolderBrowseToolbar({
     filterType,
     projectTypes,
     viewMode,
+    contentLayout,
     onSearchQueryChange,
     onFilterTypeChange,
-    onViewModeChange
+    onViewModeChange,
+    onContentLayoutChange
 }: FolderBrowseToolbarProps) {
     return (
-        <div className="sticky -top-6 z-20 bg-sparkle-bg/95 backdrop-blur-xl pt-6 pb-4 mb-6 -mx-6 px-6 border-b border-white/5">
+        <div className="sticky -top-6 z-20 bg-sparkle-bg/90 backdrop-blur-2xl pt-6 pb-5 mb-6 -mx-6 px-6">
             <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
                 <div className="flex flex-1 w-full gap-3">
                     <div className="relative flex-1 group/search">
@@ -71,19 +74,44 @@ export function FolderBrowseToolbar({
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 bg-sparkle-card p-1.5 rounded-2xl border border-white/10 shadow-sm">
+                    <div className="flex items-center gap-1.5 rounded-xl border border-sparkle-border bg-sparkle-card p-1">
+                        <button
+                            onClick={() => onContentLayoutChange('grouped')}
+                            className={cn(
+                                'px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200',
+                                contentLayout === 'grouped'
+                                    ? 'bg-sparkle-card-hover text-sparkle-text'
+                                    : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'
+                            )}
+                        >
+                            Grouped
+                        </button>
+                        <button
+                            onClick={() => onContentLayoutChange('explorer')}
+                            className={cn(
+                                'px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200',
+                                contentLayout === 'explorer'
+                                    ? 'bg-sparkle-card-hover text-sparkle-text'
+                                    : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'
+                            )}
+                        >
+                            Explorer
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-1 rounded-xl border border-sparkle-border bg-sparkle-card p-1">
                         {VIEW_MODES.map(({ id, icon: Icon }) => (
                             <button
                                 key={id}
                                 onClick={() => onViewModeChange(id)}
                                 className={cn(
-                                    'p-2.5 rounded-xl transition-all duration-300',
+                                    'p-2 rounded-lg transition-all duration-200',
                                     viewMode === id
-                                        ? 'bg-white/10 text-white shadow-inner scale-105'
-                                        : 'text-white/30 hover:text-white hover:bg-white/5'
+                                        ? 'bg-sparkle-card-hover text-sparkle-text'
+                                        : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'
                                 )}
                             >
-                                <Icon size={18} />
+                                <Icon size={16} />
                             </button>
                         ))}
                     </div>

@@ -14,9 +14,9 @@ import { useProjectsController } from './projects/useProjectsController'
 import { getProjectTypeById, formatRelativeTime } from './projects/projectsTypes'
 
 export default function Projects() {
-    const { settings } = useSettings()
+    const { settings, updateSettings } = useSettings()
     const navigate = useNavigate()
-    const controller = useProjectsController(settings, navigate)
+    const controller = useProjectsController(settings, updateSettings, navigate)
 
     if (!controller.hasLoadedOnce && controller.showBlockingLoader) {
         return (
@@ -107,6 +107,8 @@ export default function Projects() {
                 setShowHiddenFiles={controller.setShowHiddenFiles}
                 viewMode={controller.viewMode}
                 setViewMode={controller.setViewMode}
+                contentLayout={controller.contentLayout}
+                setContentLayout={controller.setContentLayout}
                 hasSearchResults={Boolean(controller.searchResults)}
                 searchResultsCount={searchResultsCount}
             />
@@ -122,6 +124,7 @@ export default function Projects() {
                     filteredProjects={controller.filteredProjects}
                     filteredFiles={controller.filteredFiles}
                     viewMode={controller.viewMode}
+                    contentLayout={controller.contentLayout}
                     formatRelativeTime={formatRelativeTime}
                     getProjectTypeLabel={(type) => getProjectTypeById(type)?.displayName || type}
                     getProjectThemeColor={(type) => getProjectTypeById(type)?.themeColor || '#525252'}

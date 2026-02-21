@@ -24,6 +24,7 @@ export function FilePreviewModal({ file, content, loading, truncated, size, prev
 
     const [viewport, setViewport] = useState<ViewportPreset>('responsive')
     const [htmlViewMode, setHtmlViewMode] = useState<'rendered' | 'code'>('rendered')
+    const [csvDistinctColorsEnabled, setCsvDistinctColorsEnabled] = useState(true)
     const presetConfig = VIEWPORT_PRESETS[viewport]
     const isCompactHtmlViewport = isHtml && viewport !== 'responsive' && presetConfig.width <= 768
 
@@ -77,6 +78,8 @@ export function FilePreviewModal({ file, content, loading, truncated, size, prev
                     onViewportChange={setViewport}
                     htmlViewMode={htmlViewMode}
                     onHtmlViewModeChange={setHtmlViewMode}
+                    csvDistinctColorsEnabled={csvDistinctColorsEnabled}
+                    onCsvDistinctColorsEnabledChange={setCsvDistinctColorsEnabled}
                     onOpenInBrowser={handleOpenInBrowser}
                     onClose={onClose}
                 />
@@ -98,6 +101,7 @@ export function FilePreviewModal({ file, content, loading, truncated, size, prev
                             viewport={viewport}
                             presetConfig={presetConfig}
                             htmlViewMode={htmlViewMode}
+                            csvDistinctColorsEnabled={csvDistinctColorsEnabled}
                         />
                     </PreviewErrorBoundary>
                 </div>

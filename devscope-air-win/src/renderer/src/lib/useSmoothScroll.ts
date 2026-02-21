@@ -2,6 +2,7 @@ import { useEffect, useRef, RefObject } from 'react'
 
 interface SmoothScrollOptions {
   ease?: number
+  enabled?: boolean
 }
 
 /**
@@ -11,7 +12,7 @@ export function useSmoothScroll(
   containerRef: RefObject<HTMLElement>,
   options: SmoothScrollOptions = {}
 ) {
-  const { ease = 0.1 } = options
+  const { ease = 0.1, enabled = true } = options
 
   const targetY = useRef(0)
   const currentY = useRef(0)
@@ -25,6 +26,11 @@ export function useSmoothScroll(
     // Initialize
     currentY.current = container.scrollTop
     targetY.current = container.scrollTop
+
+    if (!enabled) {
+      isAnimating.current = false
+      return
+    }
 
     const animate = () => {
       if (!container) return
@@ -92,7 +98,7 @@ export function useSmoothScroll(
         cancelAnimationFrame(animationFrame.current)
       }
     }
-  }, [ease, containerRef])
+  }, [ease, enabled, containerRef])
 
   // Return refs so caller can reset them
   return { targetY, currentY, animationFrame, isAnimating }

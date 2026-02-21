@@ -15,6 +15,7 @@ const Home = lazy(() => import('./pages/Home'))
 const Projects = lazy(() => import('./pages/Projects'))
 const ProjectDetails = lazy(() => import('./pages/ProjectDetails'))
 const FolderBrowse = lazy(() => import('./pages/FolderBrowse'))
+const Assistant = lazy(() => import('./pages/Assistant'))
 
 // Settings sub-pages
 const AppearanceSettings = lazy(() => import('./pages/settings/AppearanceSettings'))
@@ -25,6 +26,7 @@ const ProjectsSettings = lazy(() => import('./pages/settings/ProjectsSettings'))
 const AISettings = lazy(() => import('./pages/settings/AISettings'))
 const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
+const AssistantSettings = lazy(() => import('./pages/settings/AssistantSettings'))
 
 // Terminal Context
 interface TerminalContextType {
@@ -59,9 +61,14 @@ function MainContent() {
     const mainRef = useRef<HTMLElement>(null)
     const location = useLocation()
     const isSettingsRoute = location.pathname.startsWith('/settings')
+    const isAssistantRoute = location.pathname === '/assistant'
     const { isCollapsed } = useSidebar()
+    const { settings } = useSettings()
 
-    const { targetY, currentY, animationFrame, isAnimating } = useSmoothScroll(mainRef, { ease: 0.12 })
+    const { targetY, currentY, animationFrame, isAnimating } = useSmoothScroll(mainRef, {
+        ease: 0.12,
+        enabled: settings.scrollMode === 'smooth'
+    })
 
     // Reset scroll to top when route changes
     useEffect(() => {
@@ -81,7 +88,7 @@ function MainContent() {
     return (
         <main
             ref={mainRef}
-            className={`flex-1 p-6 overflow-y-auto overflow-x-hidden min-h-0 focus:outline-none transition-[margin] duration-300 ease-in-out${isSettingsRoute ? '' : ' theme-adaptive'} ${isCollapsed ? 'ml-16' : 'ml-64'}`}
+            className={`flex-1 min-h-0 focus:outline-none transition-[margin] duration-300 ease-in-out ${isAssistantRoute ? 'p-0 overflow-hidden' : 'p-6 overflow-y-auto overflow-x-hidden'}${isSettingsRoute ? '' : ' theme-adaptive'} ${isCollapsed ? 'ml-16' : 'ml-64'}`}
             tabIndex={0}
         >
             <Suspense fallback={<PageLoader />}>
@@ -91,6 +98,7 @@ function MainContent() {
                     <Route path="/projects" element={<Projects />} />
                     <Route path="/projects/:projectPath" element={<ProjectDetails />} />
                     <Route path="/folder-browse/:folderPath" element={<FolderBrowse />} />
+                    <Route path="/assistant" element={<Assistant />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/settings/appearance" element={<AppearanceSettings />} />
                     <Route path="/settings/behavior" element={<BehaviorSettings />} />
@@ -100,6 +108,7 @@ function MainContent() {
                     <Route path="/settings/ai" element={<AISettings />} />
                     <Route path="/settings/terminal" element={<TerminalSettings />} />
                     <Route path="/settings/logs" element={<LogsSettings />} />
+                    <Route path="/settings/assistant" element={<AssistantSettings />} />
                     <Route path="*" element={<Navigate to="/home" replace />} />
                 </Routes>
             </Suspense>

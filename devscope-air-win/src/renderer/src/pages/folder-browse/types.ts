@@ -23,7 +23,8 @@ export interface FileItem {
     extension: string
 }
 
-export type ViewMode = 'grid' | 'detailed' | 'list'
+export type ViewMode = 'grid' | 'finder'
+export type ContentLayout = 'grouped' | 'explorer'
 
 export interface ProjectTypeInfo {
     displayName: string

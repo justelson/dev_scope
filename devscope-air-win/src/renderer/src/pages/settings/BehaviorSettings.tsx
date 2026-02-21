@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Power, EyeOff } from 'lucide-react'
+import { ArrowLeft, Power, EyeOff, Mouse } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 
@@ -117,6 +117,42 @@ export default function BehaviorSettings() {
                             checked={settings.startMinimized}
                             onChange={handleMinimizedToggle}
                         />
+                    </div>
+                </SettingsSection>
+
+                <SettingsSection title="Scroll Feel" description="Choose between DevScope buttery scrolling and native app scrolling">
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <Mouse size={20} className="text-sparkle-text-secondary" />
+                            <p className="text-sm font-medium text-sparkle-text">
+                                {settings.scrollMode === 'smooth' ? 'Buttery smooth' : 'Native'}
+                            </p>
+                        </div>
+
+                        <div className="inline-flex items-center rounded-lg border border-sparkle-border bg-sparkle-bg p-1">
+                            <button
+                                onClick={() => updateSettings({ scrollMode: 'smooth' })}
+                                className={cn(
+                                    'px-3 py-1.5 rounded-md text-xs transition-colors',
+                                    settings.scrollMode === 'smooth'
+                                        ? 'bg-[var(--accent-primary)] text-white'
+                                        : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
+                                )}
+                            >
+                                Buttery
+                            </button>
+                            <button
+                                onClick={() => updateSettings({ scrollMode: 'native' })}
+                                className={cn(
+                                    'px-3 py-1.5 rounded-md text-xs transition-colors',
+                                    settings.scrollMode === 'native'
+                                        ? 'bg-[var(--accent-primary)] text-white'
+                                        : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
+                                )}
+                            >
+                                Native
+                            </button>
+                        </div>
                     </div>
                 </SettingsSection>
             </div>

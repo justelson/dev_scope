@@ -1,0 +1,28 @@
+Read and obey:
+- docs/ai/ASSISTANT_DOCS_INDEX.md
+- docs/ai/ASSISTANT_EXECUTION_RULEBOOK.md
+- docs/ai/ASSISTANT_PHASE_BOARDS_FE_BE.md
+- docs/ai/ASSISTANT_AGENT_REPORTING_CONTRACT.md
+
+Assignment: Phase 02 Backend
+
+Allowed files only:
+- src/main/assistant/**
+
+Tasks:
+1) Fix and validate streaming delta accumulation.
+2) Ensure final message locks exactly once on completion.
+3) Handle turn completed/failed/interrupted/cancelled cleanly and consistently.
+
+Expected outcome:
+- No duplicate/corrupted final responses.
+- Turn lifecycle is consistent and recoverable.
+
+Hard rules:
+- Do not modify any file outside allowlist.
+- Do not start any Phase 03+ work.
+- If blocked by out-of-scope dependency, stop and report blocker.
+
+Deliverables:
+1) Normal report using docs/ai/ASSISTANT_AGENT_REPORTING_CONTRACT.md.
+2) Append one CSV row to docs/ai/dispatch/assistant_backend_log.csv.

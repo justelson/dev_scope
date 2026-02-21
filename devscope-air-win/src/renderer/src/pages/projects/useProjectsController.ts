@@ -6,7 +6,11 @@ import type { FileItem, FolderItem, IndexedProject, IndexedTotals, IndexedInvent
 import { useProjectSearch } from './useProjectSearch'
 import { useProjectStatsModal } from './useProjectStatsModal'
 
-export function useProjectsController(settings: Settings, navigate: NavigateFunction) {
+export function useProjectsController(
+    settings: Settings,
+    updateSettings: (partial: Partial<Settings>) => void,
+    navigate: NavigateFunction
+) {
     const [projects, setProjects] = useState<Project[]>([])
     const [folders, setFolders] = useState<FolderItem[]>([])
     const [files, setFiles] = useState<FileItem[]>([])
@@ -21,7 +25,7 @@ export function useProjectsController(settings: Settings, navigate: NavigateFunc
     const inFlightScanKeyRef = useRef<string | null>(null)
     const indexTotalsRunRef = useRef(0)
 
-    const search = useProjectSearch(settings, projects, folders, files)
+    const search = useProjectSearch(settings, updateSettings, projects, folders, files)
     const stats = useProjectStatsModal(projects, indexedTotals, indexedInventory, search.searchRootsKey)
 
     const loadProjects = useCallback(async () => {
@@ -129,6 +133,8 @@ export function useProjectsController(settings: Settings, navigate: NavigateFunc
         setFilterType: search.setFilterType,
         viewMode: search.viewMode,
         setViewMode: search.setViewMode,
+        contentLayout: search.contentLayout,
+        setContentLayout: search.setContentLayout,
         showHiddenFiles: search.showHiddenFiles,
         setShowHiddenFiles: search.setShowHiddenFiles,
         isSearching: search.isSearching,

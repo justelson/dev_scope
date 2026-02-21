@@ -9,6 +9,12 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 export type Theme = 'dark' | 'light' | 'purple' | 'green' | 'midnight' | 'ocean' | 'forest' | 'slate' | 'charcoal' | 'navy'
 export type Shell = 'powershell' | 'cmd'
 export type CommitAIProvider = 'groq' | 'gemini'
+export type ScrollMode = 'smooth' | 'native'
+export type BrowserViewMode = 'grid' | 'finder'
+export type BrowserContentLayout = 'grouped' | 'explorer'
+export type AssistantProvider = 'codex'
+export type AssistantApprovalMode = 'safe' | 'yolo'
+export type AssistantProfile = 'safe-dev' | 'review' | 'yolo-fast' | 'custom'
 
 export interface AccentColor {
     name: string
@@ -59,6 +65,9 @@ export interface Settings {
     // Behavior
     startMinimized: boolean
     startWithWindows: boolean
+    scrollMode: ScrollMode
+    browserViewMode: BrowserViewMode
+    browserContentLayout: BrowserContentLayout
 
     // Projects
     projectsFolder: string
@@ -70,6 +79,57 @@ export interface Settings {
     groqApiKey: string
     geminiApiKey: string
     commitAIProvider: CommitAIProvider
+
+    // Assistant
+    assistantEnabled: boolean
+    assistantProvider: AssistantProvider
+    assistantDefaultModel: string
+    assistantApprovalMode: AssistantApprovalMode
+    assistantShowThinking: boolean
+    assistantAutoConnectOnOpen: boolean
+    assistantSidebarCollapsed: boolean
+    assistantSidebarWidth: number
+    assistantShowEventPanel: boolean
+    assistantProfile: AssistantProfile
+    assistantProjectModels: Record<string, string>
+    assistantProjectProfiles: Record<string, AssistantProfile>
+}
+
+const ASSISTANT_PROFILES: AssistantProfile[] = ['safe-dev', 'review', 'yolo-fast', 'custom']
+
+function clampAssistantSidebarWidth(value: unknown): number {
+    const numeric = Number(value)
+    if (!Number.isFinite(numeric)) return 320
+    return Math.max(240, Math.min(520, Math.round(numeric)))
+}
+
+function normalizeAssistantProfile(value: unknown): AssistantProfile {
+    return ASSISTANT_PROFILES.includes(value as AssistantProfile)
+        ? value as AssistantProfile
+        : 'safe-dev'
+}
+
+function normalizeStringRecord(value: unknown): Record<string, string> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    const next: Record<string, string> = {}
+    for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+        const normalizedKey = key.trim()
+        const normalizedValue = typeof raw === 'string' ? raw.trim() : ''
+        if (!normalizedKey || !normalizedValue) continue
+        next[normalizedKey] = normalizedValue
+    }
+    return next
+}
+
+function normalizeAssistantProjectProfiles(value: unknown): Record<string, AssistantProfile> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    const next: Record<string, AssistantProfile> = {}
+    for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+        const normalizedKey = key.trim()
+        if (!normalizedKey) continue
+        next[normalizedKey] = normalizeAssistantProfile(raw)
+    }
+    return next
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -80,13 +140,28 @@ const DEFAULT_SETTINGS: Settings = {
     defaultShell: 'powershell',
     startMinimized: false,
     startWithWindows: false,
+    scrollMode: 'smooth',
+    browserViewMode: 'grid',
+    browserContentLayout: 'grouped',
     projectsFolder: '',
     additionalFolders: [],
     enableFolderIndexing: true,
     autoIndexOnStartup: false,
     groqApiKey: '',
     geminiApiKey: '',
-    commitAIProvider: 'groq'
+    commitAIProvider: 'groq',
+    assistantEnabled: false,
+    assistantProvider: 'codex',
+    assistantDefaultModel: 'default',
+    assistantApprovalMode: 'safe',
+    assistantShowThinking: true,
+    assistantAutoConnectOnOpen: false,
+    assistantSidebarCollapsed: false,
+    assistantSidebarWidth: 320,
+    assistantShowEventPanel: false,
+    assistantProfile: 'safe-dev',
+    assistantProjectModels: {},
+    assistantProjectProfiles: {}
 }
 
 const STORAGE_KEY = 'devscope-settings'
@@ -108,13 +183,30 @@ function loadSettings(): Settings {
                 defaultShell: candidate.defaultShell,
                 startMinimized: candidate.startMinimized,
                 startWithWindows: candidate.startWithWindows,
+                scrollMode: candidate.scrollMode === 'native' ? 'native' : 'smooth',
+                browserViewMode: candidate.browserViewMode === 'finder' ? 'finder' : 'grid',
+                browserContentLayout: candidate.browserContentLayout === 'explorer' ? 'explorer' : 'grouped',
                 projectsFolder: candidate.projectsFolder,
                 additionalFolders: candidate.additionalFolders,
                 enableFolderIndexing: candidate.enableFolderIndexing,
                 autoIndexOnStartup: candidate.autoIndexOnStartup,
                 groqApiKey: candidate.groqApiKey,
                 geminiApiKey: candidate.geminiApiKey,
-                commitAIProvider: candidate.commitAIProvider
+                commitAIProvider: candidate.commitAIProvider,
+                assistantEnabled: Boolean(candidate.assistantEnabled),
+                assistantProvider: candidate.assistantProvider === 'codex' ? 'codex' : 'codex',
+                assistantDefaultModel: typeof candidate.assistantDefaultModel === 'string' && candidate.assistantDefaultModel.trim()
+                    ? candidate.assistantDefaultModel.trim()
+                    : 'default',
+                assistantApprovalMode: candidate.assistantApprovalMode === 'yolo' ? 'yolo' : 'safe',
+                assistantShowThinking: candidate.assistantShowThinking !== false,
+                assistantAutoConnectOnOpen: !!candidate.assistantAutoConnectOnOpen,
+                assistantSidebarCollapsed: !!candidate.assistantSidebarCollapsed,
+                assistantSidebarWidth: clampAssistantSidebarWidth(candidate.assistantSidebarWidth),
+                assistantShowEventPanel: !!candidate.assistantShowEventPanel,
+                assistantProfile: normalizeAssistantProfile(candidate.assistantProfile),
+                assistantProjectModels: normalizeStringRecord(candidate.assistantProjectModels),
+                assistantProjectProfiles: normalizeAssistantProjectProfiles(candidate.assistantProjectProfiles)
             }
         }
     } catch (e) {

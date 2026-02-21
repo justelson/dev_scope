@@ -1,0 +1,16 @@
+You are preparing a final handoff for review.
+
+Read and obey:
+- docs/ai/ASSISTANT_EXECUTION_RULEBOOK.md
+- docs/ai/ASSISTANT_AGENT_REPORTING_CONTRACT.md
+- docs/ai/ASSISTANT_AGENT_HANDOFF_CHECKLIST.md
+
+Requirements:
+1) Provide full report in reporting contract format.
+2) Include exact changed files.
+3) Explicitly confirm scope compliance.
+4) Provide expected outcome pass/fail with evidence.
+5) Provide validation commands and results.
+6) List blockers and residual risks.
+
+Output must be strict and complete for final reviewer decision.

@@ -13,9 +13,19 @@ interface PreviewBodyProps {
     viewport: ViewportPreset
     presetConfig: ViewportPresetConfig
     htmlViewMode: 'rendered' | 'code'
+    csvDistinctColorsEnabled: boolean
 }
 
-export default function PreviewBody({ file, content, loading, meta, viewport, presetConfig, htmlViewMode }: PreviewBodyProps) {
+export default function PreviewBody({
+    file,
+    content,
+    loading,
+    meta,
+    viewport,
+    presetConfig,
+    htmlViewMode,
+    csvDistinctColorsEnabled
+}: PreviewBodyProps) {
     const isTextLike = isTextLikeFileType(file.type)
 
     if (loading) {
@@ -27,7 +37,7 @@ export default function PreviewBody({ file, content, loading, meta, viewport, pr
     }
 
     if (isTextLike) {
-        return <TextPreviewContent file={file} content={content} meta={meta} />
+        return <TextPreviewContent file={file} content={content} meta={meta} csvDistinctColorsEnabled={csvDistinctColorsEnabled} />
     }
 
     if (file.type === 'image') {

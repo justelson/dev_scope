@@ -1,0 +1,28 @@
+Read and obey:
+- docs/ai/ASSISTANT_DOCS_INDEX.md
+- docs/ai/ASSISTANT_EXECUTION_RULEBOOK.md
+- docs/ai/ASSISTANT_PHASE_BOARDS_FE_BE.md
+- docs/ai/ASSISTANT_AGENT_REPORTING_CONTRACT.md
+
+Assignment: Phase 02 Frontend
+
+Allowed files only:
+- src/renderer/src/pages/Assistant.tsx
+- src/renderer/src/pages/assistant/**
+
+Tasks:
+1) Render stream smoothly with no flicker.
+2) Render final answer exactly once after turn completes.
+3) Keep busy/composer controls correct during active turn.
+
+Expected outcome:
+- Stable stream-to-final UX with no duplicate final render.
+
+Hard rules:
+- Do not modify any file outside allowlist.
+- Do not start any Phase 03+ work.
+- If blocked by out-of-scope dependency, stop and report blocker.
+
+Deliverables:
+1) Normal report using docs/ai/ASSISTANT_AGENT_REPORTING_CONTRACT.md.
+2) Append one CSV row to docs/ai/dispatch/assistant_frontend_log.csv.

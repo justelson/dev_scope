@@ -1,0 +1,57 @@
+Read and obey first:
+- docs/ai/ASSISTANT_DOCS_INDEX.md
+- docs/ai/ASSISTANT_EXECUTION_RULEBOOK.md
+- docs/ai/ASSISTANT_PHASE_BOARDS_FE_BE.md
+- docs/ai/ASSISTANT_SCOPE_ALLOWLIST_MATRIX.md
+- docs/ai/ASSISTANT_AGENT_REPORTING_CONTRACT.md
+
+Assignment: Frontend Phase 06 and Phase 07 only
+
+Execution mode:
+1. Complete Phase 06 fully.
+2. Only after Phase 06 is 100% done, continue to Phase 07.
+3. If a requirement already exists, verify it and mark it as SKIPPED (already implemented).
+
+Hard scope rules:
+- Do not modify any file outside the active phase allowlist.
+- Do not do Phase 08+ work.
+- Preserve current UI/UX/features unless the active phase explicitly requires change.
+- No tests/builds unless phase policy explicitly allows it.
+
+Phase 06 allowlist (frontend):
+- src/renderer/src/pages/assistant/**
+- src/renderer/src/pages/settings/AssistantSettings.tsx
+
+Phase 06 objective:
+- Events console with filters + search
+- Formatted/raw payload toggle
+- Copy/export/reset actions
+
+Phase 07 allowlist (frontend):
+- src/renderer/src/pages/Assistant.tsx
+- src/renderer/src/pages/assistant/**
+- src/renderer/src/lib/settings.tsx (only if persistence is required)
+
+Phase 07 objective:
+- Sessions/thread management UI
+- New chat/new thread controls
+- Rename/delete/archive session UX
+
+Phase handoff requirements:
+- At end of Phase 06:
+  - Append CSV row to docs/ai/dispatch/assistant_frontend_log.csv
+  - Write assistant_phase06_frontend_report.md
+- At end of Phase 07:
+  - Append CSV row to docs/ai/dispatch/assistant_frontend_log.csv
+  - Write assistant_phase07_frontend_report.md
+
+Each report must include:
+- Assignment/track
+- Files changed
+- Scope compliance
+- Work completed
+- Expected outcome check (PASS/FAIL + concrete evidence)
+- Validation commands run (or explicit reason not run)
+- Blockers
+- Risks
+- Handoff status

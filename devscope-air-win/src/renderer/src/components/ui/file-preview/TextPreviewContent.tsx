@@ -10,9 +10,10 @@ interface TextPreviewContentProps {
     file: PreviewFile
     content: string
     meta: PreviewMeta
+    csvDistinctColorsEnabled: boolean
 }
 
-export default function TextPreviewContent({ file, content, meta }: TextPreviewContentProps) {
+export default function TextPreviewContent({ file, content, meta, csvDistinctColorsEnabled }: TextPreviewContentProps) {
     const isLargeTextPreview = useMemo(() => {
         const lineCount = content.split(/\r?\n/).length
         return content.length > HIGHLIGHT_MAX_CHARS || lineCount > HIGHLIGHT_MAX_LINES
@@ -70,7 +71,11 @@ export default function TextPreviewContent({ file, content, meta }: TextPreviewC
             )}
 
             {file.type === 'csv' && (
-                <CsvPreviewTable content={content} language={file.language} />
+                <CsvPreviewTable
+                    content={content}
+                    language={file.language}
+                    useDistinctColumnColors={csvDistinctColorsEnabled}
+                />
             )}
 
             {file.type === 'code' && (

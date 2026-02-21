@@ -4,6 +4,8 @@
 
 import { BrowserWindow, ipcMain } from 'electron'
 import log from 'electron-log'
+import { assistantBridge } from '../assistant'
+import { systemMetricsBridge } from '../system-metrics/manager'
 import {
     handleGetDetailedSystemStats,
     handleGetDeveloperTooling,
@@ -84,6 +86,20 @@ import {
     handleStageFiles,
     handleUnstageFiles
 } from './handlers/git-write-handlers'
+import {
+    handleAssistantCancelTurn,
+    handleAssistantClearHistory,
+    handleAssistantConnect,
+    handleAssistantDisconnect,
+    handleAssistantGetApprovalMode,
+    handleAssistantGetHistory,
+    handleAssistantListModels,
+    handleAssistantSend,
+    handleAssistantSetApprovalMode,
+    handleAssistantStatus,
+    handleAssistantSubscribe,
+    handleAssistantUnsubscribe
+} from './handlers/assistant-handlers'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     log.info('Registering IPC handlers...')
@@ -108,6 +124,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:generateCommitMessage', handleGenerateCommitMessage)
     ipcMain.handle('devscope:getAiDebugLogs', handleGetAiDebugLogs)
     ipcMain.handle('devscope:clearAiDebugLogs', handleClearAiDebugLogs)
+
+    ipcMain.handle('devscope:assistant:subscribe', handleAssistantSubscribe)
+    ipcMain.handle('devscope:assistant:unsubscribe', handleAssistantUnsubscribe)
+    ipcMain.handle('devscope:assistant:connect', handleAssistantConnect)
+    ipcMain.handle('devscope:assistant:disconnect', handleAssistantDisconnect)
+    ipcMain.handle('devscope:assistant:status', handleAssistantStatus)
+    ipcMain.handle('devscope:assistant:send', handleAssistantSend)
+    ipcMain.handle('devscope:assistant:cancelTurn', handleAssistantCancelTurn)
+    ipcMain.handle('devscope:assistant:setApprovalMode', handleAssistantSetApprovalMode)
+    ipcMain.handle('devscope:assistant:getApprovalMode', handleAssistantGetApprovalMode)
+    ipcMain.handle('devscope:assistant:getHistory', handleAssistantGetHistory)
+    ipcMain.handle('devscope:assistant:clearHistory', handleAssistantClearHistory)
+    ipcMain.handle('devscope:assistant:listModels', handleAssistantListModels)
 
     ipcMain.handle('devscope:selectFolder', handleSelectFolder)
     ipcMain.handle('devscope:scanProjects', handleScanProjects)
@@ -187,5 +216,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     mainWindow.webContents.once('destroyed', () => {
         systemMetricsBridge.unsubscribe(mainWindow.webContents.id)
+        assistantBridge.unsubscribe(mainWindow.webContents.id)
     })
 }

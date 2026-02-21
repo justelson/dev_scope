@@ -2,20 +2,29 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import type { Settings } from '@/lib/settings'
 import { parseFileSearchQuery } from '@/lib/utils'
 import { buildFileSearchIndex, searchFileIndex, type FileSearchIndex } from '@/lib/fileSearchIndex'
-import type { FileItem, FolderItem, Project, SearchResults, ViewMode } from './projectsTypes'
+import type { ContentLayout, FileItem, FolderItem, Project, SearchResults, ViewMode } from './projectsTypes'
 
 export function useProjectSearch(
     settings: Settings,
+    updateSettings: (partial: Partial<Settings>) => void,
     projects: Project[],
     folders: FolderItem[],
     files: FileItem[]
 ) {
     const [searchQuery, setSearchQuery] = useState('')
     const [filterType, setFilterType] = useState<string>('all')
-    const [viewMode, setViewMode] = useState<ViewMode>('grid')
     const [showHiddenFiles, setShowHiddenFiles] = useState(false)
     const [isSearching, setIsSearching] = useState(false)
     const [searchResults, setSearchResults] = useState<SearchResults | null>(null)
+
+    const viewMode = settings.browserViewMode as ViewMode
+    const contentLayout = settings.browserContentLayout as ContentLayout
+    const setViewMode = useCallback((value: ViewMode) => {
+        updateSettings({ browserViewMode: value })
+    }, [updateSettings])
+    const setContentLayout = useCallback((value: ContentLayout) => {
+        updateSettings({ browserContentLayout: value })
+    }, [updateSettings])
 
     const deferredSearchQuery = useDeferredValue(searchQuery)
     const searchIndexCacheRef = useRef<Map<string, FileSearchIndex>>(new Map())
@@ -212,6 +221,8 @@ export function useProjectSearch(
         setFilterType,
         viewMode,
         setViewMode,
+        contentLayout,
+        setContentLayout,
         showHiddenFiles,
         setShowHiddenFiles,
         isSearching,

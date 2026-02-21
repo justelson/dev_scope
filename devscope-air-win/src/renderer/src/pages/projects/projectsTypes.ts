@@ -68,7 +68,8 @@ export interface StatChip {
     color: string
 }
 
-export type ViewMode = 'grid' | 'detailed' | 'list'
+export type ViewMode = 'grid' | 'finder'
+export type ContentLayout = 'grouped' | 'explorer'
 
 export const PROJECT_TYPES_MAP: Record<string, { displayName: string; themeColor: string }> = {
     node: { displayName: 'Node.js', themeColor: '#339933' },

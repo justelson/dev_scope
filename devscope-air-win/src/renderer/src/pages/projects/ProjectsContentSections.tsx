@@ -1,7 +1,8 @@
-import { ExternalLink, FileCode, Folder, FolderTree, Github, Code, File, ChevronRight, Clock } from 'lucide-react'
+import type { ComponentType, ElementType } from 'react'
+import { ChevronRight, Clock, Code, ExternalLink, File, FileCode, Folder, FolderTree, Github } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ProjectIcon, { FrameworkBadge } from '@/components/ui/ProjectIcon'
-import type { FileItem, FolderItem, Project, ViewMode } from './projectsTypes'
+import type { ContentLayout, FileItem, FolderItem, Project, ViewMode } from './projectsTypes'
 
 interface ProjectsContentSectionsProps {
     plainFolders: FolderItem[]
@@ -9,6 +10,7 @@ interface ProjectsContentSectionsProps {
     filteredProjects: Project[]
     filteredFiles: FileItem[]
     viewMode: ViewMode
+    contentLayout: ContentLayout
     formatRelativeTime: (timestamp?: number) => string
     getProjectTypeLabel: (type: string) => string
     getProjectThemeColor: (type: string) => string
@@ -20,12 +22,187 @@ interface ProjectsContentSectionsProps {
     filterActive: boolean
 }
 
+interface SectionHeaderProps {
+    icon: ComponentType<{ size?: number | string; className?: string }>
+    iconClassName: string
+    title: string
+    count: number
+}
+
+function SectionHeader({ icon: Icon, iconClassName, title, count }: SectionHeaderProps) {
+    return (
+        <div className="flex items-center gap-3 mb-6">
+            <Icon size={18} className={iconClassName} />
+            <h2 className="text-sm font-medium text-white/60">{title}</h2>
+            <span className="text-xs text-white/30">{count}</span>
+            <div className="h-px bg-white/5 flex-1" />
+        </div>
+    )
+}
+
+interface FinderItemProps {
+    icon: ElementType<{ size?: number | string; className?: string }>
+    title: string
+    subtitle?: string
+    onClick: () => void
+    iconClassName?: string
+}
+
+const WRAP_AND_CLAMP_2 = 'whitespace-normal break-words [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical] overflow-hidden'
+
+function FinderItem({ icon: Icon, title, subtitle, onClick, iconClassName }: FinderItemProps) {
+    return (
+        <button
+            onClick={onClick}
+            title={subtitle ? `${title} - ${subtitle}` : title}
+            className="group flex flex-col items-center gap-2 p-3 rounded-xl transition-all duration-300 w-full max-w-[120px] hover:bg-sparkle-card/80 hover:shadow-lg hover:-translate-y-1"
+        >
+            <div className="relative w-16 h-16 flex items-center justify-center bg-sparkle-bg border border-white/5 rounded-2xl group-hover:border-white/20 shadow-inner transition-all">
+                <Icon size={32} className={cn('transition-transform duration-300 group-hover:scale-110', iconClassName)} />
+            </div>
+            <div className="flex flex-col items-center w-full gap-0.5 text-center px-1">
+                <span className={cn('text-xs font-medium text-white/80 group-hover:text-white transition-colors w-full leading-4 min-h-8', WRAP_AND_CLAMP_2)}>
+                    {title}
+                </span>
+                {subtitle && (
+                    <span className="text-[10px] text-white/30 group-hover:text-white/50 transition-colors w-full truncate">
+                        {subtitle}
+                    </span>
+                )}
+            </div>
+        </button>
+    )
+}
+
+function parentPathForFile(path: string) {
+    const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+    return lastSlash > 0 ? path.slice(0, lastSlash) : path
+}
+
+function ProjectCard({
+    project,
+    viewMode,
+    formatRelativeTime,
+    getProjectTypeLabel,
+    getProjectThemeColor,
+    onProjectOpen,
+    openInExplorer
+}: {
+    project: Project
+    viewMode: ViewMode
+    formatRelativeTime: (timestamp?: number) => string
+    getProjectTypeLabel: (type: string) => string
+    getProjectThemeColor: (type: string) => string
+    onProjectOpen: (project: Project) => void
+    openInExplorer: (path: string) => void
+}) {
+    const themeColor = getProjectThemeColor(project.type)
+    const frameworkDisplayLimit = 3
+
+    return (
+        <div
+            onClick={() => onProjectOpen(project)}
+            className={cn(
+                'group relative border border-white/5 transition-all duration-300 overflow-hidden cursor-pointer',
+                'hover:-translate-y-1 hover:border-white/10',
+                viewMode === 'finder'
+                    ? 'rounded-xl bg-sparkle-card flex flex-col items-center p-4 text-center'
+                    : 'rounded-2xl bg-sparkle-card p-5 flex flex-col gap-4'
+            )}
+        >
+            <div
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                style={{
+                    boxShadow: `inset 0 0 0 1px ${themeColor}40`,
+                    background: `linear-gradient(to bottom right, ${themeColor}05, transparent)`
+                }}
+            />
+
+            {viewMode === 'finder' ? (
+                <>
+                    <div className="relative w-16 h-16 flex items-center justify-center bg-sparkle-bg border border-white/5 rounded-2xl group-hover:border-white/20 shadow-inner mb-3">
+                        <ProjectIcon
+                            projectType={project.type}
+                            framework={project.frameworks?.[0]}
+                            size={40}
+                        />
+                    </div>
+                    <span className={cn('font-bold text-xs text-white w-full leading-4 min-h-8', WRAP_AND_CLAMP_2)} title={project.name}>
+                        {project.name}
+                    </span>
+                    <span className="text-[10px] text-white/40 truncate w-full" title={getProjectTypeLabel(project.type)}>{getProjectTypeLabel(project.type)}</span>
+                </>
+            ) : (
+                <>
+                    <div className="flex items-start justify-between w-full relative z-10">
+                        <div className="p-3 rounded-xl bg-sparkle-bg border border-white/5 shadow-inner">
+                            <ProjectIcon
+                                projectType={project.type}
+                                framework={project.frameworks?.[0]}
+                                size={32}
+                            />
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-white/30">
+                            <Clock size={12} />
+                            <span>{formatRelativeTime(project.lastModified)}</span>
+                        </div>
+                    </div>
+
+                    <div className="relative z-10 flex-1">
+                        <h3 className={cn('font-bold text-white text-lg mb-1 group-hover:text-white/90 transition-colors leading-6', WRAP_AND_CLAMP_2)} title={project.name}>
+                            {project.name}
+                        </h3>
+                        <p className="text-xs text-white/40 mb-3 truncate" title={getProjectTypeLabel(project.type)}>{getProjectTypeLabel(project.type)}</p>
+
+                        {project.frameworks && project.frameworks.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mb-3">
+                                {project.frameworks.slice(0, frameworkDisplayLimit).map((fw) => (
+                                    <FrameworkBadge
+                                        key={fw}
+                                        framework={fw}
+                                        size="sm"
+                                        showLabel={false}
+                                    />
+                                ))}
+                                {project.frameworks.length > frameworkDisplayLimit && (
+                                    <span className="text-[10px] text-white/30 px-1.5 py-0.5">
+                                        +{project.frameworks.length - frameworkDisplayLimit}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2 relative z-10">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                openInExplorer(project.path)
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-sparkle-border-secondary text-sparkle-text-secondary hover:text-sparkle-text rounded-lg transition-colors"
+                        >
+                            <ExternalLink size={14} />
+                            <span>Open</span>
+                        </button>
+                    </div>
+
+                    <div
+                        className="absolute bottom-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        style={{ background: themeColor }}
+                    />
+                </>
+            )}
+        </div>
+    )
+}
+
 export function ProjectsContentSections({
     plainFolders,
     gitRepos,
     filteredProjects,
     filteredFiles,
     viewMode,
+    contentLayout,
     formatRelativeTime,
     getProjectTypeLabel,
     getProjectThemeColor,
@@ -36,27 +213,231 @@ export function ProjectsContentSections({
     searchActive,
     filterActive
 }: ProjectsContentSectionsProps) {
+    const explorerEntries = [
+        ...plainFolders.map((folder) => ({
+            id: `folder:${folder.path}`,
+            kind: 'folder' as const,
+            name: folder.name,
+            payload: folder
+        })),
+        ...gitRepos.map((repo) => ({
+            id: `git:${repo.path}`,
+            kind: 'git' as const,
+            name: repo.name,
+            payload: { name: repo.name, path: repo.path, isProject: true } as FolderItem
+        })),
+        ...filteredProjects.map((project) => ({
+            id: `project:${project.path}`,
+            kind: 'project' as const,
+            name: project.name,
+            payload: project
+        })),
+        ...filteredFiles.map((file) => ({
+            id: `file:${file.path}`,
+            kind: 'file' as const,
+            name: file.name,
+            payload: file
+        }))
+    ].sort((left, right) => {
+        const order: Record<'folder' | 'git' | 'project' | 'file', number> = {
+            folder: 0,
+            git: 1,
+            project: 2,
+            file: 3
+        }
+        const kindDiff = order[left.kind] - order[right.kind]
+        if (kindDiff !== 0) return kindDiff
+        return left.name.localeCompare(right.name)
+    })
+
+    const totalItems = plainFolders.length + gitRepos.length + filteredProjects.length + filteredFiles.length
+
+    if (contentLayout === 'explorer') {
+        const isFinderMode = viewMode === 'finder'
+        return (
+            <div className="space-y-8">
+                {totalItems > 0 ? (
+                    <div>
+                        <SectionHeader icon={FolderTree} iconClassName="text-indigo-400/80" title="All Items" count={totalItems} />
+                        <div
+                            className={cn(
+                                'grid gap-3',
+                                isFinderMode
+                                    ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10'
+                                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 auto-rows-fr'
+                            )}
+                        >
+                            {explorerEntries.map((entry) => {
+                                if (entry.kind === 'project') {
+                                    const project = entry.payload as Project
+                                    if (isFinderMode) {
+                                        return (
+                                            <ProjectCard
+                                                key={entry.id}
+                                                project={project}
+                                                viewMode="finder"
+                                                formatRelativeTime={formatRelativeTime}
+                                                getProjectTypeLabel={getProjectTypeLabel}
+                                                getProjectThemeColor={getProjectThemeColor}
+                                                onProjectOpen={onProjectOpen}
+                                                openInExplorer={openInExplorer}
+                                            />
+                                        )
+                                    }
+
+                                    return (
+                                        <button
+                                            key={entry.id}
+                                            onClick={() => onProjectOpen(project)}
+                                            className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15"
+                                        >
+                                            <div className="mb-2 flex items-center justify-between">
+                                                <div className="rounded-lg border border-white/5 bg-sparkle-bg p-2">
+                                                    <ProjectIcon projectType={project.type} framework={project.frameworks?.[0]} size={20} />
+                                                </div>
+                                                <span className="text-[10px] text-white/30">{formatRelativeTime(project.lastModified)}</span>
+                                            </div>
+                                            <p className={cn('text-sm font-semibold text-white/85 group-hover:text-white leading-5', WRAP_AND_CLAMP_2)} title={project.name}>{project.name}</p>
+                                            <p className="truncate text-[10px] text-white/40" title={getProjectTypeLabel(project.type)}>{getProjectTypeLabel(project.type)}</p>
+                                        </button>
+                                    )
+                                }
+
+                                if (entry.kind === 'file') {
+                                    const file = entry.payload as FileItem
+                                    const parentPath = parentPathForFile(file.path)
+                                    if (isFinderMode) {
+                                        return (
+                                            <FinderItem
+                                                key={entry.id}
+                                                icon={FileCode}
+                                                iconClassName="text-cyan-300/80"
+                                                title={file.name}
+                                                subtitle={file.extension || 'File'}
+                                                onClick={() => onFileParentOpen(parentPath)}
+                                            />
+                                        )
+                                    }
+
+                                    return (
+                                        <div
+                                            key={entry.id}
+                                            onClick={() => onFileParentOpen(parentPath)}
+                                            className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-cyan-300/30 hover:bg-cyan-300/5 cursor-pointer flex flex-col"
+                                            title={file.path}
+                                        >
+                                            <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
+                                                <File size={15} className="text-cyan-300/80" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className={cn('text-sm text-white/80 group-hover:text-white leading-5', WRAP_AND_CLAMP_2)} title={file.name}>{file.name}</div>
+                                                <div className="truncate text-[11px] text-sparkle-text-muted" title={parentPath}>{parentPath}</div>
+                                            </div>
+                                            <div className="mt-2">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        openInExplorer(file.path)
+                                                    }}
+                                                    className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
+                                                    title="Open in Explorer"
+                                                >
+                                                    <ExternalLink size={12} />
+                                                    Open
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                }
+
+                                const isGit = entry.kind === 'git'
+                                const folder = entry.payload as FolderItem
+                                if (isFinderMode) {
+                                    return (
+                                        <FinderItem
+                                            key={entry.id}
+                                            icon={isGit ? Github : Folder}
+                                            iconClassName={isGit ? 'text-orange-400' : 'text-yellow-400'}
+                                            title={entry.name}
+                                            subtitle={isGit ? 'Git Repo' : 'Folder'}
+                                            onClick={() => onFolderOpen(folder.path)}
+                                        />
+                                    )
+                                }
+
+                                return (
+                                    <button
+                                        key={entry.id}
+                                        onClick={() => onFolderOpen(folder.path)}
+                                        className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15 flex flex-col"
+                                    >
+                                        <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
+                                            {isGit ? (
+                                                <Github size={16} className="text-orange-400/70 group-hover:text-orange-400 transition-colors" />
+                                            ) : (
+                                                <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors" />
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)} title={entry.name}>{entry.name}</div>
+                                            <div className="text-[10px] text-white/30">{isGit ? 'Git Repo' : 'Folder'}</div>
+                                        </div>
+                                        <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 mt-2 transition-colors" />
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-16 bg-sparkle-card rounded-xl border border-sparkle-border">
+                        <FileCode size={48} className="text-sparkle-text-muted mb-4" />
+                        <h3 className="text-lg font-medium text-sparkle-text mb-2">
+                            {searchActive || filterActive ? 'No Matching Items' : 'No Items Found'}
+                        </h3>
+                        <p className="text-sparkle-text-secondary text-center max-w-md">
+                            {searchActive || filterActive
+                                ? 'Try adjusting your search or filter criteria.'
+                                : 'No projects, files, or folders detected.'}
+                        </p>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     return (
         <div className="space-y-8">
             {plainFolders.length > 0 && (
                 <div>
-                    <div className="flex items-center gap-3 mb-4">
-                        <Folder size={18} className="text-yellow-400/70" />
-                        <h2 className="text-sm font-medium text-white/60">Folders</h2>
-                        <span className="text-xs text-white/30">{plainFolders.length}</span>
-                        <div className="h-px bg-white/5 flex-1" />
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                    <SectionHeader icon={Folder} iconClassName="text-yellow-400/70" title="Folders" count={plainFolders.length} />
+                    <div className={cn(
+                        'grid gap-4',
+                        viewMode === 'finder'
+                            ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10'
+                            : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2'
+                    )}>
                         {plainFolders.map((folder) => (
-                            <button
-                                key={folder.path}
-                                onClick={() => onFolderOpen(folder.path)}
-                                className="flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-yellow-400/30 hover:bg-yellow-400/5 transition-all text-left group"
-                            >
-                                <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors flex-shrink-0" />
-                                <span className="text-sm text-white/70 truncate group-hover:text-white transition-colors">{folder.name}</span>
-                                <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto flex-shrink-0 transition-colors" />
-                            </button>
+                            viewMode === 'finder' ? (
+                                <FinderItem
+                                    key={folder.path}
+                                    icon={Folder}
+                                    iconClassName="text-yellow-400"
+                                    title={folder.name}
+                                    subtitle="Folder"
+                                    onClick={() => onFolderOpen(folder.path)}
+                                />
+                            ) : (
+                                <button
+                                    key={folder.path}
+                                    onClick={() => onFolderOpen(folder.path)}
+                                    className="flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-yellow-400/30 hover:bg-yellow-400/5 transition-all text-left group"
+                                    title={folder.name}
+                                >
+                                    <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors flex-shrink-0" />
+                                    <span className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)}>{folder.name}</span>
+                                    <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto flex-shrink-0 transition-colors" />
+                                </button>
+                            )
                         ))}
                     </div>
                 </div>
@@ -64,23 +445,35 @@ export function ProjectsContentSections({
 
             {gitRepos.length > 0 && (
                 <div>
-                    <div className="flex items-center gap-3 mb-4">
-                        <Github size={18} className="text-orange-400/70" />
-                        <h2 className="text-sm font-medium text-white/60">Git Repositories</h2>
-                        <span className="text-xs text-white/30">{gitRepos.length}</span>
-                        <div className="h-px bg-white/5 flex-1" />
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                    <SectionHeader icon={Github} iconClassName="text-orange-400/70" title="Git Repositories" count={gitRepos.length} />
+                    <div className={cn(
+                        'grid gap-4',
+                        viewMode === 'finder'
+                            ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10'
+                            : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2'
+                    )}>
                         {gitRepos.map((repo) => (
-                            <button
-                                key={repo.path}
-                                onClick={() => onFolderOpen(repo.path)}
-                                className="flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-orange-400/30 hover:bg-orange-400/5 transition-all text-left group"
-                            >
-                                <Github size={16} className="text-orange-400/70 group-hover:text-orange-400 transition-colors flex-shrink-0" />
-                                <span className="text-sm text-white/70 truncate group-hover:text-white transition-colors">{repo.name}</span>
-                                <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto flex-shrink-0 transition-colors" />
-                            </button>
+                            viewMode === 'finder' ? (
+                                <FinderItem
+                                    key={repo.path}
+                                    icon={Github}
+                                    iconClassName="text-orange-400"
+                                    title={repo.name}
+                                    subtitle="Git Repo"
+                                    onClick={() => onFolderOpen(repo.path)}
+                                />
+                            ) : (
+                                <button
+                                    key={repo.path}
+                                    onClick={() => onFolderOpen(repo.path)}
+                                    className="flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-orange-400/30 hover:bg-orange-400/5 transition-all text-left group"
+                                    title={repo.name}
+                                >
+                                    <Github size={16} className="text-orange-400/70 group-hover:text-orange-400 transition-colors flex-shrink-0" />
+                                    <span className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)}>{repo.name}</span>
+                                    <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto flex-shrink-0 transition-colors" />
+                                </button>
+                            )
                         ))}
                     </div>
                 </div>
@@ -88,140 +481,51 @@ export function ProjectsContentSections({
 
             {filteredProjects.length > 0 && (
                 <div>
-                    <div className="flex items-center gap-3 mb-4">
-                        <Code size={18} className="text-sparkle-accent" />
-                        <h2 className="text-sm font-medium text-white/60">Projects</h2>
-                        <span className="text-xs text-white/30">{filteredProjects.length}</span>
-                        <div className="h-px bg-white/5 flex-1" />
-                    </div>
-
+                    <SectionHeader icon={Code} iconClassName="text-sparkle-accent" title="Projects" count={filteredProjects.length} />
                     <div
                         className={cn(
                             'grid gap-4',
-                            viewMode === 'grid' && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
-                            viewMode === 'detailed' && 'grid-cols-1 md:grid-cols-2',
-                            viewMode === 'list' && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                            viewMode === 'finder' && 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10 gap-x-2 gap-y-6',
+                            viewMode === 'grid' && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
                         )}
                     >
-                        {filteredProjects.map((project) => {
-                            const themeColor = getProjectThemeColor(project.type)
-                            const frameworkDisplayLimit = viewMode === 'detailed' ? 5 : 3
-                            return (
-                                <div
-                                    key={project.path}
-                                    onClick={() => onProjectOpen(project)}
-                                    className={cn(
-                                        'group relative border border-white/5 transition-all duration-300 overflow-hidden cursor-pointer',
-                                        'hover:-translate-y-1 hover:border-white/10',
-                                        viewMode === 'list'
-                                            ? 'rounded-xl p-3 bg-sparkle-card flex items-center gap-3'
-                                            : 'rounded-2xl bg-sparkle-card p-5 flex flex-col gap-4'
-                                    )}
-                                >
-                                    <div
-                                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                                        style={{
-                                            boxShadow: `inset 0 0 0 1px ${themeColor}40`,
-                                            background: `linear-gradient(to bottom right, ${themeColor}05, transparent)`
-                                        }}
-                                    />
-
-                                    {viewMode === 'list' ? (
-                                        <>
-                                            <div className="p-2 rounded-lg bg-sparkle-bg border border-white/5">
-                                                <ProjectIcon projectType={project.type} size={20} />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-sm text-white truncate">{project.name}</span>
-                                                    {project.frameworks?.slice(0, 1).map((fw) => (
-                                                        <FrameworkBadge key={fw} framework={fw} size="sm" showLabel={false} />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                            <span className="text-[10px] text-white/30">{formatRelativeTime(project.lastModified)}</span>
-                                            <ChevronRight size={16} className="text-white/30 group-hover:text-white/60 transition-colors" />
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="flex items-start justify-between w-full relative z-10">
-                                                <div className="p-3 rounded-xl bg-sparkle-bg border border-white/5 shadow-inner">
-                                                    <ProjectIcon
-                                                        projectType={project.type}
-                                                        framework={project.frameworks?.[0]}
-                                                        size={viewMode === 'detailed' ? 40 : 32}
-                                                    />
-                                                </div>
-                                                <div className="flex items-center gap-1.5 text-[10px] text-white/30">
-                                                    <Clock size={12} />
-                                                    <span>{formatRelativeTime(project.lastModified)}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="relative z-10 flex-1">
-                                                <h3 className="font-bold text-white text-lg mb-1 group-hover:text-white/90 transition-colors truncate">
-                                                    {project.name}
-                                                </h3>
-                                                <p className="text-xs text-white/40 mb-3">{getProjectTypeLabel(project.type)}</p>
-
-                                                {project.frameworks && project.frameworks.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1.5 mb-3">
-                                                        {project.frameworks.slice(0, frameworkDisplayLimit).map((fw) => (
-                                                            <FrameworkBadge
-                                                                key={fw}
-                                                                framework={fw}
-                                                                size="sm"
-                                                                showLabel={viewMode === 'detailed'}
-                                                            />
-                                                        ))}
-                                                        {project.frameworks.length > frameworkDisplayLimit && (
-                                                            <span className="text-[10px] text-white/30 px-1.5 py-0.5">
-                                                                +{project.frameworks.length - frameworkDisplayLimit}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <div className="flex items-center gap-2 relative z-10">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        openInExplorer(project.path)
-                                                    }}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-sparkle-border-secondary text-sparkle-text-secondary hover:text-sparkle-text rounded-lg transition-colors"
-                                                >
-                                                    <ExternalLink size={14} />
-                                                    <span>Open</span>
-                                                </button>
-                                            </div>
-
-                                            <div
-                                                className="absolute bottom-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                                                style={{ background: themeColor }}
-                                            />
-                                        </>
-                                    )}
-                                </div>
-                            )
-                        })}
+                        {filteredProjects.map((project) => (
+                            <ProjectCard
+                                key={project.path}
+                                project={project}
+                                viewMode={viewMode}
+                                formatRelativeTime={formatRelativeTime}
+                                getProjectTypeLabel={getProjectTypeLabel}
+                                getProjectThemeColor={getProjectThemeColor}
+                                onProjectOpen={onProjectOpen}
+                                openInExplorer={openInExplorer}
+                            />
+                        ))}
                     </div>
                 </div>
             )}
 
             {filteredFiles.length > 0 && (
                 <div>
-                    <div className="flex items-center gap-3 mb-4">
-                        <File size={18} className="text-cyan-300/80" />
-                        <h2 className="text-sm font-medium text-white/60">Files</h2>
-                        <span className="text-xs text-white/30">{filteredFiles.length}</span>
-                        <div className="h-px bg-white/5 flex-1" />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                    <SectionHeader icon={File} iconClassName="text-cyan-300/80" title="Files" count={filteredFiles.length} />
+                    <div className={cn(
+                        'grid gap-4',
+                        viewMode === 'finder'
+                            ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10'
+                            : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2'
+                    )}>
                         {filteredFiles.map((file) => {
-                            const lastSlash = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'))
-                            const parentPath = lastSlash > 0 ? file.path.slice(0, lastSlash) : file.path
-                            return (
+                            const parentPath = parentPathForFile(file.path)
+                            return viewMode === 'finder' ? (
+                                <FinderItem
+                                    key={file.path}
+                                    icon={FileCode}
+                                    iconClassName="text-cyan-300/80"
+                                    title={file.name}
+                                    subtitle={file.extension || 'File'}
+                                    onClick={() => onFileParentOpen(parentPath)}
+                                />
+                            ) : (
                                 <div
                                     key={file.path}
                                     onClick={() => onFileParentOpen(parentPath)}
@@ -230,8 +534,8 @@ export function ProjectsContentSections({
                                 >
                                     <File size={15} className="text-cyan-300/80 flex-shrink-0" />
                                     <div className="min-w-0 flex-1">
-                                        <div className="truncate text-sm text-white/80 group-hover:text-white">{file.name}</div>
-                                        <div className="truncate text-[11px] text-sparkle-text-muted">{parentPath}</div>
+                                        <div className={cn('text-sm text-white/80 group-hover:text-white leading-5', WRAP_AND_CLAMP_2)} title={file.name}>{file.name}</div>
+                                        <div className="truncate text-[11px] text-sparkle-text-muted" title={parentPath}>{parentPath}</div>
                                     </div>
                                     <button
                                         onClick={(e) => {

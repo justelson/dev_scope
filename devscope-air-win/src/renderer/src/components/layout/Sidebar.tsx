@@ -3,7 +3,7 @@
  */
 
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Settings, FolderOpen, House, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createContext, useContext, type ReactNode } from 'react'
 import { useSettings } from '@/lib/settings'
@@ -49,6 +49,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
     { id: 'home', label: 'Home', path: '/home', icon: House },
     { id: 'projects', label: 'Projects', path: '/projects', icon: FolderOpen },
+    { id: 'assistant', label: 'Assistant', path: '/assistant', icon: Bot },
     { id: 'settings', label: 'Settings', path: '/settings', icon: Settings }
 ]
 

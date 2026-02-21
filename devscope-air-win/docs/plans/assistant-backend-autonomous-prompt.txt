@@ -1,0 +1,26 @@
+Read and obey these docs in order:
+1) docs/plans/assistant-autonomous-overview.md
+2) docs/plans/assistant-backend-autonomous-loop.md
+3) docs/ai/ASSISTANT_EXECUTION_RULEBOOK.md
+4) docs/ai/ASSISTANT_PHASE_BOARDS_FE_BE.md
+5) docs/ai/ASSISTANT_SCOPE_ALLOWLIST_MATRIX.md
+6) docs/ai/ASSISTANT_AGENT_REPORTING_CONTRACT.md
+
+Your mission:
+- Complete backend track from Phase 01 through Phase 12 autonomously.
+- Do not stop between phases unless blocked.
+- If a phase is already complete in docs/plans/assistant-backend-progress.md, skip it and continue.
+- Log every phase step in:
+  - docs/ai/dispatch/assistant_backend_log.csv
+  - docs/plans/assistant-backend-progress.md
+
+Hard constraints:
+- Modify only backend allowlist files for the active phase.
+- Do not touch frontend files.
+- No tests/build/typecheck until final Phase 12 validation step.
+- If blocked by scope, stop and record blocker with exact path and reason.
+
+Finish condition:
+- All backend phases marked complete.
+- Final validation done in Phase 12.
+- Final handoff report produced in required reporting-contract format.

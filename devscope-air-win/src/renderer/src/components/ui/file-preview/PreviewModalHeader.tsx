@@ -10,6 +10,8 @@ interface PreviewModalHeaderProps {
     onViewportChange: (viewport: ViewportPreset) => void
     htmlViewMode: 'rendered' | 'code'
     onHtmlViewModeChange: (mode: 'rendered' | 'code') => void
+    csvDistinctColorsEnabled: boolean
+    onCsvDistinctColorsEnabledChange: (enabled: boolean) => void
     onOpenInBrowser: () => void
     onClose: () => void
 }
@@ -31,10 +33,13 @@ export default function PreviewModalHeader({
     onViewportChange,
     htmlViewMode,
     onHtmlViewModeChange,
+    csvDistinctColorsEnabled,
+    onCsvDistinctColorsEnabledChange,
     onOpenInBrowser,
     onClose
 }: PreviewModalHeaderProps) {
     const isHtml = file.type === 'html'
+    const isCsv = file.type === 'csv'
     const presetConfig = VIEWPORT_PRESETS[viewport]
     const containerRef = useRef<HTMLDivElement | null>(null)
     const [headerWidth, setHeaderWidth] = useState(1280)
@@ -154,6 +159,32 @@ export default function PreviewModalHeader({
                         <ExternalLink size={14} />
                         {!isCompactHtmlHeader && <span>Open</span>}
                     </button>
+                )}
+                {isCsv && (
+                    <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5">
+                        <span className="text-xs text-white/60">Column Colors</span>
+                        <button
+                            type="button"
+                            onClick={() => onCsvDistinctColorsEnabledChange(!csvDistinctColorsEnabled)}
+                            className="group"
+                            title={csvDistinctColorsEnabled ? 'Disable distinct column colors' : 'Enable distinct column colors'}
+                            aria-pressed={csvDistinctColorsEnabled}
+                        >
+                            <span
+                                className={cn(
+                                    'inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                                    csvDistinctColorsEnabled ? 'bg-emerald-400/80' : 'bg-white/20'
+                                )}
+                            >
+                                <span
+                                    className={cn(
+                                        'h-4 w-4 rounded-full bg-white shadow transition-transform',
+                                        csvDistinctColorsEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                                    )}
+                                />
+                            </span>
+                        </button>
+                    </div>
                 )}
                 <button
                     onClick={onClose}

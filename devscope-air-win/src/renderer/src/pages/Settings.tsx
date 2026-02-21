@@ -5,7 +5,7 @@
 import { Link } from 'react-router-dom'
 import {
     Palette, RefreshCw, Download, Info,
-    ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal, Bug
+    ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal, Bug, Bot
 } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
@@ -82,7 +82,7 @@ export default function Settings() {
                     iconBg="bg-blue-500/10"
                     title="Behavior"
                     description="Startup options"
-                    preview={`${settings.startWithWindows ? 'Startup enabled' : 'Startup disabled'}${settings.startMinimized ? ' \u2022 Hidden start' : ''}`}
+                    preview={`${settings.startWithWindows ? 'Startup enabled' : 'Startup disabled'}${settings.startMinimized ? ' \u2022 Hidden start' : ''} \u2022 ${settings.scrollMode === 'smooth' ? 'Buttery scroll' : 'Native scroll'}`}
                 />
                 <SettingsCard
                     to="/settings/projects"
@@ -91,6 +91,15 @@ export default function Settings() {
                     title="Projects"
                     description="Configure projects folder location"
                     preview={settings.projectsFolder ? 'Configured' : 'Not set'}
+                />
+
+                <SettingsCard
+                    to="/settings/assistant"
+                    icon={<Bot className="text-indigo-300" size={24} />}
+                    iconBg="bg-indigo-400/10"
+                    title="Assistant"
+                    description="Configure in-app coding assistant behavior"
+                    preview={`${settings.assistantEnabled ? 'Enabled' : 'Disabled'} • ${settings.assistantApprovalMode.toUpperCase()}${settings.assistantAutoConnectOnOpen ? ' • Auto-connect' : ''}`}
                 />
 
                 <SettingsCard
