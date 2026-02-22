@@ -7,49 +7,25 @@ import {
     ChevronLeft,
     ChevronRight,
     Copy,
-    FileText,
     RotateCcw,
-    Search,
     Shield,
-    Terminal,
-    Wrench
+    type LucideIcon
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
-
-export type AssistantReasoning = {
-    turnId: string
-    attemptGroupId: string
-    text: string
-    method: string
-    timestamp: number
-}
-
-export type AssistantActivity = {
-    turnId: string
-    attemptGroupId: string
-    kind: string
-    summary: string
-    method: string
-    payload: Record<string, unknown>
-    timestamp: number
-}
-
-export type AssistantApproval = {
-    requestId: number
-    method: string
-    mode: 'safe' | 'yolo'
-    decision?: 'decline' | 'acceptForSession'
-    request?: Record<string, unknown>
-    timestamp: number
-    turnId?: string
-    attemptGroupId?: string
-}
+import type { AssistantActivity, AssistantApproval, AssistantReasoning } from './assistant-page-types'
+import {
+    ActivityIcon,
+    formatStatTimestamp,
+    mergeReasoningEntries,
+    normalizeReasoningMarkdown
+} from './assistant-message-utils'
 
 type AssistantMessageAttempt = {
     id: string
     text: string
     reasoningText?: string
+    createdAt?: number
     turnId?: string
     attemptGroupId?: string
     isActiveAttempt?: boolean
@@ -64,74 +40,6 @@ interface AssistantMessageProps {
     reasoning?: AssistantReasoning[]
     activities?: AssistantActivity[]
     approvals?: AssistantApproval[]
-}
-
-function concatReasoningChunk(base: string, chunk: string): string {
-    if (!chunk) return base
-    if (!base) return chunk
-    if (/^\s*#{1,6}\s/.test(chunk) || /^\s*[-*]\s+/.test(chunk) || /^\s*\d+\.\s+/.test(chunk)) {
-        return `${base}\n${chunk}`
-    }
-
-    const endsWithWord = /[A-Za-z0-9]$/.test(base)
-    const startsWithWord = /^[A-Za-z0-9]/.test(chunk)
-    if (!endsWithWord || !startsWithWord) {
-        return `${base}${chunk}`
-    }
-
-    const nextToken = chunk.match(/^[A-Za-z]+/)?.[0] || ''
-    const joinSuffixes = new Set([
-        's', 'es', 'ed', 'ing', 'ly', 'er', 'ers',
-        'tion', 'tions', 'ment', 'ments', 'ness',
-        'able', 'ible', 'al', 'ous'
-    ])
-    if (joinSuffixes.has(nextToken.toLowerCase())) {
-        return `${base}${chunk}`
-    }
-
-    return `${base} ${chunk}`
-}
-
-function shouldConcatReasoningChunk(prevText: string, nextText: string, gapMs: number): boolean {
-    if (!nextText) return false
-    if (gapMs > 2500) return false
-
-    const trimmedPrev = prevText.trimEnd()
-    const trimmedNext = nextText.trimStart()
-    if (!trimmedPrev) return true
-    if (!trimmedNext) return false
-
-    const prevEndedSentence = /[.!?]["')\]]?\s*$/.test(trimmedPrev)
-    const nextLooksNewSentence = /^[A-Z][a-z]/.test(trimmedNext)
-    if (prevEndedSentence && nextLooksNewSentence) return false
-
-    if (/^\s*[#>*-]/.test(nextText)) return false
-    if (/^\s*\d+\./.test(nextText)) return false
-    return true
-}
-
-function normalizeReasoningDisplayText(text: string): string {
-    if (!text) return ''
-    return String(text)
-        .replace(/\u0000/g, '')
-        .replace(/\r/g, '')
-        .replace(/([a-z])([A-Z])/g, '$1 $2')
-        .replace(/([.!?])([A-Za-z])/g, '$1 $2')
-        .replace(/\s+([,.;:!?])/g, '$1')
-        .trim()
-}
-
-function ActivityIcon({ kind }: { kind: string }) {
-    switch (kind) {
-        case 'command':
-            return <Terminal size={14} className="text-sky-300" />
-        case 'file':
-            return <FileText size={14} className="text-amber-300" />
-        case 'search':
-            return <Search size={14} className="text-violet-300" />
-        default:
-            return <Wrench size={14} className="text-sparkle-text-muted" />
-    }
 }
 
 export function AssistantMessage({
@@ -152,6 +60,7 @@ export function AssistantMessage({
     const [isThoughtsOpen, setIsThoughtsOpen] = useState(false)
     const [isRegenerating, setIsRegenerating] = useState(false)
     const [isAttemptPinned, setIsAttemptPinned] = useState(false)
+    const [elapsedNowMs, setElapsedNowMs] = useState(() => Date.now())
     const thoughtsBodyRef = useRef<HTMLDivElement | null>(null)
 
     useEffect(() => {
@@ -209,40 +118,22 @@ export function AssistantMessage({
 
     const normalizedReasoning = persistedReasoning.length > 0
         ? persistedReasoning
-        : [...turnReasoning]
-            .sort((a, b) => a.timestamp - b.timestamp)
-            .reduce<AssistantReasoning[]>((acc, entry) => {
-                const rawText = String(entry.text || '')
-                if (!rawText) return acc
-
-                const normalizedEntry: AssistantReasoning = {
-                    ...entry,
-                    text: rawText
-                }
-                const last = acc[acc.length - 1]
-                const canMerge = Boolean(last)
-                    && last.method === normalizedEntry.method
-                    && shouldConcatReasoningChunk(
-                        last.text,
-                        normalizedEntry.text,
-                        Math.max(0, normalizedEntry.timestamp - last.timestamp)
-                    )
-                if (last && canMerge) {
-                    last.text = concatReasoningChunk(last.text, normalizedEntry.text)
-                    last.timestamp = normalizedEntry.timestamp
-                    return acc
-                }
-                acc.push(normalizedEntry)
-                return acc
-            }, [])
+        : mergeReasoningEntries(turnReasoning)
 
     const allThoughts = [...normalizedReasoning, ...turnActivities, ...turnApprovals].sort(
         (a, b) => a.timestamp - b.timestamp
     )
     const firstThoughtAt = allThoughts.length > 0 ? allThoughts[0].timestamp : null
     const lastThoughtAt = allThoughts.length > 0 ? allThoughts[allThoughts.length - 1].timestamp : null
-    const thoughtElapsedMs = (firstThoughtAt !== null && lastThoughtAt !== null)
-        ? Math.max(0, lastThoughtAt - firstThoughtAt)
+    const isLiveAttempt = isBusy && (isStreamingCurrentAttempt || Boolean(currentAttempt.isActiveAttempt))
+    const elapsedStartAt = firstThoughtAt !== null
+        ? firstThoughtAt
+        : (isLiveAttempt && Number.isFinite(currentAttempt.createdAt) ? Number(currentAttempt.createdAt) : null)
+    const elapsedEndAt = elapsedStartAt !== null
+        ? (isLiveAttempt ? elapsedNowMs : (lastThoughtAt ?? elapsedStartAt))
+        : null
+    const thoughtElapsedMs = (elapsedStartAt !== null && elapsedEndAt !== null)
+        ? Math.max(0, elapsedEndAt - elapsedStartAt)
         : 0
 
     const handleCopy = async () => {
@@ -271,19 +162,29 @@ export function AssistantMessage({
     const activityCount = turnActivities.length
     const approvalCount = turnApprovals.length
     const canRegenerate = Boolean(currentAttempt.turnId)
+    const timestampLabel = formatStatTimestamp(currentAttempt.createdAt)
     const thoughtElapsedLabel = thoughtElapsedMs > 0
         ? `${(thoughtElapsedMs / 1000).toFixed(thoughtElapsedMs < 10_000 ? 1 : 0)}s`
-        : isBusy && hasThoughts
+        : isLiveAttempt
             ? 'live'
             : '0.0s'
-    const statsLineParts = [
-        `${outputTokens} tok`,
-        `${outputChars} chars`,
-        `${thoughtSummaryCount} thoughts`,
-        `${activityCount} actions`,
-        `${approvalCount} approvals`,
-        `elapsed ${thoughtElapsedLabel}`
-    ] as string[]
+    const stats = [
+        { id: 'tok', prefix: '', value: String(outputTokens), suffix: 'tok' },
+        { id: 'chars', prefix: '', value: String(outputChars), suffix: 'chars' },
+        { id: 'thoughts', prefix: '', value: String(thoughtSummaryCount), suffix: 'thoughts' },
+        { id: 'actions', prefix: '', value: String(activityCount), suffix: 'actions' },
+        { id: 'approvals', prefix: '', value: String(approvalCount), suffix: 'approvals' },
+        { id: 'time', prefix: 'at', value: timestampLabel, suffix: '' },
+        { id: 'elapsed', prefix: 'elapsed', value: thoughtElapsedLabel, suffix: '' }
+    ] as const
+
+    useEffect(() => {
+        if (!isLiveAttempt) return
+        const timer = window.setInterval(() => {
+            setElapsedNowMs(Date.now())
+        }, 200)
+        return () => window.clearInterval(timer)
+    }, [isLiveAttempt])
 
     useEffect(() => {
         if (isBusy && hasThoughts) {
@@ -299,7 +200,7 @@ export function AssistantMessage({
             top: el.scrollHeight,
             behavior: isBusy ? 'auto' : 'smooth'
         })
-    }, [isThoughtsOpen, allThoughts.length, thoughtElapsedMs, isBusy])
+    }, [isThoughtsOpen, allThoughts.length, isBusy])
 
     return (
         <div className="group w-full max-w-none space-y-2.5 animate-fadeIn">
@@ -347,7 +248,7 @@ export function AssistantMessage({
                                             style={animationStyle}
                                         >
                                             <MarkdownRenderer
-                                                content={item.method === 'persisted' ? item.text : normalizeReasoningDisplayText(item.text)}
+                                                content={normalizeReasoningMarkdown(item.text)}
                                                 className="bg-transparent p-0 text-sparkle-text-secondary prose-invert max-w-none break-words prose-p:my-1 prose-p:break-words prose-p:whitespace-pre-wrap prose-li:break-words prose-li:whitespace-pre-wrap prose-pre:my-1 prose-pre:whitespace-pre-wrap prose-code:text-xs"
                                             />
                                         </div>
@@ -471,12 +372,14 @@ export function AssistantMessage({
 
                 <div className="mt-2 flex w-full items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-xs text-sparkle-text-muted">
-                        {statsLineParts.map((part) => (
+                        {stats.map((stat) => (
                             <span
-                                key={part}
-                                className="rounded-[4px] border border-sparkle-border bg-sparkle-bg/85 px-2 py-0.5 font-mono text-[10px] text-sparkle-text-secondary animate-fadeIn"
+                                key={stat.id}
+                                className="rounded-[4px] border border-sparkle-border bg-sparkle-bg/85 px-2 py-0.5 font-mono text-[10px] text-sparkle-text-secondary tabular-nums"
                             >
-                                {part}
+                                {stat.prefix ? `${stat.prefix} ` : ''}
+                                <span className="tabular-nums">{stat.value}</span>
+                                {stat.suffix ? ` ${stat.suffix}` : ''}
                             </span>
                         ))}
                     </div>

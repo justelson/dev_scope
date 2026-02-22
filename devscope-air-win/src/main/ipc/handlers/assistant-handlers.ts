@@ -15,7 +15,15 @@ type AssistantDataQuery = {
     archived?: boolean
     prompt?: string
     contextDiff?: string
-    contextFiles?: Array<{ path: string; content?: string }>
+    contextFiles?: Array<{
+        path: string
+        content?: string
+        name?: string
+        mimeType?: string
+        kind?: 'image' | 'doc' | 'code' | 'file'
+        sizeBytes?: number
+        previewText?: string
+    }>
     promptTemplate?: string
     format?: 'json' | 'markdown'
     projectPath?: string
@@ -71,6 +79,12 @@ export function handleAssistantStatus(event: Electron.IpcMainInvokeEvent, query?
     }
     if (query?.kind === 'sessions:archive') {
         return assistantBridge.archiveSession(String(query.sessionId || ''), Boolean(query.archived))
+    }
+    if (query?.kind === 'sessions:set-project-path') {
+        return assistantBridge.setSessionProjectPath(
+            String(query.sessionId || ''),
+            String(query.projectPath || '')
+        )
     }
     if (query?.kind === 'thread:new') {
         return assistantBridge.newThread()

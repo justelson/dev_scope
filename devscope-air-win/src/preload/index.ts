@@ -122,7 +122,15 @@ const devScopeAPI = {
             regenerateFromTurnId?: string
             projectPath?: string
             profile?: string
-            contextFiles?: Array<{ path: string; content?: string }>
+            contextFiles?: Array<{
+                path: string
+                content?: string
+                name?: string
+                mimeType?: string
+                kind?: 'image' | 'doc' | 'code' | 'file'
+                sizeBytes?: number
+                previewText?: string
+            }>
             contextDiff?: string
             promptTemplate?: string
         }) => ipcRenderer.invoke('devscope:assistant:send', prompt, options),
@@ -131,7 +139,15 @@ const devScopeAPI = {
             approvalMode?: 'safe' | 'yolo'
             projectPath?: string
             profile?: string
-            contextFiles?: Array<{ path: string; content?: string }>
+            contextFiles?: Array<{
+                path: string
+                content?: string
+                name?: string
+                mimeType?: string
+                kind?: 'image' | 'doc' | 'code' | 'file'
+                sizeBytes?: number
+                previewText?: string
+            }>
             contextDiff?: string
             promptTemplate?: string
         }) => ipcRenderer.invoke('devscope:assistant:send', '', {
@@ -163,11 +179,21 @@ const devScopeAPI = {
         deleteSession: (sessionId: string) => ipcRenderer.invoke('devscope:assistant:status', { kind: 'sessions:delete', sessionId }),
         archiveSession: (sessionId: string, archived: boolean = true) =>
             ipcRenderer.invoke('devscope:assistant:status', { kind: 'sessions:archive', sessionId, archived }),
+        setSessionProjectPath: (sessionId: string, projectPath: string) =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'sessions:set-project-path', sessionId, projectPath }),
         newThread: () => ipcRenderer.invoke('devscope:assistant:status', { kind: 'thread:new' }),
         estimateTokens: (input: {
             prompt: string
             contextDiff?: string
-            contextFiles?: Array<{ path: string; content?: string }>
+            contextFiles?: Array<{
+                path: string
+                content?: string
+                name?: string
+                mimeType?: string
+                kind?: 'image' | 'doc' | 'code' | 'file'
+                sizeBytes?: number
+                previewText?: string
+            }>
             promptTemplate?: string
         }) => ipcRenderer.invoke('devscope:assistant:status', { kind: 'tokens:estimate', ...(input || {}) }),
         listProfiles: () => ipcRenderer.invoke('devscope:assistant:status', { kind: 'profiles:list' }),

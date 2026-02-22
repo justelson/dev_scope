@@ -39,7 +39,15 @@ export interface AssistantSendOptions {
     regenerateFromTurnId?: string
     projectPath?: string
     profile?: string
-    contextFiles?: Array<{ path: string; content?: string }>
+    contextFiles?: Array<{
+        path: string
+        content?: string
+        name?: string
+        mimeType?: string
+        kind?: 'image' | 'doc' | 'code' | 'file'
+        sizeBytes?: number
+        previewText?: string
+    }>
     contextDiff?: string
     promptTemplate?: string
 }
