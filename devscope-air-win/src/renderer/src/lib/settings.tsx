@@ -89,6 +89,7 @@ export interface Settings {
     assistantAutoConnectOnOpen: boolean
     assistantSidebarCollapsed: boolean
     assistantSidebarWidth: number
+    assistantAllowEventConsole: boolean
     assistantShowEventPanel: boolean
     assistantProfile: AssistantProfile
     assistantProjectModels: Record<string, string>
@@ -158,6 +159,7 @@ const DEFAULT_SETTINGS: Settings = {
     assistantAutoConnectOnOpen: false,
     assistantSidebarCollapsed: false,
     assistantSidebarWidth: 320,
+    assistantAllowEventConsole: true,
     assistantShowEventPanel: false,
     assistantProfile: 'safe-dev',
     assistantProjectModels: {},
@@ -203,6 +205,7 @@ function loadSettings(): Settings {
                 assistantAutoConnectOnOpen: !!candidate.assistantAutoConnectOnOpen,
                 assistantSidebarCollapsed: !!candidate.assistantSidebarCollapsed,
                 assistantSidebarWidth: clampAssistantSidebarWidth(candidate.assistantSidebarWidth),
+                assistantAllowEventConsole: candidate.assistantAllowEventConsole !== false,
                 assistantShowEventPanel: !!candidate.assistantShowEventPanel,
                 assistantProfile: normalizeAssistantProfile(candidate.assistantProfile),
                 assistantProjectModels: normalizeStringRecord(candidate.assistantProjectModels),

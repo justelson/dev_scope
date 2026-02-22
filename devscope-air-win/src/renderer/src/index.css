@@ -299,6 +299,26 @@
 /* ============================================================================
    Animations
    ============================================================================ */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -372,7 +392,7 @@
 }
 
 .animate-modal-backdrop-out {
-  animation: modalBackdropOut 0.2s ease-in;
+  animation: modalBackdropOut 0.2s ease-in forwards;
 }
 
 .animate-modal-in {
@@ -380,7 +400,7 @@
 }
 
 .animate-modal-out {
-  animation: modalSlideOut 0.2s cubic-bezier(0.4, 0, 1, 1);
+  animation: modalSlideOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 
@@ -548,4 +568,34 @@
 
 .theme-adaptive .group:hover .group-hover\:text-white\/60 {
   color: color-mix(in srgb, var(--color-text), transparent 40%) !important;
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slideInFromTop {
+  animation: slideInFromTop 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }

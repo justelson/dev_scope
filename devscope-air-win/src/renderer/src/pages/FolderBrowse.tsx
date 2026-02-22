@@ -18,6 +18,16 @@ import { formatFileSize, formatRelativeTime, getFileColor, getProjectTypes } fro
 
 const FILES_PAGE_SIZE = 300
 
+async function yieldToBrowserPaint(): Promise<void> {
+    await new Promise<void>((resolve) => {
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(() => resolve())
+            return
+        }
+        setTimeout(resolve, 0)
+    })
+}
+
 function getParentFolderPath(currentPath: string): string | null {
     const raw = String(currentPath || '').trim().replace(/[\\/]+$/, '')
     if (!raw) return null
@@ -75,6 +85,7 @@ export default function FolderBrowse() {
 
         setLoading(true)
         setError(null)
+        await yieldToBrowserPaint()
 
         try {
             const result = await window.devscope.scanProjects(decodedPath)

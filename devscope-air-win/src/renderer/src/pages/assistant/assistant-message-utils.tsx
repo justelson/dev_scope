@@ -29,19 +29,12 @@ export function concatReasoningChunk(base: string, chunk: string): string {
 
 export function shouldConcatReasoningChunk(prevText: string, nextText: string, gapMs: number): boolean {
     if (!nextText) return false
-    if (gapMs > 2500) return false
+    if (gapMs > 15000) return false
 
     const trimmedPrev = prevText.trimEnd()
     const trimmedNext = nextText.trimStart()
     if (!trimmedPrev) return true
     if (!trimmedNext) return false
-
-    const prevEndedSentence = /[.!?]["')\]]?\s*$/.test(trimmedPrev)
-    const nextLooksNewSentence = /^[A-Z][a-z]/.test(trimmedNext)
-    if (prevEndedSentence && nextLooksNewSentence) return false
-
-    if (/^\s*[#>*-]/.test(nextText)) return false
-    if (/^\s*\d+\./.test(nextText)) return false
     return true
 }
 
@@ -59,10 +52,13 @@ export function normalizeReasoningMarkdown(text: string): string {
 }
 
 export function formatStatTimestamp(value?: number): string {
-    if (!Number.isFinite(value)) return '--:--:--'
+    if (!Number.isFinite(value)) return '--'
     const date = new Date(Number(value))
-    if (Number.isNaN(date.getTime())) return '--:--:--'
-    return date.toLocaleTimeString([], {
+    if (Number.isNaN(date.getTime())) return '--'
+    return date.toLocaleString([], {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
@@ -84,7 +80,6 @@ export function mergeReasoningEntries(
             }
             const last = acc[acc.length - 1]
             const canMerge = Boolean(last)
-                && last.method === normalizedEntry.method
                 && shouldConcatReasoningChunk(
                     last.text,
                     normalizedEntry.text,
@@ -112,4 +107,3 @@ export function ActivityIcon({ kind }: { kind: string }) {
             return <Wrench size={14} className="text-sparkle-text-muted" />
     }
 }
-

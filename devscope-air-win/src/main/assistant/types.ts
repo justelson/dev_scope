@@ -17,12 +17,25 @@ export interface AssistantHistoryMessage {
     id: string
     role: 'user' | 'assistant' | 'system'
     text: string
+    attachments?: AssistantHistoryAttachment[]
+    sourcePrompt?: string
     reasoningText?: string
     createdAt: number
     turnId?: string
     attemptGroupId?: string
     attemptIndex?: number
     isActiveAttempt?: boolean
+}
+
+export interface AssistantHistoryAttachment {
+    path: string
+    name?: string
+    mimeType?: string
+    kind?: 'image' | 'doc' | 'code' | 'file'
+    sizeBytes?: number
+    previewText?: string
+    previewDataUrl?: string
+    textPreview?: string
 }
 
 export interface AssistantConnectOptions {
@@ -68,6 +81,9 @@ export interface AssistantEventPayload {
     | 'assistant-final'
     | 'assistant-reasoning'
     | 'assistant-activity'
+    | 'account/updated'
+    | 'account/rateLimits/updated'
+    | 'thread/tokenUsage/updated'
     | 'approval-request'
     | 'approval-decision'
     | 'turn-complete'

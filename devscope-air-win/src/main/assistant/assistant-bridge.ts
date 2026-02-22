@@ -112,6 +112,7 @@ type AssistantSessionSnapshot = {
     history: AssistantHistoryMessage[]
     threadId: string | null
     projectPath?: string
+    contextTitleFinalized?: boolean
 }
 type JsonRpcNotification = {
     method?: string

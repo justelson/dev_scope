@@ -19,6 +19,14 @@ type Result = {
     group: string
 }
 
+function getParentPath(filePath: string): string {
+    const normalized = String(filePath || '').trim()
+    const sep = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'))
+    if (sep <= 0) return normalized
+    if (sep === 2 && /^[A-Za-z]:[\\/]/.test(normalized)) return normalized.slice(0, 3)
+    return normalized.slice(0, sep)
+}
+
 function QuickChips({ onSelect }: { onSelect: (v: string) => void }) {
     const chips = [
         { label: 'Projects', value: '/', icon: <Slash size={12} /> },
@@ -58,6 +66,7 @@ export function CommandPalette() {
     const [selectedIndex, setSelectedIndex] = useState(0)
     const [recent, setRecent] = useState<string[]>([])
     const [isClosing, setIsClosing] = useState(false)
+    const closeTimerRef = useRef<number | null>(null)
     const paletteRoots = useMemo(() => {
         return Array.from(new Set([
             settings.projectsFolder,
@@ -72,15 +81,33 @@ export function CommandPalette() {
         } else {
             setQuery('')
             setSelectedIndex(0)
+            if (closeTimerRef.current) {
+                window.clearTimeout(closeTimerRef.current)
+                closeTimerRef.current = null
+            }
         }
     }, [isOpen])
 
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
+        if (isClosing) return
         setIsClosing(true)
-        setTimeout(() => {
+        if (closeTimerRef.current) {
+            window.clearTimeout(closeTimerRef.current)
+        }
+        closeTimerRef.current = window.setTimeout(() => {
+            closeTimerRef.current = null
             close()
         }, 200) // Match animation duration
-    }
+    }, [close, isClosing])
+
+    useEffect(() => {
+        return () => {
+            if (closeTimerRef.current) {
+                window.clearTimeout(closeTimerRef.current)
+                closeTimerRef.current = null
+            }
+        }
+    }, [])
 
     useEffect(() => {
         try {
@@ -266,7 +293,7 @@ export function CommandPalette() {
                 color: '#fbbf24',
                 icon: <File size={16} />,
                 group: 'Files',
-                action: () => navigate(`/folder-browse/${encodeURIComponent(f.path)}`)
+                action: () => navigate(`/folder-browse/${encodeURIComponent(getParentPath(f.path))}`)
             }))
 
         if (parsed.domain === 'projects') return addProjects()
@@ -304,14 +331,14 @@ export function CommandPalette() {
         <div 
             className={cn(
                 "fixed inset-0 z-[60] bg-black/60 backdrop-blur-md flex items-start justify-center pt-24",
-                isClosing ? "animate-modal-backdrop-out" : "animate-modal-backdrop"
+                isClosing ? "animate-modal-backdrop-out" : "animate-fadeIn"
             )}
             onClick={handleClose}
         >
             <div
                 className={cn(
                     "w-full max-w-3xl mx-4 bg-sparkle-card/95 border border-sparkle-border-secondary rounded-2xl shadow-2xl overflow-hidden",
-                    isClosing ? "animate-modal-out" : "animate-modal-in"
+                    isClosing ? "animate-modal-out" : "animate-fadeIn"
                 )}
                 onClick={e => e.stopPropagation()}
             >

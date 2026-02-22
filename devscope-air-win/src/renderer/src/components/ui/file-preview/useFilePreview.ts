@@ -2,6 +2,16 @@ import { useState } from 'react'
 import type { PreviewFile } from './types'
 import { resolvePreviewType } from './utils'
 
+async function yieldToBrowserPaint(): Promise<void> {
+    await new Promise<void>((resolve) => {
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(() => resolve())
+            return
+        }
+        setTimeout(resolve, 0)
+    })
+}
+
 export interface UseFilePreviewReturn {
     previewFile: PreviewFile | null
     previewContent: string
@@ -57,7 +67,7 @@ export function useFilePreview(): UseFilePreviewReturn {
         const previewTarget = resolvePreviewType(file.name, ext)
 
         if (!previewTarget) {
-            await openFile(file.path)
+            void openFile(file.path)
             return
         }
 
@@ -68,6 +78,7 @@ export function useFilePreview(): UseFilePreviewReturn {
             type: previewTarget.type,
             language: previewTarget.language
         })
+        await yieldToBrowserPaint()
 
         if (!previewTarget.needsContent) {
             setPreviewContent('')

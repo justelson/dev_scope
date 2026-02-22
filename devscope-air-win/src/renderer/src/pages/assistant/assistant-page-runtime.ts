@@ -174,6 +174,20 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
         if (event.type === 'history') {
             const nextHistory = event.payload.history as AssistantHistoryMessage[] | undefined
             if (Array.isArray(nextHistory)) deps.setHistory(nextHistory)
+            void window.devscope.assistant.listSessions().then((sessionsResult) => {
+                if (!sessionsResult?.success || !Array.isArray(sessionsResult.sessions)) return
+                const normalizedSessions = sessionsResult.sessions.map((session: any) => ({
+                    id: String(session?.id || ''),
+                    title: String(session?.title || ''),
+                    archived: Boolean(session?.archived),
+                    createdAt: Number(session?.createdAt) || Date.now(),
+                    updatedAt: Number(session?.updatedAt) || Date.now(),
+                    messageCount: Number(session?.messageCount) || 0,
+                    projectPath: typeof session?.projectPath === 'string' ? session.projectPath : ''
+                })) as AssistantSession[]
+                deps.setSessions(normalizedSessions)
+                deps.setActiveSessionId(sessionsResult.activeSessionId ? String(sessionsResult.activeSessionId) : null)
+            }).catch(() => undefined)
             return
         }
         if (event.type === 'assistant-delta') {

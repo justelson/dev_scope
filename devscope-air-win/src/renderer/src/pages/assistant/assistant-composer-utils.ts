@@ -9,11 +9,33 @@ export const DRAFT_STORAGE_KEY = 'devscope:assistant:draft:v1'
 export const MAX_COMPOSER_HEIGHT = 160
 const LARGE_PASTE_MIN_LINES = 40
 const LARGE_PASTE_MIN_CHARS = 1200
-const MAX_ATTACHMENT_CONTENT_CHARS = 12_000
+export const MAX_ATTACHMENT_CONTENT_CHARS = 12_000
 const MAX_PREVIEW_TEXT_CHARS = 220
 
 export const MAX_IMAGE_DATA_URL_CHARS = 180_000
 export const ATTACHMENT_REMOVE_MS = 190
+
+const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/pjpeg': 'jpg',
+    'image/pjp': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/avif': 'avif',
+    'image/apng': 'apng',
+    'image/svg+xml': 'svg',
+    'image/bmp': 'bmp',
+    'image/x-ms-bmp': 'bmp',
+    'image/vnd.microsoft.icon': 'ico',
+    'image/x-icon': 'ico',
+    'image/tiff': 'tif',
+    'image/heic': 'heic',
+    'image/heif': 'heif',
+    'image/jfif': 'jfif',
+    'image/jxl': 'jxl'
+}
 
 export function createAttachmentId(): string {
     return `ctx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -56,7 +78,10 @@ export function getContextFileMeta(file: Partial<ComposerContextFile>): {
     const ext = dotIndex > 0 ? name.slice(dotIndex + 1).toLowerCase() : ''
     const mimeType = String(file.mimeType || '').toLowerCase()
 
-    const imageExts = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tif', 'tiff'])
+    const imageExts = new Set([
+        'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tif', 'tiff',
+        'avif', 'apng', 'heic', 'heif', 'jfif', 'jxl'
+    ])
     const codeExts = new Set([
         'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'json', 'py', 'go', 'rs', 'java', 'kt', 'cs', 'cpp', 'c', 'h',
         'css', 'scss', 'sass', 'html', 'xml', 'yml', 'yaml', 'toml', 'sh', 'ps1', 'sql', 'md'
@@ -74,6 +99,21 @@ export function getContextFileMeta(file: Partial<ComposerContextFile>): {
 export function buildAttachmentPath(source: 'paste' | 'manual', name: string): string {
     if (source === 'paste') return `clipboard://${name}`
     return name
+}
+
+export function inferImageExtensionFromMimeType(mimeType?: string): string {
+    const normalized = String(mimeType || '').trim().toLowerCase()
+    if (!normalized) return 'png'
+    if (IMAGE_EXTENSION_BY_MIME[normalized]) return IMAGE_EXTENSION_BY_MIME[normalized]
+    if (!normalized.startsWith('image/')) return 'png'
+
+    const subtype = normalized.slice('image/'.length)
+        .split(';')[0]
+        .split('+')[0]
+        .trim()
+    if (!subtype) return 'png'
+    if (subtype === 'jpeg') return 'jpg'
+    return subtype.replace(/[^a-z0-9]/g, '') || 'png'
 }
 
 export async function readFileAsDataUrl(file: File): Promise<string> {

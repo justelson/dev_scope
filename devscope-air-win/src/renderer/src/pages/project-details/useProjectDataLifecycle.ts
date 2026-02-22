@@ -10,6 +10,16 @@ import type {
     ProjectDetails
 } from './types'
 
+async function yieldToBrowserPaint(): Promise<void> {
+    await new Promise<void>((resolve) => {
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(() => resolve())
+            return
+        }
+        setTimeout(resolve, 0)
+    })
+}
+
 interface UseProjectDataLifecycleParams {
     decodedPath: string
     activeTab: 'readme' | 'files' | 'git'
@@ -139,6 +149,7 @@ export function useProjectDataLifecycle({
 
         setLoading(true)
         setError(null)
+        await yieldToBrowserPaint()
 
         try {
             const [detailsResult, treeResult] = await Promise.all([
@@ -169,6 +180,7 @@ export function useProjectDataLifecycle({
         if (!decodedPath) return
 
         setLoadingGit(true)
+        await yieldToBrowserPaint()
 
         try {
             if (refreshFileTree) {

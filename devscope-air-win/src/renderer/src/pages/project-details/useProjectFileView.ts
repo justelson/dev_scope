@@ -12,6 +12,7 @@ export interface FlatFileItem {
     ext: string
     isPreviewable: boolean
     childInfo: { files: number; folders: number } | null
+    children?: FlatFileItem[]
 }
 
 interface UseProjectFileViewParams {

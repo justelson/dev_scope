@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Command, FileCode2, FileImage, FileText, Loader2, Plus, SendHorizontal, X } from 'lucide-react'
+import { ChevronDown, Command, FileCode2, FileImage, FileText, Loader2, Plus, SendHorizontal, X } from 'lucide-react'
+import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { cn } from '@/lib/utils'
 import AssistantAttachmentPreviewModal from './AssistantAttachmentPreviewModal'
 import type { ComposerContextFile } from './assistant-composer-types'
@@ -11,8 +12,10 @@ import {
     DRAFT_STORAGE_KEY,
     getContentTypeTag,
     getContextFileMeta,
+    inferImageExtensionFromMimeType,
     isLargeTextPaste,
     isPastedTextAttachment,
+    MAX_ATTACHMENT_CONTENT_CHARS,
     MAX_COMPOSER_HEIGHT,
     MAX_IMAGE_DATA_URL_CHARS,
     readFileAsDataUrl,
@@ -29,15 +32,46 @@ export type AssistantComposerProps = {
     isSending: boolean
     isThinking: boolean
     isConnected: boolean
+    activeModel?: string
+    modelOptions?: Array<{ id: string; label: string }>
+    modelsLoading?: boolean
+    modelsError?: string | null
+    onSelectModel?: (modelId: string) => void
+    onRefreshModels?: () => void
+    activeProfile?: string
 }
 
-export function AssistantComposer({ onSend, disabled, isSending, isThinking, isConnected }: AssistantComposerProps) {
+export function AssistantComposer({
+    onSend,
+    disabled,
+    isSending,
+    isThinking,
+    isConnected,
+    activeModel,
+    modelOptions,
+    modelsLoading,
+    modelsError,
+    onSelectModel,
+    onRefreshModels,
+    activeProfile
+}: AssistantComposerProps) {
     const [text, setText] = useState('')
     const [contextFiles, setContextFiles] = useState<ComposerContextFile[]>([])
+    const [sentPromptHistory, setSentPromptHistory] = useState<string[]>([])
+    const [historyCursor, setHistoryCursor] = useState<number | null>(null)
+    const [draftBeforeHistory, setDraftBeforeHistory] = useState('')
     const [showSlashMenu, setShowSlashMenu] = useState(false)
+    const [showModelDropdown, setShowModelDropdown] = useState(false)
     const [previewAttachment, setPreviewAttachment] = useState<ComposerContextFile | null>(null)
     const [removingAttachmentIds, setRemovingAttachmentIds] = useState<string[]>([])
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const filePickerRef = useRef<HTMLInputElement>(null)
+    const modelDropdownRef = useRef<HTMLDivElement>(null)
+    const resolvedModel = activeModel || 'default'
+    const availableModelOptions = (Array.isArray(modelOptions) && modelOptions.length > 0)
+        ? modelOptions
+        : [{ id: resolvedModel, label: resolvedModel === 'default' ? 'Default (server recommended)' : resolvedModel }]
+    const selectedModelLabel = availableModelOptions.find((model) => model.id === resolvedModel)?.label || resolvedModel
 
     const resizeComposer = () => {
         const el = textareaRef.current
@@ -79,6 +113,17 @@ export function AssistantComposer({ onSend, disabled, isSending, isThinking, isC
     }, [text])
 
     useEffect(() => {
+        if (!showModelDropdown) return
+        const handleClickOutside = (event: MouseEvent) => {
+            if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
+                setShowModelDropdown(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [showModelDropdown])
+
+    useEffect(() => {
         resizeComposer()
     }, [text, contextFiles.length])
 
@@ -106,23 +151,185 @@ export function AssistantComposer({ onSend, disabled, isSending, isThinking, isC
         }, ATTACHMENT_REMOVE_MS)
     }
 
+    const attachFile = async (file: File, source: 'paste' | 'manual') => {
+        const declaredMimeType = String(file.type || '').trim().toLowerCase()
+        const fallbackName = declaredMimeType.startsWith('image/')
+            ? `${source}-image-${Date.now()}.${inferImageExtensionFromMimeType(declaredMimeType)}`
+            : `${source}-file-${Date.now()}`
+        const name = file.name || fallbackName
+        const electronPath = String((file as File & { path?: string }).path || '').trim()
+        const metaPath = electronPath || buildAttachmentPath(source, name)
+        const mimeType = declaredMimeType || 'application/octet-stream'
+        const looksLikeImageByName = /\.(png|jpe?g|gif|webp|svg|bmp|ico|tiff?|avif|apng|heic|heif|jfif|jxl)$/i.test(name)
+        const needsInlineImageContent = source === 'paste' || !electronPath || metaPath.startsWith('clipboard://')
+
+        const addImageAttachment = (dataUrl: string, resolvedMimeType: string) => {
+            upsertAttachment({
+                id: createAttachmentId(),
+                path: metaPath,
+                name,
+                mimeType: resolvedMimeType,
+                sizeBytes: file.size,
+                kind: 'image',
+                previewDataUrl: dataUrl,
+                content: needsInlineImageContent ? dataUrl : undefined,
+                previewText: source === 'paste'
+                    ? (dataUrl.length <= MAX_IMAGE_DATA_URL_CHARS
+                        ? 'Pasted image from clipboard.'
+                        : 'Pasted image from clipboard (large image, sent as full payload).')
+                    : 'Attached image file.',
+                source,
+                animateIn: true
+            })
+        }
+
+        if (mimeType.startsWith('image/') || looksLikeImageByName) {
+            try {
+                const dataUrl = await readFileAsDataUrl(file)
+                const dataUrlMimeMatch = dataUrl.match(/^data:([^;,]+)[;,]/i)
+                const dataUrlMimeType = String(dataUrlMimeMatch?.[1] || '').trim().toLowerCase()
+                const resolvedMimeType = dataUrlMimeType || (mimeType.startsWith('image/') ? mimeType : 'image/png')
+                addImageAttachment(dataUrl, resolvedMimeType)
+            } catch {
+                // ignore invalid image payloads
+            }
+            return
+        }
+
+        if (source === 'paste' && !declaredMimeType) {
+            try {
+                const dataUrl = await readFileAsDataUrl(file)
+                const dataUrlMimeMatch = dataUrl.match(/^data:([^;,]+)[;,]/i)
+                const dataUrlMimeType = String(dataUrlMimeMatch?.[1] || '').trim().toLowerCase()
+                if (dataUrlMimeType.startsWith('image/')) {
+                    addImageAttachment(dataUrl, dataUrlMimeType)
+                    return
+                }
+            } catch {
+                // not an image payload; fall through to text/binary handling
+            }
+        }
+
+        try {
+            const rawText = await file.text()
+            const trimmed = rawText.length > MAX_ATTACHMENT_CONTENT_CHARS
+                ? `${rawText.slice(0, MAX_ATTACHMENT_CONTENT_CHARS)}\n\n[truncated]`
+                : rawText
+            const meta = getContextFileMeta({ path: metaPath, name, mimeType })
+            upsertAttachment({
+                id: createAttachmentId(),
+                path: metaPath,
+                name,
+                mimeType,
+                sizeBytes: file.size,
+                kind: meta.category === 'code' ? 'code' : 'doc',
+                content: trimmed,
+                previewText: summarizeTextPreview(rawText),
+                source,
+                animateIn: true
+            })
+        } catch {
+            upsertAttachment({
+                id: createAttachmentId(),
+                path: metaPath,
+                name,
+                mimeType,
+                sizeBytes: file.size,
+                kind: 'file',
+                previewText: source === 'paste' ? 'Binary attachment from clipboard.' : 'Attached binary file.',
+                source,
+                animateIn: true
+            })
+        }
+    }
+
+    const handlePickedFiles = (files: FileList | null) => {
+        if (!files || files.length === 0) return
+        const selectedFiles = Array.from(files)
+        for (const file of selectedFiles) {
+            void attachFile(file, 'manual')
+        }
+    }
+
     const handleSend = async () => {
         const prompt = text.trim()
         if ((prompt.length === 0 && contextFiles.length === 0) || disabled || isSending || !isConnected) return
 
-        const success = await onSend(prompt, contextFiles)
-        if (!success) return
+        // Capture state for possible rollback
+        const prevText = text
+        const prevFiles = contextFiles
 
+        // Clear immediately for responsive feel
         setText('')
         setContextFiles([])
+        setHistoryCursor(null)
+        setDraftBeforeHistory('')
         try {
             localStorage.removeItem(DRAFT_STORAGE_KEY)
         } catch {
             // ignore storage errors
         }
+
+        const success = await onSend(prompt, contextFiles)
+        if (!success) {
+            // Rollback if failed
+            setText(prevText)
+            setContextFiles(prevFiles)
+            return
+        }
+
+        if (prompt.length > 0) {
+            setSentPromptHistory((prev) => {
+                if (prev[prev.length - 1] === prompt) return prev
+                return [...prev.slice(-49), prompt]
+            })
+        }
+    }
+
+    const handleRecallPrevious = () => {
+        if (sentPromptHistory.length === 0) return
+        if (historyCursor == null) {
+            setDraftBeforeHistory(text)
+            const nextIndex = sentPromptHistory.length - 1
+            setHistoryCursor(nextIndex)
+            setText(sentPromptHistory[nextIndex])
+            return
+        }
+        const nextIndex = Math.max(0, historyCursor - 1)
+        setHistoryCursor(nextIndex)
+        setText(sentPromptHistory[nextIndex])
+    }
+
+    const handleRecallNext = () => {
+        if (historyCursor == null) return
+        if (historyCursor >= sentPromptHistory.length - 1) {
+            setHistoryCursor(null)
+            setText(draftBeforeHistory)
+            setDraftBeforeHistory('')
+            return
+        }
+        const nextIndex = historyCursor + 1
+        setHistoryCursor(nextIndex)
+        setText(sentPromptHistory[nextIndex])
     }
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        const target = event.currentTarget
+        const selectionStart = target.selectionStart ?? 0
+        const selectionEnd = target.selectionEnd ?? 0
+        const atStart = selectionStart === 0 && selectionEnd === 0
+        const atEnd = selectionStart === text.length && selectionEnd === text.length
+
+        if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'ArrowUp' && atStart) {
+            event.preventDefault()
+            handleRecallPrevious()
+            return
+        }
+        if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'ArrowDown' && atEnd) {
+            event.preventDefault()
+            handleRecallNext()
+            return
+        }
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault()
             void handleSend()
@@ -142,70 +349,7 @@ export function AssistantComposer({ onSend, disabled, isSending, isThinking, isC
             for (const item of fileItems) {
                 const file = item.getAsFile()
                 if (!file) continue
-
-                const fallbackName = file.type.startsWith('image/')
-                    ? `pasted-image-${Date.now()}.png`
-                    : `pasted-file-${Date.now()}`
-                const name = file.name || fallbackName
-                const metaPath = buildAttachmentPath('paste', name)
-                const mimeType = file.type || 'application/octet-stream'
-
-                if (mimeType.startsWith('image/')) {
-                    void readFileAsDataUrl(file)
-                        .then((dataUrl) => {
-                            const safeDataUrl = dataUrl.length <= MAX_IMAGE_DATA_URL_CHARS ? dataUrl : ''
-                            upsertAttachment({
-                                id: createAttachmentId(),
-                                path: metaPath,
-                                name,
-                                mimeType,
-                                sizeBytes: file.size,
-                                kind: 'image',
-                                previewDataUrl: dataUrl,
-                                content: safeDataUrl || undefined,
-                                previewText: safeDataUrl
-                                    ? 'Pasted image from clipboard.'
-                                    : 'Pasted image is large. Preview available in UI.',
-                                source: 'paste',
-                                animateIn: true
-                            })
-                        })
-                        .catch(() => undefined)
-                    continue
-                }
-
-                void file.text()
-                    .then((rawText) => {
-                        const trimmed = rawText.length > MAX_ATTACHMENT_CONTENT_CHARS
-                            ? `${rawText.slice(0, MAX_ATTACHMENT_CONTENT_CHARS)}\n\n[truncated]`
-                            : rawText
-                        const meta = getContextFileMeta({ path: metaPath, name, mimeType })
-                        upsertAttachment({
-                            id: createAttachmentId(),
-                            path: metaPath,
-                            name,
-                            mimeType,
-                            sizeBytes: file.size,
-                            kind: meta.category === 'code' ? 'code' : 'doc',
-                            content: trimmed,
-                            previewText: summarizeTextPreview(rawText),
-                            source: 'paste',
-                            animateIn: true
-                        })
-                    })
-                    .catch(() => {
-                        upsertAttachment({
-                            id: createAttachmentId(),
-                            path: metaPath,
-                            name,
-                            mimeType,
-                            sizeBytes: file.size,
-                            kind: 'file',
-                            previewText: 'Binary attachment from clipboard.',
-                            source: 'paste',
-                            animateIn: true
-                        })
-                    })
+                void attachFile(file, 'paste')
             }
             return
         }
@@ -273,17 +417,8 @@ export function AssistantComposer({ onSend, disabled, isSending, isThinking, isC
                 </div>
             )}
 
-            <div
-                className="overflow-hidden transition-[max-height,opacity,margin] duration-200 ease-out"
-                style={{
-                    maxHeight: contextFiles.length > 0
-                        ? `${Math.min(340, Math.max(104, Math.ceil(contextFiles.length / 4) * 104 + 8))}px`
-                        : '0px',
-                    opacity: contextFiles.length > 0 ? 1 : 0,
-                    marginBottom: contextFiles.length > 0 ? '2px' : '0px'
-                }}
-            >
-                <div className="flex flex-wrap gap-2 px-1">
+            <AnimatedHeight isOpen={contextFiles.length > 0} duration={300}>
+                <div className="flex flex-wrap gap-2 px-1 pb-2">
                     {contextFiles.map((file) => {
                         const meta = getContextFileMeta(file)
                         const contentType = getContentTypeTag(file)
@@ -357,48 +492,180 @@ export function AssistantComposer({ onSend, disabled, isSending, isThinking, isC
                         )
                     })}
                 </div>
-            </div>
+            </AnimatedHeight>
 
-            <div className="rounded-xl border border-sparkle-border bg-sparkle-card/80 p-2">
-                <div className="flex items-center gap-2 rounded-lg border border-sparkle-border bg-sparkle-bg px-2 py-2 transition-colors focus-within:border-[var(--accent-primary)]/45 focus-within:ring-2 focus-within:ring-[var(--accent-primary)]/15">
+            <div className="group relative flex flex-col gap-2 rounded-[22px] border border-sparkle-border bg-sparkle-card/50 p-2.5 transition-all focus-within:bg-sparkle-card focus-within:shadow-2xl">
+                <div className="flex items-end gap-2.5 px-1.5 py-1">
+                    <input
+                        ref={filePickerRef}
+                        type="file"
+                        className="hidden"
+                        multiple
+                        accept="image/*,text/*,.md,.markdown,.txt,.json,.yaml,.yml,.xml,.csv,.ts,.tsx,.js,.jsx,.mjs,.cjs,.py,.go,.rs,.java,.kt,.cs,.cpp,.c,.h,.css,.scss,.sass,.html,.sql,.toml,.sh,.ps1"
+                        onChange={(event) => {
+                            handlePickedFiles(event.target.files)
+                            event.currentTarget.value = ''
+                        }}
+                    />
                     <button
                         type="button"
-                        onClick={() => void handleCommandSelect('/include')}
+                        onClick={() => filePickerRef.current?.click()}
                         disabled={disabled}
-                        className="rounded-lg border border-sparkle-border bg-sparkle-card p-2.5 text-sparkle-text-secondary transition-colors hover:border-[var(--accent-primary)]/40 hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)]"
-                        title="Add context file"
+                        className="mb-1 rounded-xl border border-sparkle-border bg-sparkle-card p-2.5 text-sparkle-text-secondary transition-all hover:scale-105 hover:border-[var(--accent-primary)]/40 hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)] active:scale-95"
+                        title="Attach files"
                     >
-                        <Plus size={16} />
+                        <Plus size={18} />
                     </button>
-                    <textarea
-                        ref={textareaRef}
-                        rows={1}
-                        value={text}
-                        onChange={(event) => setText(event.target.value)}
-                        onKeyDown={handleKeyDown}
-                        onPaste={handlePaste}
-                        className="flex-1 resize-none bg-transparent px-2 py-0.5 text-sm leading-6 text-sparkle-text outline-none placeholder:text-sparkle-text-muted"
-                        placeholder={isConnected ? 'Ask DevScope Assistant (Type "/" for commands, paste image/text/files)...' : 'Connect assistant to start chatting...'}
-                        disabled={disabled || !isConnected}
-                    />
+
+                    <div className="flex-1">
+                        <textarea
+                            ref={textareaRef}
+                            rows={1}
+                            value={text}
+                            onChange={(event) => {
+                                setText(event.target.value)
+                                if (historyCursor != null) {
+                                    setHistoryCursor(null)
+                                }
+                            }}
+                            onKeyDown={handleKeyDown}
+                            onPaste={handlePaste}
+                            className="w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed text-sparkle-text outline-none placeholder:text-sparkle-text-muted/60"
+                            placeholder={isConnected ? 'How can I help you build today?' : 'Connect assistant to start chatting...'}
+                            disabled={disabled || !isConnected}
+                        />
+                    </div>
+
                     <button
                         type="button"
                         disabled={disabled || !isConnected || isThinking || (!text.trim() && contextFiles.length === 0)}
                         onClick={() => void handleSend()}
                         className={cn(
-                            'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all',
+                            'mb-1 inline-flex h-9 w-9 items-center justify-center rounded-xl transition-all active:scale-95',
                             disabled || !isConnected || isThinking || (!text.trim() && contextFiles.length === 0)
-                                ? 'cursor-not-allowed bg-sparkle-border text-sparkle-text-muted shadow-none'
-                                : 'bg-[var(--accent-primary)] text-white hover:bg-[var(--accent-primary)]/85 hover:shadow-[0_0_15px_rgba(var(--accent-primary-rgb),0.25)]'
+                                ? 'bg-sparkle-border/40 text-sparkle-text-muted cursor-not-allowed opacity-40'
+                                : 'bg-[var(--accent-primary)] text-white hover:bg-[var(--accent-primary)]/90 hover:shadow-lg hover:shadow-[var(--accent-primary)]/20'
                         )}
                     >
                         {isThinking ? (
-                            <Loader2 size={14} className="animate-spin" />
+                            <Loader2 size={18} className="animate-spin" />
                         ) : (
-                            <SendHorizontal size={14} />
+                            <SendHorizontal size={18} />
                         )}
-                        {isSending ? 'Sending...' : isThinking ? 'Thinking...' : 'Send'}
                     </button>
+                </div>
+
+                <div className="mt-1 flex items-center justify-between px-3 pb-2 text-[10px] font-medium tracking-tight">
+                    <div className="relative flex flex-col w-80" ref={modelDropdownRef}>
+                        <div
+                            className={cn(
+                                'pointer-events-none absolute bottom-full left-0 z-30 w-full overflow-hidden',
+                                showModelDropdown ? 'pointer-events-auto' : 'pointer-events-none'
+                            )}
+                        >
+                            <AnimatedHeight isOpen={showModelDropdown} duration={300}>
+                                <div className="p-2 space-y-1 bg-sparkle-card border border-sparkle-border border-b-transparent rounded-t-xl shadow-2xl shadow-black/80">
+                                    <div className="flex items-center justify-between px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-sparkle-text-muted/40">
+                                        <span>Model Selection</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => onRefreshModels?.()}
+                                            className="inline-flex items-center rounded border border-transparent px-1.5 py-0.5 text-sparkle-text-muted hover:border-sparkle-border hover:bg-sparkle-card-hover hover:text-sparkle-text transition-all"
+                                            title="Refresh models"
+                                        >
+                                            <Loader2 size={10} className={cn(modelsLoading && 'animate-spin')} />
+                                        </button>
+                                    </div>
+
+                                    <div className="max-h-64 space-y-0.5 overflow-y-auto scrollbar-hide px-1 pb-1">
+                                        {availableModelOptions.map((model) => {
+                                            const isActive = model.id === resolvedModel
+                                            return (
+                                                <button
+                                                    key={model.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        onSelectModel?.(model.id)
+                                                        setShowModelDropdown(false)
+                                                    }}
+                                                    className={cn(
+                                                        'group relative flex w-full items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-200 backdrop-blur-[2px]',
+                                                        isActive
+                                                            ? 'border-white/10 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] shadow-[0_2px_10px_rgba(0,0,0,0.05)]'
+                                                            : 'border-white/5 bg-sparkle-bg/40 text-sparkle-text-secondary hover:border-sparkle-border hover:bg-sparkle-card-hover/60 hover:text-sparkle-text'
+                                                    )}
+                                                >
+                                                    <div className="min-w-0 flex-1 overflow-hidden">
+                                                        <div className={cn(
+                                                            "truncate text-[13px] leading-tight transition-colors text-left",
+                                                            isActive ? "font-bold" : "font-medium"
+                                                        )}>
+                                                            {model.label || model.id}
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+
+                                    {modelsError && (
+                                        <div className="px-2 py-1">
+                                            <p className="text-[10px] text-rose-400 font-medium">{modelsError}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </AnimatedHeight>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setShowModelDropdown((prev) => {
+                                    const next = !prev
+                                    if (next && !modelOptions?.length && onRefreshModels) {
+                                        onRefreshModels()
+                                    }
+                                    return next
+                                })
+                            }}
+                            title={modelsError || 'Select model for this chat path'}
+                            className={cn(
+                                'flex w-full items-center gap-2 px-3 py-1.5 transition-all outline-none border shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]/30 focus-visible:border-[var(--accent-primary)]/50',
+                                showModelDropdown
+                                    ? 'rounded-b-xl border-sparkle-border border-t-transparent bg-sparkle-card-hover'
+                                    : 'rounded-xl border-sparkle-border bg-sparkle-card hover:bg-sparkle-card-hover hover:border-[var(--accent-primary)]/40'
+                            )}
+                        >
+                            <Command size={11} className={cn("transition-colors", showModelDropdown ? "text-[var(--accent-primary)]" : "text-sparkle-text-muted/40")} />
+                            <span className={cn(
+                                "flex-1 truncate text-left",
+                                showModelDropdown ? "text-[var(--accent-primary)] font-semibold" : "text-sparkle-text/90 font-medium"
+                            )}>
+                                {selectedModelLabel}
+                            </span>
+                            <ChevronDown
+                                size={12}
+                                className={cn(
+                                    'shrink-0 text-sparkle-text-muted transition-transform duration-300',
+                                    showModelDropdown && 'rotate-180 text-[var(--accent-primary)]',
+                                    modelsLoading && 'animate-pulse'
+                                )}
+                            />
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                        <div className={cn(
+                            "h-1 w-1 rounded-full",
+                            activeProfile === 'yolo-fast' ? "bg-[var(--accent-primary)] animate-pulse shadow-[0_0_8px_var(--accent-primary)]" : "bg-emerald-500"
+                        )} />
+                        <span className={cn(
+                            "font-bold uppercase tracking-widest",
+                            activeProfile === 'yolo-fast' ? "text-[var(--accent-primary)]" : "text-emerald-400"
+                        )}>
+                            {activeProfile || 'safe-dev'}
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -410,6 +677,6 @@ export function AssistantComposer({ onSend, disabled, isSending, isThinking, isC
                 showFormattingWarning={previewAttachment ? isPastedTextAttachment(previewAttachment) : false}
                 onClose={() => setPreviewAttachment(null)}
             />
-        </div>
+        </div >
     )
 }

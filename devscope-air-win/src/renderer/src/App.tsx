@@ -27,6 +27,7 @@ const AISettings = lazy(() => import('./pages/settings/AISettings'))
 const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
 const AssistantSettings = lazy(() => import('./pages/settings/AssistantSettings'))
+const AssistantAccountSettings = lazy(() => import('./pages/settings/AssistantAccountSettings'))
 
 // Terminal Context
 interface TerminalContextType {
@@ -93,7 +94,7 @@ function MainContent() {
         >
             <Suspense fallback={<PageLoader />}>
                 <Routes>
-                    <Route path="/" element={<Navigate to="/home" replace />} />
+                    <Route path="/" element={<Navigate to="/assistant" replace />} />
                     <Route path="/home" element={<Home />} />
                     <Route path="/projects" element={<Projects />} />
                     <Route path="/projects/:projectPath" element={<ProjectDetails />} />
@@ -109,7 +110,9 @@ function MainContent() {
                     <Route path="/settings/terminal" element={<TerminalSettings />} />
                     <Route path="/settings/logs" element={<LogsSettings />} />
                     <Route path="/settings/assistant" element={<AssistantSettings />} />
-                    <Route path="*" element={<Navigate to="/home" replace />} />
+                    <Route path="/settings/account" element={<AssistantAccountSettings />} />
+                    <Route path="/settings/usage" element={<AssistantAccountSettings />} />
+                    <Route path="*" element={<Navigate to="/assistant" replace />} />
                 </Routes>
             </Suspense>
         </main>

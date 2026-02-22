@@ -1,5 +1,6 @@
 import log from 'electron-log'
 import { assistantBridge } from '../../assistant'
+import { bridgeReadAccount, bridgeReadAccountRateLimits } from '../../assistant/assistant-bridge-operations'
 import type {
     AssistantConnectOptions,
     AssistantSendOptions
@@ -30,6 +31,7 @@ type AssistantDataQuery = {
     model?: string
     profile?: string
     filePath?: string
+    refreshToken?: boolean
 }
 
 export function handleAssistantSubscribe(event: Electron.IpcMainInvokeEvent) {
@@ -114,6 +116,12 @@ export function handleAssistantStatus(event: Electron.IpcMainInvokeEvent, query?
     }
     if (query?.kind === 'telemetry:integrity') {
         return assistantBridge.getTelemetryIntegrity()
+    }
+    if (query?.kind === 'account:read') {
+        return bridgeReadAccount.call(assistantBridge as any, Boolean(query.refreshToken))
+    }
+    if (query?.kind === 'account:rate-limits') {
+        return bridgeReadAccountRateLimits.call(assistantBridge as any)
     }
     if (
         query?.kind === 'workflow:explain-diff'

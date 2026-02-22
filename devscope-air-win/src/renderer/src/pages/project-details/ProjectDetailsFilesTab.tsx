@@ -6,6 +6,7 @@ import {
 import { cn } from '@/lib/utils'
 import { formatFileSize } from './fileTreeUtils'
 import { getFileIcon } from './fileIcons'
+import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 
 interface ProjectDetailsFilesTabProps {
     [key: string]: any

@@ -63,6 +63,7 @@ export function bridgeFinalizeTurn(
         }
         bridge.history.push(assistantMessage)
         bridge.turnAttemptGroupByTurnId.set(turnId, attemptGroupId)
+
         bridge.emitEvent('assistant-final', {
             turnId,
             text: finalText,
@@ -317,8 +318,10 @@ export function bridgeFindSourcePromptForAssistantTurn(
 
     for (let index = assistantIndex - 1; index >= 0; index -= 1) {
         const entry = bridge.history[index]
-        if (entry.role === 'user' && entry.text.trim()) {
-            return entry.text
+        if (entry.role === 'user') {
+            const sourcePrompt = readString(entry.sourcePrompt).trim()
+            if (sourcePrompt) return sourcePrompt
+            if (entry.text.trim()) return entry.text
         }
     }
 

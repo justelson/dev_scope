@@ -2,7 +2,7 @@ import { app } from 'electron'
 import log from 'electron-log'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
-import { createId, now, readRecord, readString } from './assistant-bridge-helpers'
+import { createId, isAutoSessionTitle, now, readRecord, readString } from './assistant-bridge-helpers'
 
 const REQUEST_TIMEOUT_MS = 120000
 const ASSISTANT_STATE_VERSION = 1
@@ -21,7 +21,8 @@ export function bridgeCreateDefaultSession(bridge: BridgeStateContext): any {
         updatedAt: createdAt,
         history: [],
         threadId: null,
-        projectPath: ''
+        projectPath: '',
+        contextTitleFinalized: false
     }
 }
 
@@ -91,21 +92,66 @@ export async function bridgeEnsurePersistenceLoaded(bridge: BridgeStateContext):
                     ? historyRaw
                         .map((entry) => readRecord(entry))
                         .filter((entry): entry is Record<string, unknown> => Boolean(entry))
-                        .map((entry) => ({
-                            id: readString(entry.id) || createId('msg'),
-                            role: readString(entry.role) || 'system',
-                            text: readString(entry.text),
-                            reasoningText: readString(entry.reasoningText) || undefined,
-                            createdAt: Number(entry.createdAt) || now(),
-                            turnId: readString(entry.turnId) || undefined,
-                            attemptGroupId: readString(entry.attemptGroupId) || undefined,
-                            attemptIndex: Number(entry.attemptIndex) || undefined,
-                            isActiveAttempt: typeof entry.isActiveAttempt === 'boolean' ? entry.isActiveAttempt : undefined
-                        }))
+                        .map((entry) => {
+                            const attachmentsRaw = entry.attachments
+                            const attachments = Array.isArray(attachmentsRaw)
+                                ? attachmentsRaw
+                                    .map((attachment) => readRecord(attachment))
+                                    .filter((attachment): attachment is Record<string, unknown> => Boolean(attachment))
+                                    .map((attachment) => ({
+                                        path: readString(attachment.path),
+                                        name: readString(attachment.name) || undefined,
+                                        mimeType: readString(attachment.mimeType) || undefined,
+                                        kind: readString(attachment.kind) || undefined,
+                                        sizeBytes: Number(attachment.sizeBytes) || undefined,
+                                        previewText: readString(attachment.previewText) || undefined,
+                                        previewDataUrl: readString(attachment.previewDataUrl) || undefined,
+                                        textPreview: readString(attachment.textPreview) || undefined
+                                    }))
+                                    .filter((attachment) =>
+                                        attachment.path
+                                        || attachment.name
+                                        || attachment.mimeType
+                                        || attachment.kind
+                                        || attachment.sizeBytes
+                                        || attachment.previewText
+                                        || attachment.previewDataUrl
+                                        || attachment.textPreview
+                                    )
+                                : []
+
+                            return {
+                                id: readString(entry.id) || createId('msg'),
+                                role: readString(entry.role) || 'system',
+                                text: readString(entry.text),
+                                attachments: attachments.length > 0 ? attachments : undefined,
+                                sourcePrompt: readString(entry.sourcePrompt) || undefined,
+                                reasoningText: readString(entry.reasoningText) || undefined,
+                                createdAt: Number(entry.createdAt) || now(),
+                                turnId: readString(entry.turnId) || undefined,
+                                attemptGroupId: readString(entry.attemptGroupId) || undefined,
+                                attemptIndex: Number(entry.attemptIndex) || undefined,
+                                isActiveAttempt: typeof entry.isActiveAttempt === 'boolean' ? entry.isActiveAttempt : undefined
+                            }
+                        })
                     : []
                 const threadId = readString(record.threadId).trim() || null
                 const projectPath = readString(record.projectPath).trim()
-                return { id, title, archived, createdAt, updatedAt, history, threadId, projectPath: projectPath || '' }
+                const persistedContextTitleFinalized = typeof record.contextTitleFinalized === 'boolean'
+                    ? record.contextTitleFinalized
+                    : undefined
+                const contextTitleFinalized = persistedContextTitleFinalized ?? !isAutoSessionTitle(title)
+                return {
+                    id,
+                    title,
+                    archived,
+                    createdAt,
+                    updatedAt,
+                    history,
+                    threadId,
+                    projectPath: projectPath || '',
+                    contextTitleFinalized
+                }
             })
 
         bridge.activeSessionId = readString(parsed.activeSessionId).trim() || null
@@ -264,7 +310,8 @@ export async function bridgePersistState(bridge: BridgeStateContext): Promise<vo
             updatedAt: session.updatedAt,
             history: session.history.map((entry: unknown) => ({ ...(entry as object) })),
             threadId: session.threadId,
-            projectPath: session.projectPath || ''
+            projectPath: session.projectPath || '',
+            contextTitleFinalized: Boolean(session.contextTitleFinalized)
         }))
     }
 

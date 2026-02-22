@@ -1,76 +1,9 @@
-import type { ComponentType, ElementType } from 'react'
-import { ChevronRight, Clock, Code, ExternalLink, File, FileCode, FileText, Folder, Github } from 'lucide-react'
-import ProjectIcon, { FrameworkBadge } from '@/components/ui/ProjectIcon'
+import { ChevronRight, Code, File, FileCode, FileText, Folder, Github } from 'lucide-react'
+import ProjectIcon from '@/components/ui/ProjectIcon'
 import { cn } from '@/lib/utils'
 import { getProjectTypeById, type ContentLayout, type FileItem, type FolderItem, type Project, type ViewMode } from './types'
-
-interface SectionHeaderProps {
-    icon: ComponentType<{ size?: number | string; className?: string }>
-    iconClassName: string
-    title: string
-    count: number
-}
-
-function SectionHeader({ icon: Icon, iconClassName, title, count }: SectionHeaderProps) {
-    return (
-        <div className="flex items-center gap-3 mb-6">
-            <Icon size={18} className={iconClassName} />
-            <h2 className="text-sm font-medium text-white/60">{title}</h2>
-            <span className="text-xs text-white/30">{count}</span>
-            <div className="h-px bg-white/5 flex-1" />
-        </div>
-    )
-}
-
-interface FinderItemProps {
-    icon: ElementType<{ size?: number | string; className?: string }>
-    title: string
-    subtitle?: string
-    tag?: string
-    tagColor?: string
-    onClick: () => void
-    className?: string
-    iconClassName?: string
-}
-
-const WRAP_AND_CLAMP_2 = 'whitespace-normal break-words [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical] overflow-hidden'
-
-function FinderItem({ icon: Icon, title, subtitle, tag, tagColor, onClick, className, iconClassName }: FinderItemProps) {
-    return (
-        <button
-            onClick={onClick}
-            title={subtitle ? `${title} - ${subtitle}` : title}
-            className={cn(
-                'group flex flex-col items-center gap-2 p-3 rounded-xl transition-all duration-300 w-full max-w-[120px]',
-                'hover:bg-sparkle-card/80 hover:shadow-lg hover:-translate-y-1',
-                className
-            )}
-        >
-            <div className="relative w-16 h-16 flex items-center justify-center bg-sparkle-bg border border-white/5 rounded-2xl group-hover:border-white/20 shadow-inner transition-all overflow-visible">
-                <Icon size={32} className={cn('transition-transform duration-300 group-hover:scale-110', iconClassName)} />
-
-                {tag && (
-                    <div
-                        className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider text-white shadow-lg border border-white/10 z-10"
-                        style={{ backgroundColor: tagColor || '#6b7280' }}
-                    >
-                        {tag}
-                    </div>
-                )}
-            </div>
-            <div className="flex flex-col items-center w-full gap-0.5 text-center px-1">
-                <span className={cn('text-xs font-medium text-white/80 group-hover:text-white transition-colors w-full leading-4 min-h-8', WRAP_AND_CLAMP_2)}>
-                    {title}
-                </span>
-                {subtitle && (
-                    <span className="text-[10px] text-white/30 group-hover:text-white/50 transition-colors w-full truncate">
-                        {subtitle}
-                    </span>
-                )}
-            </div>
-        </button>
-    )
-}
+import { FinderItem, SectionHeader, WRAP_AND_CLAMP_2 } from '../shared/BrowseSectionPrimitives'
+import { FolderBrowseProjectCard } from './FolderBrowseProjectCard'
 
 interface FolderBrowseContentProps {
     filteredFolders: FolderItem[]
@@ -91,120 +24,6 @@ interface FolderBrowseContentProps {
     formatFileSize: (bytes: number) => string
     getFileColor: (ext: string) => string
     formatRelativeTime: (timestamp?: number) => string
-}
-
-function ProjectCard({
-    project,
-    viewMode,
-    onProjectClick,
-    onOpenProjectInExplorer,
-    formatRelativeTime
-}: {
-    project: Project
-    viewMode: ViewMode
-    onProjectClick: (project: Project) => void
-    onOpenProjectInExplorer: (path: string) => void
-    formatRelativeTime: (timestamp?: number) => string
-}) {
-    const typeInfo = getProjectTypeById(project.type)
-    const themeColor = typeInfo?.themeColor || '#525252'
-
-    return (
-        <div
-            key={project.path}
-            onClick={() => onProjectClick(project)}
-            className={cn(
-                'group relative border border-white/5 transition-all duration-300 overflow-hidden cursor-pointer',
-                'hover:-translate-y-1 hover:border-white/10',
-                viewMode === 'finder'
-                    ? 'rounded-xl bg-sparkle-card flex flex-col items-center p-4 text-center'
-                    : 'rounded-2xl bg-sparkle-card p-5 flex flex-col gap-4'
-            )}
-        >
-            <div
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                style={{
-                    boxShadow: `inset 0 0 0 1px ${themeColor}40`,
-                    background: `linear-gradient(to bottom right, ${themeColor}05, transparent)`
-                }}
-            />
-
-            {viewMode === 'finder' ? (
-                <>
-                    <div className="relative w-16 h-16 flex items-center justify-center bg-sparkle-bg border border-white/5 rounded-2xl group-hover:border-white/20 shadow-inner mb-3">
-                        <ProjectIcon
-                            projectType={project.type}
-                            framework={project.frameworks?.[0]}
-                            size={40}
-                        />
-                        {project.type === 'electron' && (
-                            <div className="absolute -bottom-1 -right-1 p-1 rounded bg-sparkle-bg border border-white/10 shadow-lg">
-                                <ProjectIcon projectType="electron" size={12} />
-                            </div>
-                        )}
-                    </div>
-                    <span className={cn('font-bold text-xs text-white w-full leading-4 min-h-8', WRAP_AND_CLAMP_2)} title={project.name}>
-                        {project.name}
-                    </span>
-                    <span className="text-[10px] text-white/40 truncate w-full" title={typeInfo?.displayName || project.type}>{typeInfo?.displayName || project.type}</span>
-                </>
-            ) : (
-                <>
-                    <div className="flex items-start justify-between w-full relative z-10">
-                        <div className="p-3 rounded-xl bg-sparkle-bg border border-white/5 shadow-inner">
-                            <ProjectIcon
-                                projectType={project.type}
-                                framework={project.frameworks?.[0]}
-                                size={32}
-                            />
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-white/30">
-                            <Clock size={12} />
-                            <span>{formatRelativeTime(project.lastModified)}</span>
-                        </div>
-                    </div>
-
-                    <div className="relative z-10 flex-1">
-                        <h3 className={cn('font-bold text-white text-lg mb-1 group-hover:text-white/90 transition-colors leading-6', WRAP_AND_CLAMP_2)} title={project.name}>
-                            {project.name}
-                        </h3>
-                        <p className="text-xs text-white/40 mb-3 truncate" title={typeInfo?.displayName || project.type}>{typeInfo?.displayName || project.type}</p>
-
-                        {project.frameworks && project.frameworks.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mb-3">
-                                {project.frameworks.slice(0, 3).map((framework) => (
-                                    <FrameworkBadge
-                                        key={framework}
-                                        framework={framework}
-                                        size="sm"
-                                        showLabel={false}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex items-center gap-2 relative z-10">
-                        <button
-                            onClick={(event) => {
-                                event.stopPropagation()
-                                onOpenProjectInExplorer(project.path)
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-sparkle-border-secondary text-sparkle-text-secondary hover:text-sparkle-text rounded-lg transition-colors"
-                        >
-                            <ExternalLink size={14} />
-                            <span>Open</span>
-                        </button>
-                    </div>
-
-                    <div
-                        className="absolute bottom-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                        style={{ background: themeColor }}
-                    />
-                </>
-            )}
-        </div>
-    )
 }
 
 export function FolderBrowseContent({
@@ -290,7 +109,7 @@ export function FolderBrowseContent({
                                     const project = entry.payload as Project
                                     if (isFinderMode) {
                                         return (
-                                            <ProjectCard
+                                            <FolderBrowseProjectCard
                                                 key={entry.id}
                                                 project={project}
                                                 viewMode="finder"
@@ -578,7 +397,7 @@ export function FolderBrowseContent({
                         )}
                     >
                         {displayedProjects.map((project) => (
-                            <ProjectCard
+                            <FolderBrowseProjectCard
                                 key={project.path}
                                 project={project}
                                 viewMode={viewMode}

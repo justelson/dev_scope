@@ -47,6 +47,7 @@ export function useProjectsController(
 
         setLoading(true)
         setError(null)
+        await yieldToUi()
 
         const indexRunId = ++indexTotalsRunRef.current
         setIndexingTotals(true)

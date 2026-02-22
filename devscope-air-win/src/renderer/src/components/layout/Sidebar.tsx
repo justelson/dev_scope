@@ -60,7 +60,7 @@ export default function Sidebar() {
 
     return (
         <nav className={cn(
-            "h-[calc(100vh-46px)] fixed left-0 top-[46px] flex flex-col py-4 border-r border-sparkle-border-secondary bg-sparkle-bg z-40 transition-[width] duration-300 ease-in-out",
+            "h-[calc(100vh-46px)] fixed left-0 top-[46px] flex flex-col py-4 border-r border-sparkle-border-secondary bg-sparkle-bg z-40 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
             isCollapsed ? "w-16" : "w-64"
         )}>
             <div className="flex-1 flex flex-col gap-1 px-3">
@@ -74,40 +74,58 @@ export default function Sidebar() {
                             onClick={() => navigate(item.path)}
                             title={isCollapsed ? item.label : undefined}
                             className={cn(
-                                'flex items-center gap-3 py-2.5 rounded-lg transition-all duration-300 ease-in-out text-left relative overflow-hidden',
-                                !isCollapsed && 'border-l-4 px-3',
-                                isCollapsed && 'justify-center pl-1',
+                                'group flex items-center h-10 rounded-lg transition-all duration-300 ease-out text-left relative overflow-hidden',
                                 isActive
                                     ? 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]'
-                                    : 'text-sparkle-text-secondary hover:bg-sparkle-border-secondary hover:text-sparkle-text',
-                                isActive && !isCollapsed && 'border-[var(--accent-primary)]',
-                                !isActive && !isCollapsed && 'border-transparent'
+                                    : 'text-sparkle-text-secondary hover:bg-white/[0.04] hover:text-sparkle-text'
                             )}
                         >
-                            <Icon size={18} className="shrink-0" />
-                            <span className={cn(
-                                "text-sm font-medium whitespace-nowrap transition-all duration-300 ease-in-out",
-                                isCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto"
-                            )}>
-                                {item.label}
-                            </span>
+                            {/* Active Indicator Strip */}
+                            <div className={cn(
+                                "absolute left-0 w-1 bg-[var(--accent-primary)] transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] rounded-r-full",
+                                isActive ? "h-5 opacity-100" : "h-0 opacity-0"
+                            )} />
+
+                            <div className="flex items-center min-w-[40px] h-full">
+                                {/* Fixed Width Icon Container for stability */}
+                                <div className="w-10 h-10 flex items-center justify-center shrink-0">
+                                    <Icon size={18} className={cn(
+                                        "transition-transform duration-300",
+                                        isActive && "scale-110"
+                                    )} />
+                                </div>
+
+                                <span className={cn(
+                                    "text-sm font-medium whitespace-nowrap transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+                                    isCollapsed
+                                        ? "opacity-0 -translate-x-2 pointer-events-none invisible"
+                                        : "opacity-100 translate-x-0 visible ml-0.5"
+                                )}>
+                                    {item.label}
+                                </span>
+                            </div>
                         </button>
                     )
                 })}
             </div>
 
-            <div className="px-4 pt-4 mt-2 border-t border-sparkle-border-secondary transition-all duration-300 ease-in-out">
-                <div className="flex items-center justify-between gap-2">
-                    <p className={cn(
-                        "text-xs text-sparkle-text-muted flex-1 whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden",
-                        isCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto"
-                    )}>
-                        DevScope Air v1.0.0
-                    </p>
+            <div className={cn(
+                "pt-4 mt-2 border-t border-sparkle-border-secondary transition-all duration-300",
+                isCollapsed ? "px-3" : "px-4"
+            )}>
+                <div className="flex items-center justify-between gap-2 h-8">
+                    {!isCollapsed && (
+                        <p className="text-[10px] text-sparkle-text-muted flex-1 whitespace-nowrap transition-all duration-300 animate-fadeIn overflow-hidden uppercase tracking-wider font-medium">
+                            DevScope Air v1.0.0
+                        </p>
+                    )}
                     <button
                         onClick={() => setIsCollapsed(!isCollapsed)}
                         title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        className="p-1.5 rounded hover:bg-sparkle-border-secondary text-sparkle-text-muted hover:text-sparkle-text transition-colors shrink-0"
+                        className={cn(
+                            "p-1.5 rounded-md hover:bg-white/[0.04] text-sparkle-text-muted hover:text-[var(--accent-primary)] transition-all duration-300 shrink-0",
+                            isCollapsed && "mx-auto"
+                        )}
                     >
                         {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
                     </button>

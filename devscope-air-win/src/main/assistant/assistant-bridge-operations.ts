@@ -1,8 +1,69 @@
 import { getWorkingChangesForAI, getWorkingDiff } from '../inspectors/git/read'
-import { createId, now, parseModelList, readString } from './assistant-bridge-helpers'
+import { createId, deriveSessionTitleFromPrompt, isAutoSessionTitle, now, parseModelList, readString } from './assistant-bridge-helpers'
 import type { AssistantHistoryMessage, AssistantModelInfo, AssistantSendOptions } from './types'
+import { materializeContextFilesForSend } from './context-file-materializer'
 
 type BridgeOperationsContext = any
+
+function normalizeContextFilesForHistory(
+    options: AssistantSendOptions
+): Array<{
+    path: string
+    name: string
+    mimeType: string
+    kind: string
+    sizeBytes: number
+    previewText?: string
+    previewDataUrl?: string
+    textPreview?: string
+}> {
+    if (!Array.isArray(options.contextFiles)) return []
+
+    return options.contextFiles
+        .map((entry) => {
+            const record = (entry || {}) as Record<string, unknown>
+            const path = readString(record.path).trim()
+            const name = readString(record.name).trim()
+            const mimeType = readString(record.mimeType).trim()
+            const kind = readString(record.kind).trim()
+            const sizeBytes = Number(record.sizeBytes) || 0
+            const previewText = readString(record.previewText).trim()
+            const rawContent = readString(record.content)
+            const hasImageDataUrl = /^data:image\//i.test(rawContent)
+            const previewDataUrl = hasImageDataUrl ? rawContent : ''
+            const textPreview = !hasImageDataUrl && rawContent
+                ? rawContent.slice(0, 2400)
+                : ''
+            return {
+                path,
+                name,
+                mimeType,
+                kind,
+                sizeBytes,
+                previewText: previewText || undefined,
+                previewDataUrl: previewDataUrl || undefined,
+                textPreview: textPreview || undefined
+            }
+        })
+        .filter((entry) =>
+            entry.path
+            || entry.name
+            || entry.mimeType
+            || entry.kind
+            || entry.sizeBytes > 0
+            || entry.previewDataUrl
+            || entry.textPreview
+            || entry.previewText
+        )
+}
+
+function buildUserMessageDisplayText(prompt: string, options: AssistantSendOptions): string {
+    const trimmedPrompt = String(prompt || '').trim()
+    const normalizedFiles = normalizeContextFilesForHistory(options)
+    if (trimmedPrompt) return trimmedPrompt
+    if (normalizedFiles.length > 0) return 'Attached files for this request.'
+    return ''
+}
 
 export async function bridgeRunWorkflow(
     this: BridgeOperationsContext,
@@ -155,6 +216,39 @@ export async function bridgeListModels(
     }
 }
 
+export async function bridgeReadAccount(
+    this: BridgeOperationsContext,
+    refreshToken = false
+): Promise<{ success: boolean; result?: unknown; error?: string }> {
+    try {
+        await this.ensureInitialized()
+        const result = await this.requestWithRetry('account/read', {
+            refreshToken: Boolean(refreshToken)
+        }, { retries: 1 })
+        return { success: true, result }
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to read account.'
+        }
+    }
+}
+
+export async function bridgeReadAccountRateLimits(
+    this: BridgeOperationsContext
+): Promise<{ success: boolean; result?: unknown; error?: string }> {
+    try {
+        await this.ensureInitialized()
+        const result = await this.requestWithRetry('account/rateLimits/read', {}, { retries: 1 })
+        return { success: true, result }
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to read account rate limits.'
+        }
+    }
+}
+
 export async function bridgeCancelTurn(
     this: BridgeOperationsContext,
     turnId?: string
@@ -231,7 +325,22 @@ export async function bridgeSendPrompt(
         this.persistStateSoon()
     }
 
-    const regenerationTargetTurnId = readString(options.regenerateFromTurnId).trim()
+    let normalizedContextFiles = options.contextFiles
+    try {
+        normalizedContextFiles = await materializeContextFilesForSend(
+            options.contextFiles,
+            selectedProjectPath || undefined
+        )
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to materialize attachments.'
+        this.emitEvent('error', { message })
+    }
+    const runtimeOptions: AssistantSendOptions = {
+        ...options,
+        contextFiles: normalizedContextFiles
+    }
+
+    const regenerationTargetTurnId = readString(runtimeOptions.regenerateFromTurnId).trim()
     let effectivePrompt = userPrompt
     let attemptGroupIdSeed: string | null = null
 
@@ -247,17 +356,31 @@ export async function bridgeSendPrompt(
         effectivePrompt = sourcePrompt
         attemptGroupIdSeed = assistantTarget.attemptGroupId || regenerationTargetTurnId
     } else {
+        if (activeSession && !activeSession.contextTitleFinalized && isAutoSessionTitle(activeSession.title)) {
+            const derivedTitle = deriveSessionTitleFromPrompt(userPrompt)
+            if (derivedTitle) {
+                activeSession.title = derivedTitle
+                activeSession.contextTitleFinalized = true
+                activeSession.updatedAt = now()
+                this.persistStateSoon()
+            }
+        }
+
+        const historyAttachments = normalizeContextFilesForHistory(options)
+        const displayText = buildUserMessageDisplayText(effectivePrompt, runtimeOptions)
         const userMessage: AssistantHistoryMessage = {
             id: createId('msg'),
             role: 'user',
-            text: effectivePrompt,
+            text: displayText,
+            attachments: historyAttachments.length > 0 ? historyAttachments : undefined,
+            sourcePrompt: effectivePrompt,
             createdAt: now()
         }
         this.history.push(userMessage)
         this.emitEvent('history', { history: [...this.history] })
     }
 
-    effectivePrompt = this.buildPromptWithContext(effectivePrompt, options)
+    effectivePrompt = this.buildPromptWithContext(effectivePrompt, runtimeOptions)
 
     try {
         let resolvedModel = await this.resolveSelectedModel(selectedProjectPath || undefined)

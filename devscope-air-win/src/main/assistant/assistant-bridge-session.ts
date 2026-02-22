@@ -1,5 +1,5 @@
 import type { AssistantApprovalMode, AssistantEventPayload, AssistantHistoryMessage } from './types'
-import { createId, now } from './assistant-bridge-helpers'
+import { createId, isAutoSessionTitle, now } from './assistant-bridge-helpers'
 type BridgeSessionContext = any
 export function bridgeGetHistory(bridge: BridgeSessionContext): {
     success: boolean
@@ -288,15 +288,17 @@ export function bridgeCreateSession(
     const createdAt = now()
     const id = createId('session')
     const cleanTitle = String(title || '').trim()
+    const sessionTitle = cleanTitle || `Session ${bridge.sessions.length + 1}`
     const session = {
         id,
-        title: cleanTitle || `Session ${bridge.sessions.length + 1}`,
+        title: sessionTitle,
         archived: false,
         createdAt,
         updatedAt: createdAt,
         history: [],
         threadId: null,
-        projectPath: ''
+        projectPath: '',
+        contextTitleFinalized: !isAutoSessionTitle(sessionTitle)
     }
     bridge.sessions.unshift(session)
     bridge.activeSessionId = session.id
@@ -362,6 +364,7 @@ export function bridgeRenameSession(
         return { success: false, error: `Session not found: ${targetId}` }
     }
     target.title = nextTitle
+    target.contextTitleFinalized = true
     target.updatedAt = now()
     bridge.persistStateSoon()
     return { success: true }

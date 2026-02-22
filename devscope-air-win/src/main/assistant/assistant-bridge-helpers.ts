@@ -198,7 +198,7 @@ function collectModelContainers(root: unknown): Array<{ value: unknown; source: 
         visited.add(node)
 
         if (Array.isArray(node)) {
-            if (path === 'result' || /(models?|items?|list|catalog|registry)/i.test(path)) {
+            if (path === 'result' || /(models?|items?|list|catalog|registry|available|options?|choices|supported|allowed)/i.test(path)) {
                 push(node, path)
             }
             if (depth <= 0) return
@@ -213,13 +213,15 @@ function collectModelContainers(root: unknown): Array<{ value: unknown; source: 
         for (const [key, child] of Object.entries(record)) {
             const childPath = path ? `${path}.${key}` : key
             const normalizedKey = key.toLowerCase()
-            const keyLooksModelContainer = /(models|items|list|catalog|registry|map|bymodel|bymodels|byprovider)/i.test(normalizedKey)
+            const keyLooksModelContainer = /(models|items|list|catalog|registry|map|bymodel|bymodels|byprovider|available|options?|choices|supported|allowed)/i.test(normalizedKey)
             const keyLooksSingleModel = normalizedKey === 'model'
                 || normalizedKey === 'defaultmodel'
                 || normalizedKey === 'recommendedmodel'
+                || normalizedKey === 'activemodel'
             const keyAllowsTraversal = keyLooksModelContainer
                 || keyLooksSingleModel
                 || /(data|result|payload|response|provider|providers|meta|output|resources)/i.test(normalizedKey)
+                || /(providers?|byprovider|models?|catalog|registry)/i.test(path)
                 || path === 'result'
             if (!keyAllowsTraversal) continue
 
@@ -245,10 +247,22 @@ export function parseModelList(result: unknown): AssistantModelInfo[] {
         { value: nestedData?.items, source: 'root.data.items' },
         { value: root?.models, source: 'root.models' },
         { value: nestedData?.models, source: 'root.data.models' },
+        { value: root?.availableModels, source: 'root.availableModels' },
+        { value: nestedData?.availableModels, source: 'root.data.availableModels' },
+        { value: root?.available, source: 'root.available' },
+        { value: nestedData?.available, source: 'root.data.available' },
+        { value: root?.options, source: 'root.options' },
+        { value: nestedData?.options, source: 'root.data.options' },
+        { value: root?.supported, source: 'root.supported' },
+        { value: nestedData?.supported, source: 'root.data.supported' },
         { value: root?.result, source: 'root.result' },
         { value: nestedResult?.items, source: 'root.result.items' },
         { value: nestedResult?.data, source: 'root.result.data' },
-        { value: nestedResult?.models, source: 'root.result.models' }
+        { value: nestedResult?.models, source: 'root.result.models' },
+        { value: nestedResult?.availableModels, source: 'root.result.availableModels' },
+        { value: nestedResult?.available, source: 'root.result.available' },
+        { value: nestedResult?.options, source: 'root.result.options' },
+        { value: nestedResult?.supported, source: 'root.result.supported' }
     ]
     const recursiveCandidates = collectModelContainers(result)
     dataCandidates.push(...recursiveCandidates)
@@ -257,9 +271,15 @@ export function parseModelList(result: unknown): AssistantModelInfo[] {
         readString(root?.defaultModel).trim(),
         readString(root?.default).trim(),
         readString(root?.model).trim(),
+        readString(root?.activeModel).trim(),
+        readString(root?.selectedModel).trim(),
         readString(nestedData?.defaultModel).trim(),
+        readString(nestedData?.activeModel).trim(),
+        readString(nestedData?.selectedModel).trim(),
         readString(nestedResult?.defaultModel).trim(),
-        readString(nestedResult?.model).trim()
+        readString(nestedResult?.model).trim(),
+        readString(nestedResult?.activeModel).trim(),
+        readString(nestedResult?.selectedModel).trim()
     ].find((value) => value.length > 0) || ''
 
     const models: AssistantModelInfo[] = []
@@ -292,9 +312,9 @@ export function parseModelList(result: unknown): AssistantModelInfo[] {
             continue
         }
 
-        const sourceIsModelMap = /(models|items|list|catalog|registry|map|bymodel|bymodels|byprovider)/i.test(source)
+        const sourceIsModelMap = /(models|items|list|catalog|registry|map|bymodel|bymodels|byprovider|available|options?|choices|supported|allowed)/i.test(source)
         if (!sourceIsModelMap) {
-            const sourceLooksSingleModel = /(^|\.)(model|defaultmodel|recommendedmodel)$/i.test(source)
+            const sourceLooksSingleModel = /(^|\.)(model|defaultmodel|recommendedmodel|activemodel|selectedmodel)$/i.test(source)
             if (sourceLooksSingleModel) {
                 const direct = parseModelEntry(value)
                 if (direct) pushModel(direct)
@@ -307,6 +327,12 @@ export function parseModelList(result: unknown): AssistantModelInfo[] {
 
         for (const [key, raw] of Object.entries(mapRecord)) {
             if (!key || key === 'default' || key === 'defaultModel') continue
+            if (Array.isArray(raw)) {
+                for (const nestedEntry of raw) {
+                    pushModel(parseModelEntry(nestedEntry))
+                }
+                continue
+            }
             pushModel(parseModelEntry(raw, key))
         }
     }
@@ -356,4 +382,34 @@ export function composeReasoningText(parts: string[]): string {
         }
     }
     return merged.trim()
+}
+
+export function deriveSessionTitleFromPrompt(prompt: string, maxLength = 120): string {
+    const lines = String(prompt || '')
+        .replace(/\r/g, '\n')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+
+    if (lines.length === 0) return ''
+
+    const firstLine = lines[0]
+    const normalized = firstLine
+        .replace(/^\s*#{1,6}\s+/, '')
+        .replace(/[`*_~]/g, '')
+        .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+        .replace(/^["'`]+|["'`]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .replace(/[.:;,\-–—]+$/g, '')
+        .trim()
+
+    if (!normalized) return ''
+    if (normalized.length <= maxLength) return normalized
+    return `${normalized.slice(0, Math.max(1, maxLength - 3)).trimEnd()}...`
+}
+
+export function isAutoSessionTitle(title: string): boolean {
+    const normalized = String(title || '').trim()
+    if (!normalized) return true
+    return /^session\s+\d+$/i.test(normalized) || /^untitled session$/i.test(normalized)
 }

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSettings } from '@/lib/settings'
 import {
     type AssistantActivity,
@@ -19,6 +19,32 @@ import { createAssistantPageActions } from './assistant-page-actions'
 import { createAssistantEventHandler, createLoadSnapshot } from './assistant-page-runtime'
 
 type SessionScope = { turnIds: Set<string>; attemptGroupIds: Set<string> }
+type RuntimeModel = { id: string; label: string; isDefault: boolean }
+type ModelListResponse = { success?: boolean; models?: RuntimeModel[]; error?: string }
+const FALLBACK_MODEL_OPTIONS: RuntimeModel[] = [{ id: 'default', label: 'Default (server recommended)', isDefault: false }]
+
+function normalizeRuntimeModels(payload: ModelListResponse | null | undefined): RuntimeModel[] {
+    const list = Array.isArray(payload?.models) ? payload.models : []
+    const normalized = list
+        .map((entry) => ({
+            id: typeof entry?.id === 'string' ? entry.id.trim() : '',
+            label: typeof entry?.label === 'string' && entry.label.trim() ? entry.label.trim() : '',
+            isDefault: Boolean(entry?.isDefault)
+        }))
+        .filter((entry) => entry.id.length > 0)
+
+    const seen = new Set<string>()
+    const unique: RuntimeModel[] = []
+    for (const entry of normalized) {
+        if (seen.has(entry.id)) continue
+        seen.add(entry.id)
+        unique.push({
+            ...entry,
+            label: entry.label || entry.id
+        })
+    }
+    return unique
+}
 
 export function useAssistantPageController() {
     const { settings, updateSettings } = useSettings()
@@ -30,7 +56,9 @@ export function useAssistantPageController() {
     const [isSending, setIsSending] = useState(false)
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const [eventLog, setEventLog] = useState<AssistantEvent[]>([])
-    const [showEventConsole, setShowEventConsole] = useState(settings.assistantShowEventPanel)
+    const [showEventConsole, setShowEventConsole] = useState(
+        settings.assistantAllowEventConsole && settings.assistantShowEventPanel
+    )
     const [showHeaderMenu, setShowHeaderMenu] = useState(false)
     const [showYoloConfirmModal, setShowYoloConfirmModal] = useState(false)
     const [chatProjectPath, setChatProjectPath] = useState(settings.projectsFolder || '')
@@ -45,6 +73,9 @@ export function useAssistantPageController() {
     const [approvalsByTurn, setApprovalsByTurn] = useState<Record<string, AssistantApproval[]>>({})
     const [sessions, setSessions] = useState<AssistantSession[]>([])
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+    const [runtimeModels, setRuntimeModels] = useState<RuntimeModel[]>([])
+    const [modelsLoading, setModelsLoading] = useState(false)
+    const [modelsError, setModelsError] = useState<string | null>(null)
 
     const autoConnectAttemptedRef = useRef(false)
     const headerMenuRef = useRef<HTMLDivElement | null>(null)
@@ -61,6 +92,89 @@ export function useAssistantPageController() {
     const activeProjectPath = effectiveProjectPath || 'global'
     const activeModel = settings.assistantProjectModels[activeProjectPath] || settings.assistantDefaultModel || 'default'
     const activeProfile = settings.assistantProjectProfiles[activeProjectPath] || settings.assistantProfile || 'safe-dev'
+    const modelOptions = useMemo(() => {
+        const defaultOption: RuntimeModel = { id: 'default', label: 'Default (server recommended)', isDefault: false }
+        const source = runtimeModels.length > 0
+            ? runtimeModels.map((model) => ({
+                id: model.id,
+                label: model.isDefault ? `${model.label} (default)` : model.label,
+                isDefault: model.isDefault
+            }))
+            : FALLBACK_MODEL_OPTIONS
+
+        const deduped = new Map<string, RuntimeModel>()
+        deduped.set(defaultOption.id, defaultOption)
+        for (const model of source) {
+            if (!model.id || model.id === 'default') continue
+            deduped.set(model.id, model)
+        }
+
+        if (settings.assistantDefaultModel && !deduped.has(settings.assistantDefaultModel)) {
+            deduped.set(settings.assistantDefaultModel, {
+                id: settings.assistantDefaultModel,
+                label: `${settings.assistantDefaultModel} (saved)`,
+                isDefault: false
+            })
+        }
+
+        if (activeModel && !deduped.has(activeModel)) {
+            deduped.set(activeModel, {
+                id: activeModel,
+                label: `${activeModel} (active)`,
+                isDefault: false
+            })
+        }
+
+        return Array.from(deduped.values())
+    }, [runtimeModels, settings.assistantDefaultModel, activeModel])
+
+    const loadModels = useCallback(async () => {
+        setModelsLoading(true)
+        setModelsError(null)
+        try {
+            const directResult = await window.devscope.assistant.listModels()
+            const directModels = normalizeRuntimeModels(directResult as ModelListResponse)
+            if (directResult?.success && directModels.length > 0) {
+                setRuntimeModels(directModels)
+                return
+            }
+
+            const statusFallback = await window.devscope.assistant.status({ kind: 'models:list' })
+            const fallbackModels = normalizeRuntimeModels(statusFallback as ModelListResponse)
+            if (statusFallback?.success && fallbackModels.length > 0) {
+                setRuntimeModels(fallbackModels)
+                return
+            }
+
+            setRuntimeModels(directModels.length > 0 ? directModels : fallbackModels)
+            setModelsError(
+                (directResult as ModelListResponse)?.error
+                || (statusFallback as ModelListResponse)?.error
+                || 'Unable to load models from Codex runtime.'
+            )
+        } catch (error: any) {
+            setRuntimeModels([])
+            setModelsError(error?.message || 'Unable to load models from Codex runtime.')
+        } finally {
+            setModelsLoading(false)
+        }
+    }, [])
+
+    const handleSelectModel = useCallback((modelId: string) => {
+        const normalizedModel = String(modelId || '').trim() || 'default'
+        const currentOverride = String(settings.assistantProjectModels[activeProjectPath] || '').trim()
+
+        if (!currentOverride && normalizedModel === 'default') return
+        if (currentOverride === normalizedModel) return
+
+        const nextProjectModels = { ...settings.assistantProjectModels }
+        if (normalizedModel === 'default') {
+            delete nextProjectModels[activeProjectPath]
+        } else {
+            nextProjectModels[activeProjectPath] = normalizedModel
+        }
+        updateSettings({ assistantProjectModels: nextProjectModels })
+    }, [activeProjectPath, settings.assistantProjectModels, updateSettings])
 
     const availableProjectRoots = useMemo(() => {
         const roots = [settings.projectsFolder, ...(settings.additionalFolders || [])]
@@ -78,6 +192,7 @@ export function useAssistantPageController() {
     }, [settings.assistantEnabled, status])
 
     const isBusy = Boolean(status.activeTurnId)
+    const canUseEventConsole = settings.assistantAllowEventConsole
     const activeSessions = useMemo(() => sessions.filter((session) => !session.archived), [sessions])
     const activeSessionTitle = useMemo(() => {
         const raw = sessions.find((session) => session.id === activeSessionId)?.title || ''
@@ -119,28 +234,31 @@ export function useAssistantPageController() {
             .sort((a, b) => b.timestamp - a.timestamp)
             .find((entry) => entry.turnId)?.turnId || null
         const pendingTurnId = status.activeTurnId || streamingTurnId || latestThoughtTurnId
+
+        // If we are sending but don't have a pending turn ID yet, or if we have a pending turn ID
+        // but no streaming text or thoughts yet, we should show a placeholder assistant message.
+        if (isSending || (pendingTurnId && !streamingText && !allReasoning.some(r => r.turnId === pendingTurnId) && !allActivities.some(a => a.turnId === pendingTurnId))) {
+            const hasAssistantForPendingTurn = pendingTurnId && history.some((message) => message.role === 'assistant' && message.turnId === pendingTurnId)
+            if (!hasAssistantForPendingTurn) {
+                const pendingId = pendingTurnId ? `streaming-${pendingTurnId}` : 'pending-assistant'
+                return [...groupedHistory, {
+                    id: pendingId,
+                    role: 'assistant' as const,
+                    messages: [{
+                        id: `${pendingId}-msg`,
+                        role: 'assistant' as const,
+                        text: streamingText || '',
+                        createdAt: Date.now(),
+                        turnId: pendingTurnId || undefined,
+                        isActiveAttempt: true
+                    }]
+                }]
+            }
+        }
+
         if (!pendingTurnId) return groupedHistory
 
-        const hasAssistantForPendingTurn = history.some((message) => message.role === 'assistant' && message.turnId === pendingTurnId)
-        if (hasAssistantForPendingTurn) return groupedHistory
-
-        const hasThoughtsForPendingTurn = allReasoning.some((entry) => entry.turnId === pendingTurnId)
-            || allActivities.some((entry) => entry.turnId === pendingTurnId)
-            || allApprovals.some((entry) => entry.turnId === pendingTurnId)
-        if (!streamingText && !hasThoughtsForPendingTurn) return groupedHistory
-
-        return [...groupedHistory, {
-            id: `streaming-${pendingTurnId}`,
-            role: 'assistant' as const,
-            messages: [{
-                id: `streaming-${pendingTurnId}`,
-                role: 'assistant' as const,
-                text: streamingText,
-                createdAt: (history[history.length - 1]?.createdAt || Date.now()) + 1,
-                turnId: pendingTurnId,
-                isActiveAttempt: true
-            }]
-        }]
+        return groupedHistory
     }, [groupedHistory, history, streamingTurnId, streamingText, status.activeTurnId, allReasoning, allActivities, allApprovals])
 
     const scrollChatToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -236,12 +354,22 @@ export function useAssistantPageController() {
             if (!isMounted) return
             handleAssistantEvent(event as AssistantEvent)
         })
-        void loadSnapshot({ hydrateChat: true }).catch(() => setIsChatHydrating(false))
+        void actions.handleCreateSession()
+            .then(() => {
+                if (isMounted) {
+                    void loadSnapshot({ hydrateChat: true }).catch(() => setIsChatHydrating(false))
+                }
+            })
+            .catch(() => setIsChatHydrating(false))
         return () => {
             isMounted = false
             unsubscribe()
         }
     }, [])
+
+    useEffect(() => {
+        void loadModels()
+    }, [loadModels])
 
     useEffect(() => {
         if (!settings.assistantEnabled || !settings.assistantAutoConnectOnOpen) return
@@ -251,7 +379,17 @@ export function useAssistantPageController() {
         void actions.handleConnect().catch(() => undefined)
     }, [settings.assistantEnabled, settings.assistantAutoConnectOnOpen, status.connected, status.state])
 
-    useEffect(() => setShowEventConsole(settings.assistantShowEventPanel), [settings.assistantShowEventPanel])
+    useEffect(() => {
+        setShowEventConsole(canUseEventConsole && settings.assistantShowEventPanel)
+    }, [canUseEventConsole, settings.assistantShowEventPanel])
+    useEffect(() => {
+        if (canUseEventConsole) return
+        if (!showEventConsole && !settings.assistantShowEventPanel) return
+        setShowEventConsole(false)
+        if (settings.assistantShowEventPanel) {
+            updateSettings({ assistantShowEventPanel: false })
+        }
+    }, [canUseEventConsole, showEventConsole, settings.assistantShowEventPanel, updateSettings])
     useEffect(() => {
         if (!showEventConsole || settings.assistantSidebarCollapsed) return
         updateSettings({ assistantSidebarCollapsed: true })
@@ -348,6 +486,9 @@ export function useAssistantPageController() {
         sessions,
         activeSessionId,
         activeModel,
+        modelOptions,
+        modelsLoading,
+        modelsError,
         activeProfile,
         availableProjectRoots,
         effectiveProjectPath,
@@ -365,6 +506,8 @@ export function useAssistantPageController() {
         setShowHeaderMenu,
         setShowYoloConfirmModal,
         setChatProjectPath,
+        handleSelectModel,
+        handleRefreshModels: loadModels,
         setWorkflowProjectPath,
         setWorkflowFilePath,
         handleChatScroll,
@@ -374,4 +517,3 @@ export function useAssistantPageController() {
 }
 
 export type AssistantPageController = ReturnType<typeof useAssistantPageController>
-

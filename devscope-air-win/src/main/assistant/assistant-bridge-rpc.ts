@@ -354,6 +354,15 @@ export function bridgeHandleNotification(
         return
     }
 
+    if (
+        method === 'account/updated'
+        || method === 'account/rateLimits/updated'
+        || method === 'thread/tokenUsage/updated'
+    ) {
+        bridge.emitEvent(method as 'account/updated' | 'account/rateLimits/updated' | 'thread/tokenUsage/updated', { ...params })
+        return
+    }
+
     if (method.startsWith('codex/event/')) {
         bridge.handleLegacyNotification(method, params)
     }

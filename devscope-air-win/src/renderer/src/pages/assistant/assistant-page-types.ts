@@ -15,12 +15,25 @@ export type AssistantHistoryMessage = {
     id: string
     role: AssistantRole
     text: string
+    attachments?: AssistantHistoryAttachment[]
+    sourcePrompt?: string
     reasoningText?: string
     createdAt: number
     turnId?: string
     attemptGroupId?: string
     attemptIndex?: number
     isActiveAttempt?: boolean
+}
+
+export type AssistantHistoryAttachment = {
+    path: string
+    name?: string
+    mimeType?: string
+    kind?: 'image' | 'doc' | 'code' | 'file'
+    sizeBytes?: number
+    previewText?: string
+    previewDataUrl?: string
+    textPreview?: string
 }
 
 export type AssistantEvent = {
@@ -175,4 +188,3 @@ export function isTelemetryEventInScope(
     if (attemptGroupId && scope.attemptGroupIds.has(attemptGroupId)) return true
     return false
 }
-

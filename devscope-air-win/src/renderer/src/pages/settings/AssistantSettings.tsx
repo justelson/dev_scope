@@ -1,28 +1,14 @@
-/**
- * DevScope - Assistant Settings Page
- */
-
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Bot, RefreshCw, Shield, Sparkles, PanelLeft, PlugZap, SlidersHorizontal } from 'lucide-react'
+import { ArrowLeft, Bot, RefreshCw, Shield, Sparkles, PanelLeft, PlugZap, SlidersHorizontal, Gauge, BarChart3 } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
+import AssistantAccountSettings from './AssistantAccountSettings'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
-type RuntimeModel = {
-    id: string
-    label: string
-    isDefault: boolean
-}
-
-type ModelListResponse = {
-    success?: boolean
-    models?: RuntimeModel[]
-    error?: string
-}
-
-const FALLBACK_MODEL_OPTIONS = [
-    { id: 'default', label: 'Default (server recommended)' }
-]
+type RuntimeModel = { id: string; label: string; isDefault: boolean }
+type ModelListResponse = { success?: boolean; models?: RuntimeModel[]; error?: string }
+const FALLBACK_MODEL_OPTIONS = [{ id: 'default', label: 'Default (server recommended)' }]
 
 const ASSISTANT_PROFILE_OPTIONS = [
     { id: 'safe-dev', label: 'Safe Dev', desc: 'Standard development without execution privileges.' },
@@ -33,7 +19,7 @@ const ASSISTANT_PROFILE_OPTIONS = [
 
 export default function AssistantSettings() {
     const { settings, updateSettings } = useSettings()
-    const [activeTab, setActiveTab] = useState<'connection' | 'defaults' | 'behavior' | 'advanced'>('connection')
+    const [activeTab, setActiveTab] = useState<'connection' | 'defaults' | 'behavior' | 'advanced' | 'account' | 'usage'>('connection')
     const [runtimeModels, setRuntimeModels] = useState<RuntimeModel[]>([])
     const [modelsLoading, setModelsLoading] = useState(false)
     const [modelsError, setModelsError] = useState<string | null>(null)
@@ -174,6 +160,18 @@ export default function AssistantSettings() {
                     active={activeTab === 'advanced'}
                     onClick={() => setActiveTab('advanced')}
                 />
+                <TabButton
+                    title="Account"
+                    icon={<Gauge size={14} />}
+                    active={activeTab === 'account'}
+                    onClick={() => setActiveTab('account')}
+                />
+                <TabButton
+                    title="Usage"
+                    icon={<BarChart3 size={14} />}
+                    active={activeTab === 'usage'}
+                    onClick={() => setActiveTab('usage')}
+                />
             </div>
 
             <div className="space-y-6">
@@ -215,21 +213,17 @@ export default function AssistantSettings() {
                                     </button>
                                 </div>
                                 <div>
-                                    <input
-                                        type="text"
-                                        list="models-list"
+                                    <select
                                         value={settings.assistantDefaultModel}
                                         onChange={(event) => updateSettings({ assistantDefaultModel: event.target.value })}
-                                        placeholder="Search or select a model..."
                                         className="mt-2 w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm text-sparkle-text focus:outline-none focus:border-indigo-500/50"
-                                    />
-                                    <datalist id="models-list">
+                                    >
                                         {modelOptions.map((model) => (
                                             <option key={model.id} value={model.id}>
                                                 {model.label}
                                             </option>
                                         ))}
-                                    </datalist>
+                                    </select>
                                 </div>
                                 {modelsError && (
                                     <p className="mt-2 text-xs text-amber-300">
@@ -313,16 +307,23 @@ export default function AssistantSettings() {
                                 onChange={(checked) => updateSettings({ assistantShowThinking: checked })}
                             />
                             <ToggleRow
+                                icon={<PanelLeft size={16} className="text-cyan-300" />}
+                                title="Allow Event Console in chat UI"
+                                description="Show/hide event console controls in the Assistant page."
+                                checked={settings.assistantAllowEventConsole}
+                                onChange={(checked) => updateSettings({ assistantAllowEventConsole: checked, assistantShowEventPanel: checked ? settings.assistantShowEventPanel : false })}
+                            />
+                            <ToggleRow
                                 icon={<Shield size={16} className="text-amber-300" />}
                                 title="Show debug/event panel by default"
                                 description="Open assistant with event diagnostics visible."
-                                checked={settings.assistantShowEventPanel}
-                                onChange={(checked) => updateSettings({ assistantShowEventPanel: checked })}
+                                checked={settings.assistantAllowEventConsole && settings.assistantShowEventPanel}
+                                disabled={!settings.assistantAllowEventConsole}
+                                onChange={(checked) => updateSettings({ assistantShowEventPanel: checked, assistantAllowEventConsole: checked ? true : settings.assistantAllowEventConsole })}
                             />
                         </div>
                     </SettingsSection>
                 )}
-
                 {activeTab === 'advanced' && (
                     <SettingsSection title="Advanced Layout" description="Tune assistant sidebar behavior and dimensions.">
                         <div className="space-y-4">
@@ -353,6 +354,14 @@ export default function AssistantSettings() {
                     </SettingsSection>
                 )}
 
+                {activeTab === 'account' && (
+                    <AssistantAccountSettings embedded forcedTab="account" />
+                )}
+
+                {activeTab === 'usage' && (
+                    <AssistantAccountSettings embedded forcedTab="usage" />
+                )}
+
                 <div className="pt-1">
                     <button
                         onClick={() =>
@@ -364,6 +373,7 @@ export default function AssistantSettings() {
                                 assistantAutoConnectOnOpen: false,
                                 assistantSidebarCollapsed: false,
                                 assistantSidebarWidth: 320,
+                                assistantAllowEventConsole: true,
                                 assistantShowEventPanel: false,
                                 assistantProfile: 'safe-dev',
                                 assistantProjectModels: {},
@@ -376,41 +386,18 @@ export default function AssistantSettings() {
                     </button>
                 </div>
             </div>
-            {showYoloConfirmModal && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn"
-                    onClick={() => setShowYoloConfirmModal(false)}
-                >
-                    <div
-                        className="w-full max-w-md rounded-2xl border border-amber-500/30 bg-sparkle-card p-6 shadow-2xl"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <h3 className="text-base font-semibold text-sparkle-text">Enable YOLO mode by default?</h3>
-                        <p className="mt-2 text-sm text-sparkle-text-secondary">
-                            YOLO mode auto-approves command execution and file modifications. Enable this only for trusted repositories.
-                        </p>
-                        <div className="mt-5 flex items-center justify-end gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setShowYoloConfirmModal(false)}
-                                className="rounded-lg border border-sparkle-border px-3 py-1.5 text-sm text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    updateSettings({ assistantApprovalMode: 'yolo' })
-                                    setShowYoloConfirmModal(false)
-                                }}
-                                className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 transition-colors hover:bg-amber-500/25"
-                            >
-                                Enable YOLO
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmModal
+                isOpen={showYoloConfirmModal}
+                title="Enable YOLO mode by default?"
+                message="YOLO mode auto-approves command execution and file modifications. Enable this only for trusted repositories."
+                confirmLabel="Enable YOLO"
+                onConfirm={() => {
+                    updateSettings({ assistantApprovalMode: 'yolo' })
+                    setShowYoloConfirmModal(false)
+                }}
+                onCancel={() => setShowYoloConfirmModal(false)}
+                variant="warning"
+            />
         </div>
     )
 }
@@ -458,16 +445,18 @@ function ToggleRow({
     title,
     description,
     checked,
+    disabled,
     onChange
 }: {
     icon: ReactNode
     title: string
     description: string
     checked: boolean
+    disabled?: boolean
     onChange: (next: boolean) => void
 }) {
     return (
-        <div className="flex items-center justify-between gap-3 py-1">
+        <div className={cn('flex items-center justify-between gap-3 py-1', disabled && 'opacity-60')}>
             <div className="flex items-start gap-3">
                 <span className="mt-0.5">{icon}</span>
                 <div>
@@ -475,17 +464,18 @@ function ToggleRow({
                     <p className="text-xs text-sparkle-text-secondary">{description}</p>
                 </div>
             </div>
-            <ToggleSwitch checked={checked} onChange={onChange} />
+            <ToggleSwitch checked={checked} onChange={onChange} disabled={disabled} />
         </div>
     )
 }
 
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (next: boolean) => void }) {
+function ToggleSwitch({ checked, onChange, disabled }: { checked: boolean; onChange: (next: boolean) => void; disabled?: boolean }) {
     return (
         <button
+            disabled={disabled}
             onClick={() => onChange(!checked)}
             className={cn(
-                'w-12 h-7 rounded-full transition-colors relative shrink-0',
+                'w-12 h-7 rounded-full transition-colors relative shrink-0 disabled:cursor-not-allowed',
                 checked ? 'bg-[var(--accent-primary)]' : 'bg-sparkle-border'
             )}
         >

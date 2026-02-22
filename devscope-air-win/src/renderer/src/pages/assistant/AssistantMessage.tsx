@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import {
     Bot,
     Brain,
@@ -230,12 +231,13 @@ export function AssistantMessage({
                         />
                     </button>
 
-                    {isThoughtsOpen && (
+                    <AnimatedHeight isOpen={isThoughtsOpen} duration={500}>
                         <div
                             ref={thoughtsBodyRef}
-                            className="max-h-[42vh] space-y-2 overflow-y-auto border-t border-sparkle-border p-3 animate-fadeIn"
+                            className="max-h-[42vh] space-y-2 overflow-y-auto border-t border-sparkle-border p-3"
                         >
                             {allThoughts.map((item, index) => {
+                                // ... (rest of the content remains the same)
                                 const animationStyle = {
                                     animationDelay: `${Math.min(index, 10) * 45}ms`,
                                     animationFillMode: 'both' as const
@@ -313,7 +315,7 @@ export function AssistantMessage({
                                 )
                             })}
                         </div>
-                    )}
+                    </AnimatedHeight>
                 </div>
             )}
 
@@ -363,11 +365,30 @@ export function AssistantMessage({
                     </div>
                 </div>
 
-                <div className="max-w-[86ch] text-[15px] leading-7 text-sparkle-text">
-                    <MarkdownRenderer
-                        content={displayedText}
-                        className="bg-transparent p-0 text-sparkle-text prose-invert"
-                    />
+                <div className="max-w-[86ch] text-[15px] leading-7 text-sparkle-text relative min-h-[1.75rem]">
+                    {(!displayedText && isBusy) ? (
+                        <div className="space-y-3 py-2 animate-fadeIn">
+                            {!hasThoughts ? (
+                                <>
+                                    <div className="h-3 w-[85%] rounded bg-sparkle-border/40 animate-shimmer" />
+                                    <div className="h-3 w-[65%] rounded bg-sparkle-border/40 animate-shimmer" />
+                                    <div className="h-3 w-[75%] rounded bg-sparkle-border/40 animate-shimmer" />
+                                </>
+                            ) : (
+                                <div className="flex items-center gap-2 py-1">
+                                    <div className="h-2 w-24 rounded bg-sparkle-border/40 animate-shimmer" />
+                                    <span className="text-[10px] uppercase tracking-widest text-sparkle-text-muted font-mono opacity-50">Thinking...</span>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className={cn("transition-opacity duration-500", !displayedText ? "opacity-0" : "opacity-100")}>
+                            <MarkdownRenderer
+                                content={displayedText}
+                                className="bg-transparent p-0 text-sparkle-text prose-invert"
+                            />
+                        </div>
+                    )}
                 </div>
 
                 <div className="mt-2 flex w-full items-center justify-between gap-2">

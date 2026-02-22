@@ -115,6 +115,7 @@ const devScopeAPI = {
             limit?: number
             types?: string[]
             search?: string
+            refreshToken?: boolean
         }) => ipcRenderer.invoke('devscope:assistant:status', query),
         send: (prompt: string, options?: {
             model?: string
@@ -203,6 +204,10 @@ const devScopeAPI = {
         setProjectModel: (projectPath: string, model: string) =>
             ipcRenderer.invoke('devscope:assistant:status', { kind: 'project-model:set', projectPath, model }),
         getTelemetryIntegrity: () => ipcRenderer.invoke('devscope:assistant:status', { kind: 'telemetry:integrity' }),
+        readAccount: (refreshToken = false) =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'account:read', refreshToken }),
+        readRateLimits: () =>
+            ipcRenderer.invoke('devscope:assistant:status', { kind: 'account:rate-limits' }),
         runWorkflowExplainDiff: (projectPath: string, filePath?: string, model?: string) =>
             ipcRenderer.invoke('devscope:assistant:status', { kind: 'workflow:explain-diff', projectPath, filePath, model }),
         runWorkflowReviewStaged: (projectPath: string, model?: string) =>
