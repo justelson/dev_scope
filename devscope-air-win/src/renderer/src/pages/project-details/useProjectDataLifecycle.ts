@@ -1,4 +1,10 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import {
+    getCachedFileTree,
+    getCachedProjectDetails,
+    setCachedFileTree,
+    setCachedProjectDetails
+} from '@/lib/projectViewCache'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type {
     FileTreeNode,
@@ -105,6 +111,8 @@ export function useProjectDataLifecycle({
     setIsProjectLive,
     setActivePorts
 }: UseProjectDataLifecycleParams) {
+    const loadDetailsRequestRef = useRef(0)
+
     const measureReadmeOverflow = useCallback(() => {
         const element = readmeContentRef.current
         if (!element) {
@@ -147,32 +155,64 @@ export function useProjectDataLifecycle({
     const loadProjectDetails = useCallback(async () => {
         if (!decodedPath) return
 
-        setLoading(true)
+        const requestId = ++loadDetailsRequestRef.current
+        const isStale = () => requestId !== loadDetailsRequestRef.current
+        const cachedProject = getCachedProjectDetails(decodedPath)
+        const cachedTree = getCachedFileTree(decodedPath)
+        const hasCachedProject = Boolean(cachedProject)
+
+        if (cachedProject) {
+            setProject(cachedProject as any)
+            setError(null)
+            setLoading(false)
+        } else {
+            setLoading(true)
+        }
+        if (cachedTree) {
+            setFileTree(cachedTree as any)
+        }
+
         setError(null)
-        await yieldToBrowserPaint()
+        if (!hasCachedProject) {
+            await yieldToBrowserPaint()
+        }
 
         try {
-            const [detailsResult, treeResult] = await Promise.all([
-                window.devscope.getProjectDetails(decodedPath),
-                window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
-            ])
+            const treePromise = window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
+            const detailsResult = await window.devscope.getProjectDetails(decodedPath)
+
+            if (isStale()) return
 
             if (detailsResult.success) {
                 setProject(detailsResult.project)
+                setCachedProjectDetails(decodedPath, detailsResult.project)
                 if (detailsResult.project.readme) {
                     setActiveTab('readme')
                 }
+                setError(null)
+                setLoading(false)
             } else {
-                setError(detailsResult.error || 'Failed to load project details')
+                if (!hasCachedProject) {
+                    setError(detailsResult.error || 'Failed to load project details')
+                }
+                setLoading(false)
             }
 
+            const treeResult = await treePromise
+            if (isStale()) return
             if (treeResult.success) {
                 setFileTree(treeResult.tree)
+                setCachedFileTree(decodedPath, treeResult.tree)
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to load project')
+            if (isStale()) return
+            if (!hasCachedProject) {
+                setError(err.message || 'Failed to load project')
+            }
         } finally {
-            setLoading(false)
+            if (!isStale() && !hasCachedProject) {
+                setLoading(false)
+            }
         }
     }, [decodedPath, setLoading, setError, setProject, setActiveTab, setFileTree])
 

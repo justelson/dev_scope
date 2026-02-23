@@ -27,26 +27,7 @@ function getParentPath(filePath: string): string {
     return normalized.slice(0, sep)
 }
 
-function QuickChips({ onSelect }: { onSelect: (v: string) => void }) {
-    const chips = [
-        { label: 'Projects', value: '/', icon: <Slash size={12} /> },
-        { label: 'Files', value: '//', icon: <Slash size={12} /> }
-    ]
-    return (
-        <div className="flex items-center gap-2 flex-wrap">
-            {chips.map(c => (
-                <button
-                    key={c.label}
-                    onClick={() => onSelect(c.value)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sparkle-accent/40 border border-sparkle-border-secondary text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-accent/60 text-sm"
-                >
-                    {c.icon}
-                    <span>{c.label}</span>
-                </button>
-            ))}
-        </div>
-    )
-}
+// Quick chips component removed, functionality integrated directly into main markup
 
 const MAX_PER_GROUP = 8
 const RECENT_KEY = 'devscope:palette:recent'
@@ -58,6 +39,7 @@ export function CommandPalette() {
     const inputRef = useRef<HTMLInputElement>(null)
     const fileIndexCacheRef = useRef<Map<string, FileSearchIndex>>(new Map())
     const fileIndexLoadingRef = useRef<Set<string>>(new Set())
+    const loadedProjectsRootsKeyRef = useRef<string>('')
 
     const [query, setQuery] = useState('')
     const [projects, setProjects] = useState<any[]>([])
@@ -73,6 +55,7 @@ export function CommandPalette() {
             ...(settings.additionalFolders || [])
         ].filter((root): root is string => typeof root === 'string' && root.trim().length > 0)))
     }, [settings.projectsFolder, settings.additionalFolders])
+    const paletteRootsKey = useMemo(() => paletteRoots.join('||'), [paletteRoots])
 
     useEffect(() => {
         if (isOpen) {
@@ -132,6 +115,7 @@ export function CommandPalette() {
 
     useEffect(() => {
         if (!isOpen || paletteRoots.length === 0) return
+        if (projects.length > 0 && loadedProjectsRootsKeyRef.current === paletteRootsKey) return
 
         Promise.all(paletteRoots.map((root) => window.devscope.scanProjects(root)))
             .then((results) => {
@@ -145,10 +129,16 @@ export function CommandPalette() {
                         merged.push(project)
                     }
                 }
+                loadedProjectsRootsKeyRef.current = paletteRootsKey
                 setProjects(merged)
             })
             .catch(err => console.error('scanProjects failed', err))
-    }, [isOpen, paletteRoots])
+    }, [isOpen, paletteRoots, paletteRootsKey, projects.length])
+
+    useEffect(() => {
+        if (loadedProjectsRootsKeyRef.current === paletteRootsKey) return
+        setProjects([])
+    }, [paletteRootsKey])
 
     useEffect(() => {
         fileIndexCacheRef.current.clear()
@@ -328,54 +318,99 @@ export function CommandPalette() {
     if (!isOpen) return null
 
     return (
-        <div 
+        <div
             className={cn(
-                "fixed inset-0 z-[60] bg-black/60 backdrop-blur-md flex items-start justify-center pt-24",
+                "fixed inset-0 z-[60] bg-sparkle-bg/80 backdrop-blur-xl flex items-start justify-center pt-[10vh] sm:pt-[15vh] px-4",
                 isClosing ? "animate-modal-backdrop-out" : "animate-fadeIn"
             )}
             onClick={handleClose}
         >
             <div
                 className={cn(
-                    "w-full max-w-3xl mx-4 bg-sparkle-card/95 border border-sparkle-border-secondary rounded-2xl shadow-2xl overflow-hidden",
+                    "flex flex-col w-full max-w-2xl bg-sparkle-card border border-sparkle-border rounded-[14px] overflow-hidden shadow-2xl mx-4",
                     isClosing ? "animate-modal-out" : "animate-fadeIn"
                 )}
                 onClick={e => e.stopPropagation()}
             >
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-sparkle-border-secondary bg-sparkle-accent/40">
-                    <div className="p-2 rounded-xl bg-sparkle-accent/40 text-sparkle-text-secondary">
-                        <Search size={16} />
-                    </div>
+                {/* Search Header */}
+                <div className="relative flex items-center gap-3 px-4 py-3.5 sm:px-5">
+                    {/* Subtle top glow */}
+                    <div className="absolute top-0 inset-x-0 h-[80px] bg-gradient-to-b from-[var(--accent-primary)]/10 to-transparent pointer-events-none opacity-50 hidden dark:block" />
+
+                    <Search size={18} className="text-[var(--accent-primary)]/80 stroke-[2] ml-1" />
                     <input
                         ref={inputRef}
                         value={query}
                         onChange={e => setQuery(e.target.value)}
-                        placeholder="Search: / projects, // files"
-                        className="flex-1 bg-transparent text-sparkle-text placeholder:text-sparkle-text-muted text-base outline-none"
+                        placeholder="What are you looking for?"
+                        className="flex-1 bg-transparent text-sparkle-text placeholder:text-sparkle-text-muted/60 text-[16px] xl:text-[18px] font-medium outline-none ml-2"
                     />
-                    <div className="flex items-center gap-2 text-[11px] text-sparkle-text-muted">
-                        <Kbd>Ctrl</Kbd><span className="text-sparkle-text-muted">+</span><Kbd>K</Kbd>
-                        <button onClick={handleClose} className="p-2 rounded-lg hover:bg-sparkle-accent/60 text-sparkle-text-secondary">
-                            <X size={16} />
-                        </button>
+                    <div className="flex items-center gap-2">
+                        {query && (
+                            <button
+                                onClick={() => setQuery('')}
+                                className="p-1.5 rounded-full hover:bg-sparkle-bg text-sparkle-text-muted hover:text-sparkle-text transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        )}
+                        <kbd className="hidden sm:inline-flex items-center justify-center h-6 px-1.5 border border-sparkle-border/60 rounded bg-sparkle-bg text-[10px] font-medium text-sparkle-text-secondary shadow-sm">Esc</kbd>
                     </div>
                 </div>
 
-                <div className="max-h-[420px] overflow-auto custom-scrollbar divide-y divide-sparkle-border-secondary">
+                <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-sparkle-border/40 to-transparent" />
+
+                {/* Main Content Area */}
+                <div className="relative max-h-[55vh] overflow-y-auto custom-scrollbar flex flex-col bg-sparkle-bg/30">
                     {query.trim() === '' && (
-                        <div className="p-4 space-y-3">
-                            <QuickChips onSelect={(text) => setQuery(text + ' ')} />
+                        <div className="p-4 sm:p-5">
+                            <div className="mb-6">
+                                <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-[var(--accent-primary)] mb-3 flex items-center gap-2 px-1">
+                                    <Slash size={12} className="opacity-70" /> Quick Search
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setQuery('/ ')}
+                                        className="group text-left p-3 sm:p-4 rounded-xl border border-sparkle-border hover:border-[var(--accent-primary)]/40 bg-sparkle-bg hover:bg-sparkle-card-hover transition-all flex items-start gap-3 shadow-sm"
+                                    >
+                                        <div className="p-2 rounded-lg bg-sparkle-card-hover border border-sparkle-border group-hover:bg-[var(--accent-primary)]/10 group-hover:text-[var(--accent-primary)] group-hover:border-[var(--accent-primary)]/20 transition-all text-sparkle-text-secondary">
+                                            <Folder size={18} className="stroke-[1.5]" />
+                                        </div>
+                                        <div>
+                                            <div className="font-semibold text-[14px] text-sparkle-text mb-0.5">Projects</div>
+                                            <div className="text-[11px] text-sparkle-text-muted">Type <span className="font-mono text-sparkle-text-secondary bg-sparkle-card border border-sparkle-border px-1 py-0.5 rounded">/</span></div>
+                                        </div>
+                                    </button>
+                                    <button
+                                        onClick={() => setQuery('// ')}
+                                        className="group text-left p-3 sm:p-4 rounded-xl border border-sparkle-border hover:border-[var(--accent-primary)]/40 bg-sparkle-bg hover:bg-sparkle-card-hover transition-all flex items-start gap-3 shadow-sm"
+                                    >
+                                        <div className="p-2 rounded-lg bg-sparkle-card-hover border border-sparkle-border group-hover:bg-[var(--accent-primary)]/10 group-hover:text-[var(--accent-primary)] group-hover:border-[var(--accent-primary)]/20 transition-all text-sparkle-text-secondary">
+                                            <File size={18} className="stroke-[1.5]" />
+                                        </div>
+                                        <div>
+                                            <div className="font-semibold text-[14px] text-sparkle-text mb-0.5">Files</div>
+                                            <div className="text-[11px] text-sparkle-text-muted">Type <span className="font-mono text-sparkle-text-secondary bg-sparkle-card border border-sparkle-border px-1 py-0.5 rounded">//</span></div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
                             {recent.length > 0 && (
                                 <div>
-                                    <div className="text-[11px] uppercase tracking-widest text-sparkle-text-muted mb-2">Recent</div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {recent.map((r) => (
+                                    <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-[var(--accent-primary)] mb-2 flex items-center gap-2 px-1">History</div>
+                                    <div className="flex flex-col gap-1">
+                                        {recent.map((r, i) => (
                                             <button
                                                 key={r}
                                                 onClick={() => setQuery(r + ' ')}
-                                                className="px-3 py-1.5 rounded-lg bg-sparkle-accent/40 border border-sparkle-border-secondary text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-accent/60 text-sm"
+                                                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-[13px] text-sparkle-text-secondary hover:bg-sparkle-card-hover border border-transparent hover:border-sparkle-border/40 hover:text-sparkle-text group transition-colors"
                                             >
-                                                {r}
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-sparkle-text-muted group-hover:bg-[var(--accent-primary)] transition-all" />
+                                                    <span className="font-medium">{r}</span>
+                                                </div>
+                                                <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 text-[var(--accent-primary)] transition-opacity" />
                                             </button>
                                         ))}
                                     </div>
@@ -384,36 +419,92 @@ export function CommandPalette() {
                         </div>
                     )}
 
+                    {results.length > 0 && (
+                        <div className="p-2 sm:p-3 flex-1 pb-3">
+                            {results.map((r, idx) => {
+                                const isSelected = idx === selectedIndex;
+                                return (
+                                    <button
+                                        key={r.id}
+                                        onClick={() => { r.action(); pushRecent(query); handleClose() }}
+                                        className={cn(
+                                            'group w-full flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 text-left transition-all outline-none rounded-xl mb-0.5',
+                                            isSelected
+                                                ? 'bg-sparkle-card border-l-[3px] border-l-[var(--accent-primary)] bg-[var(--accent-primary)]/5 shadow-sm'
+                                                : 'hover:bg-sparkle-bg border-l-[3px] border-l-transparent border border-transparent hover:border-sparkle-border/40'
+                                        )}
+                                    >
+                                        <div className={cn(
+                                            "flex items-center justify-center transition-colors",
+                                            isSelected ? "text-[var(--accent-primary)]" : "text-sparkle-text-secondary group-hover:text-sparkle-text"
+                                        )}>
+                                            {r.icon || <Folder size={18} className="stroke-[1.5]" />}
+                                        </div>
+
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <span className={cn(
+                                                    "text-[14px] font-medium truncate transition-colors",
+                                                    isSelected ? "text-[var(--accent-primary)]" : "text-sparkle-text group-hover:text-[var(--accent-primary)]"
+                                                )}>{r.title}</span>
+
+                                                {r.badge && (
+                                                    <span className={cn(
+                                                        "text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-widest leading-none drop-shadow-sm border",
+                                                        isSelected
+                                                            ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-primary)]/20"
+                                                            : "bg-sparkle-bg text-sparkle-text-muted border-sparkle-border"
+                                                    )}>{r.badge}</span>
+                                                )}
+                                            </div>
+                                            {r.subtitle && (
+                                                <p className={cn(
+                                                    "text-[12px] truncate transition-colors",
+                                                    isSelected ? "text-[var(--accent-primary)]/70" : "text-sparkle-text-muted"
+                                                )}>{r.subtitle}</p>
+                                            )}
+                                        </div>
+
+                                        <div className={cn(
+                                            "flex items-center transition-opacity",
+                                            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                        )}>
+                                            <ArrowRight size={16} className={isSelected ? "text-[var(--accent-primary)]/80" : "text-sparkle-text-muted/50"} />
+                                        </div>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
+
                     {results.length === 0 && query.trim() !== '' && !loadingFiles && (
-                        <div className="p-6 text-center text-sparkle-text-muted text-sm">No matches yet. Try / or // prefixes.</div>
+                        <div className="p-16 text-center flex flex-col items-center justify-center opacity-60">
+                            <div className="p-4 rounded-3xl bg-sparkle-card border border-sparkle-border/40 shadow-sm mb-5">
+                                <Search size={32} className="text-sparkle-text-muted stroke-[1.5]" />
+                            </div>
+                            <div className="text-sparkle-text text-xl font-medium mb-1">No results found</div>
+                            <div className="text-sparkle-text-muted text-[14px] max-w-[280px]">We couldn't find anything matching "{query}". Try adjusting your search.</div>
+                        </div>
                     )}
+
                     {loadingFiles && (
-                        <div className="p-3 text-center text-sparkle-text-secondary text-sm">Searching files...</div>
+                        <div className="p-16 text-center flex flex-col items-center justify-center opacity-60">
+                            <div className="w-10 h-10 rounded-full border-2 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] animate-spin mb-5" />
+                            <div className="text-sparkle-text font-medium text-lg">Scanning folders...</div>
+                        </div>
                     )}
-                    {results.map((r, idx) => (
-                        <button
-                            key={r.id}
-                            onClick={() => { r.action(); pushRecent(query); handleClose() }}
-                            className={cn(
-                                'w-full flex items-center gap-3 px-4 py-3 text-left transition-colors',
-                                idx === selectedIndex ? 'bg-sparkle-accent/60' : 'hover:bg-sparkle-accent/40'
-                            )}
-                        >
-                            <div className="p-2 rounded-lg bg-sparkle-accent/50 text-sparkle-text-secondary" style={{ border: `1px solid ${r.color || '#ffffff22'}` }}>
-                                {r.icon || <Folder size={16} />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sparkle-text font-semibold truncate">{r.title}</span>
-                                    {r.badge && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-sparkle-border-secondary text-sparkle-text-muted">{r.badge}</span>
-                                    )}
-                                </div>
-                                {r.subtitle && <p className="text-xs text-sparkle-text-muted truncate">{r.subtitle}</p>}
-                            </div>
-                            <ArrowRight size={14} className="text-sparkle-text-muted" />
-                        </button>
-                    ))}
+                </div>
+
+                {/* Footer */}
+                <div className="h-10 border-t border-sparkle-border border-x-0 border-b-0 bg-sparkle-bg/50 px-4 sm:px-5 flex items-center justify-between">
+                    <div className="text-[10px] font-medium text-sparkle-text-muted flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)] animate-pulse shadow-[0_0_8px_var(--accent-primary)]" />
+                        DevScope Command Flow
+                    </div>
+                    <div className="flex items-center gap-4 text-[10px] text-sparkle-text-muted font-medium">
+                        <span className="flex items-center gap-1.5"><kbd className="font-mono bg-sparkle-card px-1.5 py-0.5 rounded border border-sparkle-border/60 shadow-sm">↑</kbd> <kbd className="font-mono bg-sparkle-card px-1.5 py-0.5 rounded border border-sparkle-border/60 shadow-sm">↓</kbd> Navigate</span>
+                        <span className="flex items-center gap-1.5"><kbd className="font-mono bg-sparkle-card px-1.5 py-0.5 rounded border border-sparkle-border/60 shadow-sm">↵</kbd> Select</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -421,7 +512,7 @@ export function CommandPalette() {
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {
-    return <span className="px-2 py-1 rounded-md border border-sparkle-border-secondary bg-sparkle-accent/50 text-sparkle-text-secondary">{children}</span>
+    return <span className="px-1.5 py-0.5 rounded border border-sparkle-border/60 bg-sparkle-bg text-sparkle-text-secondary font-medium shadow-sm">{children}</span>
 }
 
 export default CommandPalette

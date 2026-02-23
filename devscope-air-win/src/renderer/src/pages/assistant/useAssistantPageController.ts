@@ -354,13 +354,18 @@ export function useAssistantPageController() {
             if (!isMounted) return
             handleAssistantEvent(event as AssistantEvent)
         })
-        void actions.handleCreateSession()
-            .then(() => {
-                if (isMounted) {
-                    void loadSnapshot({ hydrateChat: true }).catch(() => setIsChatHydrating(false))
-                }
-            })
-            .catch(() => setIsChatHydrating(false))
+
+        void (async () => {
+            setIsChatHydrating(true)
+            try {
+                await loadSnapshot()
+                if (!isMounted) return
+                await actions.handleCreateSession()
+            } catch {
+                if (isMounted) setIsChatHydrating(false)
+            }
+        })()
+
         return () => {
             isMounted = false
             unsubscribe()

@@ -6,6 +6,7 @@ import type { AssistantHistoryAttachment } from './assistant-page-types'
 const USER_COLLAPSED_LINE_COUNT = 7
 const USER_COLLAPSED_MAX_HEIGHT_PX = USER_COLLAPSED_LINE_COUNT * 24
 const USER_COLLAPSED_FADE_HEIGHT_PX = 160
+const USER_FLOATING_COLLAPSE_BOTTOM_PX = 176
 
 export function CollapsiblePlainMessage({
     text,
@@ -254,7 +255,7 @@ export function CollapsiblePlainMessage({
                 <button
                     type="button"
                     onClick={handleCollapseToTop}
-                    style={{ right: `${floatingRightPx}px`, bottom: '124px' }}
+                    style={{ right: `${floatingRightPx}px`, bottom: `${USER_FLOATING_COLLAPSE_BOTTOM_PX}px` }}
                     className="fixed z-40 inline-flex items-center gap-2 rounded-full border border-white/20 bg-black/65 px-4 py-2 text-sm text-white/90 shadow-lg backdrop-blur-md transition-colors hover:bg-black/80"
                 >
                     <ChevronUp size={14} />

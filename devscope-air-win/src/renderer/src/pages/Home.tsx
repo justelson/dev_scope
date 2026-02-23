@@ -50,6 +50,11 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-sparkle-text-secondary">
                     <span>Last refresh: {overview.lastRefreshAt ? new Date(overview.lastRefreshAt).toLocaleTimeString() : 'pending'}</span>
+                    {overview.gitOverviewLoading && (
+                        <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[11px] font-medium text-amber-300">
+                            Loading Git data
+                        </span>
+                    )}
                     <button
                         onClick={() => void overview.refreshHome('background')}
                         disabled={overview.refreshing}

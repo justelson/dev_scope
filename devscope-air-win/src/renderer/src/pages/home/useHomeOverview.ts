@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getRecentProjects } from '@/lib/recentProjects'
+import { primeProjectDetailsCache } from '@/lib/projectViewCache'
 import type { DiscoveredProject, ProjectOverviewItem } from './types'
 import { mergeProjectOverview, normalizePathKey, type ProjectsGitOverviewResult, type ScanResult } from './homeUtils'
 
 const AUTO_REFRESH_MS = 60_000
+const FOREGROUND_REFRESH_COOLDOWN_MS = 8_000
+const GIT_PRIORITY_BATCH_SIZE = 14
 
 type HomeOverviewSettings = {
     projectsFolder?: string
@@ -21,6 +24,7 @@ export function useHomeOverview(settings: HomeOverviewSettings) {
     const [error, setError] = useState<string | null>(null)
     const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
     const refreshRequestRef = useRef(0)
+    const lastForegroundRefreshAtRef = useRef(0)
     const prewarmedFolderPathsRef = useRef<Set<string>>(new Set())
 
     const prewarmFolderScans = useCallback(async (folderPaths: string[]) => {
@@ -94,6 +98,9 @@ export function useHomeOverview(settings: HomeOverviewSettings) {
             )
 
             const mergedProjects = mergeProjects(scanResults)
+            for (const project of mergedProjects) {
+                primeProjectDetailsCache(project)
+            }
             const recentProjects = getRecentProjects()
 
             if (isStale()) return
@@ -104,29 +111,68 @@ export function useHomeOverview(settings: HomeOverviewSettings) {
             const gitCandidates = mergedProjects.filter(
                 (project) => project.type === 'git' || project.markers?.includes('.git')
             )
-
-            prewarmCandidates(scanResults, gitCandidates.map((project) => project.path), prewarmedFolderPathsRef.current, prewarmFolderScans)
-
             const gitCandidatePathKeys = new Set(gitCandidates.map((project) => normalizePathKey(project.path)))
             setGitOverviewLoading(gitCandidates.length > 0)
             setGitLoadingPaths(gitCandidatePathKeys)
+            const prioritizedGitPaths = prioritizeGitCandidates(gitCandidates, recentProjects)
+            const priorityPaths = prioritizedGitPaths.slice(0, GIT_PRIORITY_BATCH_SIZE)
+            const remainingPaths = prioritizedGitPaths.slice(GIT_PRIORITY_BATCH_SIZE)
+            let overviewItems: NonNullable<ProjectsGitOverviewResult['items']> = []
+            let overviewFailed = false
 
-            let overviewResult: ProjectsGitOverviewResult = { success: true, items: [] }
-            if (gitCandidates.length > 0) {
-                overviewResult = await window.devscope.getProjectsGitOverview(
-                    gitCandidates.map((project) => project.path)
-                ) as ProjectsGitOverviewResult
+            const loadedPathKeys = new Set<string>()
+            const applyOverviewProgress = () => {
+                setItems(mergeProjectOverview(mergedProjects, overviewItems, recentProjects))
+                const pending = new Set(
+                    Array.from(gitCandidatePathKeys).filter((pathKey) => !loadedPathKeys.has(pathKey))
+                )
+                setGitLoadingPaths(pending)
+                setGitOverviewLoading(pending.size > 0)
             }
 
-            if (isStale()) return
-            setItems(mergeProjectOverview(mergedProjects, overviewResult.items, recentProjects))
+            const loadOverviewBatch = async (paths: string[]) => {
+                if (paths.length === 0) return
+                const batch = await window.devscope.getProjectsGitOverview(paths) as ProjectsGitOverviewResult
+                if (!batch.success) {
+                    overviewFailed = true
+                    return
+                }
+                const nextItems = Array.isArray(batch.items) ? batch.items : []
+                overviewItems = [...overviewItems, ...nextItems]
+                for (const item of nextItems) {
+                    loadedPathKeys.add(normalizePathKey(item.path))
+                }
+            }
+
+            if (priorityPaths.length > 0) {
+                await loadOverviewBatch(priorityPaths)
+                if (isStale()) return
+                applyOverviewProgress()
+            }
+
+            if (remainingPaths.length > 0) {
+                await loadOverviewBatch(remainingPaths)
+                if (isStale()) return
+                applyOverviewProgress()
+            } else if (priorityPaths.length === 0) {
+                setGitOverviewLoading(false)
+                setGitLoadingPaths(new Set())
+            }
+
             setGitOverviewLoading(false)
             setGitLoadingPaths(new Set())
 
+            prewarmCandidates(
+                scanResults,
+                gitCandidates.map((project) => project.path),
+                prewarmedFolderPathsRef.current,
+                prewarmFolderScans
+            )
+
             if (failedScans.length === scanResults.length) {
                 setError(failedScans[0]?.error || 'Failed to scan configured project roots')
-            } else if (!overviewResult.success) {
-                setError(overviewResult.error || 'Git overview partially failed')
+            } else if (overviewFailed) {
+                setError('Git overview partially failed')
             } else {
                 setError(null)
             }
@@ -154,53 +200,74 @@ export function useHomeOverview(settings: HomeOverviewSettings) {
         return () => window.clearInterval(interval)
     }, [refreshHome])
 
-    const totals = useMemo(() => {
-        const gitEnabled = items.filter((item) => item.isGitRepo).length
-        const needsCommit = items.filter((item) => item.changedCount > 0).length
-        const needsPush = items.filter((item) => item.unpushedCount > 0).length
+    useEffect(() => {
+        const runForegroundRefresh = () => {
+            const now = Date.now()
+            if (now - lastForegroundRefreshAtRef.current < FOREGROUND_REFRESH_COOLDOWN_MS) return
+            lastForegroundRefreshAtRef.current = now
+            void refreshHome('background')
+        }
 
-        return { totalProjects: items.length, gitEnabled, needsCommit, needsPush }
-    }, [items])
+        const handleVisibilityChange = () => {
+            if (document.visibilityState !== 'visible') return
+            runForegroundRefresh()
+        }
 
-    const gitCandidates = useMemo(() => {
-        return [...items]
-            .filter((item) => item.type === 'git' || item.markers?.includes('.git'))
-            .sort((a, b) => {
-                const recentA = a.lastOpenedAt || 0
-                const recentB = b.lastOpenedAt || 0
-                if (recentA !== recentB) return recentB - recentA
-                return (b.lastModified || 0) - (a.lastModified || 0)
-            })
-    }, [items])
+        window.addEventListener('focus', runForegroundRefresh)
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        return () => {
+            window.removeEventListener('focus', runForegroundRefresh)
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+        }
+    }, [refreshHome])
 
-    const needsCommitProjects = useMemo(() => {
-        if (gitOverviewLoading) return gitCandidates
-        return [...items]
-            .filter((item) => item.changedCount > 0)
-            .sort((a, b) => {
-                const recentA = a.lastOpenedAt || 0
-                const recentB = b.lastOpenedAt || 0
-                if (recentA !== recentB) return recentB - recentA
-                if (a.changedCount !== b.changedCount) return b.changedCount - a.changedCount
-                return (b.lastModified || 0) - (a.lastModified || 0)
-            })
-    }, [items, gitCandidates, gitOverviewLoading])
+    const derived = useMemo(() => {
+        const gitCandidates: ProjectOverviewItem[] = []
+        const needsCommitFiltered: ProjectOverviewItem[] = []
+        const needsPushFiltered: ProjectOverviewItem[] = []
+        let gitEnabled = 0
+        let needsCommit = 0
+        let needsPush = 0
 
-    const needsPushProjects = useMemo(() => {
-        if (gitOverviewLoading) return gitCandidates
-        return [...items]
-            .filter((item) => item.unpushedCount > 0)
-            .sort((a, b) => {
-                const recentA = a.lastOpenedAt || 0
-                const recentB = b.lastOpenedAt || 0
-                if (recentA !== recentB) return recentB - recentA
-                if (a.unpushedCount !== b.unpushedCount) return b.unpushedCount - a.unpushedCount
-                return (b.lastModified || 0) - (a.lastModified || 0)
-            })
-    }, [items, gitCandidates, gitOverviewLoading])
+        for (const item of items) {
+            if (item.isGitRepo) gitEnabled += 1
+            if (item.changedCount > 0) {
+                needsCommit += 1
+                needsCommitFiltered.push(item)
+            }
+            if (item.unpushedCount > 0) {
+                needsPush += 1
+                needsPushFiltered.push(item)
+            }
+            if (item.type === 'git' || item.markers?.includes('.git')) {
+                gitCandidates.push(item)
+            }
+        }
 
-    const recentActivity = useMemo(() => {
-        return [...items].sort((a, b) => {
+        gitCandidates.sort((a, b) => {
+            const recentA = a.lastOpenedAt || 0
+            const recentB = b.lastOpenedAt || 0
+            if (recentA !== recentB) return recentB - recentA
+            return (b.lastModified || 0) - (a.lastModified || 0)
+        })
+
+        needsCommitFiltered.sort((a, b) => {
+            const recentA = a.lastOpenedAt || 0
+            const recentB = b.lastOpenedAt || 0
+            if (recentA !== recentB) return recentB - recentA
+            if (a.changedCount !== b.changedCount) return b.changedCount - a.changedCount
+            return (b.lastModified || 0) - (a.lastModified || 0)
+        })
+
+        needsPushFiltered.sort((a, b) => {
+            const recentA = a.lastOpenedAt || 0
+            const recentB = b.lastOpenedAt || 0
+            if (recentA !== recentB) return recentB - recentA
+            if (a.unpushedCount !== b.unpushedCount) return b.unpushedCount - a.unpushedCount
+            return (b.lastModified || 0) - (a.lastModified || 0)
+        })
+
+        const recentActivity = [...items].sort((a, b) => {
             const trackedA = a.lastOpenedAt ? 1 : 0
             const trackedB = b.lastOpenedAt ? 1 : 0
             if (trackedA !== trackedB) return trackedB - trackedA
@@ -210,7 +277,21 @@ export function useHomeOverview(settings: HomeOverviewSettings) {
             if (openedA !== openedB) return openedB - openedA
             return (b.lastModified || 0) - (a.lastModified || 0)
         })
-    }, [items])
+
+        const totals = {
+            totalProjects: items.length,
+            gitEnabled,
+            needsCommit,
+            needsPush
+        }
+
+        return {
+            totals,
+            needsCommitProjects: gitOverviewLoading ? gitCandidates : needsCommitFiltered,
+            needsPushProjects: gitOverviewLoading ? gitCandidates : needsPushFiltered,
+            recentActivity
+        }
+    }, [items, gitOverviewLoading])
 
     return {
         projectRoots,
@@ -220,10 +301,10 @@ export function useHomeOverview(settings: HomeOverviewSettings) {
         gitLoadingPaths,
         error,
         lastRefreshAt,
-        totals,
-        needsCommitProjects,
-        needsPushProjects,
-        recentActivity,
+        totals: derived.totals,
+        needsCommitProjects: derived.needsCommitProjects,
+        needsPushProjects: derived.needsPushProjects,
+        recentActivity: derived.recentActivity,
         refreshHome
     }
 }
@@ -265,6 +346,22 @@ function prewarmCandidates(
         if (prewarmQueue.length >= 40) break
     }
     if (prewarmQueue.length > 0) {
-        void prewarmFolderScans(prewarmQueue)
+        window.setTimeout(() => {
+            void prewarmFolderScans(prewarmQueue)
+        }, 1200)
     }
+}
+
+function prioritizeGitCandidates(
+    gitCandidates: DiscoveredProject[],
+    recentProjects: Record<string, { lastOpenedAt: number }>
+): string[] {
+    return [...gitCandidates]
+        .sort((a, b) => {
+            const recentA = recentProjects[normalizePathKey(a.path)]?.lastOpenedAt || 0
+            const recentB = recentProjects[normalizePathKey(b.path)]?.lastOpenedAt || 0
+            if (recentA !== recentB) return recentB - recentA
+            return (b.lastModified || 0) - (a.lastModified || 0)
+        })
+        .map((project) => project.path)
 }

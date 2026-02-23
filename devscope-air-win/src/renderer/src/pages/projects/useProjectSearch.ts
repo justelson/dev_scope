@@ -4,6 +4,11 @@ import { parseFileSearchQuery } from '@/lib/utils'
 import { buildFileSearchIndex, searchFileIndex, type FileSearchIndex } from '@/lib/fileSearchIndex'
 import type { ContentLayout, FileItem, FolderItem, Project, SearchResults, ViewMode } from './projectsTypes'
 
+const INDEX_RETRY_COOLDOWN_MS = 15000
+const SHARED_SEARCH_INDEX_CACHE = new Map<string, FileSearchIndex>()
+const SHARED_SEARCH_INDEX_LOADING = new Map<string, Promise<void>>()
+const SHARED_SEARCH_INDEX_RETRY_AT = new Map<string, number>()
+
 export function useProjectSearch(
     settings: Settings,
     updateSettings: (partial: Partial<Settings>) => void,
@@ -16,6 +21,7 @@ export function useProjectSearch(
     const [showHiddenFiles, setShowHiddenFiles] = useState(false)
     const [isSearching, setIsSearching] = useState(false)
     const [searchResults, setSearchResults] = useState<SearchResults | null>(null)
+    const [searchIndexVersion, setSearchIndexVersion] = useState(0)
 
     const viewMode = settings.browserViewMode as ViewMode
     const contentLayout = settings.browserContentLayout as ContentLayout
@@ -27,8 +33,9 @@ export function useProjectSearch(
     }, [updateSettings])
 
     const deferredSearchQuery = useDeferredValue(searchQuery)
-    const searchIndexCacheRef = useRef<Map<string, FileSearchIndex>>(new Map())
-    const searchIndexLoadingRef = useRef<Map<string, Promise<void>>>(new Map())
+    const searchIndexCacheRef = useRef<Map<string, FileSearchIndex>>(SHARED_SEARCH_INDEX_CACHE)
+    const searchIndexLoadingRef = useRef<Map<string, Promise<void>>>(SHARED_SEARCH_INDEX_LOADING)
+    const searchIndexRetryAtRef = useRef<Map<string, number>>(SHARED_SEARCH_INDEX_RETRY_AT)
 
     const searchRoots = useMemo(() => {
         return Array.from(new Set([
@@ -40,36 +47,44 @@ export function useProjectSearch(
     const searchRootsKey = useMemo(() => searchRoots.join('||'), [searchRoots])
 
     useEffect(() => {
-        searchIndexCacheRef.current.clear()
-        searchIndexLoadingRef.current.clear()
+        // Keep shared cache across navigations so deep-search doesn't rebuild every time.
+        setSearchIndexVersion((prev) => prev + 1)
     }, [searchRootsKey])
 
-    const ensureSearchIndex = useCallback(async (root: string) => {
+    const queueSearchIndexBuild = useCallback((root: string) => {
         if (!root) return
         if (searchIndexCacheRef.current.has(root)) return
 
         const inFlight = searchIndexLoadingRef.current.get(root)
-        if (inFlight) {
-            await inFlight
-            return
-        }
+        if (inFlight) return
+
+        const retryAt = searchIndexRetryAtRef.current.get(root) || 0
+        if (Date.now() < retryAt) return
 
         const loadPromise = (async () => {
-            const treeResult = await window.devscope.getFileTree(root, {
-                showHidden: true,
-                maxDepth: -1
-            })
+            try {
+                const treeResult = await window.devscope.getFileTree(root, {
+                    showHidden: true,
+                    maxDepth: -1
+                })
 
-            if (!treeResult?.success || !treeResult?.tree) return
-            searchIndexCacheRef.current.set(root, buildFileSearchIndex(treeResult.tree))
+                if (!treeResult?.success || !treeResult?.tree) {
+                    searchIndexRetryAtRef.current.set(root, Date.now() + INDEX_RETRY_COOLDOWN_MS)
+                    return
+                }
+
+                searchIndexCacheRef.current.set(root, buildFileSearchIndex(treeResult.tree))
+                searchIndexRetryAtRef.current.delete(root)
+                setSearchIndexVersion((prev) => prev + 1)
+            } catch {
+                searchIndexRetryAtRef.current.set(root, Date.now() + INDEX_RETRY_COOLDOWN_MS)
+            }
         })()
 
         searchIndexLoadingRef.current.set(root, loadPromise)
-        try {
-            await loadPromise
-        } finally {
+        void loadPromise.finally(() => {
             searchIndexLoadingRef.current.delete(root)
-        }
+        })
     }, [])
 
     useEffect(() => {
@@ -79,7 +94,11 @@ export function useProjectSearch(
         const runAutoIndex = async () => {
             for (const root of searchRoots) {
                 if (cancelled) break
-                await ensureSearchIndex(root)
+                queueSearchIndexBuild(root)
+                const inFlight = searchIndexLoadingRef.current.get(root)
+                if (inFlight) {
+                    await inFlight.catch(() => undefined)
+                }
             }
         }
 
@@ -87,7 +106,7 @@ export function useProjectSearch(
         return () => {
             cancelled = true
         }
-    }, [settings.enableFolderIndexing, searchRoots, ensureSearchIndex])
+    }, [settings.enableFolderIndexing, searchRoots, queueSearchIndexBuild])
 
     const performDeepSearch = useCallback(async (query: string) => {
         if (!query.trim() || searchRoots.length === 0) {
@@ -107,11 +126,12 @@ export function useProjectSearch(
             const seenFolderPaths = new Set<string>()
             const seenFilePaths = new Set<string>()
 
-            await Promise.all(searchRoots.map((root) => ensureSearchIndex(root)))
-
             for (const root of searchRoots) {
                 const index = searchIndexCacheRef.current.get(root)
-                if (!index) continue
+                if (!index) {
+                    queueSearchIndexBuild(root)
+                    continue
+                }
 
                 const searchResult = searchFileIndex(index, parsedQuery, {
                     showHidden: showHiddenFiles,
@@ -164,7 +184,7 @@ export function useProjectSearch(
         } finally {
             setIsSearching(false)
         }
-    }, [ensureSearchIndex, projects, searchRoots, showHiddenFiles])
+    }, [projects, queueSearchIndexBuild, searchRoots, showHiddenFiles])
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -175,7 +195,7 @@ export function useProjectSearch(
             }
         }, 180)
         return () => clearTimeout(timer)
-    }, [deferredSearchQuery, performDeepSearch])
+    }, [deferredSearchQuery, performDeepSearch, searchIndexVersion])
 
     const clearSearch = useCallback(() => {
         setSearchQuery('')

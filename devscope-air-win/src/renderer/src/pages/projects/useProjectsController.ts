@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
 import type { Settings } from '@/lib/settings'
+import { primeProjectDetailsCache } from '@/lib/projectViewCache'
 import type { FileItem, FolderItem, IndexedProject, IndexedTotals, IndexedInventory, IndexAllFoldersResult, Project } from './projectsTypes'
 import { useProjectSearch } from './useProjectSearch'
 import { useProjectStatsModal } from './useProjectStatsModal'
@@ -56,6 +57,9 @@ export function useProjectsController(
         try {
             const results = await Promise.all(foldersToScan.map((folder) => window.devscope.scanProjects(folder)))
             const aggregated = await aggregateScanResults(results)
+            for (const project of aggregated.projects) {
+                primeProjectDetailsCache(project)
+            }
 
             startTransition(() => {
                 setProjects(aggregated.projects)
