@@ -1,5 +1,6 @@
 import { webContents } from 'electron'
 import log from 'electron-log'
+import { ASSISTANT_IPC } from '../../shared/contracts/assistant-ipc'
 import {
     extractTurnIdFromParams,
     normalizeToken,
@@ -210,7 +211,7 @@ export function bridgeEmitEvent(
             continue
         }
         try {
-            target.send('devscope:assistant:event', event)
+            target.send(ASSISTANT_IPC.eventStream, event)
         } catch (error) {
             bridge.subscribers.delete(id)
             log.warn('[AssistantBridge] Failed to emit event to renderer', { id, error })

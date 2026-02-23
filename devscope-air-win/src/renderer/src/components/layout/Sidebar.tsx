@@ -5,7 +5,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useCallback, useEffect, useContext, type ReactNode } from 'react'
 import { useSettings } from '@/lib/settings'
 
 interface SidebarContextType {
@@ -53,10 +53,47 @@ const NAV_ITEMS: NavItem[] = [
     { id: 'settings', label: 'Settings', path: '/settings', icon: Settings }
 ]
 
+const LAST_PROJECTS_ROUTE_KEY = 'devscope:last-projects-route:v1'
+
+function isProjectsAreaPath(pathname: string): boolean {
+    return (
+        pathname === '/projects'
+        || pathname.startsWith('/projects/')
+        || pathname.startsWith('/folder-browse/')
+    )
+}
+
+function getProjectsRestorePath(): string {
+    try {
+        const stored = localStorage.getItem(LAST_PROJECTS_ROUTE_KEY)
+        if (stored && isProjectsAreaPath(stored)) return stored
+    } catch {
+        // Ignore storage read errors.
+    }
+    return '/projects'
+}
+
 export default function Sidebar() {
     const location = useLocation()
     const navigate = useNavigate()
     const { isCollapsed, setIsCollapsed } = useSidebar()
+
+    useEffect(() => {
+        if (!isProjectsAreaPath(location.pathname)) return
+        try {
+            localStorage.setItem(LAST_PROJECTS_ROUTE_KEY, location.pathname)
+        } catch {
+            // Ignore storage write errors.
+        }
+    }, [location.pathname])
+
+    const handleNavClick = useCallback((item: NavItem) => {
+        if (item.id === 'projects') {
+            navigate(getProjectsRestorePath())
+            return
+        }
+        navigate(item.path)
+    }, [navigate])
 
     return (
         <nav className={cn(
@@ -65,13 +102,15 @@ export default function Sidebar() {
         )}>
             <div className="flex-1 flex flex-col gap-1 px-3">
                 {NAV_ITEMS.map((item) => {
-                    const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+                    const isActive = item.id === 'projects'
+                        ? isProjectsAreaPath(location.pathname)
+                        : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
                     const Icon = item.icon
 
                     return (
                         <button
                             key={item.id}
-                            onClick={() => navigate(item.path)}
+                            onClick={() => handleNavClick(item)}
                             title={isCollapsed ? item.label : undefined}
                             className={cn(
                                 'group flex items-center h-10 rounded-lg transition-all duration-300 ease-out text-left relative overflow-hidden',

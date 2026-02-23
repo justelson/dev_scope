@@ -7,6 +7,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
+import { useTerminal } from '@/App'
 import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
 import { trackRecentProject } from '@/lib/recentProjects'
 import { useSettings } from '@/lib/settings'
@@ -29,15 +30,14 @@ async function yieldToBrowserPaint(): Promise<void> {
 }
 
 function getParentFolderPath(currentPath: string): string | null {
-    const raw = String(currentPath || '').trim().replace(/[\\/]+$/, '')
+    const raw = String(currentPath || '').trim().replace(/\//g, '\\').replace(/[\\]+$/, '')
     if (!raw) return null
 
-    if (/^[A-Za-z]:$/.test(raw)) return null
+    if (/^[A-Za-z]:\\?$/.test(raw)) return null
     if (/^\\\\[^\\]+\\[^\\]+$/.test(raw)) return null
 
-    const lastSepIndex = Math.max(raw.lastIndexOf('\\'), raw.lastIndexOf('/'))
+    const lastSepIndex = raw.lastIndexOf('\\')
     if (lastSepIndex < 0) return null
-    if (lastSepIndex === 0 && raw.startsWith('/')) return '/'
 
     const parent = raw.slice(0, lastSepIndex)
     if (!parent || parent === raw) return null
@@ -49,14 +49,80 @@ function getParentFolderPath(currentPath: string): string | null {
     return parent
 }
 
+function normalizePath(path: string): string {
+    const raw = String(path || '').trim().replace(/\//g, '\\')
+    if (!raw) return ''
+    if (/^[A-Za-z]:\\?$/.test(raw)) return `${raw.slice(0, 2)}\\`
+    if (/^\\\\[^\\]+\\[^\\]+\\?$/.test(raw)) return raw.replace(/[\\]+$/, '')
+    return raw.replace(/[\\]+$/, '')
+}
+
+function isPathWithinRoot(path: string, root: string): boolean {
+    const normalizedPath = normalizePath(path).toLowerCase()
+    const normalizedRoot = normalizePath(root).toLowerCase()
+    if (!normalizedPath || !normalizedRoot) return false
+    if (normalizedPath === normalizedRoot) return true
+    return normalizedPath.startsWith(`${normalizedRoot}\\`)
+}
+
+function resolveNavigationRoot(path: string, roots: string[]): string | null {
+    const normalizedPath = normalizePath(path)
+    if (!normalizedPath) return null
+
+    const matchingRoots = roots
+        .map((root) => normalizePath(root))
+        .filter((root) => root.length > 0)
+        .filter((root) => isPathWithinRoot(normalizedPath, root))
+
+    if (matchingRoots.length === 0) return null
+    matchingRoots.sort((left, right) => right.length - left.length)
+    return matchingRoots[0]
+}
+
+function getParentFolderPathWithinRoot(currentPath: string, rootLimit: string | null): string | null {
+    const normalizedCurrentPath = normalizePath(currentPath)
+    const normalizedRootLimit = normalizePath(rootLimit || '')
+
+    if (!normalizedCurrentPath) return null
+    if (normalizedRootLimit && normalizedCurrentPath.toLowerCase() === normalizedRootLimit.toLowerCase()) return null
+
+    const parent = getParentFolderPath(normalizedCurrentPath)
+    if (!parent) return null
+
+    if (!normalizedRootLimit) {
+        return parent
+    }
+
+    if (!isPathWithinRoot(parent, normalizedRootLimit)) {
+        return null
+    }
+
+    return parent
+}
+
 export default function FolderBrowse() {
     const { settings, updateSettings } = useSettings()
+    const { openTerminal } = useTerminal()
     const { folderPath } = useParams<{ folderPath: string }>()
     const navigate = useNavigate()
 
     const decodedPath = folderPath ? decodeURIComponent(folderPath) : ''
     const folderName = decodedPath.split(/[/\\]/).pop() || 'Folder'
     const folderHistoryRef = useRef<string[]>([])
+    const configuredBrowseRoots = useMemo(() => (
+        Array.from(new Set([
+            settings.projectsFolder,
+            ...(settings.additionalFolders || [])
+        ].filter((path): path is string => typeof path === 'string' && path.trim().length > 0)))
+    ), [settings.projectsFolder, settings.additionalFolders])
+    const navigationRoot = useMemo(
+        () => resolveNavigationRoot(decodedPath, configuredBrowseRoots),
+        [decodedPath, configuredBrowseRoots]
+    )
+    const canNavigateUp = useMemo(
+        () => Boolean(getParentFolderPathWithinRoot(decodedPath, navigationRoot)),
+        [decodedPath, navigationRoot]
+    )
 
     const [projects, setProjects] = useState<Project[]>([])
     const [folders, setFolders] = useState<FolderItem[]>([])
@@ -68,6 +134,7 @@ export default function FolderBrowse() {
     const [filterType, setFilterType] = useState('all')
     const [isCurrentFolderGitRepo, setIsCurrentFolderGitRepo] = useState(false)
     const [visibleFileCount, setVisibleFileCount] = useState(FILES_PAGE_SIZE)
+    const [copiedPath, setCopiedPath] = useState(false)
 
     const {
         previewFile,
@@ -140,6 +207,10 @@ export default function FolderBrowse() {
         history.push(decodedPath)
     }, [decodedPath])
 
+    useEffect(() => {
+        setCopiedPath(false)
+    }, [decodedPath])
+
     const parsedSearchQuery = useMemo(
         () => parseFileSearchQuery(deferredSearchQuery),
         [deferredSearchQuery]
@@ -201,12 +272,17 @@ export default function FolderBrowse() {
         const history = folderHistoryRef.current
         if (history.length > 1) {
             history.pop()
-            const previousFolder = history[history.length - 1]
-            navigate(`/folder-browse/${encodeURIComponent(previousFolder)}`)
-            return
+            while (history.length > 0) {
+                const previousFolder = history[history.length - 1]
+                if (!navigationRoot || isPathWithinRoot(previousFolder, navigationRoot)) {
+                    navigate(`/folder-browse/${encodeURIComponent(previousFolder)}`)
+                    return
+                }
+                history.pop()
+            }
         }
 
-        const parentPath = getParentFolderPath(decodedPath)
+        const parentPath = getParentFolderPathWithinRoot(decodedPath, navigationRoot)
         if (parentPath && parentPath !== decodedPath) {
             navigate(`/folder-browse/${encodeURIComponent(parentPath)}`)
             return
@@ -214,6 +290,29 @@ export default function FolderBrowse() {
 
         navigate(-1)
     }
+
+    const handleNavigateUp = () => {
+        const parentPath = getParentFolderPathWithinRoot(decodedPath, navigationRoot)
+        if (!parentPath || parentPath === decodedPath) {
+            return
+        }
+        navigate(`/folder-browse/${encodeURIComponent(parentPath)}`)
+    }
+
+    const handleCopyPath = useCallback(async () => {
+        if (!decodedPath.trim()) return
+        try {
+            if (window.devscope.copyToClipboard) {
+                await window.devscope.copyToClipboard(decodedPath)
+            } else {
+                await navigator.clipboard.writeText(decodedPath)
+            }
+            setCopiedPath(true)
+            window.setTimeout(() => setCopiedPath(false), 1500)
+        } catch {
+            setCopiedPath(false)
+        }
+    }, [decodedPath])
 
     return (
         <div className="max-w-[1600px] mx-auto animate-fadeIn pb-20">
@@ -224,7 +323,12 @@ export default function FolderBrowse() {
                 isCurrentFolderGitRepo={isCurrentFolderGitRepo}
                 loading={loading}
                 onBack={handleBack}
+                onNavigateUp={handleNavigateUp}
+                canNavigateUp={canNavigateUp}
                 onViewAsProject={handleViewAsProject}
+                onOpenTerminal={() => openTerminal({ displayName: folderName, id: 'main', category: 'folder' }, decodedPath)}
+                onCopyPath={handleCopyPath}
+                copiedPath={copiedPath}
                 onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}
                 onRefresh={loadContents}
             />

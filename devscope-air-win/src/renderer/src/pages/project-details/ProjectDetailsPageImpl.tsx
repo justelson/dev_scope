@@ -38,6 +38,28 @@ const PREVIEWABLE_EXTENSIONS = new Set([
 const PREVIEWABLE_FILE_NAMES = new Set([
     'dockerfile', 'makefile', '.gitignore', '.gitattributes', '.editorconfig', '.npmrc', '.eslintrc', '.prettierrc'
 ])
+
+function getParentFolderPath(currentPath: string): string | null {
+    const raw = String(currentPath || '').trim().replace(/[\\/]+$/, '')
+    if (!raw) return null
+
+    if (/^[A-Za-z]:$/.test(raw)) return null
+    if (/^\\\\[^\\]+\\[^\\]+$/.test(raw)) return null
+
+    const lastSepIndex = Math.max(raw.lastIndexOf('\\'), raw.lastIndexOf('/'))
+    if (lastSepIndex < 0) return null
+    if (lastSepIndex === 0 && raw.startsWith('/')) return '/'
+
+    const parent = raw.slice(0, lastSepIndex)
+    if (!parent || parent === raw) return null
+
+    if (/^[A-Za-z]:$/.test(parent)) {
+        return `${parent}\\`
+    }
+
+    return parent
+}
+
 export default function ProjectDetailsPage() {
     const { projectPath } = useParams<{ projectPath: string }>()
     const navigate = useNavigate()
@@ -55,6 +77,7 @@ export default function ProjectDetailsPage() {
     const [activePorts, setActivePorts] = useState<number[]>([])
     const [gitHistory, setGitHistory] = useState<GitCommit[]>([])
     const [loadingGit, setLoadingGit] = useState(false)
+    const [loadingFiles, setLoadingFiles] = useState(true)
     const [gitView, setGitView] = useState<'changes' | 'history' | 'unpushed' | 'manage'>('manage')
     const [commitPage, setCommitPage] = useState(1)
     const [unpushedPage, setUnpushedPage] = useState(1)
@@ -159,11 +182,12 @@ export default function ProjectDetailsPage() {
         trackRecentProject(decodedPath, 'project')
     }, [decodedPath])
     const goBack = () => {
-        if (window.history.length > 1) {
-            navigate(-1)
-        } else {
-            navigate('/projects')
+        const parentPath = getParentFolderPath(project?.path || decodedPath)
+        if (parentPath) {
+            navigate(`/folder-browse/${encodeURIComponent(parentPath)}`)
+            return
         }
+        navigate('/projects')
     }
     const showToast = (message: string, actionLabel?: string, actionTo?: string) => {
         setToast({ message, visible: false, actionLabel, actionTo })
@@ -227,7 +251,8 @@ export default function ProjectDetailsPage() {
         setReadmeExpanded,
         setReadmeNeedsExpand,
         setIsProjectLive,
-        setActivePorts
+        setActivePorts,
+        setLoadingFiles
     })
     const {
         changedFiles,
@@ -392,6 +417,7 @@ export default function ProjectDetailsPage() {
                 setActiveTab={setActiveTab}
                 fileTree={fileTree}
                 loadingGit={loadingGit}
+                loadingFiles={loadingFiles}
                 changedFiles={changedFiles}
                 unpushedCommits={unpushedCommits}
                 onBrowseFolder={() => {

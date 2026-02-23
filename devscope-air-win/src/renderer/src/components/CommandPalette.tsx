@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useCommandPalette } from '@/lib/commandPalette'
 import { useSettings } from '@/lib/settings'
 import { cn, parseFileSearchQuery } from '@/lib/utils'
-import { buildFileSearchIndex, searchFileIndex, type FileSearchIndex } from '@/lib/fileSearchIndex'
+import { buildFileSearchIndex, searchFileIndex, type FileSearchIndex, type SearchTreeNode } from '@/lib/fileSearchIndex'
 
 type Domain = 'projects' | 'files' | 'mixed'
 
@@ -163,8 +163,9 @@ export function CommandPalette() {
         fileIndexLoadingRef.current.add(project.path)
         try {
             const treeRes = await window.devscope.getFileTree(project.path, { maxDepth: -1, showHidden: false })
-            if (treeRes?.success === false || !treeRes?.tree) return
-            fileIndexCacheRef.current.set(project.path, buildFileSearchIndex(treeRes.tree))
+            const tree = (treeRes as { tree?: unknown } | null | undefined)?.tree
+            if (treeRes?.success === false || !Array.isArray(tree)) return
+            fileIndexCacheRef.current.set(project.path, buildFileSearchIndex(tree as SearchTreeNode[]))
             setFileIndexVersion(prev => prev + 1)
         } catch (err) {
             console.error('file index load failed', err)
@@ -509,10 +510,6 @@ export function CommandPalette() {
             </div>
         </div>
     )
-}
-
-function Kbd({ children }: { children: React.ReactNode }) {
-    return <span className="px-1.5 py-0.5 rounded border border-sparkle-border/60 bg-sparkle-bg text-sparkle-text-secondary font-medium shadow-sm">{children}</span>
 }
 
 export default CommandPalette

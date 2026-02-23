@@ -31,7 +31,8 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
         sortAsc,
         setSortAsc,
         visibleFileList,
-        openPreview
+        openPreview,
+        loadingFiles
     } = props
 
     return (
@@ -107,7 +108,12 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                {visibleFileList.length === 0 ? (
+                {loadingFiles ? (
+                    <div className="flex flex-col items-center justify-center py-16 opacity-60">
+                        <div className="w-10 h-10 rounded-full border-2 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] animate-spin mb-5" />
+                        <div className="text-white font-medium text-lg">Loading files...</div>
+                    </div>
+                ) : visibleFileList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-white/30">
                         <Search size={32} className="mb-3 opacity-30" />
                         <p className="text-sm">No files found</p>

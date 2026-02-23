@@ -25,6 +25,7 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
         activeTab,
         setActiveTab,
         fileTree,
+        loadingFiles,
         loadingGit,
         changedFiles,
         unpushedCommits,
@@ -152,11 +153,18 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                             )}
                         >
                             <FolderOpen size={15} /> Files
+                            {loadingFiles && (
+                                <RefreshCw size={12} className="animate-spin text-[var(--accent-primary)]" />
+                            )}
                             <span className={cn(
                                 "text-[10px] px-1.5 py-0.5 rounded-full",
-                                activeTab === 'files' ? "bg-white/10" : "bg-white/5 opacity-60"
+                                loadingFiles
+                                    ? "bg-[var(--accent-primary)]/15 text-[var(--accent-primary)]"
+                                    : activeTab === 'files'
+                                        ? "bg-white/10"
+                                        : "bg-white/5 opacity-60"
                             )}>
-                                {fileTree.length}
+                                {loadingFiles ? '...' : fileTree.length}
                             </span>
                         </button>
                         <button

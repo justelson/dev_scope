@@ -1,10 +1,9 @@
 import log from 'electron-log'
-import { assistantBridge } from '../../assistant'
-import { bridgeReadAccount, bridgeReadAccountRateLimits } from '../../assistant/assistant-bridge-operations'
 import type {
     AssistantConnectOptions,
     AssistantSendOptions
 } from '../../assistant'
+import { devscopeCore } from '../../core/devscope-core'
 
 type AssistantDataQuery = {
     kind?: string
@@ -34,14 +33,18 @@ type AssistantDataQuery = {
     refreshToken?: boolean
 }
 
+function subscribeSender(event: Electron.IpcMainInvokeEvent): void {
+    devscopeCore.assistant.subscribe(event.sender.id)
+}
+
 export function handleAssistantSubscribe(event: Electron.IpcMainInvokeEvent) {
     log.info('IPC: assistant:subscribe', { senderId: event.sender.id })
-    return assistantBridge.subscribe(event.sender.id)
+    return devscopeCore.assistant.subscribe(event.sender.id)
 }
 
 export function handleAssistantUnsubscribe(event: Electron.IpcMainInvokeEvent) {
     log.info('IPC: assistant:unsubscribe', { senderId: event.sender.id })
-    return assistantBridge.unsubscribe(event.sender.id)
+    return devscopeCore.assistant.unsubscribe(event.sender.id)
 }
 
 export function handleAssistantConnect(
@@ -49,98 +52,71 @@ export function handleAssistantConnect(
     options?: AssistantConnectOptions
 ) {
     log.info('IPC: assistant:connect', { senderId: event.sender.id, options })
-    assistantBridge.subscribe(event.sender.id)
-    return assistantBridge.connect(options)
+    return devscopeCore.assistant.connect(event.sender.id, options)
 }
 
 export function handleAssistantDisconnect(event: Electron.IpcMainInvokeEvent) {
     log.info('IPC: assistant:disconnect', { senderId: event.sender.id })
-    assistantBridge.unsubscribe(event.sender.id)
-    return assistantBridge.disconnect()
+    return devscopeCore.assistant.disconnect(event.sender.id)
 }
 
 export function handleAssistantStatus(event: Electron.IpcMainInvokeEvent, query?: AssistantDataQuery) {
-    assistantBridge.subscribe(event.sender.id)
-    if (query?.kind === 'events:export') {
-        return assistantBridge.exportEvents()
-    }
-    if (query?.kind === 'sessions:list') {
-        return assistantBridge.listSessions()
-    }
-    if (query?.kind === 'sessions:create') {
-        return assistantBridge.createSession(query.title)
-    }
-    if (query?.kind === 'sessions:select') {
-        return assistantBridge.selectSession(String(query.sessionId || ''))
-    }
-    if (query?.kind === 'sessions:rename') {
-        return assistantBridge.renameSession(String(query.sessionId || ''), String(query.title || ''))
-    }
-    if (query?.kind === 'sessions:delete') {
-        return assistantBridge.deleteSession(String(query.sessionId || ''))
-    }
-    if (query?.kind === 'sessions:archive') {
-        return assistantBridge.archiveSession(String(query.sessionId || ''), Boolean(query.archived))
-    }
+    subscribeSender(event)
+
+    // Backward-compat shim: legacy kind-based multiplexing.
+    if (query?.kind === 'events:export') return devscopeCore.assistant.exportEvents()
+    if (query?.kind === 'sessions:list') return devscopeCore.assistant.listSessions()
+    if (query?.kind === 'sessions:create') return devscopeCore.assistant.createSession(query.title)
+    if (query?.kind === 'sessions:select') return devscopeCore.assistant.selectSession(String(query.sessionId || ''))
+    if (query?.kind === 'sessions:rename') return devscopeCore.assistant.renameSession(String(query.sessionId || ''), String(query.title || ''))
+    if (query?.kind === 'sessions:delete') return devscopeCore.assistant.deleteSession(String(query.sessionId || ''))
+    if (query?.kind === 'sessions:archive') return devscopeCore.assistant.archiveSession(String(query.sessionId || ''), Boolean(query.archived))
     if (query?.kind === 'sessions:set-project-path') {
-        return assistantBridge.setSessionProjectPath(
-            String(query.sessionId || ''),
-            String(query.projectPath || '')
-        )
+        return devscopeCore.assistant.setSessionProjectPath(String(query.sessionId || ''), String(query.projectPath || ''))
     }
-    if (query?.kind === 'thread:new') {
-        return assistantBridge.newThread()
-    }
+    if (query?.kind === 'thread:new') return devscopeCore.assistant.newThread()
     if (query?.kind === 'tokens:estimate') {
-        return assistantBridge.estimatePromptTokens({
+        return devscopeCore.assistant.estimatePromptTokens({
             prompt: String(query.prompt || ''),
             contextDiff: query.contextDiff,
             contextFiles: query.contextFiles,
             promptTemplate: query.promptTemplate
         })
     }
-    if (query?.kind === 'profiles:list') {
-        return assistantBridge.listProfiles()
-    }
-    if (query?.kind === 'profiles:set') {
-        return assistantBridge.setProfile(String(query.profile || ''))
-    }
-    if (query?.kind === 'models:list') {
-        return assistantBridge.listModels(true)
-    }
-    if (query?.kind === 'project-model:get') {
-        return assistantBridge.getProjectModelDefault(String(query.projectPath || ''))
-    }
+    if (query?.kind === 'profiles:list') return devscopeCore.assistant.listProfiles()
+    if (query?.kind === 'profiles:set') return devscopeCore.assistant.setProfile(String(query.profile || ''))
+    if (query?.kind === 'models:list') return devscopeCore.assistant.listModels()
+    if (query?.kind === 'project-model:get') return devscopeCore.assistant.getProjectModelDefault(String(query.projectPath || ''))
     if (query?.kind === 'project-model:set') {
-        return assistantBridge.setProjectModelDefault(String(query.projectPath || ''), String(query.model || ''))
+        return devscopeCore.assistant.setProjectModelDefault(String(query.projectPath || ''), String(query.model || ''))
     }
-    if (query?.kind === 'telemetry:integrity') {
-        return assistantBridge.getTelemetryIntegrity()
-    }
-    if (query?.kind === 'account:read') {
-        return bridgeReadAccount.call(assistantBridge as any, Boolean(query.refreshToken))
-    }
-    if (query?.kind === 'account:rate-limits') {
-        return bridgeReadAccountRateLimits.call(assistantBridge as any)
-    }
-    if (
-        query?.kind === 'workflow:explain-diff'
-        || query?.kind === 'workflow:review-staged'
-        || query?.kind === 'workflow:draft-commit'
-    ) {
-        const workflowKind = query.kind === 'workflow:explain-diff'
-            ? 'explain-diff'
-            : query.kind === 'workflow:review-staged'
-                ? 'review-staged'
-                : 'draft-commit'
-        return assistantBridge.runWorkflow({
-            kind: workflowKind,
+    if (query?.kind === 'telemetry:integrity') return devscopeCore.assistant.getTelemetryIntegrity()
+    if (query?.kind === 'account:read') return devscopeCore.assistant.readAccount(Boolean(query.refreshToken))
+    if (query?.kind === 'account:rate-limits') return devscopeCore.assistant.readRateLimits()
+    if (query?.kind === 'workflow:explain-diff') {
+        return devscopeCore.assistant.runWorkflow({
+            kind: 'explain-diff',
             projectPath: String(query.projectPath || ''),
             filePath: query.filePath,
             model: query.model
         })
     }
-    return { success: true, status: assistantBridge.getStatus() }
+    if (query?.kind === 'workflow:review-staged') {
+        return devscopeCore.assistant.runWorkflow({
+            kind: 'review-staged',
+            projectPath: String(query.projectPath || ''),
+            model: query.model
+        })
+    }
+    if (query?.kind === 'workflow:draft-commit') {
+        return devscopeCore.assistant.runWorkflow({
+            kind: 'draft-commit',
+            projectPath: String(query.projectPath || ''),
+            model: query.model
+        })
+    }
+
+    return devscopeCore.assistant.status()
 }
 
 export async function handleAssistantSend(
@@ -154,8 +130,7 @@ export async function handleAssistantSend(
         model: options?.model,
         regenerateFromTurnId: options?.regenerateFromTurnId
     })
-    assistantBridge.subscribe(event.sender.id)
-    return await assistantBridge.sendPrompt(prompt, options)
+    return await devscopeCore.assistant.sendPrompt(event.sender.id, prompt, options)
 }
 
 export function handleAssistantCancelTurn(
@@ -163,7 +138,7 @@ export function handleAssistantCancelTurn(
     turnId?: string
 ) {
     log.info('IPC: assistant:cancelTurn', { turnId })
-    return assistantBridge.cancelTurn(turnId)
+    return devscopeCore.assistant.cancelTurn(turnId)
 }
 
 export function handleAssistantSetApprovalMode(
@@ -171,29 +146,29 @@ export function handleAssistantSetApprovalMode(
     mode: 'safe' | 'yolo'
 ) {
     log.info('IPC: assistant:setApprovalMode', { mode })
-    return assistantBridge.setApprovalMode(mode === 'yolo' ? 'yolo' : 'safe')
+    return devscopeCore.assistant.setApprovalMode(mode === 'yolo' ? 'yolo' : 'safe')
 }
 
 export function handleAssistantGetApprovalMode() {
-    return assistantBridge.getApprovalMode()
+    return devscopeCore.assistant.getApprovalMode()
 }
 
 export function handleAssistantGetHistory(event: Electron.IpcMainInvokeEvent, query?: AssistantDataQuery) {
-    assistantBridge.subscribe(event.sender.id)
+    subscribeSender(event)
     if (query?.kind === 'events') {
-        return assistantBridge.getEvents({
+        return devscopeCore.assistant.getEvents({
             limit: query.limit,
             types: query.types,
             search: query.search
         })
     }
     if (query?.kind === 'events:export') {
-        return assistantBridge.exportEvents()
+        return devscopeCore.assistant.exportEvents()
     }
     if (query?.kind === 'conversation:export') {
-        return assistantBridge.exportConversation(query.format || 'json', query.sessionId)
+        return devscopeCore.assistant.exportConversation(query.format || 'json', query.sessionId)
     }
-    return assistantBridge.getHistory()
+    return devscopeCore.assistant.getHistory()
 }
 
 export function handleAssistantClearHistory(
@@ -201,11 +176,189 @@ export function handleAssistantClearHistory(
     request?: { kind?: string }
 ) {
     if (request?.kind === 'events') {
-        return assistantBridge.clearEvents()
+        return devscopeCore.assistant.clearEvents()
     }
-    return assistantBridge.clearHistory()
+    return devscopeCore.assistant.clearHistory()
 }
 
 export async function handleAssistantListModels() {
-    return await assistantBridge.listModels(true)
+    return await devscopeCore.assistant.listModels()
+}
+
+export function handleAssistantGetEvents(
+    event: Electron.IpcMainInvokeEvent,
+    query?: { limit?: number; types?: string[]; search?: string }
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.getEvents(query)
+}
+
+export function handleAssistantClearEvents() {
+    return devscopeCore.assistant.clearEvents()
+}
+
+export function handleAssistantExportEvents() {
+    return devscopeCore.assistant.exportEvents()
+}
+
+export function handleAssistantExportConversation(
+    event: Electron.IpcMainInvokeEvent,
+    input?: { format?: 'json' | 'markdown'; sessionId?: string }
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.exportConversation(input?.format || 'json', input?.sessionId)
+}
+
+export function handleAssistantListSessions(event: Electron.IpcMainInvokeEvent) {
+    subscribeSender(event)
+    return devscopeCore.assistant.listSessions()
+}
+
+export function handleAssistantCreateSession(event: Electron.IpcMainInvokeEvent, title?: string) {
+    subscribeSender(event)
+    return devscopeCore.assistant.createSession(title)
+}
+
+export function handleAssistantSelectSession(event: Electron.IpcMainInvokeEvent, sessionId: string) {
+    subscribeSender(event)
+    return devscopeCore.assistant.selectSession(String(sessionId || ''))
+}
+
+export function handleAssistantRenameSession(
+    event: Electron.IpcMainInvokeEvent,
+    sessionId: string,
+    title: string
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.renameSession(String(sessionId || ''), String(title || ''))
+}
+
+export function handleAssistantDeleteSession(event: Electron.IpcMainInvokeEvent, sessionId: string) {
+    subscribeSender(event)
+    return devscopeCore.assistant.deleteSession(String(sessionId || ''))
+}
+
+export function handleAssistantArchiveSession(
+    event: Electron.IpcMainInvokeEvent,
+    sessionId: string,
+    archived: boolean = true
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.archiveSession(String(sessionId || ''), Boolean(archived))
+}
+
+export function handleAssistantSetSessionProjectPath(
+    event: Electron.IpcMainInvokeEvent,
+    sessionId: string,
+    projectPath: string
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.setSessionProjectPath(String(sessionId || ''), String(projectPath || ''))
+}
+
+export function handleAssistantNewThread(event: Electron.IpcMainInvokeEvent) {
+    subscribeSender(event)
+    return devscopeCore.assistant.newThread()
+}
+
+export function handleAssistantEstimateTokens(
+    event: Electron.IpcMainInvokeEvent,
+    input: {
+        prompt: string
+        contextDiff?: string
+        contextFiles?: Array<{
+            path: string
+            content?: string
+            name?: string
+            mimeType?: string
+            kind?: 'image' | 'doc' | 'code' | 'file'
+            sizeBytes?: number
+            previewText?: string
+        }>
+        promptTemplate?: string
+    }
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.estimatePromptTokens({
+        prompt: String(input?.prompt || ''),
+        contextDiff: input?.contextDiff,
+        contextFiles: input?.contextFiles,
+        promptTemplate: input?.promptTemplate
+    })
+}
+
+export function handleAssistantListProfiles(event: Electron.IpcMainInvokeEvent) {
+    subscribeSender(event)
+    return devscopeCore.assistant.listProfiles()
+}
+
+export function handleAssistantSetProfile(event: Electron.IpcMainInvokeEvent, profile: string) {
+    subscribeSender(event)
+    return devscopeCore.assistant.setProfile(String(profile || ''))
+}
+
+export function handleAssistantGetProjectModel(event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    subscribeSender(event)
+    return devscopeCore.assistant.getProjectModelDefault(String(projectPath || ''))
+}
+
+export function handleAssistantSetProjectModel(
+    event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    model: string
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.setProjectModelDefault(String(projectPath || ''), String(model || ''))
+}
+
+export function handleAssistantGetTelemetryIntegrity(event: Electron.IpcMainInvokeEvent) {
+    subscribeSender(event)
+    return devscopeCore.assistant.getTelemetryIntegrity()
+}
+
+export function handleAssistantReadAccount(event: Electron.IpcMainInvokeEvent, refreshToken = false) {
+    subscribeSender(event)
+    return devscopeCore.assistant.readAccount(Boolean(refreshToken))
+}
+
+export function handleAssistantReadRateLimits(event: Electron.IpcMainInvokeEvent) {
+    subscribeSender(event)
+    return devscopeCore.assistant.readRateLimits()
+}
+
+export function handleAssistantRunWorkflowExplainDiff(
+    event: Electron.IpcMainInvokeEvent,
+    input: { projectPath: string; filePath?: string; model?: string }
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.runWorkflow({
+        kind: 'explain-diff',
+        projectPath: String(input?.projectPath || ''),
+        filePath: input?.filePath,
+        model: input?.model
+    })
+}
+
+export function handleAssistantRunWorkflowReviewStaged(
+    event: Electron.IpcMainInvokeEvent,
+    input: { projectPath: string; model?: string }
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.runWorkflow({
+        kind: 'review-staged',
+        projectPath: String(input?.projectPath || ''),
+        model: input?.model
+    })
+}
+
+export function handleAssistantRunWorkflowDraftCommit(
+    event: Electron.IpcMainInvokeEvent,
+    input: { projectPath: string; model?: string }
+) {
+    subscribeSender(event)
+    return devscopeCore.assistant.runWorkflow({
+        kind: 'draft-commit',
+        projectPath: String(input?.projectPath || ''),
+        model: input?.model
+    })
 }

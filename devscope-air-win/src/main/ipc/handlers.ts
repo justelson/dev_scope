@@ -6,6 +6,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import log from 'electron-log'
 import { assistantBridge } from '../assistant'
 import { systemMetricsBridge } from '../system-metrics/manager'
+import { ASSISTANT_IPC, assertAssistantIpcContract } from '../../shared/contracts/assistant-ipc'
 import {
     handleGetDetailedSystemStats,
     handleGetDeveloperTooling,
@@ -87,15 +88,38 @@ import {
     handleUnstageFiles
 } from './handlers/git-write-handlers'
 import {
+    handleAssistantArchiveSession,
     handleAssistantCancelTurn,
     handleAssistantClearHistory,
+    handleAssistantClearEvents,
     handleAssistantConnect,
+    handleAssistantCreateSession,
+    handleAssistantDeleteSession,
     handleAssistantDisconnect,
+    handleAssistantEstimateTokens,
+    handleAssistantExportConversation,
+    handleAssistantExportEvents,
+    handleAssistantGetEvents,
     handleAssistantGetApprovalMode,
+    handleAssistantGetProjectModel,
     handleAssistantGetHistory,
+    handleAssistantGetTelemetryIntegrity,
     handleAssistantListModels,
+    handleAssistantListProfiles,
+    handleAssistantListSessions,
+    handleAssistantNewThread,
+    handleAssistantReadAccount,
+    handleAssistantReadRateLimits,
+    handleAssistantRenameSession,
+    handleAssistantRunWorkflowDraftCommit,
+    handleAssistantRunWorkflowExplainDiff,
+    handleAssistantRunWorkflowReviewStaged,
+    handleAssistantSelectSession,
     handleAssistantSend,
     handleAssistantSetApprovalMode,
+    handleAssistantSetProfile,
+    handleAssistantSetProjectModel,
+    handleAssistantSetSessionProjectPath,
     handleAssistantStatus,
     handleAssistantSubscribe,
     handleAssistantUnsubscribe
@@ -103,6 +127,7 @@ import {
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     log.info('Registering IPC handlers...')
+    assertAssistantIpcContract()
 
     ipcMain.handle('devscope:system:bootstrap', handleSystemMetricsBootstrap)
     ipcMain.handle('devscope:system:subscribe', handleSystemMetricsSubscribe)
@@ -125,18 +150,41 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getAiDebugLogs', handleGetAiDebugLogs)
     ipcMain.handle('devscope:clearAiDebugLogs', handleClearAiDebugLogs)
 
-    ipcMain.handle('devscope:assistant:subscribe', handleAssistantSubscribe)
-    ipcMain.handle('devscope:assistant:unsubscribe', handleAssistantUnsubscribe)
-    ipcMain.handle('devscope:assistant:connect', handleAssistantConnect)
-    ipcMain.handle('devscope:assistant:disconnect', handleAssistantDisconnect)
-    ipcMain.handle('devscope:assistant:status', handleAssistantStatus)
-    ipcMain.handle('devscope:assistant:send', handleAssistantSend)
-    ipcMain.handle('devscope:assistant:cancelTurn', handleAssistantCancelTurn)
-    ipcMain.handle('devscope:assistant:setApprovalMode', handleAssistantSetApprovalMode)
-    ipcMain.handle('devscope:assistant:getApprovalMode', handleAssistantGetApprovalMode)
-    ipcMain.handle('devscope:assistant:getHistory', handleAssistantGetHistory)
-    ipcMain.handle('devscope:assistant:clearHistory', handleAssistantClearHistory)
-    ipcMain.handle('devscope:assistant:listModels', handleAssistantListModels)
+    ipcMain.handle(ASSISTANT_IPC.subscribe, handleAssistantSubscribe)
+    ipcMain.handle(ASSISTANT_IPC.unsubscribe, handleAssistantUnsubscribe)
+    ipcMain.handle(ASSISTANT_IPC.connect, handleAssistantConnect)
+    ipcMain.handle(ASSISTANT_IPC.disconnect, handleAssistantDisconnect)
+    ipcMain.handle(ASSISTANT_IPC.status, handleAssistantStatus)
+    ipcMain.handle(ASSISTANT_IPC.send, handleAssistantSend)
+    ipcMain.handle(ASSISTANT_IPC.cancelTurn, handleAssistantCancelTurn)
+    ipcMain.handle(ASSISTANT_IPC.setApprovalMode, handleAssistantSetApprovalMode)
+    ipcMain.handle(ASSISTANT_IPC.getApprovalMode, handleAssistantGetApprovalMode)
+    ipcMain.handle(ASSISTANT_IPC.getHistory, handleAssistantGetHistory)
+    ipcMain.handle(ASSISTANT_IPC.clearHistory, handleAssistantClearHistory)
+    ipcMain.handle(ASSISTANT_IPC.listModels, handleAssistantListModels)
+    ipcMain.handle(ASSISTANT_IPC.getEvents, handleAssistantGetEvents)
+    ipcMain.handle(ASSISTANT_IPC.clearEvents, handleAssistantClearEvents)
+    ipcMain.handle(ASSISTANT_IPC.exportEvents, handleAssistantExportEvents)
+    ipcMain.handle(ASSISTANT_IPC.exportConversation, handleAssistantExportConversation)
+    ipcMain.handle(ASSISTANT_IPC.listSessions, handleAssistantListSessions)
+    ipcMain.handle(ASSISTANT_IPC.createSession, handleAssistantCreateSession)
+    ipcMain.handle(ASSISTANT_IPC.selectSession, handleAssistantSelectSession)
+    ipcMain.handle(ASSISTANT_IPC.renameSession, handleAssistantRenameSession)
+    ipcMain.handle(ASSISTANT_IPC.deleteSession, handleAssistantDeleteSession)
+    ipcMain.handle(ASSISTANT_IPC.archiveSession, handleAssistantArchiveSession)
+    ipcMain.handle(ASSISTANT_IPC.setSessionProjectPath, handleAssistantSetSessionProjectPath)
+    ipcMain.handle(ASSISTANT_IPC.newThread, handleAssistantNewThread)
+    ipcMain.handle(ASSISTANT_IPC.estimateTokens, handleAssistantEstimateTokens)
+    ipcMain.handle(ASSISTANT_IPC.listProfiles, handleAssistantListProfiles)
+    ipcMain.handle(ASSISTANT_IPC.setProfile, handleAssistantSetProfile)
+    ipcMain.handle(ASSISTANT_IPC.getProjectModel, handleAssistantGetProjectModel)
+    ipcMain.handle(ASSISTANT_IPC.setProjectModel, handleAssistantSetProjectModel)
+    ipcMain.handle(ASSISTANT_IPC.getTelemetryIntegrity, handleAssistantGetTelemetryIntegrity)
+    ipcMain.handle(ASSISTANT_IPC.readAccount, handleAssistantReadAccount)
+    ipcMain.handle(ASSISTANT_IPC.readRateLimits, handleAssistantReadRateLimits)
+    ipcMain.handle(ASSISTANT_IPC.runWorkflowExplainDiff, handleAssistantRunWorkflowExplainDiff)
+    ipcMain.handle(ASSISTANT_IPC.runWorkflowReviewStaged, handleAssistantRunWorkflowReviewStaged)
+    ipcMain.handle(ASSISTANT_IPC.runWorkflowDraftCommit, handleAssistantRunWorkflowDraftCommit)
 
     ipcMain.handle('devscope:selectFolder', handleSelectFolder)
     ipcMain.handle('devscope:scanProjects', handleScanProjects)

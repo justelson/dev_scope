@@ -67,6 +67,7 @@ interface UseProjectDataLifecycleParams {
     setReadmeNeedsExpand: Dispatch<SetStateAction<boolean>>
     setIsProjectLive: Dispatch<SetStateAction<boolean>>
     setActivePorts: Dispatch<SetStateAction<number[]>>
+    setLoadingFiles: Dispatch<SetStateAction<boolean>>
 }
 
 export function useProjectDataLifecycle({
@@ -109,7 +110,8 @@ export function useProjectDataLifecycle({
     setReadmeExpanded,
     setReadmeNeedsExpand,
     setIsProjectLive,
-    setActivePorts
+    setActivePorts,
+    setLoadingFiles
 }: UseProjectDataLifecycleParams) {
     const loadDetailsRequestRef = useRef(0)
 
@@ -178,6 +180,7 @@ export function useProjectDataLifecycle({
         }
 
         try {
+            setLoadingFiles(true)
             const treePromise = window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
             const detailsResult = await window.devscope.getProjectDetails(decodedPath)
 
@@ -213,8 +216,11 @@ export function useProjectDataLifecycle({
             if (!isStale() && !hasCachedProject) {
                 setLoading(false)
             }
+            if (!isStale()) {
+                setLoadingFiles(false)
+            }
         }
-    }, [decodedPath, setLoading, setError, setProject, setActiveTab, setFileTree])
+    }, [decodedPath, setLoading, setError, setProject, setActiveTab, setFileTree, setLoadingFiles])
 
     const refreshGitData = useCallback(async (refreshFileTree: boolean = false) => {
         if (!decodedPath) return
@@ -224,9 +230,14 @@ export function useProjectDataLifecycle({
 
         try {
             if (refreshFileTree) {
-                const treeResult = await window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
-                if (treeResult?.success && treeResult.tree) {
-                    setFileTree(treeResult.tree)
+                setLoadingFiles(true)
+                try {
+                    const treeResult = await window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
+                    if (treeResult?.success && treeResult.tree) {
+                        setFileTree(treeResult.tree)
+                    }
+                } finally {
+                    setLoadingFiles(false)
                 }
             }
 
