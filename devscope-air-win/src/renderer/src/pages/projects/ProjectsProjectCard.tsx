@@ -1,8 +1,9 @@
-import { Clock, ExternalLink } from 'lucide-react'
+import { Clock, ExternalLink, FolderOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ProjectIcon, { FrameworkBadge } from '@/components/ui/ProjectIcon'
 import type { Project, ViewMode } from './projectsTypes'
 import { WRAP_AND_CLAMP_2 } from '../shared/BrowseSectionPrimitives'
+import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
 
 interface ProjectsProjectCardProps {
     project: Project
@@ -47,6 +48,15 @@ export function ProjectsProjectCard({
 
             {viewMode === 'finder' ? (
                 <>
+                    <div className="absolute top-2 right-2 z-20">
+                        <FileActionsMenu
+                            buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20"
+                            items={[
+                                { id: 'open', label: 'Open', icon: <FolderOpen size={13} />, onSelect: () => onProjectOpen(project) },
+                                { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => openInExplorer(project.path) }
+                            ]}
+                        />
+                    </div>
                     <div className="relative mb-3 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/5 bg-sparkle-bg shadow-inner group-hover:border-white/20">
                         <ProjectIcon
                             projectType={project.type}
@@ -69,9 +79,18 @@ export function ProjectsProjectCard({
                                 size={32}
                             />
                         </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-white/30">
-                            <Clock size={12} />
-                            <span>{formatRelativeTime(project.lastModified)}</span>
+                        <div className="flex flex-col items-end gap-2">
+                            <div className="flex items-center gap-1.5 text-[10px] text-white/30">
+                                <Clock size={12} />
+                                <span>{formatRelativeTime(project.lastModified)}</span>
+                            </div>
+                            <FileActionsMenu
+                                buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                items={[
+                                    { id: 'open', label: 'Open', icon: <FolderOpen size={13} />, onSelect: () => onProjectOpen(project) },
+                                    { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => openInExplorer(project.path) }
+                                ]}
+                            />
                         </div>
                     </div>
 

@@ -1,9 +1,10 @@
-import { ChevronRight, Code, ExternalLink, File, FileCode, Folder, FolderTree, Github } from 'lucide-react'
+import { ChevronRight, Code, ExternalLink, File, FileCode, Folder, FolderTree, Github, FolderOpen, MoreVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ProjectIcon from '@/components/ui/ProjectIcon'
 import type { ContentLayout, FileItem, FolderItem, Project, ViewMode } from './projectsTypes'
 import { FinderItem, SectionHeader, WRAP_AND_CLAMP_2 } from '../shared/BrowseSectionPrimitives'
 import { ProjectsProjectCard } from './ProjectsProjectCard'
+import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
 
 interface ProjectsContentSectionsProps {
     plainFolders: FolderItem[]
@@ -155,28 +156,37 @@ export function ProjectsContentSections({
                                         <div
                                             key={entry.id}
                                             onClick={() => onFileParentOpen(parentPath)}
-                                            className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-cyan-300/30 hover:bg-cyan-300/5 cursor-pointer flex flex-col"
+                                            className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-cyan-300/30 hover:bg-cyan-300/5 cursor-pointer flex flex-col relative"
                                             title={file.path}
                                         >
-                                            <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
-                                                <File size={15} className="text-cyan-300/80" />
+                                            <div className="mb-2 flex items-start justify-between">
+                                                <div className="inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
+                                                    <File size={15} className="text-cyan-300/80" />
+                                                </div>
+                                                <FileActionsMenu
+                                                    buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    items={[
+                                                        {
+                                                            id: 'open-parent',
+                                                            label: 'Open Parent Folder',
+                                                            icon: <FolderOpen size={13} />,
+                                                            onSelect: () => onFileParentOpen(parentPath)
+                                                        },
+                                                        {
+                                                            id: 'explorer',
+                                                            label: 'Open in Explorer',
+                                                            icon: <ExternalLink size={13} />,
+                                                            onSelect: () => openInExplorer(file.path)
+                                                        }
+                                                    ]}
+                                                />
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <div className={cn('text-sm text-white/80 group-hover:text-white leading-5', WRAP_AND_CLAMP_2)} title={file.name}>{file.name}</div>
                                                 <div className="truncate text-[11px] text-sparkle-text-muted" title={parentPath}>{parentPath}</div>
                                             </div>
-                                            <div className="mt-2">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        openInExplorer(file.path)
-                                                    }}
-                                                    className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
-                                                    title="Open in Explorer"
-                                                >
-                                                    <ExternalLink size={12} />
-                                                    Open
-                                                </button>
+                                            <div className="flex justify-end mt-2">
+                                                <ExternalLink size={12} className="text-white/20 group-hover:text-white/60 transition-colors" />
                                             </div>
                                         </div>
                                     )
@@ -198,24 +208,45 @@ export function ProjectsContentSections({
                                 }
 
                                 return (
-                                    <button
+                                    <div
                                         key={entry.id}
                                         onClick={() => onFolderOpen(folder.path)}
-                                        className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15 flex flex-col"
+                                        className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15 flex flex-col relative cursor-pointer"
                                     >
-                                        <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
-                                            {isGit ? (
-                                                <Github size={16} className="text-orange-400/70 group-hover:text-orange-400 transition-colors" />
-                                            ) : (
-                                                <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors" />
-                                            )}
+                                        <div className="mb-2 flex items-start justify-between">
+                                            <div className="inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
+                                                {isGit ? (
+                                                    <Github size={16} className="text-orange-400/70 group-hover:text-orange-400 transition-colors" />
+                                                ) : (
+                                                    <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors" />
+                                                )}
+                                            </div>
+                                            <FileActionsMenu
+                                                buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                items={[
+                                                    {
+                                                        id: 'open',
+                                                        label: 'Open',
+                                                        icon: <FolderOpen size={13} />,
+                                                        onSelect: () => onFolderOpen(folder.path)
+                                                    },
+                                                    {
+                                                        id: 'explorer',
+                                                        label: 'Open in Explorer',
+                                                        icon: <ExternalLink size={13} />,
+                                                        onSelect: () => openInExplorer(folder.path)
+                                                    }
+                                                ]}
+                                            />
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <div className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)} title={entry.name}>{entry.name}</div>
                                             <div className="text-[10px] text-white/30">{isGit ? 'Git Repo' : 'Folder'}</div>
                                         </div>
-                                        <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 mt-2 transition-colors" />
-                                    </button>
+                                        <div className="flex justify-end mt-2">
+                                            <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 transition-colors" />
+                                        </div>
+                                    </div>
                                 )
                             })}
                         </div>
@@ -259,16 +290,35 @@ export function ProjectsContentSections({
                                     onClick={() => onFolderOpen(folder.path)}
                                 />
                             ) : (
-                                <button
+                                <div
                                     key={folder.path}
                                     onClick={() => onFolderOpen(folder.path)}
-                                    className="flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-yellow-400/30 hover:bg-yellow-400/5 transition-all text-left group"
+                                    className="flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-yellow-400/30 hover:bg-yellow-400/5 transition-all text-left group cursor-pointer"
                                     title={folder.name}
                                 >
                                     <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors flex-shrink-0" />
                                     <span className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)}>{folder.name}</span>
-                                    <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto flex-shrink-0 transition-colors" />
-                                </button>
+                                    <div className="ml-auto flex items-center gap-1">
+                                        <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 transition-colors shrink-0" />
+                                        <FileActionsMenu
+                                            buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            items={[
+                                                {
+                                                    id: 'open',
+                                                    label: 'Open',
+                                                    icon: <FolderOpen size={13} />,
+                                                    onSelect: () => onFolderOpen(folder.path)
+                                                },
+                                                {
+                                                    id: 'explorer',
+                                                    label: 'Open in Explorer',
+                                                    icon: <ExternalLink size={13} />,
+                                                    onSelect: () => openInExplorer(folder.path)
+                                                }
+                                            ]}
+                                        />
+                                    </div>
+                                </div>
                             )
                         ))}
                     </div>
@@ -295,16 +345,35 @@ export function ProjectsContentSections({
                                     onClick={() => onFolderOpen(repo.path)}
                                 />
                             ) : (
-                                <button
+                                <div
                                     key={repo.path}
                                     onClick={() => onFolderOpen(repo.path)}
-                                    className="flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-orange-400/30 hover:bg-orange-400/5 transition-all text-left group"
+                                    className="flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-orange-400/30 hover:bg-orange-400/5 transition-all text-left group cursor-pointer"
                                     title={repo.name}
                                 >
                                     <Github size={16} className="text-orange-400/70 group-hover:text-orange-400 transition-colors flex-shrink-0" />
                                     <span className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)}>{repo.name}</span>
-                                    <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto flex-shrink-0 transition-colors" />
-                                </button>
+                                    <div className="ml-auto flex items-center gap-1">
+                                        <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 transition-colors shrink-0" />
+                                        <FileActionsMenu
+                                            buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            items={[
+                                                {
+                                                    id: 'open',
+                                                    label: 'Open',
+                                                    icon: <FolderOpen size={13} />,
+                                                    onSelect: () => onFolderOpen(repo.path)
+                                                },
+                                                {
+                                                    id: 'explorer',
+                                                    label: 'Open in Explorer',
+                                                    icon: <ExternalLink size={13} />,
+                                                    onSelect: () => openInExplorer(repo.path)
+                                                }
+                                            ]}
+                                        />
+                                    </div>
+                                </div>
                             )
                         ))}
                     </div>
@@ -369,17 +438,26 @@ export function ProjectsContentSections({
                                         <div className={cn('text-sm text-white/80 group-hover:text-white leading-5', WRAP_AND_CLAMP_2)} title={file.name}>{file.name}</div>
                                         <div className="truncate text-[11px] text-sparkle-text-muted" title={parentPath}>{parentPath}</div>
                                     </div>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation()
-                                            openInExplorer(file.path)
-                                        }}
-                                        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
-                                        title="Open in Explorer"
-                                    >
-                                        <ExternalLink size={12} />
-                                        Open
-                                    </button>
+                                    <div className="flex items-center gap-1">
+                                        <ExternalLink size={12} className="text-white/20 group-hover:text-white/60 transition-colors shrink-0" />
+                                        <FileActionsMenu
+                                            buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            items={[
+                                                {
+                                                    id: 'open-parent',
+                                                    label: 'Open Parent Folder',
+                                                    icon: <FolderOpen size={13} />,
+                                                    onSelect: () => onFileParentOpen(parentPath)
+                                                },
+                                                {
+                                                    id: 'explorer',
+                                                    label: 'Open in Explorer',
+                                                    icon: <ExternalLink size={13} />,
+                                                    onSelect: () => openInExplorer(file.path)
+                                                }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                             )
                         })}
