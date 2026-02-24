@@ -3,7 +3,8 @@ import { ipcRenderer } from 'electron'
 export function createProjectsAdapter() {
     return {
         selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),
-        scanProjects: (folderPath: string) => ipcRenderer.invoke('devscope:scanProjects', folderPath),
+        scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) =>
+            ipcRenderer.invoke('devscope:scanProjects', folderPath, options),
         openInExplorer: (path: string) => ipcRenderer.invoke('devscope:openInExplorer', path),
         openInTerminal: (path: string, preferredShell: 'powershell' | 'cmd' = 'powershell', initialCommand?: string) =>
             ipcRenderer.invoke('devscope:openInTerminal', path, preferredShell, initialCommand),
@@ -63,6 +64,12 @@ export function createProjectsAdapter() {
         copyToClipboard: (text: string) => ipcRenderer.invoke('devscope:copyToClipboard', text),
         readFileContent: (filePath: string) => ipcRenderer.invoke('devscope:readFileContent', filePath),
         openFile: (filePath: string) => ipcRenderer.invoke('devscope:openFile', filePath),
+        openWith: (filePath: string) => ipcRenderer.invoke('devscope:openWith', filePath),
+        renameFileSystemItem: (targetPath: string, nextName: string) =>
+            ipcRenderer.invoke('devscope:renameFileSystemItem', targetPath, nextName),
+        deleteFileSystemItem: (targetPath: string) => ipcRenderer.invoke('devscope:deleteFileSystemItem', targetPath),
+        pasteFileSystemItem: (sourcePath: string, destinationDirectory: string) =>
+            ipcRenderer.invoke('devscope:pasteFileSystemItem', sourcePath, destinationDirectory),
         getProjectSessions: (_projectPath: string) => Promise.resolve({ success: true, sessions: [] }),
         getProjectProcesses: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectProcesses', projectPath),
         indexAllFolders: (folders: string[]) => ipcRenderer.invoke('devscope:indexAllFolders', folders),

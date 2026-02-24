@@ -126,7 +126,9 @@ export function AssistantSessionsSidebar({
             const validKeys = new Set(groupedSessions.map((group) => group.key))
             const next = new Set(Array.from(prev).filter((key) => validKeys.has(key)))
 
-            for (const group of groupedSessions) {
+            // Only expand the first two groups by default
+            const topTwoGroups = groupedSessions.slice(0, 2)
+            for (const group of topTwoGroups) {
                 if (!prev.has(group.key)) {
                     next.add(group.key)
                 }

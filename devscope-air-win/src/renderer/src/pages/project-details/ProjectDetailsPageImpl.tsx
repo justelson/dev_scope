@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTerminal } from '@/App'
 import { useFilePreview } from '@/components/ui/FilePreviewModal'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { PromptModal } from '@/components/ui/PromptModal'
 import { useSettings } from '@/lib/settings'
 import { trackRecentProject } from '@/lib/recentProjects'
 import { openAssistantDock } from '@/lib/assistantDockStore'
@@ -22,6 +24,13 @@ import type {
     GitTagSummary,
     ProjectDetails
 } from './types'
+
+type FileSystemClipboardItem = {
+    path: string
+    name: string
+    type: 'file' | 'directory'
+}
+
 const README_COLLAPSED_MAX_HEIGHT = 500
 const PREVIEWABLE_EXTENSIONS = new Set([
     'md', 'markdown', 'mdown', 'mdx',
@@ -59,6 +68,18 @@ function getParentFolderPath(currentPath: string): string | null {
     }
 
     return parent
+}
+
+function splitFileNameForRename(name: string): { baseName: string; extensionSuffix: string } {
+    const raw = String(name || '')
+    const dotIndex = raw.lastIndexOf('.')
+    if (dotIndex <= 0 || dotIndex === raw.length - 1) {
+        return { baseName: raw, extensionSuffix: '' }
+    }
+    return {
+        baseName: raw.slice(0, dotIndex),
+        extensionSuffix: raw.slice(dotIndex)
+    }
 }
 
 export default function ProjectDetailsPage() {
@@ -100,6 +121,7 @@ export default function ProjectDetailsPage() {
         visible: boolean
         actionLabel?: string
         actionTo?: string
+        tone?: 'success' | 'error' | 'info'
     } | null>(null)
     const [showAuthorMismatch, setShowAuthorMismatch] = useState(false)
     const [dontShowAuthorWarning, setDontShowAuthorWarning] = useState(false)
@@ -147,6 +169,12 @@ export default function ProjectDetailsPage() {
     const [sortBy, setSortBy] = useState<'name' | 'size' | 'type'>('name')
     const [sortAsc, setSortAsc] = useState(true)
     const [fileSearch, setFileSearch] = useState('')
+    const [fileClipboardItem, setFileClipboardItem] = useState<FileSystemClipboardItem | null>(null)
+    const [renameTarget, setRenameTarget] = useState<FileTreeNode | null>(null)
+    const [renameDraft, setRenameDraft] = useState('')
+    const [renameExtensionSuffix, setRenameExtensionSuffix] = useState('')
+    const [renameErrorMessage, setRenameErrorMessage] = useState<string | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<FileTreeNode | null>(null)
     const decodedPath = projectPath ? decodeURIComponent(projectPath) : ''
     const currentBranch = useMemo(() => branches.find(branch => branch.current)?.name || '', [branches])
     const {
@@ -196,8 +224,13 @@ export default function ProjectDetailsPage() {
 
         openAssistantDock({ contextPath: projectScopePath })
     }
-    const showToast = (message: string, actionLabel?: string, actionTo?: string) => {
-        setToast({ message, visible: false, actionLabel, actionTo })
+    const showToast = (
+        message: string,
+        actionLabel?: string,
+        actionTo?: string,
+        tone: 'success' | 'error' | 'info' = 'success'
+    ) => {
+        setToast({ message, visible: false, actionLabel, actionTo, tone })
         setTimeout(() => {
             setToast(prev => prev ? { ...prev, visible: true } : prev)
         }, 10)
@@ -291,6 +324,7 @@ export default function ProjectDetailsPage() {
                     await navigator.clipboard.writeText(project.path)
                 }
                 setCopiedPath(true)
+                showToast('Copied project path')
                 setTimeout(() => setCopiedPath(false), 2000)
             } catch (err) {
                 console.error('Failed to copy path:', err)
@@ -298,6 +332,149 @@ export default function ProjectDetailsPage() {
             }
         }
     }
+
+    const copyTextToClipboard = async (value: string, successMessage?: string): Promise<boolean> => {
+        try {
+            if (window.devscope.copyToClipboard) {
+                const result = await window.devscope.copyToClipboard(value)
+                if (!result.success) {
+                    setError(result.error || 'Failed to copy to clipboard')
+                    return false
+                }
+            } else {
+                await navigator.clipboard.writeText(value)
+            }
+            if (successMessage) showToast(successMessage)
+            return true
+        } catch (err: any) {
+            setError(err?.message || 'Failed to copy to clipboard')
+            return false
+        }
+    }
+
+    const handleFileTreeOpen = async (node: FileTreeNode) => {
+        if (node.type === 'directory') {
+            setExpandedFolders((prev) => {
+                const next = new Set(prev)
+                next.add(node.path)
+                return next
+            })
+            return
+        }
+        await openFile(node.path)
+    }
+
+    const handleFileTreeOpenWith = async (node: FileTreeNode) => {
+        if (node.type === 'directory') return
+        const result = await window.devscope.openWith(node.path)
+        if (!result.success) {
+            setError(result.error || `Failed to open "${node.name}" with...`)
+        }
+    }
+
+    const handleFileTreeOpenInExplorer = async (node: FileTreeNode) => {
+        const result = await window.devscope.openInExplorer(node.path)
+        if (!result.success) {
+            setError(result.error || `Failed to open "${node.name}" in explorer`)
+        }
+    }
+
+    const handleFileTreeCopyPath = async (node: FileTreeNode) => {
+        await copyTextToClipboard(node.path, `Copied path: ${node.name}`)
+    }
+
+    const handleFileTreeCopy = (node: FileTreeNode) => {
+        setFileClipboardItem({
+            path: node.path,
+            name: node.name,
+            type: node.type
+        })
+        showToast(`Copied ${node.type === 'directory' ? 'folder' : 'file'}: ${node.name}`)
+    }
+
+    const handleFileTreeRename = async (node: FileTreeNode) => {
+        const splitName = splitFileNameForRename(node.name)
+        setRenameTarget(node)
+        setRenameDraft(splitName.baseName)
+        setRenameExtensionSuffix(node.type === 'file' ? splitName.extensionSuffix : '')
+        setRenameErrorMessage(null)
+    }
+
+    const handleFileTreeDelete = async (node: FileTreeNode) => {
+        setDeleteTarget(node)
+    }
+
+    const handleFileTreePaste = async (node: FileTreeNode) => {
+        if (!fileClipboardItem) return
+
+        const destinationDirectory = node.type === 'directory'
+            ? node.path
+            : getParentFolderPath(node.path)
+
+        if (!destinationDirectory) {
+            setError('Unable to resolve destination folder for paste.')
+            return
+        }
+
+        const result = await window.devscope.pasteFileSystemItem(fileClipboardItem.path, destinationDirectory)
+        if (!result.success) {
+            setError(result.error || `Failed to paste "${fileClipboardItem.name}"`)
+            return
+        }
+
+        showToast(`Pasted ${fileClipboardItem.name}`)
+        await loadProjectDetails()
+    }
+
+    const submitRenameTarget = async () => {
+        if (!renameTarget) return
+        const normalizedBaseName = renameDraft.trim()
+        if (!normalizedBaseName) {
+            setRenameErrorMessage('Name cannot be empty.')
+            return
+        }
+        const normalizedNextName = renameTarget.type === 'file'
+            ? `${normalizedBaseName}${renameExtensionSuffix}`
+            : normalizedBaseName
+        if (normalizedNextName === renameTarget.name) {
+            setRenameTarget(null)
+            setRenameDraft('')
+            setRenameExtensionSuffix('')
+            setRenameErrorMessage(null)
+            return
+        }
+
+        const result = await window.devscope.renameFileSystemItem(renameTarget.path, normalizedNextName)
+        if (!result.success) {
+            setRenameErrorMessage(result.error || `Failed to rename "${renameTarget.name}"`)
+            return
+        }
+
+        showToast(`Renamed to ${normalizedNextName}`)
+        setRenameTarget(null)
+        setRenameDraft('')
+        setRenameExtensionSuffix('')
+        setRenameErrorMessage(null)
+        await loadProjectDetails()
+    }
+
+    const confirmDeleteTarget = async () => {
+        if (!deleteTarget) return
+        const result = await window.devscope.deleteFileSystemItem(deleteTarget.path)
+        if (!result.success) {
+            setError(result.error || `Failed to delete "${deleteTarget.name}"`)
+            return
+        }
+
+        if (fileClipboardItem?.path === deleteTarget.path) {
+            setFileClipboardItem(null)
+        }
+
+        showToast(`Deleted ${deleteTarget.name}`)
+        setDeleteTarget(null)
+        await loadProjectDetails()
+    }
+
     const {
         handleCommitClick,
         handleCommit,
@@ -452,6 +629,15 @@ export default function ProjectDetailsPage() {
                 setSortAsc={setSortAsc}
                 visibleFileList={visibleFileList}
                 openPreview={openPreview}
+                onFileTreeOpen={handleFileTreeOpen}
+                onFileTreeOpenWith={handleFileTreeOpenWith}
+                onFileTreeOpenInExplorer={handleFileTreeOpenInExplorer}
+                onFileTreeCopyPath={handleFileTreeCopyPath}
+                onFileTreeCopy={handleFileTreeCopy}
+                onFileTreeRename={handleFileTreeRename}
+                onFileTreeDelete={handleFileTreeDelete}
+                onFileTreePaste={handleFileTreePaste}
+                hasFileClipboardItem={Boolean(fileClipboardItem)}
                 gitUser={gitUser}
                 repoOwner={repoOwner}
                 gitView={gitView}
@@ -523,6 +709,41 @@ export default function ProjectDetailsPage() {
                 toast={toast}
                 navigate={navigate}
                 setToast={setToast}
+            />
+            <PromptModal
+                isOpen={Boolean(renameTarget)}
+                title="Rename Item"
+                message={renameTarget
+                    ? renameTarget.type === 'file'
+                        ? `Rename "${renameTarget.name}" (file extension is locked for safety)`
+                        : `Rename "${renameTarget.name}"`
+                    : ''}
+                value={renameDraft}
+                onChange={(value) => {
+                    setRenameDraft(value)
+                    if (renameErrorMessage) setRenameErrorMessage(null)
+                }}
+                onConfirm={() => { void submitRenameTarget() }}
+                onCancel={() => {
+                    setRenameTarget(null)
+                    setRenameDraft('')
+                    setRenameExtensionSuffix('')
+                    setRenameErrorMessage(null)
+                }}
+                confirmLabel="Rename"
+                placeholder="Enter new name"
+                valueSuffix={renameTarget?.type === 'file' ? renameExtensionSuffix : ''}
+                errorMessage={renameErrorMessage}
+            />
+            <ConfirmModal
+                isOpen={Boolean(deleteTarget)}
+                title="Delete Item?"
+                message={deleteTarget ? `Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.` : ''}
+                confirmLabel="Delete"
+                onConfirm={() => { void confirmDeleteTarget() }}
+                onCancel={() => setDeleteTarget(null)}
+                variant="danger"
+                fullscreen
             />
         </div>
     )

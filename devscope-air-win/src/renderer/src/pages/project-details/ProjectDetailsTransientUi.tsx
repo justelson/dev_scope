@@ -86,7 +86,12 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
             {toast && (
                 <div
                     className={cn(
-                        'fixed bottom-4 right-4 z-[80] max-w-sm rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300 shadow-lg backdrop-blur-md transition-all duration-300',
+                        'fixed bottom-4 right-4 z-[80] max-w-sm rounded-xl px-4 py-3 text-sm shadow-lg backdrop-blur-md transition-all duration-300',
+                        toast.tone === 'error'
+                            ? 'border border-red-500/30 bg-red-500/10 text-red-200'
+                            : toast.tone === 'success'
+                                ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                : 'border border-amber-500/30 bg-amber-500/10 text-amber-300',
                         toast.visible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
                     )}
                 >
@@ -100,7 +105,14 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
                                         navigate(toast.actionTo!)
                                         setToast(null)
                                     }}
-                                    className="text-left text-xs font-medium text-amber-200 underline underline-offset-2 hover:text-amber-100 transition-colors"
+                                    className={cn(
+                                        'text-left text-xs font-medium underline underline-offset-2 transition-colors',
+                                        toast.tone === 'error'
+                                            ? 'text-red-100 hover:text-red-50'
+                                            : toast.tone === 'success'
+                                                ? 'text-emerald-100 hover:text-emerald-50'
+                                                : 'text-amber-200 hover:text-amber-100'
+                                    )}
                                 >
                                     {toast.actionLabel}
                                 </button>

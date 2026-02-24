@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+    Check,
     ChevronRight,
     ChevronsDownUp,
     ChevronsUpDown,
@@ -69,9 +70,17 @@ export function WorkingChangesView({
     const [loadingDiffs, setLoadingDiffs] = useState<Set<string>>(new Set())
     const [showFullDiff, setShowFullDiff] = useState<Set<string>>(new Set())
     const [isExpandingAll, setIsExpandingAll] = useState(false)
+    const [copiedPath, setCopiedPath] = useState<string | null>(null)
 
     const PREVIEW_LINES = 10
     const ITEMS_PER_PAGE = 15
+
+    const handleCopyPath = (path: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        navigator.clipboard.writeText(path)
+        setCopiedPath(path)
+        setTimeout(() => setCopiedPath(null), 1500)
+    }
 
     // Paginate files
     const paginatedFiles = files.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
@@ -242,14 +251,16 @@ export function WorkingChangesView({
                                     {file.name}
                                 </span>
                                 <button
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        navigator.clipboard.writeText(file.path)
-                                    }}
-                                    className="p-1 text-white/40 hover:text-white hover:bg-white/10 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100"
-                                    title={`Copy path: ${file.path}`}
+                                    onClick={(e) => handleCopyPath(file.path, e)}
+                                    className={cn(
+                                        "p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100",
+                                        copiedPath === file.path
+                                            ? "text-emerald-400 bg-emerald-400/10"
+                                            : "text-white/40 hover:text-white hover:bg-white/10"
+                                    )}
+                                    title={copiedPath === file.path ? "Copied!" : `Copy path: ${file.path}`}
                                 >
-                                    <Copy size={14} />
+                                    {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
                                 </button>
                             </div>
                             <span className="text-xs text-white/30 truncate max-w-[200px] shrink-0">

@@ -1,4 +1,6 @@
 import { clipboard, BrowserWindow, dialog, shell } from 'electron'
+import { spawn } from 'child_process'
+import { stat } from 'fs/promises'
 import log from 'electron-log'
 import { devscopeCore } from '../../core/devscope-core'
 import type { ScanProjectsResult } from '../../services/project-discovery-service'
@@ -24,9 +26,13 @@ export async function handleSelectFolder(event: Electron.IpcMainInvokeEvent) {
     }
 }
 
-export async function handleScanProjects(_event: Electron.IpcMainInvokeEvent, folderPath: string): Promise<ScanProjectsResult> {
+export async function handleScanProjects(
+    _event: Electron.IpcMainInvokeEvent,
+    folderPath: string,
+    options?: { forceRefresh?: boolean }
+): Promise<ScanProjectsResult> {
     log.info('IPC: scanProjects', folderPath)
-    const result = await devscopeCore.projects.scanProjects(folderPath)
+    const result = await devscopeCore.projects.scanProjects(folderPath, options)
     if (result.success) {
         log.info(
             `Found ${result.projects.length} projects, ${result.folders.length} folders, and ${result.files.length} files in ${folderPath}`
@@ -46,7 +52,20 @@ export async function handleOpenInExplorer(_event: Electron.IpcMainInvokeEvent, 
     log.info('IPC: openInExplorer', path)
 
     try {
-        const result = await shell.openPath(path)
+        const normalizedPath = String(path || '').trim()
+        if (!normalizedPath) return { success: false, error: 'Path is required.' }
+
+        try {
+            const targetStats = await stat(normalizedPath)
+            if (targetStats.isFile()) {
+                shell.showItemInFolder(normalizedPath)
+                return { success: true }
+            }
+        } catch {
+            // Fall back to shell.openPath when stats are unavailable.
+        }
+
+        const result = await shell.openPath(normalizedPath)
         if (result) {
             log.error('shell.openPath failed:', result)
             return { success: false, error: result }
@@ -70,6 +89,35 @@ export async function handleOpenFile(_event: Electron.IpcMainInvokeEvent, filePa
         return { success: true }
     } catch (err: any) {
         log.error('Failed to open file:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleOpenWith(_event: Electron.IpcMainInvokeEvent, filePath: string) {
+    log.info('IPC: openWith', filePath)
+
+    try {
+        const normalizedPath = String(filePath || '').trim()
+        if (!normalizedPath) return { success: false, error: 'Path is required.' }
+
+        if (process.platform === 'win32') {
+            const child = spawn('rundll32.exe', ['shell32.dll,OpenAs_RunDLL', normalizedPath], {
+                detached: true,
+                windowsHide: true,
+                stdio: 'ignore'
+            })
+            child.unref()
+            return { success: true }
+        }
+
+        const result = await shell.openPath(normalizedPath)
+        if (result) {
+            log.error('shell.openPath failed:', result)
+            return { success: false, error: result }
+        }
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to open with:', err)
         return { success: false, error: err.message }
     }
 }

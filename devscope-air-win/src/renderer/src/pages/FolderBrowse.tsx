@@ -7,8 +7,11 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { useTerminal } from '@/App'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
+import { PromptModal } from '@/components/ui/PromptModal'
 import { openAssistantDock } from '@/lib/assistantDockStore'
 import { trackRecentProject } from '@/lib/recentProjects'
 import { useSettings } from '@/lib/settings'
@@ -19,6 +22,12 @@ import type { FileItem, FolderItem, Project } from './folder-browse/types'
 import { formatFileSize, formatRelativeTime, getFileColor, getProjectTypes } from './folder-browse/utils'
 
 const FILES_PAGE_SIZE = 300
+
+type FileSystemClipboardItem = {
+    path: string
+    name: string
+    type: 'file' | 'directory'
+}
 
 async function yieldToBrowserPaint(): Promise<void> {
     await new Promise<void>((resolve) => {
@@ -48,6 +57,18 @@ function getParentFolderPath(currentPath: string): string | null {
     }
 
     return parent
+}
+
+function splitFileNameForRename(name: string): { baseName: string; extensionSuffix: string } {
+    const raw = String(name || '')
+    const dotIndex = raw.lastIndexOf('.')
+    if (dotIndex <= 0 || dotIndex === raw.length - 1) {
+        return { baseName: raw, extensionSuffix: '' }
+    }
+    return {
+        baseName: raw.slice(0, dotIndex),
+        extensionSuffix: raw.slice(dotIndex)
+    }
 }
 
 function normalizePath(path: string): string {
@@ -136,6 +157,13 @@ export default function FolderBrowse() {
     const [isCurrentFolderGitRepo, setIsCurrentFolderGitRepo] = useState(false)
     const [visibleFileCount, setVisibleFileCount] = useState(FILES_PAGE_SIZE)
     const [copiedPath, setCopiedPath] = useState(false)
+    const [fileClipboardItem, setFileClipboardItem] = useState<FileSystemClipboardItem | null>(null)
+    const [renameTarget, setRenameTarget] = useState<FileSystemClipboardItem | null>(null)
+    const [renameDraft, setRenameDraft] = useState('')
+    const [renameExtensionSuffix, setRenameExtensionSuffix] = useState('')
+    const [renameErrorMessage, setRenameErrorMessage] = useState<string | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<FileSystemClipboardItem | null>(null)
+    const [toast, setToast] = useState<{ message: string; visible: boolean; tone?: 'success' | 'error' } | null>(null)
 
     const {
         previewFile,
@@ -148,7 +176,7 @@ export default function FolderBrowse() {
         closePreview
     } = useFilePreview()
 
-    const loadContents = useCallback(async () => {
+    const loadContents = useCallback(async (forceRefresh: boolean = false) => {
         if (!decodedPath) return
 
         setLoading(true)
@@ -156,7 +184,7 @@ export default function FolderBrowse() {
         await yieldToBrowserPaint()
 
         try {
-            const result = await window.devscope.scanProjects(decodedPath)
+            const result = await window.devscope.scanProjects(decodedPath, { forceRefresh })
             if (!result.success) {
                 setError(result.error || 'Failed to scan folder')
                 return
@@ -191,7 +219,7 @@ export default function FolderBrowse() {
     }, [decodedPath])
 
     useEffect(() => {
-        loadContents()
+        loadContents(false)
     }, [loadContents])
 
     useEffect(() => {
@@ -211,6 +239,27 @@ export default function FolderBrowse() {
     useEffect(() => {
         setCopiedPath(false)
     }, [decodedPath])
+
+    const showToast = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
+        setToast({ message, visible: false, tone })
+        window.setTimeout(() => {
+            setToast((current) => current ? { ...current, visible: true } : current)
+        }, 8)
+    }, [])
+
+    useEffect(() => {
+        if (!toast?.visible) return
+        const hideTimer = window.setTimeout(() => {
+            setToast((current) => current ? { ...current, visible: false } : current)
+        }, 2200)
+        const removeTimer = window.setTimeout(() => {
+            setToast(null)
+        }, 2600)
+        return () => {
+            window.clearTimeout(hideTimer)
+            window.clearTimeout(removeTimer)
+        }
+    }, [toast?.visible])
 
     const parsedSearchQuery = useMemo(
         () => parseFileSearchQuery(deferredSearchQuery),
@@ -300,20 +349,159 @@ export default function FolderBrowse() {
         navigate(`/folder-browse/${encodeURIComponent(parentPath)}`)
     }
 
-    const handleCopyPath = useCallback(async () => {
-        if (!decodedPath.trim()) return
+    const copyTextToClipboard = useCallback(async (value: string): Promise<boolean> => {
         try {
             if (window.devscope.copyToClipboard) {
-                await window.devscope.copyToClipboard(decodedPath)
+                const result = await window.devscope.copyToClipboard(value)
+                if (!result.success) {
+                    setError(result.error || 'Failed to copy to clipboard')
+                    return false
+                }
             } else {
-                await navigator.clipboard.writeText(decodedPath)
+                await navigator.clipboard.writeText(value)
             }
-            setCopiedPath(true)
-            window.setTimeout(() => setCopiedPath(false), 1500)
-        } catch {
-            setCopiedPath(false)
+            return true
+        } catch (err: any) {
+            setError(err?.message || 'Failed to copy to clipboard')
+            return false
         }
-    }, [decodedPath])
+    }, [])
+
+    const handleCopyPath = useCallback(async () => {
+        if (!decodedPath.trim()) return
+        const copied = await copyTextToClipboard(decodedPath)
+        setCopiedPath(copied)
+        if (copied) {
+            showToast('Copied folder path')
+            window.setTimeout(() => setCopiedPath(false), 1500)
+        }
+    }, [decodedPath, copyTextToClipboard, showToast])
+
+    const handleEntryOpen = useCallback(async (entry: FileSystemClipboardItem) => {
+        if (entry.type === 'directory') {
+            navigate(`/folder-browse/${encodeURIComponent(entry.path)}`)
+            return
+        }
+        const result = await window.devscope.openFile(entry.path)
+        if (!result.success) {
+            setError(result.error || `Failed to open "${entry.name}"`)
+        }
+    }, [navigate])
+
+    const handleEntryOpenWith = useCallback(async (entry: FileSystemClipboardItem) => {
+        if (entry.type === 'directory') return
+        const result = await window.devscope.openWith(entry.path)
+        if (!result.success) {
+            setError(result.error || `Failed to open "${entry.name}" with...`)
+        }
+    }, [])
+
+    const handleEntryOpenInExplorer = useCallback(async (entry: FileSystemClipboardItem) => {
+        const result = await window.devscope.openInExplorer(entry.path)
+        if (!result.success) {
+            setError(result.error || `Failed to open "${entry.name}" in explorer`)
+        }
+    }, [])
+
+    const handleEntryCopyPath = useCallback(async (entry: FileSystemClipboardItem) => {
+        const copied = await copyTextToClipboard(entry.path)
+        if (copied) showToast(`Copied path: ${entry.name}`)
+    }, [copyTextToClipboard, showToast])
+
+    const handleEntryCopy = useCallback((entry: FileSystemClipboardItem) => {
+        setFileClipboardItem({
+            path: entry.path,
+            name: entry.name,
+            type: entry.type
+        })
+        setError(null)
+        showToast(`Copied ${entry.type === 'directory' ? 'folder' : 'file'}: ${entry.name}`)
+    }, [showToast])
+
+    const handleEntryRename = useCallback(async (entry: FileSystemClipboardItem) => {
+        const splitName = splitFileNameForRename(entry.name)
+        setRenameTarget(entry)
+        setRenameDraft(splitName.baseName)
+        setRenameExtensionSuffix(entry.type === 'file' ? splitName.extensionSuffix : '')
+        setRenameErrorMessage(null)
+    }, [])
+
+    const handleEntryDelete = useCallback(async (entry: FileSystemClipboardItem) => {
+        setDeleteTarget(entry)
+    }, [])
+
+    const handleEntryPaste = useCallback(async (entry: FileSystemClipboardItem) => {
+        if (!fileClipboardItem) return
+
+        const destinationDirectory = entry.type === 'directory'
+            ? entry.path
+            : getParentFolderPath(entry.path)
+
+        if (!destinationDirectory) {
+            setError('Unable to resolve destination folder for paste.')
+            return
+        }
+
+        const result = await window.devscope.pasteFileSystemItem(fileClipboardItem.path, destinationDirectory)
+        if (!result.success) {
+            setError(result.error || `Failed to paste "${fileClipboardItem.name}"`)
+            return
+        }
+
+        showToast(`Pasted ${fileClipboardItem.name}`)
+        await loadContents(true)
+    }, [fileClipboardItem, loadContents, showToast])
+
+    const submitRenameTarget = useCallback(async () => {
+        if (!renameTarget) return
+
+        const normalizedBaseName = renameDraft.trim()
+        if (!normalizedBaseName) {
+            setRenameErrorMessage('Name cannot be empty.')
+            return
+        }
+        const normalizedNextName = renameTarget.type === 'file'
+            ? `${normalizedBaseName}${renameExtensionSuffix}`
+            : normalizedBaseName
+        if (normalizedNextName === renameTarget.name) {
+            setRenameTarget(null)
+            setRenameDraft('')
+            setRenameExtensionSuffix('')
+            setRenameErrorMessage(null)
+            return
+        }
+
+        const result = await window.devscope.renameFileSystemItem(renameTarget.path, normalizedNextName)
+        if (!result.success) {
+            setRenameErrorMessage(result.error || `Failed to rename "${renameTarget.name}"`)
+            return
+        }
+
+        setRenameTarget(null)
+        setRenameDraft('')
+        setRenameExtensionSuffix('')
+        setRenameErrorMessage(null)
+        showToast(`Renamed to ${normalizedNextName}`)
+        await loadContents(true)
+    }, [loadContents, renameDraft, renameExtensionSuffix, renameTarget, showToast])
+
+    const confirmDeleteTarget = useCallback(async () => {
+        if (!deleteTarget) return
+
+        const result = await window.devscope.deleteFileSystemItem(deleteTarget.path)
+        if (!result.success) {
+            setError(result.error || `Failed to delete "${deleteTarget.name}"`)
+            return
+        }
+
+        if (fileClipboardItem?.path === deleteTarget.path) {
+            setFileClipboardItem(null)
+        }
+
+        setDeleteTarget(null)
+        showToast(`Deleted ${deleteTarget.name}`)
+        await loadContents(true)
+    }, [deleteTarget, fileClipboardItem?.path, loadContents, showToast])
 
     return (
         <div className="max-w-[1600px] mx-auto animate-fadeIn pb-20">
@@ -332,7 +520,7 @@ export default function FolderBrowse() {
                 onCopyPath={handleCopyPath}
                 copiedPath={copiedPath}
                 onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}
-                onRefresh={loadContents}
+                onRefresh={() => { void loadContents(true) }}
             />
 
             <FolderBrowseToolbar
@@ -377,6 +565,15 @@ export default function FolderBrowse() {
                     onProjectClick={handleProjectClick}
                     onOpenFilePreview={(file) => openPreview(file, file.extension)}
                     onOpenProjectInExplorer={(path) => window.devscope.openInExplorer?.(path)}
+                    onEntryOpen={handleEntryOpen}
+                    onEntryOpenWith={handleEntryOpenWith}
+                    onEntryOpenInExplorer={handleEntryOpenInExplorer}
+                    onEntryCopyPath={handleEntryCopyPath}
+                    onEntryCopy={handleEntryCopy}
+                    onEntryRename={handleEntryRename}
+                    onEntryDelete={handleEntryDelete}
+                    onEntryPaste={handleEntryPaste}
+                    hasFileClipboardItem={Boolean(fileClipboardItem)}
                     formatFileSize={formatFileSize}
                     getFileColor={getFileColor}
                     formatRelativeTime={formatRelativeTime}
@@ -393,6 +590,56 @@ export default function FolderBrowse() {
                     previewBytes={previewBytes}
                     onClose={closePreview}
                 />
+            )}
+
+            <PromptModal
+                isOpen={Boolean(renameTarget)}
+                title="Rename Item"
+                message={renameTarget
+                    ? renameTarget.type === 'file'
+                        ? `Rename "${renameTarget.name}" (file extension is locked for safety)`
+                        : `Rename "${renameTarget.name}"`
+                    : ''}
+                value={renameDraft}
+                onChange={(value) => {
+                    setRenameDraft(value)
+                    if (renameErrorMessage) setRenameErrorMessage(null)
+                }}
+                onConfirm={() => { void submitRenameTarget() }}
+                onCancel={() => {
+                    setRenameTarget(null)
+                    setRenameDraft('')
+                    setRenameExtensionSuffix('')
+                    setRenameErrorMessage(null)
+                }}
+                confirmLabel="Rename"
+                placeholder="Enter new name"
+                valueSuffix={renameTarget?.type === 'file' ? renameExtensionSuffix : ''}
+                errorMessage={renameErrorMessage}
+            />
+            <ConfirmModal
+                isOpen={Boolean(deleteTarget)}
+                title="Delete Item?"
+                message={deleteTarget ? `Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.` : ''}
+                confirmLabel="Delete"
+                onConfirm={() => { void confirmDeleteTarget() }}
+                onCancel={() => setDeleteTarget(null)}
+                variant="danger"
+                fullscreen
+            />
+
+            {toast && (
+                <div
+                    className={cn(
+                        'fixed bottom-4 right-4 z-[120] max-w-sm rounded-xl px-4 py-3 text-sm shadow-lg backdrop-blur-md transition-all duration-300',
+                        toast.tone === 'error'
+                            ? 'border border-red-500/30 bg-red-500/10 text-red-200'
+                            : 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+                        toast.visible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
+                    )}
+                >
+                    {toast.message}
+                </div>
             )}
         </div>
     )

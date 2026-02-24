@@ -1,12 +1,14 @@
 import { startTransition } from 'react'
 import {
     Search, RefreshCw, ChevronsDownUp, ChevronsUpDown, Eye, EyeOff,
-    ChevronUp, ChevronDown, ChevronRight
+    ChevronUp, ChevronDown, ChevronRight, AppWindow, ClipboardPaste, Copy,
+    ExternalLink, FolderOpen, Pencil, Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatFileSize } from './fileTreeUtils'
 import { getFileIcon } from './fileIcons'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
+import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
 
 interface ProjectDetailsFilesTabProps {
     [key: string]: any
@@ -32,6 +34,15 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
         setSortAsc,
         visibleFileList,
         openPreview,
+        onFileTreeOpen,
+        onFileTreeOpenWith,
+        onFileTreeOpenInExplorer,
+        onFileTreeCopyPath,
+        onFileTreeCopy,
+        onFileTreeRename,
+        onFileTreeDelete,
+        onFileTreePaste,
+        hasFileClipboardItem,
         loadingFiles
     } = props
 
@@ -195,7 +206,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                 </span>
                             </div>
 
-                            <div className="col-span-2 flex items-center justify-end">
+                            <div className="col-span-2 flex items-center justify-end gap-2">
                                 {isFolder && childInfo && (
                                     <span className="text-[10px] text-white/30">
                                         {childInfo.folders > 0 && `${childInfo.folders} folders`}
@@ -208,6 +219,61 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         Preview
                                     </span>
                                 )}
+                                <FileActionsMenu
+                                    title={`${node.name} actions`}
+                                    items={[
+                                        {
+                                            id: 'open',
+                                            label: 'Open',
+                                            icon: <FolderOpen size={13} />,
+                                            onSelect: () => onFileTreeOpen(node)
+                                        },
+                                        ...(!isFolder ? [{
+                                            id: 'open-with',
+                                            label: 'Open With...',
+                                            icon: <AppWindow size={13} />,
+                                            onSelect: () => onFileTreeOpenWith(node)
+                                        }] : []),
+                                        {
+                                            id: 'open-in-explorer',
+                                            label: 'Open in Explorer',
+                                            icon: <ExternalLink size={13} />,
+                                            onSelect: () => onFileTreeOpenInExplorer(node)
+                                        },
+                                        {
+                                            id: 'copy-path',
+                                            label: 'Copy Path',
+                                            icon: <Copy size={13} />,
+                                            onSelect: () => onFileTreeCopyPath(node)
+                                        },
+                                        {
+                                            id: 'copy',
+                                            label: 'Copy',
+                                            icon: <Copy size={13} />,
+                                            onSelect: () => onFileTreeCopy(node)
+                                        },
+                                        {
+                                            id: 'paste',
+                                            label: 'Paste',
+                                            icon: <ClipboardPaste size={13} />,
+                                            disabled: !hasFileClipboardItem,
+                                            onSelect: () => onFileTreePaste(node)
+                                        },
+                                        {
+                                            id: 'rename',
+                                            label: 'Rename',
+                                            icon: <Pencil size={13} />,
+                                            onSelect: () => onFileTreeRename(node)
+                                        },
+                                        {
+                                            id: 'delete',
+                                            label: 'Delete',
+                                            icon: <Trash2 size={13} />,
+                                            danger: true,
+                                            onSelect: () => onFileTreeDelete(node)
+                                        }
+                                    ]}
+                                />
                             </div>
                         </div>
                     ))

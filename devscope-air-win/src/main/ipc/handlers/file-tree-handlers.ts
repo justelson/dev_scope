@@ -1,7 +1,9 @@
-import { access, open as fsOpen, readdir, stat } from 'fs/promises'
-import { join, relative } from 'path'
+import { shell } from 'electron'
+import { access, cp, lstat, open as fsOpen, readdir, rename, rm, stat } from 'fs/promises'
+import { basename, dirname, join, parse, relative, resolve, sep } from 'path'
 import log from 'electron-log'
 import { getGitStatus, type GitFileStatus } from '../../inspectors/git'
+import { invalidateScanProjectsCache } from '../../services/project-discovery-service'
 
 interface FileTreeNode {
     name: string
@@ -15,6 +17,40 @@ interface FileTreeNode {
 
 const PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 const BINARY_DETECTION_BYTES = 4096
+
+function normalizePathForComparison(pathValue: string): string {
+    const normalized = resolve(String(pathValue || ''))
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+async function pathExists(pathValue: string): Promise<boolean> {
+    try {
+        await access(pathValue)
+        return true
+    } catch {
+        return false
+    }
+}
+
+function buildCopyName(sourceName: string, copyIndex: number): string {
+    if (copyIndex <= 0) return sourceName
+    const parsed = parse(sourceName)
+    const suffix = copyIndex === 1 ? ' Copy' : ` Copy ${copyIndex}`
+    return `${parsed.name}${suffix}${parsed.ext}`
+}
+
+async function resolveCopyDestinationPath(destinationDirectory: string, sourceName: string): Promise<string> {
+    let copyIndex = 0
+    while (copyIndex < 1000) {
+        const candidateName = buildCopyName(sourceName, copyIndex)
+        const candidatePath = join(destinationDirectory, candidateName)
+        if (!(await pathExists(candidatePath))) {
+            return candidatePath
+        }
+        copyIndex += 1
+    }
+    throw new Error('Unable to resolve destination path for copy operation.')
+}
 
 function isLikelyBinaryBuffer(buffer: Buffer): boolean {
     if (buffer.length === 0) return false
@@ -154,6 +190,122 @@ export async function handleReadFileContent(_event: Electron.IpcMainInvokeEvent,
         }
     } catch (err: any) {
         log.error('Failed to read file:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleRenameFileSystemItem(
+    _event: Electron.IpcMainInvokeEvent,
+    targetPath: string,
+    nextName: string
+) {
+    log.info('IPC: renameFileSystemItem', targetPath, nextName)
+
+    try {
+        const normalizedTargetPath = String(targetPath || '').trim()
+        const normalizedNextName = String(nextName || '').trim()
+
+        if (!normalizedTargetPath) return { success: false, error: 'Target path is required.' }
+        if (!normalizedNextName) return { success: false, error: 'New name is required.' }
+        if (normalizedNextName.includes('/') || normalizedNextName.includes('\\')) {
+            return { success: false, error: 'Name cannot include path separators.' }
+        }
+
+        await access(normalizedTargetPath)
+
+        const destinationPath = join(dirname(normalizedTargetPath), normalizedNextName)
+        const normalizedSource = normalizePathForComparison(normalizedTargetPath)
+        const normalizedDestination = normalizePathForComparison(destinationPath)
+        if (normalizedSource === normalizedDestination) {
+            return { success: true, path: destinationPath, name: normalizedNextName }
+        }
+
+        if (await pathExists(destinationPath)) {
+            return { success: false, error: `A file or folder named "${normalizedNextName}" already exists.` }
+        }
+
+        await rename(normalizedTargetPath, destinationPath)
+        invalidateScanProjectsCache(dirname(normalizedTargetPath))
+        invalidateScanProjectsCache(dirname(destinationPath))
+        invalidateScanProjectsCache(normalizedTargetPath, { includeParents: false })
+        invalidateScanProjectsCache(destinationPath, { includeParents: false })
+        return { success: true, path: destinationPath, name: normalizedNextName }
+    } catch (err: any) {
+        log.error('Failed to rename file system item:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleDeleteFileSystemItem(_event: Electron.IpcMainInvokeEvent, targetPath: string) {
+    log.info('IPC: deleteFileSystemItem', targetPath)
+
+    try {
+        const normalizedTargetPath = String(targetPath || '').trim()
+        if (!normalizedTargetPath) return { success: false, error: 'Target path is required.' }
+
+        await access(normalizedTargetPath)
+
+        try {
+            await shell.trashItem(normalizedTargetPath)
+        } catch {
+            await rm(normalizedTargetPath, { recursive: true, force: false })
+        }
+
+        invalidateScanProjectsCache(dirname(normalizedTargetPath))
+        invalidateScanProjectsCache(normalizedTargetPath, { includeParents: false })
+
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to delete file system item:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handlePasteFileSystemItem(
+    _event: Electron.IpcMainInvokeEvent,
+    sourcePath: string,
+    destinationDirectory: string
+) {
+    log.info('IPC: pasteFileSystemItem', sourcePath, destinationDirectory)
+
+    try {
+        const normalizedSourcePath = String(sourcePath || '').trim()
+        const normalizedDestinationDirectory = String(destinationDirectory || '').trim()
+
+        if (!normalizedSourcePath) return { success: false, error: 'Source path is required.' }
+        if (!normalizedDestinationDirectory) return { success: false, error: 'Destination directory is required.' }
+
+        await access(normalizedSourcePath)
+        const destinationStat = await lstat(normalizedDestinationDirectory)
+        if (!destinationStat.isDirectory()) {
+            return { success: false, error: 'Destination must be a folder.' }
+        }
+
+        const sourceStat = await lstat(normalizedSourcePath)
+        const normalizedSource = normalizePathForComparison(normalizedSourcePath)
+        const normalizedDestination = normalizePathForComparison(normalizedDestinationDirectory)
+        if (sourceStat.isDirectory() && (
+            normalizedDestination === normalizedSource
+            || normalizedDestination.startsWith(`${normalizedSource}${sep}`)
+        )) {
+            return { success: false, error: 'Cannot copy a folder into itself.' }
+        }
+
+        const sourceName = basename(normalizedSourcePath)
+        const destinationPath = await resolveCopyDestinationPath(normalizedDestinationDirectory, sourceName)
+
+        await cp(normalizedSourcePath, destinationPath, {
+            recursive: sourceStat.isDirectory(),
+            errorOnExist: true,
+            force: false
+        })
+
+        invalidateScanProjectsCache(normalizedDestinationDirectory)
+        invalidateScanProjectsCache(destinationPath, { includeParents: false })
+
+        return { success: true, path: destinationPath, name: basename(destinationPath) }
+    } catch (err: any) {
+        log.error('Failed to paste file system item:', err)
         return { success: false, error: err.message }
     }
 }

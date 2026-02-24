@@ -63,8 +63,16 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
     const [showFullDiff, setShowFullDiff] = useState<Set<string>>(new Set())
     const [showCommitInfo, setShowCommitInfo] = useState(false)
     const [copiedHash, setCopiedHash] = useState(false)
+    const [copiedPath, setCopiedPath] = useState<string | null>(null)
 
     const PREVIEW_LINES = 10 // Show first 10 lines when truncated
+
+    const handleCopyPath = (path: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        navigator.clipboard.writeText(path)
+        setCopiedPath(path)
+        setTimeout(() => setCopiedPath(null), 1500)
+    }
 
     // Parse diff into file sections
     const parsedDiff = useMemo(() => {
@@ -371,14 +379,16 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                                                     {file.path}
                                                 </span>
                                                 <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        navigator.clipboard.writeText(file.path)
-                                                    }}
-                                                    className="p-1 text-white/40 hover:text-white hover:bg-white/10 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100"
-                                                    title={`Copy path: ${file.path}`}
+                                                    onClick={(e) => handleCopyPath(file.path, e)}
+                                                    className={cn(
+                                                        "p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100",
+                                                        copiedPath === file.path
+                                                            ? "text-emerald-400 bg-emerald-400/10"
+                                                            : "text-white/40 hover:text-white hover:bg-white/10"
+                                                    )}
+                                                    title={copiedPath === file.path ? "Copied!" : `Copy path: ${file.path}`}
                                                 >
-                                                    <Copy size={14} />
+                                                    {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
                                                 </button>
                                             </div>
                                             <div className="flex items-center gap-3 text-xs shrink-0">

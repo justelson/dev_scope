@@ -34,6 +34,7 @@ import {
     handleIndexAllFolders,
     handleOpenFile,
     handleOpenInExplorer,
+    handleOpenWith,
     handleScanProjects,
     handleSelectFolder
 } from './handlers/project-discovery-handlers'
@@ -42,7 +43,13 @@ import {
     handleGetProjectProcesses,
     handleGetProjectSessions
 } from './handlers/project-details-handlers'
-import { handleGetFileTree, handleReadFileContent } from './handlers/file-tree-handlers'
+import {
+    handleDeleteFileSystemItem,
+    handleGetFileTree,
+    handlePasteFileSystemItem,
+    handleReadFileContent,
+    handleRenameFileSystemItem
+} from './handlers/file-tree-handlers'
 import { handleOpenInTerminal } from './handlers/terminal-handlers'
 import {
     handleCheckIsGitRepo,
@@ -196,6 +203,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getFileTree', handleGetFileTree)
     ipcMain.handle('devscope:readFileContent', handleReadFileContent)
     ipcMain.handle('devscope:openFile', handleOpenFile)
+    ipcMain.handle('devscope:openWith', handleOpenWith)
+    ipcMain.handle('devscope:renameFileSystemItem', handleRenameFileSystemItem)
+    ipcMain.handle('devscope:deleteFileSystemItem', handleDeleteFileSystemItem)
+    ipcMain.handle('devscope:pasteFileSystemItem', handlePasteFileSystemItem)
     ipcMain.handle('devscope:getProjectSessions', handleGetProjectSessions)
     ipcMain.handle('devscope:getProjectProcesses', handleGetProjectProcesses)
 

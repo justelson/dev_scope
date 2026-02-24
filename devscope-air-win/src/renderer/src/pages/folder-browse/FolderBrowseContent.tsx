@@ -1,9 +1,19 @@
-import { ChevronRight, Code, File, FileCode, FileText, Folder, Github } from 'lucide-react'
+import {
+    AppWindow, ClipboardPaste, Copy, ExternalLink, ChevronRight, Code, File,
+    FileCode, FileText, Folder, FolderOpen, Github, Pencil, Trash2
+} from 'lucide-react'
+import { FileActionsMenu, type FileActionsMenuItem } from '@/components/ui/FileActionsMenu'
 import ProjectIcon from '@/components/ui/ProjectIcon'
 import { cn } from '@/lib/utils'
 import { getProjectTypeById, type ContentLayout, type FileItem, type FolderItem, type Project, type ViewMode } from './types'
 import { FinderItem, SectionHeader, WRAP_AND_CLAMP_2 } from '../shared/BrowseSectionPrimitives'
 import { FolderBrowseProjectCard } from './FolderBrowseProjectCard'
+
+type EntryActionTarget = {
+    path: string
+    name: string
+    type: 'file' | 'directory'
+}
 
 interface FolderBrowseContentProps {
     filteredFolders: FolderItem[]
@@ -21,6 +31,15 @@ interface FolderBrowseContentProps {
     onProjectClick: (project: Project) => void
     onOpenFilePreview: (file: FileItem) => void
     onOpenProjectInExplorer: (path: string) => void
+    onEntryOpen: (entry: EntryActionTarget) => void | Promise<void>
+    onEntryOpenWith: (entry: EntryActionTarget) => void | Promise<void>
+    onEntryOpenInExplorer: (entry: EntryActionTarget) => void | Promise<void>
+    onEntryCopyPath: (entry: EntryActionTarget) => void | Promise<void>
+    onEntryCopy: (entry: EntryActionTarget) => void | Promise<void>
+    onEntryRename: (entry: EntryActionTarget) => void | Promise<void>
+    onEntryDelete: (entry: EntryActionTarget) => void | Promise<void>
+    onEntryPaste: (entry: EntryActionTarget) => void | Promise<void>
+    hasFileClipboardItem: boolean
     formatFileSize: (bytes: number) => string
     getFileColor: (ext: string) => string
     formatRelativeTime: (timestamp?: number) => string
@@ -42,10 +61,75 @@ export function FolderBrowseContent({
     onProjectClick,
     onOpenFilePreview,
     onOpenProjectInExplorer,
+    onEntryOpen,
+    onEntryOpenWith,
+    onEntryOpenInExplorer,
+    onEntryCopyPath,
+    onEntryCopy,
+    onEntryRename,
+    onEntryDelete,
+    onEntryPaste,
+    hasFileClipboardItem,
     formatFileSize,
     getFileColor,
     formatRelativeTime
 }: FolderBrowseContentProps) {
+    const buildEntryActions = (entry: EntryActionTarget): FileActionsMenuItem[] => [
+        {
+            id: 'open',
+            label: 'Open',
+            icon: <FolderOpen size={13} />,
+            onSelect: () => onEntryOpen(entry)
+        },
+        ...(entry.type === 'file'
+            ? [{
+                id: 'open-with',
+                label: 'Open With...',
+                icon: <AppWindow size={13} />,
+                onSelect: () => onEntryOpenWith(entry)
+            }]
+            : []),
+        {
+            id: 'open-in-explorer',
+            label: 'Open in Explorer',
+            icon: <ExternalLink size={13} />,
+            onSelect: () => onEntryOpenInExplorer(entry)
+        },
+        {
+            id: 'copy-path',
+            label: 'Copy Path',
+            icon: <Copy size={13} />,
+            onSelect: () => onEntryCopyPath(entry)
+        },
+        {
+            id: 'copy',
+            label: 'Copy',
+            icon: <Copy size={13} />,
+            onSelect: () => onEntryCopy(entry)
+        },
+        {
+            id: 'paste',
+            label: 'Paste',
+            icon: <ClipboardPaste size={13} />,
+            disabled: !hasFileClipboardItem,
+            onSelect: () => onEntryPaste(entry)
+        },
+        {
+            id: 'rename',
+            label: 'Rename',
+            icon: <Pencil size={13} />,
+            onSelect: () => onEntryRename(entry)
+        },
+        {
+            id: 'delete',
+            label: 'Delete',
+            icon: <Trash2 size={13} />,
+            danger: true,
+            onSelect: () => onEntryDelete(entry)
+        }
+    ]
+    const hoverDotsClassName = 'opacity-0 group-hover:opacity-100 transition-opacity duration-150'
+
     const explorerEntries = [
         ...filteredFolders.map((folder) => ({
             id: `folder:${folder.path}`,
@@ -141,33 +225,45 @@ export function FolderBrowseContent({
 
                                 if (entry.kind === 'file') {
                                     const file = entry.payload as FileItem
+                                    const entryTarget: EntryActionTarget = { path: file.path, name: file.name, type: 'file' }
                                     const isText = file.extension === 'md' || file.extension === 'txt'
                                     const iconColor = getFileColor(file.extension)
                                     if (isFinderMode) {
                                         return (
-                                            <FinderItem
-                                                key={entry.id}
-                                                icon={isText ? FileText : FileCode}
-                                                iconClassName="text-white/20"
-                                                title={file.name}
-                                                subtitle={formatFileSize(file.size)}
-                                                tag={file.extension}
-                                                tagColor={iconColor}
-                                                onClick={() => onOpenFilePreview(file)}
-                                            />
+                                            <div key={entry.id} className="relative group mx-auto w-fit">
+                                                <FinderItem
+                                                    icon={isText ? FileText : FileCode}
+                                                    iconClassName="text-white/20"
+                                                    title={file.name}
+                                                    subtitle={formatFileSize(file.size)}
+                                                    tag={file.extension}
+                                                    tagColor={iconColor}
+                                                    onClick={() => onOpenFilePreview(file)}
+                                                />
+                                                <div className="absolute right-1 top-1 z-20">
+                                                    <FileActionsMenu
+                                                        title={`${file.name} actions`}
+                                                        items={buildEntryActions(entryTarget)}
+                                                        buttonClassName={hoverDotsClassName}
+                                                    />
+                                                </div>
+                                            </div>
                                         )
                                     }
 
                                     return (
-                                        <button
-                                            key={entry.id}
-                                            onClick={() => onOpenFilePreview(file)}
-                                            className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-blue-400/30 hover:bg-blue-400/5 cursor-pointer flex flex-col"
-                                        >
+                                        <div key={entry.id} className="group relative h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-blue-400/30 hover:bg-blue-400/5 cursor-pointer flex flex-col" onClick={() => onOpenFilePreview(file)}>
+                                            <div className="absolute right-2 top-2 z-20">
+                                                <FileActionsMenu
+                                                    title={`${file.name} actions`}
+                                                    items={buildEntryActions(entryTarget)}
+                                                    buttonClassName={hoverDotsClassName}
+                                                />
+                                            </div>
                                             <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
                                                 {isText ? <FileText size={16} style={{ color: iconColor }} /> : <FileCode size={16} style={{ color: iconColor }} />}
                                             </div>
-                                            <div className="min-w-0 flex-1">
+                                            <div className="min-w-0 flex-1 pr-8">
                                                 <p className={cn('text-sm text-white/80 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)} title={file.name}>{file.name}</p>
                                                 <p className="text-[10px] text-white/30">{formatFileSize(file.size)}</p>
                                             </div>
@@ -177,31 +273,47 @@ export function FolderBrowseContent({
                                                     Preview
                                                 </span>
                                             </div>
-                                        </button>
+                                        </div>
                                     )
                                 }
 
                                 const isGit = entry.kind === 'git'
                                 const folder = entry.payload as FolderItem
+                                const entryTarget: EntryActionTarget = { path: folder.path, name: entry.name, type: 'directory' }
                                 if (isFinderMode) {
                                     return (
-                                        <FinderItem
-                                            key={entry.id}
-                                            icon={isGit ? Github : Folder}
-                                            iconClassName={isGit ? 'text-white' : 'text-yellow-400'}
-                                            title={entry.name}
-                                            subtitle={isGit ? 'Git Repo' : 'Folder'}
-                                            onClick={() => onFolderClick(folder)}
-                                        />
+                                        <div key={entry.id} className="relative group mx-auto w-fit">
+                                            <FinderItem
+                                                icon={isGit ? Github : Folder}
+                                                iconClassName={isGit ? 'text-white' : 'text-yellow-400'}
+                                                title={entry.name}
+                                                subtitle={isGit ? 'Git Repo' : 'Folder'}
+                                                onClick={() => onFolderClick(folder)}
+                                            />
+                                            <div className="absolute right-1 top-1 z-20">
+                                                <FileActionsMenu
+                                                    title={`${entry.name} actions`}
+                                                    items={buildEntryActions(entryTarget)}
+                                                    buttonClassName={hoverDotsClassName}
+                                                />
+                                            </div>
+                                        </div>
                                     )
                                 }
 
                                 return (
-                                    <button
+                                    <div
                                         key={entry.id}
                                         onClick={() => onFolderClick(folder)}
-                                        className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15 flex flex-col"
+                                        className="group relative h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15 flex flex-col cursor-pointer"
                                     >
+                                        <div className="absolute right-2 top-2 z-20">
+                                            <FileActionsMenu
+                                                title={`${entry.name} actions`}
+                                                items={buildEntryActions(entryTarget)}
+                                                buttonClassName={hoverDotsClassName}
+                                            />
+                                        </div>
                                         <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
                                             {isGit ? (
                                                 <Github size={16} className="text-white/80 group-hover:text-white transition-colors" />
@@ -209,12 +321,12 @@ export function FolderBrowseContent({
                                                 <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors" />
                                             )}
                                         </div>
-                                        <div className="min-w-0 flex-1">
+                                        <div className="min-w-0 flex-1 pr-8">
                                             <p className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)} title={entry.name}>{entry.name}</p>
                                             <p className="text-[10px] text-white/30">{isGit ? 'Git Repo' : 'Folder'}</p>
                                         </div>
                                         <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 mt-2 transition-colors" />
-                                    </button>
+                                    </div>
                                 )
                             })}
                         </div>
@@ -259,24 +371,39 @@ export function FolderBrowseContent({
                     )}>
                         {filteredFolders.map((folder) => (
                             viewMode === 'finder' ? (
-                                <FinderItem
-                                    key={folder.path}
-                                    icon={Folder}
-                                    iconClassName="text-yellow-400"
-                                    title={folder.name}
-                                    onClick={() => onFolderClick(folder)}
-                                />
+                                <div key={folder.path} className="relative group mx-auto w-fit">
+                                    <FinderItem
+                                        icon={Folder}
+                                        iconClassName="text-yellow-400"
+                                        title={folder.name}
+                                        onClick={() => onFolderClick(folder)}
+                                    />
+                                    <div className="absolute right-1 top-1 z-20">
+                                        <FileActionsMenu
+                                            title={`${folder.name} actions`}
+                                            items={buildEntryActions({ path: folder.path, name: folder.name, type: 'directory' })}
+                                            buttonClassName={hoverDotsClassName}
+                                        />
+                                    </div>
+                                </div>
                             ) : (
-                                <button
+                                <div
                                     key={folder.path}
                                     onClick={() => onFolderClick(folder)}
-                                    className="flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-white/20 hover:bg-white/5 transition-all text-left group"
+                                    className="relative flex items-center gap-2 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-white/20 hover:bg-white/5 transition-all text-left group cursor-pointer"
                                     title={folder.name}
                                 >
                                     <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors flex-shrink-0" />
-                                    <span className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)}>{folder.name}</span>
-                                    <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto flex-shrink-0 transition-colors" />
-                                </button>
+                                    <span className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5 pr-8', WRAP_AND_CLAMP_2)}>{folder.name}</span>
+                                    <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto mr-8 flex-shrink-0 transition-colors" />
+                                    <div className="absolute right-2 top-1/2 z-20 -translate-y-1/2">
+                                        <FileActionsMenu
+                                            title={`${folder.name} actions`}
+                                            items={buildEntryActions({ path: folder.path, name: folder.name, type: 'directory' })}
+                                            buttonClassName={hoverDotsClassName}
+                                        />
+                                    </div>
+                                </div>
                             )
                         ))}
                     </div>
@@ -294,30 +421,45 @@ export function FolderBrowseContent({
                     )}>
                         {gitRepos.map((repo) => (
                             viewMode === 'finder' ? (
-                                <FinderItem
-                                    key={repo.path}
-                                    icon={Github}
-                                    iconClassName="text-white"
-                                    title={repo.name}
-                                    subtitle="Git Repo"
-                                    onClick={() => onFolderClick({ name: repo.name, path: repo.path, isProject: true })}
-                                />
+                                <div key={repo.path} className="relative group mx-auto w-fit">
+                                    <FinderItem
+                                        icon={Github}
+                                        iconClassName="text-white"
+                                        title={repo.name}
+                                        subtitle="Git Repo"
+                                        onClick={() => onFolderClick({ name: repo.name, path: repo.path, isProject: true })}
+                                    />
+                                    <div className="absolute right-1 top-1 z-20">
+                                        <FileActionsMenu
+                                            title={`${repo.name} actions`}
+                                            items={buildEntryActions({ path: repo.path, name: repo.name, type: 'directory' })}
+                                            buttonClassName={hoverDotsClassName}
+                                        />
+                                    </div>
+                                </div>
                             ) : (
-                                <button
+                                <div
                                     key={repo.path}
                                     onClick={() => onFolderClick({ name: repo.name, path: repo.path, isProject: true })}
-                                    className="flex items-center gap-2 p-2.5 bg-white/5 rounded-lg border border-white/10 hover:border-white/30 hover:bg-white/10 transition-all text-left group relative"
+                                    className="relative flex items-center gap-2 p-2.5 bg-white/5 rounded-lg border border-white/10 hover:border-white/30 hover:bg-white/10 transition-all text-left group cursor-pointer"
                                     title={repo.name}
                                 >
                                     <div className="p-1.5 rounded-md bg-white/10 flex-shrink-0">
                                         <Github size={16} className="text-white" />
                                     </div>
-                                    <div className="flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0 pr-8">
                                         <span className={cn('text-sm text-white font-medium block leading-5', WRAP_AND_CLAMP_2)}>{repo.name}</span>
                                         <span className="text-[10px] text-white/40 uppercase tracking-wide">Git Repo</span>
                                     </div>
-                                    <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto flex-shrink-0 transition-colors" />
-                                </button>
+                                    <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 ml-auto mr-8 flex-shrink-0 transition-colors" />
+                                    <div className="absolute right-2 top-1/2 z-20 -translate-y-1/2">
+                                        <FileActionsMenu
+                                            title={`${repo.name} actions`}
+                                            items={buildEntryActions({ path: repo.path, name: repo.name, type: 'directory' })}
+                                            buttonClassName={hoverDotsClassName}
+                                        />
+                                    </div>
+                                </div>
                             )
                         ))}
                     </div>
@@ -336,22 +478,31 @@ export function FolderBrowseContent({
                         {visibleFiles.map((file) => {
                             const iconColor = getFileColor(file.extension)
                             const isText = file.extension === 'md' || file.extension === 'txt'
+                            const entryTarget: EntryActionTarget = { path: file.path, name: file.name, type: 'file' }
                             return viewMode === 'finder' ? (
-                                <FinderItem
-                                    key={file.path}
-                                    icon={isText ? FileText : FileCode}
-                                    iconClassName="text-white/20"
-                                    title={file.name}
-                                    subtitle={formatFileSize(file.size)}
-                                    tag={file.extension}
-                                    tagColor={iconColor}
-                                    onClick={() => onOpenFilePreview(file)}
-                                />
+                                <div key={file.path} className="relative group mx-auto w-fit">
+                                    <FinderItem
+                                        icon={isText ? FileText : FileCode}
+                                        iconClassName="text-white/20"
+                                        title={file.name}
+                                        subtitle={formatFileSize(file.size)}
+                                        tag={file.extension}
+                                        tagColor={iconColor}
+                                        onClick={() => onOpenFilePreview(file)}
+                                    />
+                                    <div className="absolute right-1 top-1 z-20">
+                                        <FileActionsMenu
+                                            title={`${file.name} actions`}
+                                            items={buildEntryActions(entryTarget)}
+                                            buttonClassName={hoverDotsClassName}
+                                        />
+                                    </div>
+                                </div>
                             ) : (
                                 <div
                                     key={file.path}
                                     onClick={() => onOpenFilePreview(file)}
-                                    className="flex items-center gap-2.5 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-blue-400/30 hover:bg-blue-400/5 transition-all group cursor-pointer"
+                                    className="relative flex items-center gap-2.5 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-blue-400/30 hover:bg-blue-400/5 transition-all group cursor-pointer"
                                     title={file.name}
                                 >
                                     <div
@@ -364,9 +515,16 @@ export function FolderBrowseContent({
                                             <FileCode size={16} style={{ color: iconColor }} />
                                         )}
                                     </div>
-                                    <div className="flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0 pr-8">
                                         <p className={cn('text-sm text-white/80 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)}>{file.name}</p>
                                         <p className="text-[10px] text-white/30">{formatFileSize(file.size)}</p>
+                                    </div>
+                                    <div className="absolute right-2 top-1/2 z-20 -translate-y-1/2">
+                                        <FileActionsMenu
+                                            title={`${file.name} actions`}
+                                            items={buildEntryActions(entryTarget)}
+                                            buttonClassName={hoverDotsClassName}
+                                        />
                                     </div>
                                 </div>
                             )

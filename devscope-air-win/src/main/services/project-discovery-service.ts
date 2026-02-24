@@ -1,5 +1,5 @@
 import { access, readdir, readFile, stat } from 'fs/promises'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import log from 'electron-log'
 import {
     detectFrameworksFromPackageJson,
@@ -51,6 +51,9 @@ export type ScanProjectsError = {
 }
 
 export type ScanProjectsResult = ScanProjectsSuccess | ScanProjectsError
+type ScanProjectsOptions = {
+    forceRefresh?: boolean
+}
 
 const SCAN_PROJECTS_CACHE_TTL_MS = 2 * 60 * 1000
 const scanProjectsCache = new Map<string, { timestamp: number; value: ScanProjectsSuccess }>()
@@ -83,6 +86,29 @@ function cacheScanProjects(folderPath: string, value: ScanProjectsSuccess): void
         timestamp: Date.now(),
         value
     })
+}
+
+export function invalidateScanProjectsCache(folderPath: string, options?: { includeParents?: boolean }): void {
+    const includeParents = options?.includeParents ?? true
+    const normalizedInput = String(folderPath || '').trim()
+    if (!normalizedInput) return
+
+    let currentPath = normalizedInput
+    const visited = new Set<string>()
+
+    while (currentPath) {
+        const key = normalizeScanPathKey(currentPath)
+        if (visited.has(key)) break
+        visited.add(key)
+        scanProjectsCache.delete(key)
+        scanProjectsInFlight.delete(key)
+
+        if (!includeParents) break
+
+        const parentPath = dirname(currentPath)
+        if (normalizeScanPathKey(parentPath) === key) break
+        currentPath = parentPath
+    }
 }
 
 async function scanProjectsUncached(folderPath: string): Promise<ScanProjectsResult> {
@@ -189,7 +215,11 @@ async function scanProjectsUncached(folderPath: string): Promise<ScanProjectsRes
     return { success: true, projects, folders, files }
 }
 
-export async function scanProjects(folderPath: string): Promise<ScanProjectsResult> {
+export async function scanProjects(folderPath: string, options?: ScanProjectsOptions): Promise<ScanProjectsResult> {
+    if (options?.forceRefresh) {
+        invalidateScanProjectsCache(folderPath, { includeParents: false })
+    }
+
     const cached = getCachedScanProjects(folderPath)
     if (cached) {
         return cached
