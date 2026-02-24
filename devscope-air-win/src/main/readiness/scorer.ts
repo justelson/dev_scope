@@ -5,7 +5,7 @@
 
 import log from 'electron-log'
 import type {
-    Capability,
+    DetectedTool,
     ToolingReport,
     AIRuntimeReport,
     ReadinessReport,
@@ -63,7 +63,7 @@ function calculateScore(
     tooling: ToolingReport,
     aiRuntime: AIRuntimeReport
 ): number {
-    const allTools: Capability[] = [
+    const allTools: DetectedTool[] = [
         ...tooling.languages,
         ...tooling.packageManagers,
         ...tooling.buildTools,
@@ -113,7 +113,7 @@ function generateWarnings(
             ...tooling.languages,
             ...tooling.versionControl
         ]
-        const tool = allCapabilities.find(t => t.tool === essential)
+        const tool = allCapabilities.find(t => t.id === essential)
 
         if (!tool?.installed) {
             warnings.push({
@@ -127,7 +127,7 @@ function generateWarnings(
     }
 
     // Check for warning status tools
-    const allTools: Capability[] = [
+    const allTools: DetectedTool[] = [
         ...tooling.languages,
         ...tooling.packageManagers,
         ...tooling.buildTools,
@@ -139,7 +139,7 @@ function generateWarnings(
         if (tool.status === 'warning' && tool.installed) {
             warnings.push({
                 id: `warn-${id++}`,
-                tool: tool.tool,
+                tool: tool.id,
                 message: `${tool.displayName} is installed but may have issues`,
                 severity: 'medium' as WarningSeverity
             })
@@ -147,7 +147,7 @@ function generateWarnings(
     }
 
     // Check Docker daemon
-    const docker = tooling.containers.find(t => t.tool === 'docker')
+    const docker = tooling.containers.find(t => t.id === 'docker')
     if (docker?.installed && docker.status === 'warning') {
         warnings.push({
             id: `warn-${id++}`,
@@ -171,7 +171,7 @@ function generateRecommendations(
     const recommendations: Recommendation[] = []
     let priority = 1
 
-    const allTools: Capability[] = [
+    const allTools: DetectedTool[] = [
         ...tooling.languages,
         ...tooling.packageManagers,
         ...tooling.containers,
@@ -180,7 +180,7 @@ function generateRecommendations(
     ]
 
     for (const [toolId, rec] of Object.entries(RECOMMENDATIONS)) {
-        const tool = allTools.find(t => t.tool === toolId)
+        const tool = allTools.find(t => t.id === toolId)
         if (!tool?.installed) {
             recommendations.push({
                 id: `rec-${priority}`,
@@ -211,7 +211,7 @@ export function calculateReadiness(
     const score = calculateScore(tooling, aiRuntime)
     const level = getReadinessLevel(score, warnings)
 
-    const allTools: Capability[] = [
+    const allTools: DetectedTool[] = [
         ...tooling.languages,
         ...tooling.packageManagers,
         ...tooling.buildTools,

@@ -138,7 +138,7 @@ export async function bridgeStartProcess(bridge: BridgeRpcContext): Promise<void
     })
 
     bridge.rl = readline.createInterface({ input: proc.stdout })
-    bridge.rl.on('line', (line) => {
+    bridge.rl.on('line', (line: string) => {
         let message: Record<string, unknown>
         try {
             message = JSON.parse(line) as Record<string, unknown>

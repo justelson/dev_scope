@@ -1,4 +1,4 @@
-import { Code, ExternalLink, FileJson, FileText, FileType, Film, Image as ImageIcon, Table, X } from 'lucide-react'
+import { Code, Copy, ExternalLink, FileJson, FileText, FileType, Film, Image as ImageIcon, Table, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { PreviewFile } from './types'
@@ -77,8 +77,15 @@ export default function PreviewModalHeader({
         >
             <div className={cn('flex items-center gap-3 min-w-0', isCompactHtmlHeader ? 'flex-1' : '', isUltraCompactHtmlHeader ? 'w-full' : '')}>
                 <PreviewFileIcon type={file.type} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex items-center gap-2">
                     <h3 className="text-sm font-semibold text-white truncate">{file.name}</h3>
+                    <button
+                        onClick={() => navigator.clipboard.writeText(file.path)}
+                        className="p-1 text-white/40 hover:text-white hover:bg-white/10 rounded transition-all shrink-0"
+                        title={`Copy path: ${file.path}`}
+                    >
+                        <Copy size={14} />
+                    </button>
                 </div>
             </div>
 

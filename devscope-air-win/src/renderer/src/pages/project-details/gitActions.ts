@@ -137,8 +137,11 @@ export function createProjectGitActions(params: GitActionParams) {
                 contextResult.context || ''
             )
 
-            if (!generateResult?.success || !generateResult?.message) {
+            if (!generateResult?.success) {
                 throw new Error(generateResult?.error || 'Failed to generate commit message')
+            }
+            if (!generateResult.message) {
+                throw new Error('Failed to generate commit message')
             }
 
             params.setCommitMessage(generateResult.message.trim())

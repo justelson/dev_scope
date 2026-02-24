@@ -4,6 +4,7 @@ import {
     ChevronsDownUp,
     ChevronsUpDown,
     Code,
+    Copy,
     File,
     FileCode,
     FileJson,
@@ -240,6 +241,16 @@ export function WorkingChangesView({
                                 <span className="text-sm font-mono text-white/80 truncate">
                                     {file.name}
                                 </span>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        navigator.clipboard.writeText(file.path)
+                                    }}
+                                    className="p-1 text-white/40 hover:text-white hover:bg-white/10 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100"
+                                    title={`Copy path: ${file.path}`}
+                                >
+                                    <Copy size={14} />
+                                </button>
                             </div>
                             <span className="text-xs text-white/30 truncate max-w-[200px] shrink-0">
                                 {file.path.replace(file.name, '')}

@@ -40,6 +40,9 @@ type RuntimeDeps = {
 }
 
 const LIVE_PREVIEW_REASONING_METHOD = 'assistant-live-preview'
+const MAX_REASONING_PER_ATTEMPT = 100
+const MAX_ACTIVITIES_PER_ATTEMPT = 120
+const ACTIVITY_MERGE_WINDOW_MS = 6_000
 
 function normalizeRole(value: unknown): AssistantHistoryMessage['role'] {
     if (value === 'assistant' || value === 'user' || value === 'system') return value
@@ -61,22 +64,28 @@ function normalizeHistoryMessages(historyRaw: unknown[]): AssistantHistoryMessag
             : {}
         const attachmentsRaw = Array.isArray(entry.attachments) ? entry.attachments : []
         const attachments = attachmentsRaw
-            .map((rawAttachment) => {
+            .map((rawAttachment): AssistantHistoryAttachment | null => {
                 if (!rawAttachment || typeof rawAttachment !== 'object') return null
                 const attachment = rawAttachment as Record<string, unknown>
                 const path = toDisplayTextTrimmed(attachment.path)
                 if (!path) return null
                 const sizeBytesRaw = Number(attachment.sizeBytes)
-                return {
+                const normalized: AssistantHistoryAttachment = {
                     path,
-                    name: toDisplayTextTrimmed(attachment.name) || undefined,
-                    mimeType: toDisplayTextTrimmed(attachment.mimeType) || undefined,
-                    kind: normalizeAttachmentKind(attachment.kind),
-                    sizeBytes: Number.isFinite(sizeBytesRaw) ? sizeBytesRaw : undefined,
-                    previewText: toDisplayText(attachment.previewText) || undefined,
-                    previewDataUrl: toDisplayTextTrimmed(attachment.previewDataUrl) || undefined,
-                    textPreview: toDisplayText(attachment.textPreview) || undefined
+                    kind: normalizeAttachmentKind(attachment.kind)
                 }
+                const name = toDisplayTextTrimmed(attachment.name)
+                const mimeType = toDisplayTextTrimmed(attachment.mimeType)
+                const previewText = toDisplayText(attachment.previewText)
+                const previewDataUrl = toDisplayTextTrimmed(attachment.previewDataUrl)
+                const textPreview = toDisplayText(attachment.textPreview)
+                if (name) normalized.name = name
+                if (mimeType) normalized.mimeType = mimeType
+                if (Number.isFinite(sizeBytesRaw)) normalized.sizeBytes = sizeBytesRaw
+                if (previewText) normalized.previewText = previewText
+                if (previewDataUrl) normalized.previewDataUrl = previewDataUrl
+                if (textPreview) normalized.textPreview = textPreview
+                return normalized
             })
             .filter((item): item is AssistantHistoryAttachment => Boolean(item))
 
@@ -117,6 +126,63 @@ function stripLivePreviewReasoning(
     return changed ? next : source
 }
 
+function appendCappedActivity(
+    entries: AssistantActivity[],
+    nextEntry: AssistantActivity
+): AssistantActivity[] {
+    const previous = entries[entries.length - 1]
+    if (previous && shouldMergeActivities(previous, nextEntry)) {
+        const previousCount = readActivityUpdateCount(previous)
+        const nextCount = readActivityUpdateCount(nextEntry)
+        const merged: AssistantActivity = {
+            ...nextEntry,
+            summary: nextEntry.summary || previous.summary,
+            payload: {
+                ...(previous.payload || {}),
+                ...(nextEntry.payload || {}),
+                updateCount: previousCount + nextCount
+            }
+        }
+        return [...entries.slice(0, -1), merged]
+    }
+
+    const next = [...entries, nextEntry]
+    if (next.length <= MAX_ACTIVITIES_PER_ATTEMPT) return next
+    return next.slice(next.length - MAX_ACTIVITIES_PER_ATTEMPT)
+}
+
+function readActivityUpdateCount(entry: AssistantActivity): number {
+    const value = Number((entry.payload || {}).updateCount)
+    if (!Number.isFinite(value) || value < 1) return 1
+    return Math.floor(value)
+}
+
+function normalizeActivityMergeKey(value: string): string {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function shouldMergeActivities(previous: AssistantActivity, nextEntry: AssistantActivity): boolean {
+    if (nextEntry.timestamp - previous.timestamp > ACTIVITY_MERGE_WINDOW_MS) return false
+    if (normalizeActivityMergeKey(previous.kind) !== normalizeActivityMergeKey(nextEntry.kind)) return false
+
+    const previousMethod = normalizeActivityMergeKey(previous.method)
+    const nextMethod = normalizeActivityMergeKey(nextEntry.method)
+    if (previousMethod !== nextMethod) return false
+
+    const previousSummary = normalizeActivityMergeKey(previous.summary)
+    const nextSummary = normalizeActivityMergeKey(nextEntry.summary)
+    return previousSummary === nextSummary
+}
+
+function appendCappedReasoning(
+    entries: AssistantReasoning[],
+    nextEntry: AssistantReasoning
+): AssistantReasoning[] {
+    const next = [...entries, nextEntry]
+    if (next.length <= MAX_REASONING_PER_ATTEMPT) return next
+    return next.slice(next.length - MAX_REASONING_PER_ATTEMPT)
+}
+
 export function createLoadSnapshot(deps: RuntimeDeps) {
     return async (options?: { hydrateChat?: boolean }) => {
         const hydrateChat = options?.hydrateChat === true
@@ -134,6 +200,7 @@ export function createLoadSnapshot(deps: RuntimeDeps) {
             if (statusResult?.success && statusResult.status) {
                 deps.setStatus(statusResult.status as AssistantStatus)
             }
+            const activeTurnId = statusResult?.success ? statusResult.status?.activeTurnId || null : null
             const snapshotHistory = historyResult?.success && Array.isArray(historyResult.history)
                 ? normalizeHistoryMessages(historyResult.history as unknown[])
                 : []
@@ -141,7 +208,7 @@ export function createLoadSnapshot(deps: RuntimeDeps) {
 
             const snapshotScope = buildSessionScope(
                 snapshotHistory,
-                statusResult?.status?.activeTurnId || null,
+                activeTurnId,
                 deps.getStreamingTurnId()
             )
             deps.scopeRef.current = snapshotScope
@@ -232,8 +299,18 @@ export function createLoadSnapshot(deps: RuntimeDeps) {
                     nextApprovals[groupId].push(approval)
                 }
 
-                for (const arr of Object.values(nextReasoning)) arr.sort((a, b) => a.timestamp - b.timestamp)
-                for (const arr of Object.values(nextActivities)) arr.sort((a, b) => a.timestamp - b.timestamp)
+                for (const [attemptGroupId, arr] of Object.entries(nextReasoning)) {
+                    arr.sort((a, b) => a.timestamp - b.timestamp)
+                    if (arr.length > MAX_REASONING_PER_ATTEMPT) {
+                        nextReasoning[attemptGroupId] = arr.slice(arr.length - MAX_REASONING_PER_ATTEMPT)
+                    }
+                }
+                for (const [attemptGroupId, arr] of Object.entries(nextActivities)) {
+                    arr.sort((a, b) => a.timestamp - b.timestamp)
+                    if (arr.length > MAX_ACTIVITIES_PER_ATTEMPT) {
+                        nextActivities[attemptGroupId] = arr.slice(arr.length - MAX_ACTIVITIES_PER_ATTEMPT)
+                    }
+                }
                 for (const arr of Object.values(nextApprovals)) arr.sort((a, b) => a.timestamp - b.timestamp)
 
                 deps.setReasoningByTurn(nextReasoning)
@@ -363,7 +440,7 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
                 const arr = prev[payload.attemptGroupId] || []
                 return {
                     ...prev,
-                    [payload.attemptGroupId]: [...arr, { ...payload, timestamp: event.timestamp }]
+                    [payload.attemptGroupId]: appendCappedReasoning(arr, { ...payload, timestamp: event.timestamp })
                 }
             })
             return
@@ -385,7 +462,7 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
                 const arr = prev[payload.attemptGroupId] || []
                 return {
                     ...prev,
-                    [payload.attemptGroupId]: [...arr, { ...payload, timestamp: event.timestamp }]
+                    [payload.attemptGroupId]: appendCappedActivity(arr, { ...payload, timestamp: event.timestamp })
                 }
             })
             return

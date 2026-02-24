@@ -56,7 +56,7 @@ export default function Home() {
                         </span>
                     )}
                     <button
-                        onClick={() => void overview.refreshHome('background')}
+                        onClick={() => void overview.refreshHome('manual')}
                         disabled={overview.refreshing}
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-sparkle-border bg-sparkle-card hover:bg-sparkle-border-secondary transition-colors disabled:opacity-50"
                     >

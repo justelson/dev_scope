@@ -74,8 +74,8 @@ export default function ProjectsSettings() {
             const result = await window.devscope.indexAllFolders(foldersToIndex)
             setIndexResult({
                 success: result.success,
-                count: result.indexedCount || 0,
-                errors: result.errors
+                count: result.success ? result.indexedCount || 0 : 0,
+                errors: result.success ? result.errors : [{ folder: '', error: result.error || 'Indexing failed' }]
             })
         } catch (err: any) {
             setIndexResult({ success: false, count: 0, errors: [{ folder: '', error: err.message }] })

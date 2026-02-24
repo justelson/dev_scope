@@ -26,7 +26,7 @@ function sanitizeStoredMap(value: unknown): Record<string, RecentProjectEntry> {
         .filter(([key, entry]) => key.length > 0 && isRecentProjectEntry(entry))
         .map(([key, entry]) => [normalizeProjectPath(key), entry] as const)
 
-    return Object.fromEntries(entries)
+    return Object.fromEntries(entries) as Record<string, RecentProjectEntry>
 }
 
 function saveRecentProjects(entries: Record<string, RecentProjectEntry>): void {

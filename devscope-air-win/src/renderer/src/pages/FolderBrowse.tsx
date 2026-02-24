@@ -177,7 +177,7 @@ export default function FolderBrowse() {
             if (!decodedPath) return
             try {
                 const result = await window.devscope.checkIsGitRepo(decodedPath)
-                const isRepo = result?.isGitRepo === true
+                const isRepo = result?.success ? result.isGitRepo === true : false
                 setIsCurrentFolderGitRepo(isRepo)
                 if (isRepo) {
                     trackRecentProject(decodedPath, 'folder')

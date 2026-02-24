@@ -1,6 +1,6 @@
 import { getWorkingChangesForAI, getWorkingDiff } from '../inspectors/git/read'
 import { createId, deriveSessionTitleFromPrompt, isAutoSessionTitle, now, parseModelList, readString } from './assistant-bridge-helpers'
-import type { AssistantHistoryMessage, AssistantModelInfo, AssistantSendOptions } from './types'
+import type { AssistantHistoryAttachment, AssistantHistoryMessage, AssistantModelInfo, AssistantSendOptions } from './types'
 import { materializeContextFilesForSend } from './context-file-materializer'
 
 type BridgeOperationsContext = any
@@ -11,7 +11,7 @@ function normalizeContextFilesForHistory(
     path: string
     name: string
     mimeType: string
-    kind: string
+    kind?: AssistantHistoryAttachment['kind']
     sizeBytes: number
     previewText?: string
     previewDataUrl?: string
@@ -25,7 +25,16 @@ function normalizeContextFilesForHistory(
             const path = readString(record.path).trim()
             const name = readString(record.name).trim()
             const mimeType = readString(record.mimeType).trim()
-            const kind = readString(record.kind).trim()
+            const rawKind = readString(record.kind).trim()
+            const kind: AssistantHistoryAttachment['kind'] = rawKind === 'image'
+                ? 'image'
+                : rawKind === 'doc'
+                    ? 'doc'
+                    : rawKind === 'code'
+                        ? 'code'
+                        : rawKind === 'file'
+                            ? 'file'
+                            : undefined
             const sizeBytes = Number(record.sizeBytes) || 0
             const previewText = readString(record.previewText).trim()
             const rawContent = readString(record.content)

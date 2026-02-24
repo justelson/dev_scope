@@ -724,6 +724,7 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                                                                     activeProfile={activeProfile}
                                                                     streamingTurnId={streamingTurnId}
                                                                     streamingText={streamingText}
+                                                                    projectPath={effectiveProjectPath || undefined}
                                                                     reasoning={allReasoning}
                                                                     activities={allActivities}
                                                                     approvals={allApprovals}

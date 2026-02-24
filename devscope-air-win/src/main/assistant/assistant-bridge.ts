@@ -146,6 +146,7 @@ export class AssistantBridge extends EventEmitter {
     private reasoningTextsByTurn = new Map<string, string[]>()
     private lastReasoningDigestByTurn = new Map<string, string>()
     private lastActivityDigestByTurn = new Map<string, string>()
+    private lastActivityEmitByTurn = new Map<string, { timestamp: number; key: string }>()
     private finalizedTurns = new Set<string>()
     private cancelledTurns = new Set<string>()
     private cachedModels: AssistantModelInfo[] = []
@@ -227,6 +228,7 @@ export class AssistantBridge extends EventEmitter {
         this.reasoningTextsByTurn.clear()
         this.lastReasoningDigestByTurn.clear()
         this.lastActivityDigestByTurn.clear()
+        this.lastActivityEmitByTurn.clear()
         this.finalizedTurns.clear()
         this.cancelledTurns.clear()
         this.cachedModels = []

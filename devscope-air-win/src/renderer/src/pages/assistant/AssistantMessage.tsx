@@ -19,6 +19,263 @@ import {
     formatStatTimestamp
 } from './assistant-message-utils'
 
+const MAX_VISIBLE_THOUGHTS = 80
+const THOUGHT_COLLAPSE_WINDOW_MS = 12_000
+const MAX_VISIBLE_MODIFIED_FILES = 8
+const MAX_DIFF_STATS_FILES = 8
+const FILE_MUTATION_HINTS = ['edit', 'write', 'applypatch', 'patch', 'rename', 'move', 'delete', 'create']
+const FILE_NON_MUTATING_HINTS = ['read', 'list', 'grep', 'glob', 'search', 'scan', 'open']
+
+type CollapsedThought = AssistantActivity & {
+    updateCount: number
+    startTimestamp: number
+    endTimestamp: number
+}
+
+type ModifiedFileEntry = {
+    path: string
+    updateCount: number
+    lastTimestamp: number
+    additions: number
+    deletions: number
+}
+
+type FileDiffStats = {
+    additions: number
+    deletions: number
+}
+
+function readDiffNumber(value: unknown): number {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0
+    return Math.floor(parsed)
+}
+
+function parseActivityDiffStats(payload: Record<string, unknown>): FileDiffStats {
+    return {
+        additions: readDiffNumber(
+            payload.additions
+            ?? payload.insertions
+            ?? payload.added
+            ?? payload.linesAdded
+        ),
+        deletions: readDiffNumber(
+            payload.deletions
+            ?? payload.removals
+            ?? payload.removed
+            ?? payload.linesDeleted
+        )
+    }
+}
+
+function parseDiffLineStats(diffText: string): FileDiffStats {
+    if (!diffText || diffText === 'No changes') return { additions: 0, deletions: 0 }
+    const lines = diffText.split('\n')
+    let additions = 0
+    let deletions = 0
+
+    for (const line of lines) {
+        if (!line) continue
+        if (line.startsWith('+++') || line.startsWith('---')) continue
+        if (line.startsWith('+')) additions += 1
+        else if (line.startsWith('-')) deletions += 1
+    }
+
+    return { additions, deletions }
+}
+
+function CompactDiffBars({ additions, deletions, compact }: { additions: number; deletions: number; compact: boolean }) {
+    const slotCount = compact ? 8 : 10
+    const total = additions + deletions
+    let plusSlots = 0
+    let minusSlots = 0
+
+    if (total > 0) {
+        plusSlots = Math.round((additions / total) * slotCount)
+        minusSlots = Math.round((deletions / total) * slotCount)
+
+        if (additions > 0 && plusSlots === 0) plusSlots = 1
+        if (deletions > 0 && minusSlots === 0) minusSlots = 1
+        if (plusSlots + minusSlots > slotCount) {
+            const overflow = plusSlots + minusSlots - slotCount
+            if (plusSlots >= minusSlots) plusSlots -= overflow
+            else minusSlots -= overflow
+        }
+    }
+
+    return (
+        <span className="inline-flex items-center gap-[2px]">
+            {Array.from({ length: slotCount }).map((_, index) => {
+                const isPlus = index < plusSlots
+                const isMinus = !isPlus && index < (plusSlots + minusSlots)
+                return (
+                    <span
+                        key={`bar-${index}`}
+                        className={cn(
+                            'h-2 w-[3px] rounded-[2px]',
+                            isPlus
+                                ? 'bg-emerald-400/95'
+                                : isMinus
+                                    ? 'bg-rose-400/95'
+                                    : 'bg-sparkle-border/70'
+                        )}
+                    />
+                )
+            })}
+        </span>
+    )
+}
+
+function normalizeThoughtKey(value: string): string {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function getThoughtUpdateCount(activity: AssistantActivity): number {
+    const value = Number((activity.payload || {}).updateCount)
+    if (!Number.isFinite(value) || value < 1) return 1
+    return Math.floor(value)
+}
+
+function collapseThoughts(entries: AssistantActivity[]): CollapsedThought[] {
+    const collapsed: CollapsedThought[] = []
+
+    for (const entry of entries) {
+        const updateCount = getThoughtUpdateCount(entry)
+        const last = collapsed[collapsed.length - 1]
+        const sameAsLast = last
+            ? normalizeThoughtKey(last.kind) === normalizeThoughtKey(entry.kind)
+                && normalizeThoughtKey(last.method) === normalizeThoughtKey(entry.method)
+                && normalizeThoughtKey(last.summary) === normalizeThoughtKey(entry.summary)
+                && (entry.timestamp - last.endTimestamp) <= THOUGHT_COLLAPSE_WINDOW_MS
+            : false
+
+        if (sameAsLast && last) {
+            last.updateCount += updateCount
+            last.endTimestamp = entry.timestamp
+            if (String(entry.summary || '').length > String(last.summary || '').length) {
+                last.summary = entry.summary
+            }
+            continue
+        }
+
+        collapsed.push({
+            ...entry,
+            updateCount,
+            startTimestamp: entry.timestamp,
+            endTimestamp: entry.timestamp
+        })
+    }
+
+    return collapsed
+}
+
+function normalizeModifiedFilePath(value: string): string {
+    const trimmed = String(value || '').trim().replace(/^['"`]+|['"`]+$/g, '')
+    if (!trimmed) return ''
+    return trimmed.replace(/\\/g, '/').replace(/^\.\//, '')
+}
+
+function toModifiedFileKey(value: string): string {
+    return normalizeModifiedFilePath(value).toLowerCase()
+}
+
+function collectActivityFilePaths(payload: Record<string, unknown>): string[] {
+    const paths: string[] = []
+    const addPath = (value: unknown) => {
+        if (typeof value !== 'string') return
+        const normalized = normalizeModifiedFilePath(value)
+        if (!normalized) return
+        paths.push(normalized)
+    }
+
+    addPath(payload.filePath)
+    addPath(payload.path)
+
+    const files = payload.files
+    if (Array.isArray(files)) {
+        for (const file of files) {
+            if (typeof file === 'string') {
+                addPath(file)
+            } else if (file && typeof file === 'object') {
+                const record = file as Record<string, unknown>
+                addPath(record.path)
+                addPath(record.filePath)
+                addPath(record.name)
+            }
+        }
+    }
+
+    return Array.from(new Set(paths))
+}
+
+function isLikelyFileMutation(activity: AssistantActivity): boolean {
+    const method = normalizeThoughtKey(activity.method)
+    const kind = normalizeThoughtKey(activity.kind)
+    const payload = (activity.payload || {}) as Record<string, unknown>
+    const tool = normalizeThoughtKey(String(payload.tool || ''))
+    const hasMutationHint = FILE_MUTATION_HINTS.some((token) => method.includes(token) || tool.includes(token))
+    if (hasMutationHint) return true
+
+    const hasNonMutatingHint = FILE_NON_MUTATING_HINTS.some((token) => method.includes(token) || tool.includes(token))
+    if (hasNonMutatingHint) return false
+
+    const hasFilePaths = collectActivityFilePaths(payload).length > 0
+    return kind === 'file' && hasFilePaths
+}
+
+function buildModifiedFiles(entries: AssistantActivity[]): ModifiedFileEntry[] {
+    const byPath = new Map<string, ModifiedFileEntry>()
+    const sorted = [...entries].sort((a, b) => a.timestamp - b.timestamp)
+
+    for (const activity of sorted) {
+        if (!isLikelyFileMutation(activity)) continue
+        const payload = (activity.payload || {}) as Record<string, unknown>
+        const paths = collectActivityFilePaths(payload)
+        if (paths.length === 0) continue
+        const updateCount = getThoughtUpdateCount(activity)
+        const activityDiff = parseActivityDiffStats(payload)
+        const canApplyActivityDiff = paths.length === 1
+
+        for (const path of paths) {
+            const key = toModifiedFileKey(path)
+            if (!key) continue
+            const existing = byPath.get(key)
+            if (existing) {
+                existing.updateCount += updateCount
+                existing.lastTimestamp = Math.max(existing.lastTimestamp, activity.timestamp)
+                if (canApplyActivityDiff) {
+                    existing.additions += activityDiff.additions
+                    existing.deletions += activityDiff.deletions
+                }
+                continue
+            }
+            byPath.set(key, {
+                path,
+                updateCount,
+                lastTimestamp: activity.timestamp,
+                additions: canApplyActivityDiff ? activityDiff.additions : 0,
+                deletions: canApplyActivityDiff ? activityDiff.deletions : 0
+            })
+        }
+    }
+
+    return Array.from(byPath.values()).sort((a, b) => {
+        if (a.lastTimestamp !== b.lastTimestamp) return b.lastTimestamp - a.lastTimestamp
+        return a.path.localeCompare(b.path)
+    })
+}
+
+function splitModifiedFilePath(path: string): { directory: string; filename: string } {
+    const normalized = normalizeModifiedFilePath(path)
+    if (!normalized) return { directory: '', filename: '' }
+    const lastSlash = normalized.lastIndexOf('/')
+    if (lastSlash < 0) return { directory: '', filename: normalized }
+    return {
+        directory: normalized.slice(0, lastSlash + 1),
+        filename: normalized.slice(lastSlash + 1)
+    }
+}
+
 type AssistantMessageAttempt = {
     id: string
     text: string
@@ -38,6 +295,7 @@ interface AssistantMessageProps {
     activeProfile?: string
     streamingTurnId?: string | null
     streamingText?: string
+    projectPath?: string
     reasoning?: AssistantReasoning[]
     activities?: AssistantActivity[]
     approvals?: AssistantApproval[]
@@ -52,6 +310,7 @@ export function AssistantMessage({
     activeProfile = 'safe-dev',
     streamingTurnId = null,
     streamingText = '',
+    projectPath,
     activities = [],
 }: AssistantMessageProps) {
     const activeIndex = attempts.findIndex((attempt) => attempt.isActiveAttempt)
@@ -64,6 +323,8 @@ export function AssistantMessage({
     const [isRegenerating, setIsRegenerating] = useState(false)
     const [isAttemptPinned, setIsAttemptPinned] = useState(false)
     const [elapsedNowMs, setElapsedNowMs] = useState(() => Date.now())
+    const [diffStatsByPath, setDiffStatsByPath] = useState<Record<string, FileDiffStats>>({})
+    const diffStatsCacheRef = useRef<Map<string, FileDiffStats>>(new Map())
     const thoughtsBodyRef = useRef<HTMLDivElement | null>(null)
 
     useEffect(() => {
@@ -99,9 +360,18 @@ export function AssistantMessage({
         return sameTurn || sameGroup
     })
     const commandActivities = turnActivities.filter((entry) => String(entry.kind || '').toLowerCase() === 'command')
+    const modifiedFiles = buildModifiedFiles(turnActivities)
+    const visibleModifiedFiles = modifiedFiles.slice(0, MAX_VISIBLE_MODIFIED_FILES)
+    const visibleModifiedFilesKey = visibleModifiedFiles
+        .map((file) => `${toModifiedFileKey(file.path)}:${file.updateCount}:${file.additions}:${file.deletions}`)
+        .join('|')
+    const hiddenModifiedFilesCount = Math.max(0, modifiedFiles.length - visibleModifiedFiles.length)
+    const totalModifiedFileUpdates = modifiedFiles.reduce((sum, file) => sum + file.updateCount, 0)
     const allThoughts = [...commandActivities].sort(
         (a, b) => a.timestamp - b.timestamp
     )
+    const collapsedThoughts = collapseThoughts(allThoughts)
+    const visibleThoughts = collapsedThoughts.slice(-MAX_VISIBLE_THOUGHTS)
     const firstThoughtAt = allThoughts.length > 0 ? allThoughts[0].timestamp : null
     const lastThoughtAt = allThoughts.length > 0 ? allThoughts[allThoughts.length - 1].timestamp : null
     const isLiveAttempt = isBusy && (isStreamingCurrentAttempt || Boolean(currentAttempt.isActiveAttempt))
@@ -137,7 +407,7 @@ export function AssistantMessage({
     const hasThoughts = allThoughts.length > 0
     const outputChars = displayedText.trim().length
     const outputTokens = outputChars > 0 ? Math.max(1, Math.round(outputChars / 4)) : 0
-    const thoughtSummaryCount = commandActivities.length
+    const thoughtSummaryCount = collapsedThoughts.length
     const activityCount = commandActivities.length
     const approvalCount = 0
     const canRegenerate = Boolean(currentAttempt.turnId)
@@ -164,6 +434,64 @@ export function AssistantMessage({
         { id: 'commands', prefix: '', value: String(thoughtSummaryCount), suffix: 'commands' },
         { id: 'elapsed', prefix: 'elapsed', value: thoughtElapsedLabel, suffix: '' }
     ] as const
+
+    useEffect(() => {
+        const normalizedProjectPath = String(projectPath || '').trim()
+        if (!normalizedProjectPath || visibleModifiedFiles.length === 0) {
+            setDiffStatsByPath({})
+            return
+        }
+
+        const targets = visibleModifiedFiles.slice(0, MAX_DIFF_STATS_FILES)
+        const base: Record<string, FileDiffStats> = {}
+        const missingTargets = targets.filter((file) => {
+            const key = `${normalizedProjectPath}::${toModifiedFileKey(file.path)}`
+            const cached = diffStatsCacheRef.current.get(key)
+            if (cached) {
+                base[toModifiedFileKey(file.path)] = cached
+                return false
+            }
+
+            if (file.additions > 0 || file.deletions > 0) {
+                const initialStats = { additions: file.additions, deletions: file.deletions }
+                diffStatsCacheRef.current.set(key, initialStats)
+                base[toModifiedFileKey(file.path)] = initialStats
+                return false
+            }
+
+            return true
+        })
+
+        let cancelled = false
+        setDiffStatsByPath(base)
+
+        if (missingTargets.length === 0) return
+
+        void Promise.all(missingTargets.map(async (file) => {
+            try {
+                const diff = await window.devscope.getWorkingDiff(normalizedProjectPath, file.path)
+                const text = diff?.success ? String(diff.diff || '') : ''
+                const stats = parseDiffLineStats(text)
+                return { key: toModifiedFileKey(file.path), stats }
+            } catch {
+                return { key: toModifiedFileKey(file.path), stats: { additions: 0, deletions: 0 } }
+            }
+        })).then((results) => {
+            if (cancelled) return
+            setDiffStatsByPath((prev) => {
+                const next = { ...prev }
+                for (const result of results) {
+                    next[result.key] = result.stats
+                    diffStatsCacheRef.current.set(`${normalizedProjectPath}::${result.key}`, result.stats)
+                }
+                return next
+            })
+        })
+
+        return () => {
+            cancelled = true
+        }
+    }, [projectPath, visibleModifiedFilesKey])
 
     useEffect(() => {
         if (!isLiveAttempt) return
@@ -207,8 +535,13 @@ export function AssistantMessage({
                                 <span className="inline-flex h-2 w-2 rounded-full bg-indigo-300 animate-pulse" />
                             )}
                             <span className={cn('rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>
-                                {allThoughts.length}
+                                {collapsedThoughts.length}
                             </span>
+                            {allThoughts.length > collapsedThoughts.length && (
+                                <span className={cn('rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>
+                                    {allThoughts.length} updates
+                                </span>
+                            )}
                             <span className={cn('rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>for {thoughtElapsedLabel}</span>
                         </div>
                         <ChevronDown
@@ -222,7 +555,7 @@ export function AssistantMessage({
                             ref={thoughtsBodyRef}
                             className="max-h-[42vh] space-y-2 overflow-y-auto border-t border-sparkle-border p-3"
                         >
-                            {allThoughts.map((item, index) => {
+                            {visibleThoughts.map((item, index) => {
                                 const animationStyle = {
                                     animationDelay: `${Math.min(index, 10) * 45}ms`,
                                     animationFillMode: 'both' as const
@@ -248,7 +581,11 @@ export function AssistantMessage({
                                                     {item.method}
                                                 </span>
                                             </div>
-                                            <p className={cn('mt-1 text-sparkle-text-secondary', compact && 'text-[10px]')}>{item.summary}</p>
+                                            <p className={cn('mt-1 text-sparkle-text-secondary', compact && 'text-[10px]')}>
+                                                {item.updateCount > 1
+                                                    ? `${item.summary || 'Running command...'} (x${item.updateCount} updates)`
+                                                    : (item.summary || 'Running command...')}
+                                            </p>
                                         </div>
                                     </div>
                                 )
@@ -332,6 +669,68 @@ export function AssistantMessage({
                         </div>
                     )}
                 </div>
+
+                {modifiedFiles.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-sparkle-border bg-sparkle-bg/80 px-2.5 py-2">
+                        <div className={cn('flex items-center gap-2 text-sparkle-text-secondary', compact ? 'text-[10px]' : 'text-xs')}>
+                            <span className="font-mono uppercase tracking-wide text-sparkle-text-muted">Modified files</span>
+                            <span className="rounded-[4px] border border-sparkle-border px-1.5 py-0.5 font-mono text-sparkle-text-muted">
+                                {modifiedFiles.length}
+                            </span>
+                            {totalModifiedFileUpdates > modifiedFiles.length && (
+                                <span className="rounded-[4px] border border-sparkle-border px-1.5 py-0.5 font-mono text-sparkle-text-muted">
+                                    {totalModifiedFileUpdates} updates
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="mt-2 space-y-1.5">
+                            {visibleModifiedFiles.map((file) => {
+                                const pathKey = toModifiedFileKey(file.path)
+                                const stats = diffStatsByPath[pathKey] || { additions: file.additions, deletions: file.deletions }
+                                const splitPath = splitModifiedFilePath(file.path)
+
+                                return (
+                                    <div
+                                        key={file.path}
+                                        title={file.path}
+                                        className={cn(
+                                            'flex items-center justify-between rounded-md border border-sparkle-border bg-sparkle-card px-2 py-1.5',
+                                            compact ? 'text-[10px]' : 'text-[11px]'
+                                        )}
+                                    >
+                                        <span className="min-w-0 truncate font-mono text-sparkle-text-secondary">
+                                            {splitPath.directory && (
+                                                <span className="text-sparkle-text-muted">{splitPath.directory}</span>
+                                            )}
+                                            <span className="font-semibold text-sparkle-text">{splitPath.filename || file.path}</span>
+                                            {file.updateCount > 1 ? ` x${file.updateCount}` : ''}
+                                        </span>
+                                        <span className="ml-2 inline-flex shrink-0 items-center gap-2">
+                                            <CompactDiffBars
+                                                additions={stats.additions}
+                                                deletions={stats.deletions}
+                                                compact={compact}
+                                            />
+                                            <span className="font-mono text-emerald-300">+{stats.additions}</span>
+                                            <span className="font-mono text-rose-300">-{stats.deletions}</span>
+                                        </span>
+                                    </div>
+                                )
+                            })}
+                            {hiddenModifiedFilesCount > 0 && (
+                                <span
+                                    className={cn(
+                                        'rounded-md border border-sparkle-border bg-sparkle-card px-2 py-1 font-mono text-sparkle-text-muted',
+                                        compact ? 'text-[10px]' : 'text-[11px]'
+                                    )}
+                                >
+                                    +{hiddenModifiedFilesCount} more
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {compact && isMessageInfoOpen && (
                     <div className="mt-2 rounded-md border border-sparkle-border bg-sparkle-bg/85 p-2.5 text-xs text-sparkle-text-secondary">

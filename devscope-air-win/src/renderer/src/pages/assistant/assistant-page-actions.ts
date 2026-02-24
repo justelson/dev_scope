@@ -137,7 +137,7 @@ export function createAssistantPageActions(ctx: ActionContext) {
             if (!currentSessionId) {
                 // Draft mode: Create session in backend first
                 const created = await window.devscope.assistant.createSession()
-                currentSessionId = String(created?.session?.id || '').trim()
+                currentSessionId = created?.success ? String(created.session?.id || '').trim() : ''
                 if (!currentSessionId) {
                     ctx.setErrorMessage('Failed to create session for this message.')
                     return false

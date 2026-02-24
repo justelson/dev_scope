@@ -370,6 +370,16 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                                                 <span className="text-sm font-mono text-white/80 truncate">
                                                     {file.path}
                                                 </span>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        navigator.clipboard.writeText(file.path)
+                                                    }}
+                                                    className="p-1 text-white/40 hover:text-white hover:bg-white/10 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100"
+                                                    title={`Copy path: ${file.path}`}
+                                                >
+                                                    <Copy size={14} />
+                                                </button>
                                             </div>
                                             <div className="flex items-center gap-3 text-xs shrink-0">
                                                 {file.additions > 0 && (

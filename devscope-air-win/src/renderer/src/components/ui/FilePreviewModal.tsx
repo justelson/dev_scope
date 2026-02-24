@@ -58,7 +58,7 @@ export function FilePreviewModal({ file, content, loading, truncated, size, prev
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md"
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-md"
             onClick={onClose}
             style={{ animation: 'fadeIn 0.15s ease-out' }}
             onWheel={e => e.stopPropagation()}
