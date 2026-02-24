@@ -457,7 +457,13 @@ export async function bridgeSendPrompt(
         this.status.connected = true
         this.status.state = 'ready'
         this.status.lastError = null
-        this.turnBuffers.set(turnId, { draft: '', pendingFinal: null, source: null })
+        this.turnBuffers.set(turnId, {
+            draft: '',
+            pendingFinal: null,
+            pendingFinalPhase: null,
+            draftKind: null,
+            source: null
+        })
         this.reasoningTextsByTurn.set(turnId, [])
         const attemptGroupId = attemptGroupIdSeed || turnId
         this.turnContexts.set(turnId, { attemptGroupId })

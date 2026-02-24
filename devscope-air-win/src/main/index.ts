@@ -39,12 +39,22 @@ const getPreloadPath = (): string => {
     return existsSync(preloadMjs) ? preloadMjs : preloadJs
 }
 
+const getAppIconPath = (): string | undefined => {
+    const candidates = [
+        join(process.resourcesPath, 'icon.png'),
+        join(app.getAppPath(), 'resources/icon.png'),
+        join(process.cwd(), 'resources/icon.png')
+    ]
+    return candidates.find((candidate) => existsSync(candidate))
+}
+
 function isDevToolsShortcut(input: Electron.Input): boolean {
     const key = input.key?.toLowerCase()
     return input.type === 'keyDown' && !!input.control && !!input.shift && key === 'i'
 }
 
 function createWindow(): void {
+    const iconPath = getAppIconPath()
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
@@ -53,6 +63,7 @@ function createWindow(): void {
         show: false,
         frame: false,
         backgroundColor: '#0c121f',
+        ...(iconPath ? { icon: iconPath } : {}),
         webPreferences: {
             preload: getPreloadPath(),
             sandbox: false,

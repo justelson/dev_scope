@@ -4,13 +4,21 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Minus, Square, X, Copy, Search } from 'lucide-react'
+import { Minus, Square, X, Copy, Search, PanelRightClose } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import { DevScopeLogoASCIIMini } from '../ui/DevScopeLogo'
 import { useCommandPalette } from '@/lib/commandPalette'
+import { closeAssistantDock, useAssistantDockState } from '@/lib/assistantDockStore'
 
 export default function TitleBar() {
     const [isMaximized, setIsMaximized] = useState(false)
     const { open } = useCommandPalette()
+    const location = useLocation()
+    const dock = useAssistantDockState()
+    const isProjectsAreaRoute = location.pathname === '/projects'
+        || location.pathname.startsWith('/projects/')
+        || location.pathname.startsWith('/folder-browse/')
+    const showDockMinimize = dock.open && isProjectsAreaRoute && location.pathname !== '/assistant'
 
     useEffect(() => {
         const checkMaximized = async () => {
@@ -56,6 +64,15 @@ export default function TitleBar() {
 
             {/* Window Controls */}
             <div className="flex">
+                {showDockMinimize && (
+                    <button
+                        onClick={closeAssistantDock}
+                        className="h-[46px] w-11 inline-flex items-center justify-center text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/14 transition-colors"
+                        title="Minimize assistant sidebar"
+                    >
+                        <PanelRightClose size={15} />
+                    </button>
+                )}
                 <button
                     onClick={handleMinimize}
                     className="h-[46px] w-11 inline-flex items-center justify-center text-sparkle-text-secondary hover:bg-sparkle-accent transition-colors"

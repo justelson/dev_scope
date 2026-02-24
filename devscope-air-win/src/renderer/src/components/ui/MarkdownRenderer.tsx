@@ -20,7 +20,7 @@ function MarkdownRenderer({ content, className, filePath }: MarkdownRendererProp
     const components = useMemo(() => createMarkdownComponents(filePath), [filePath])
 
     return (
-        <div className={cn('markdown-body', className)}>
+        <div className={cn('markdown-body break-words [overflow-wrap:anywhere] [word-break:break-word]', className)}>
             <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={components}>
                 {content}
             </Markdown>

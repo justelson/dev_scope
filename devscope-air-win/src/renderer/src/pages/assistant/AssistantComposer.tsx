@@ -16,7 +16,6 @@ import {
     isLargeTextPaste,
     isPastedTextAttachment,
     MAX_ATTACHMENT_CONTENT_CHARS,
-    MAX_COMPOSER_HEIGHT,
     MAX_IMAGE_DATA_URL_CHARS,
     readFileAsDataUrl,
     SLASH_COMMANDS,
@@ -39,6 +38,7 @@ export type AssistantComposerProps = {
     onSelectModel?: (modelId: string) => void
     onRefreshModels?: () => void
     activeProfile?: string
+    compact?: boolean
 }
 
 export function AssistantComposer({
@@ -53,7 +53,8 @@ export function AssistantComposer({
     modelsError,
     onSelectModel,
     onRefreshModels,
-    activeProfile
+    activeProfile,
+    compact = false
 }: AssistantComposerProps) {
     const [text, setText] = useState('')
     const [contextFiles, setContextFiles] = useState<ComposerContextFile[]>([])
@@ -72,15 +73,6 @@ export function AssistantComposer({
         ? modelOptions
         : [{ id: resolvedModel, label: resolvedModel === 'default' ? 'Default (server recommended)' : resolvedModel }]
     const selectedModelLabel = availableModelOptions.find((model) => model.id === resolvedModel)?.label || resolvedModel
-
-    const resizeComposer = () => {
-        const el = textareaRef.current
-        if (!el) return
-        el.style.height = '0px'
-        const next = Math.max(24, Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT))
-        el.style.height = `${next}px`
-        el.style.overflowY = el.scrollHeight > MAX_COMPOSER_HEIGHT ? 'auto' : 'hidden'
-    }
 
     const upsertAttachment = (attachment: ComposerContextFile) => {
         setContextFiles((prev) => {
@@ -122,10 +114,6 @@ export function AssistantComposer({
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [showModelDropdown])
-
-    useEffect(() => {
-        resizeComposer()
-    }, [text, contextFiles.length])
 
     useEffect(() => {
         if (!contextFiles.some((file) => file.animateIn)) return
@@ -393,9 +381,12 @@ export function AssistantComposer({
     }
 
     return (
-        <div className="relative flex flex-col gap-2">
+        <div className={cn('relative flex flex-col', compact ? 'gap-1.5' : 'gap-2')}>
             {showSlashMenu && (
-                <div className="absolute bottom-full left-0 z-10 mb-2 w-64 overflow-hidden rounded-xl border border-sparkle-border bg-sparkle-card shadow-lg">
+                <div className={cn(
+                    'absolute bottom-full left-0 z-10 mb-2 overflow-hidden rounded-xl border border-sparkle-border bg-sparkle-card shadow-lg',
+                    compact ? 'w-56' : 'w-64'
+                )}>
                     <div className="flex items-center gap-2 border-b border-sparkle-border bg-sparkle-bg px-3 py-2">
                         <Command size={14} className="text-sparkle-text-muted" />
                         <span className="text-xs font-medium text-sparkle-text-secondary">Slash Commands</span>
@@ -418,7 +409,7 @@ export function AssistantComposer({
             )}
 
             <AnimatedHeight isOpen={contextFiles.length > 0} duration={300}>
-                <div className="flex flex-wrap gap-2 px-1 pb-2">
+                <div className={cn('flex flex-wrap px-1', compact ? 'gap-1.5 pb-1.5' : 'gap-2 pb-2')}>
                     {contextFiles.map((file) => {
                         const meta = getContextFileMeta(file)
                         const contentType = getContentTypeTag(file)
@@ -427,7 +418,10 @@ export function AssistantComposer({
                         return (
                             <article
                                 key={file.id}
-                                className="group relative h-24 w-24 overflow-hidden rounded-xl border border-sparkle-border bg-sparkle-card/85 p-1.5 shadow-sm transition-colors hover:border-[var(--accent-primary)]/35 hover:bg-sparkle-card"
+                                className={cn(
+                                    'group relative overflow-hidden rounded-xl border border-sparkle-border bg-sparkle-card/85 p-1.5 shadow-sm transition-colors hover:border-[var(--accent-primary)]/35 hover:bg-sparkle-card',
+                                    compact ? 'h-20 w-20' : 'h-24 w-24'
+                                )}
                                 style={{
                                     transition: 'transform 190ms ease, opacity 190ms ease, filter 190ms ease',
                                     transform: isRemoving
@@ -494,8 +488,11 @@ export function AssistantComposer({
                 </div>
             </AnimatedHeight>
 
-            <div className="group relative flex flex-col gap-2 rounded-[22px] border border-sparkle-border bg-sparkle-card/50 p-2.5 transition-all focus-within:bg-sparkle-card focus-within:shadow-2xl">
-                <div className="flex items-end gap-2.5 px-1.5 py-1">
+            <div className={cn(
+                'group relative flex flex-col border border-sparkle-border bg-sparkle-card/50 transition-all focus-within:bg-sparkle-card focus-within:shadow-2xl',
+                compact ? 'gap-1.5 rounded-[18px] p-2' : 'gap-2 rounded-[22px] p-2.5'
+            )}>
+                <div className={cn('flex items-end', compact ? 'gap-2 px-1 py-0.5' : 'gap-2.5 px-1.5 py-1')}>
                     <input
                         ref={filePickerRef}
                         type="file"
@@ -511,10 +508,13 @@ export function AssistantComposer({
                         type="button"
                         onClick={() => filePickerRef.current?.click()}
                         disabled={disabled}
-                        className="mb-1 rounded-xl border border-sparkle-border bg-sparkle-card p-2.5 text-sparkle-text-secondary transition-all hover:scale-105 hover:border-[var(--accent-primary)]/40 hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)] active:scale-95"
+                        className={cn(
+                            'mb-1 rounded-xl border border-sparkle-border bg-sparkle-card text-sparkle-text-secondary transition-all hover:scale-105 hover:border-[var(--accent-primary)]/40 hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)] active:scale-95',
+                            compact ? 'p-2' : 'p-2.5'
+                        )}
                         title="Attach files"
                     >
-                        <Plus size={18} />
+                        <Plus size={compact ? 16 : 18} />
                     </button>
 
                     <div className="flex-1">
@@ -530,8 +530,11 @@ export function AssistantComposer({
                             }}
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
-                            className="w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed text-sparkle-text outline-none placeholder:text-sparkle-text-muted/60"
-                            placeholder={isConnected ? 'How can I help you build today?' : 'Connect assistant to start chatting...'}
+                            className={cn(
+                                'w-full resize-none overflow-y-auto bg-transparent px-1 py-1 leading-relaxed text-sparkle-text outline-none placeholder:text-sparkle-text-muted/60',
+                                compact ? 'h-8 min-h-8 max-h-8 text-[13px]' : 'h-9 min-h-9 max-h-9 text-sm'
+                            )}
+                            placeholder={isConnected ? (compact ? 'Ask assistant...' : 'How can I help you build today?') : 'Connect assistant to start chatting...'}
                             disabled={disabled || !isConnected}
                         />
                     </div>
@@ -541,22 +544,26 @@ export function AssistantComposer({
                         disabled={disabled || !isConnected || isThinking || (!text.trim() && contextFiles.length === 0)}
                         onClick={() => void handleSend()}
                         className={cn(
-                            'mb-1 inline-flex h-9 w-9 items-center justify-center rounded-xl transition-all active:scale-95',
+                            'mb-1 inline-flex items-center justify-center rounded-xl transition-all active:scale-95',
+                            compact ? 'h-8 w-8' : 'h-9 w-9',
                             disabled || !isConnected || isThinking || (!text.trim() && contextFiles.length === 0)
                                 ? 'bg-sparkle-border/40 text-sparkle-text-muted cursor-not-allowed opacity-40'
                                 : 'bg-[var(--accent-primary)] text-white hover:bg-[var(--accent-primary)]/90 hover:shadow-lg hover:shadow-[var(--accent-primary)]/20'
                         )}
                     >
                         {isThinking ? (
-                            <Loader2 size={18} className="animate-spin" />
+                            <Loader2 size={compact ? 16 : 18} className="animate-spin" />
                         ) : (
-                            <SendHorizontal size={18} />
+                            <SendHorizontal size={compact ? 16 : 18} />
                         )}
                     </button>
                 </div>
 
-                <div className="mt-1 flex items-center justify-between px-3 pb-2 text-[10px] font-medium tracking-tight">
-                    <div className="relative flex flex-col w-80" ref={modelDropdownRef}>
+                <div className={cn(
+                    'mt-1 flex items-center justify-between font-medium tracking-tight',
+                    compact ? 'px-2 pb-1.5 text-[9px]' : 'px-3 pb-2 text-[10px]'
+                )}>
+                    <div className={cn('relative flex flex-col', compact ? 'w-60' : 'w-80')} ref={modelDropdownRef}>
                         <div
                             className={cn(
                                 'pointer-events-none absolute bottom-full left-0 z-30 w-full overflow-hidden',
@@ -636,15 +643,16 @@ export function AssistantComposer({
                                     : 'rounded-xl border-sparkle-border bg-sparkle-card hover:bg-sparkle-card-hover hover:border-[var(--accent-primary)]/40'
                             )}
                         >
-                            <Command size={11} className={cn("transition-colors", showModelDropdown ? "text-[var(--accent-primary)]" : "text-sparkle-text-muted/40")} />
+                            <Command size={compact ? 10 : 11} className={cn("transition-colors", showModelDropdown ? "text-[var(--accent-primary)]" : "text-sparkle-text-muted/40")} />
                             <span className={cn(
-                                "flex-1 truncate text-left",
+                                'flex-1 truncate text-left',
+                                compact ? 'text-[11px]' : '',
                                 showModelDropdown ? "text-[var(--accent-primary)] font-semibold" : "text-sparkle-text/90 font-medium"
                             )}>
                                 {selectedModelLabel}
                             </span>
                             <ChevronDown
-                                size={12}
+                                size={compact ? 11 : 12}
                                 className={cn(
                                     'shrink-0 text-sparkle-text-muted transition-transform duration-300',
                                     showModelDropdown && 'rotate-180 text-[var(--accent-primary)]',
@@ -656,11 +664,12 @@ export function AssistantComposer({
 
                     <div className="flex items-center gap-1.5">
                         <div className={cn(
-                            "h-1 w-1 rounded-full",
+                            'h-1 w-1 rounded-full',
                             activeProfile === 'yolo-fast' ? "bg-[var(--accent-primary)] animate-pulse shadow-[0_0_8px_var(--accent-primary)]" : "bg-emerald-500"
                         )} />
                         <span className={cn(
-                            "font-bold uppercase tracking-widest",
+                            'font-bold uppercase tracking-widest',
+                            compact ? 'text-[9px]' : '',
                             activeProfile === 'yolo-fast' ? "text-[var(--accent-primary)]" : "text-emerald-400"
                         )}>
                             {activeProfile || 'safe-dev'}

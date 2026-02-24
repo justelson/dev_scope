@@ -24,7 +24,13 @@ export function bridgeFinalizeTurn(
         return
     }
 
-    const buffer = bridge.turnBuffers.get(turnId) || { draft: '', pendingFinal: null, source: null }
+    const buffer = bridge.turnBuffers.get(turnId) || {
+        draft: '',
+        pendingFinal: null,
+        pendingFinalPhase: null,
+        draftKind: null,
+        source: null
+    }
     const turnContext = bridge.turnContexts.get(turnId)
     const attemptGroupId = turnContext?.attemptGroupId || bridge.turnAttemptGroupByTurnId.get(turnId) || turnId
     const wasCancelledByRequest = bridge.cancelledTurns.delete(turnId)
@@ -33,8 +39,16 @@ export function bridgeFinalizeTurn(
         : outcome.reason
     const shouldLockFinal = outcome.success && terminalReason === 'completed'
     const explicitFinalText = (outcome.explicitFinalText || '').trim()
+    const finalDraft = buffer.draftKind === 'provisional' ? '' : buffer.draft.trim()
+    const fallbackDraft = buffer.draft.trim()
     const finalText = shouldLockFinal
-        ? explicitFinalText || buffer.pendingFinal?.trim() || buffer.draft.trim()
+        ? (
+            explicitFinalText
+            || buffer.pendingFinalPhase?.trim()
+            || buffer.pendingFinal?.trim()
+            || finalDraft
+            || fallbackDraft
+        )
         : ''
 
     if (shouldLockFinal && finalText) {

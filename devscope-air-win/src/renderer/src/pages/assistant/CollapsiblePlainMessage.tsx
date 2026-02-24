@@ -11,11 +11,13 @@ const USER_FLOATING_COLLAPSE_BOTTOM_PX = 176
 export function CollapsiblePlainMessage({
     text,
     isUser,
-    attachments = []
+    attachments = [],
+    compact = false
 }: {
     text: string
     isUser: boolean
     attachments?: AssistantHistoryAttachment[]
+    compact?: boolean
 }) {
     const [isCollapsed, setIsCollapsed] = useState(true)
     const [canCollapse, setCanCollapse] = useState(false)
@@ -158,7 +160,8 @@ export function CollapsiblePlainMessage({
     return (
         <div ref={sectionRef} className={cn('group max-w-full', isUser ? 'ml-auto w-auto' : 'w-full')}>
             <div className={cn(
-                'relative max-w-[78ch] rounded-2xl px-4 py-3 shadow-sm border whitespace-pre-wrap text-[15px] leading-6 text-sparkle-text bg-sparkle-card border-sparkle-border',
+                'relative max-w-[78ch] rounded-2xl px-4 py-3 shadow-sm border whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] text-sparkle-text bg-sparkle-card border-sparkle-border',
+                compact ? 'text-[12px] leading-5' : 'text-[15px] leading-6',
                 isUser && 'ml-auto'
             )}>
                 {isUser && (
@@ -198,7 +201,7 @@ export function CollapsiblePlainMessage({
                                             />
                                         </div>
                                     ) : textPreview ? (
-                                        <pre className="max-h-32 overflow-auto p-2 text-[11px] leading-5 whitespace-pre-wrap break-words font-mono text-sparkle-text-secondary">
+                                        <pre className="max-h-32 overflow-auto p-2 text-[11px] leading-5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-sparkle-text-secondary">
                                             {textPreview}
                                         </pre>
                                     ) : (
@@ -218,7 +221,7 @@ export function CollapsiblePlainMessage({
                 )}
                 <div
                     ref={contentRef}
-                    className={cn('relative break-words', isUser && 'pr-10')}
+                    className={cn('relative break-words [overflow-wrap:anywhere] [word-break:break-word]', isUser && 'pr-10')}
                     style={
                         showFade
                             ? {

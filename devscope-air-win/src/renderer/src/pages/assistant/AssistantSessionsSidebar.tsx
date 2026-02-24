@@ -2,20 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Link } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import {
-    Archive,
-    ChevronDown,
     ChevronRight,
     Edit2,
     Folder,
     FolderOpen,
     MessageSquarePlus,
-    PanelLeft,
-    PanelLeftClose,
-    Plus,
     Shield,
-    Settings2,
-    Sparkles,
     Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -31,9 +25,11 @@ export type AssistantSessionSidebarItem = {
 type AssistantSessionsSidebarProps = {
     collapsed: boolean
     width: number
+    compact?: boolean
     sessions: AssistantSessionSidebarItem[]
     activeSessionId: string | null
     onSetCollapsed: (collapsed: boolean) => void
+    onWidthChange?: (width: number) => void
     onCreateSession: (projectPath?: string) => Promise<void>
     onSelectSession: (sessionId: string) => Promise<void>
     onRenameSession: (sessionId: string, nextTitle: string) => Promise<void>
@@ -69,9 +65,11 @@ function getDirectoryLabel(path: string): string {
 export function AssistantSessionsSidebar({
     collapsed,
     width,
+    compact = false,
     sessions,
     activeSessionId,
     onSetCollapsed,
+    onWidthChange,
     onCreateSession,
     onSelectSession,
     onRenameSession,
@@ -82,7 +80,6 @@ export function AssistantSessionsSidebar({
     const [renameDraft, setRenameDraft] = useState('')
     const [sessionToDelete, setSessionToDelete] = useState<AssistantSessionSidebarItem | null>(null)
     const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(new Set())
-    const [showAllGroupKeys, setShowAllGroupKeys] = useState<Set<string>>(new Set())
 
     const getDisplayTitle = (title: string): string => {
         const trimmed = String(title || '').trim()
@@ -155,15 +152,6 @@ export function AssistantSessionsSidebar({
         })
     }
 
-    const toggleShowAll = (key: string) => {
-        setShowAllGroupKeys((prev) => {
-            const next = new Set(prev)
-            if (next.has(key)) next.delete(key)
-            else next.add(key)
-            return next
-        })
-    }
-
     const openRenameModal = (session: AssistantSessionSidebarItem) => {
         setRenameTarget(session)
         setRenameDraft(getDisplayTitle(session.title))
@@ -186,19 +174,58 @@ export function AssistantSessionsSidebar({
         setSessionToDelete(session)
     }
 
+    const autoMinimizeIfCompactExpanded = () => {
+        if (compact && !collapsed) {
+            onSetCollapsed(true)
+        }
+    }
+
     const confirmDelete = async () => {
         if (!sessionToDelete) return
         await onDeleteSession(sessionToDelete.id)
         setSessionToDelete(null)
+    }
+    const minSidebarWidth = 180
+    const maxSidebarWidth = compact ? 420 : 520
+    const resolvedWidth = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, Math.round(width)))
+    const clampSidebarWidth = (value: number) => {
+        if (!Number.isFinite(value)) return resolvedWidth
+        return Math.max(minSidebarWidth, Math.min(maxSidebarWidth, Math.round(value)))
+    }
+
+    const handleResizeStart = (event: React.MouseEvent<HTMLDivElement>) => {
+        if (collapsed || !onWidthChange) return
+        event.preventDefault()
+        event.stopPropagation()
+
+        const startX = event.clientX
+        const startWidth = resolvedWidth
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+
+        const handleMove = (moveEvent: MouseEvent) => {
+            const delta = moveEvent.clientX - startX
+            onWidthChange(clampSidebarWidth(startWidth + delta))
+        }
+
+        const handleUp = () => {
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+            window.removeEventListener('mousemove', handleMove)
+            window.removeEventListener('mouseup', handleUp)
+        }
+
+        window.addEventListener('mousemove', handleMove)
+        window.addEventListener('mouseup', handleUp)
     }
 
     return (
         <aside
             className={cn(
                 'relative h-full shrink-0 overflow-x-hidden border-r border-sparkle-border bg-sparkle-bg transition-[width] duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]',
-                collapsed ? 'w-16' : 'w-72'
+                collapsed ? (compact ? 'w-14' : 'w-16') : (compact ? 'w-64' : 'w-72')
             )}
-            style={!collapsed ? { width } : undefined}
+            style={!collapsed ? { width: resolvedWidth } : undefined}
         >
             {/* Decorative top gradient bar */}
             <div
@@ -208,8 +235,20 @@ export function AssistantSessionsSidebar({
                 }}
             />
 
+            {!collapsed && (
+                <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    onMouseDown={handleResizeStart}
+                    className={cn(
+                        'absolute right-0 top-0 z-30 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--accent-primary)]/18'
+                    )}
+                    title="Resize assistant sidebar"
+                />
+            )}
+
             {collapsed ? (
-                <div className="relative z-10 flex h-full flex-col items-center gap-4 px-2 pb-4 pt-4">
+                <div className={cn('relative z-10 flex h-full flex-col items-center px-2 pb-4 pt-4', compact ? 'gap-3' : 'gap-4')}>
                     {/* Expand Sidebar Toggle (Matches position of collapse button) */}
                     <button
                         type="button"
@@ -223,20 +262,23 @@ export function AssistantSessionsSidebar({
                     <button
                         type="button"
                         onClick={() => void onCreateSession()}
-                        className="group relative flex h-9 w-9 items-center justify-center rounded-lg text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                        className={cn(
+                            'group relative flex items-center justify-center rounded-lg text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text',
+                            compact ? 'h-8 w-8' : 'h-9 w-9'
+                        )}
                         title="New thread"
                     >
-                        <MessageSquarePlus size={18} />
+                        <MessageSquarePlus size={compact ? 16 : 18} />
                     </button>
 
                     {/* Accent divider */}
-                    <div className="my-1 flex w-8 flex-col items-center gap-1.5">
+                    <div className={cn('my-1 flex flex-col items-center gap-1.5', compact ? 'w-7' : 'w-8')}>
                         <div className="h-px w-full bg-white/5" />
                     </div>
 
 
                     {/* Collapsed session avatars */}
-                    <div className="flex w-full flex-1 flex-col items-center gap-2.5 overflow-y-auto pb-2 pt-1 no-scrollbar">
+                    <div className={cn('flex w-full flex-1 flex-col items-center overflow-y-auto pb-2 pt-1 no-scrollbar', compact ? 'gap-2' : 'gap-2.5')}>
                         {groupedSessions.map((group) => {
                             const primarySession = group.sessions[0]
                             const hasActive = group.sessions.some((session) => session.id === activeSessionId)
@@ -247,7 +289,8 @@ export function AssistantSessionsSidebar({
                                     onClick={() => void onSelectSession(primarySession.id)}
                                     title={group.path || 'No directory'}
                                     className={cn(
-                                        'relative flex h-8 w-8 items-center justify-center rounded-lg text-[10px] font-bold transition-all duration-200 focus:outline-none',
+                                        'relative flex items-center justify-center rounded-lg text-[10px] font-bold transition-all duration-200 focus:outline-none',
+                                        compact ? 'h-7 w-7' : 'h-8 w-8',
                                         hasActive
                                             ? 'bg-[var(--accent-primary)] text-white ring-1 ring-[var(--accent-primary)]/40 shadow-sm'
                                             : 'bg-sparkle-card/50 text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
@@ -269,70 +312,82 @@ export function AssistantSessionsSidebar({
                     </Link>
                 </div>
             ) : (
-                <div className="relative z-10 flex h-full flex-col px-4 pb-4 pt-4">
+                <div className={cn('relative z-10 flex h-full flex-col pb-4 pt-4', compact ? 'px-3' : 'px-4')}>
                     {/* ── Sidebar Toggle (Absolute positioned) ── */}
                     <button
                         type="button"
                         onClick={() => onSetCollapsed(true)}
-                        className="absolute right-3 top-3 z-20 rounded-lg p-1.5 text-sparkle-text-secondary/70 transition-all hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                        className={cn(
+                            'absolute z-20 rounded-lg p-1.5 text-sparkle-text-secondary/70 transition-all hover:bg-sparkle-card-hover hover:text-sparkle-text',
+                            compact ? 'right-2 top-2' : 'right-3 top-3'
+                        )}
                         title="Collapse sidebar"
                     >
-                        <ChevronRight size={18} className="rotate-180" />
+                        <ChevronRight size={compact ? 16 : 18} className="rotate-180" />
                     </button>
 
                     {/* ── Header actions ── */}
-                    <div className="mb-6 flex flex-col gap-1 pt-2">
+                    <div className={cn(compact ? 'mb-4 pt-8' : 'mb-6 pt-9', 'flex flex-col gap-1')}>
                         <button
                             type="button"
-                            onClick={() => void onCreateSession()}
-                            className="flex items-center gap-3 rounded-lg px-2 py-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                            onClick={() => {
+                                void onCreateSession()
+                                autoMinimizeIfCompactExpanded()
+                            }}
+                            className={cn(
+                                'flex items-center rounded-lg px-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text',
+                                compact ? 'gap-2 py-1.5' : 'gap-3 py-2'
+                            )}
                         >
-                            <MessageSquarePlus size={18} />
-                            <span className="text-sm font-medium">New thread</span>
+                            <MessageSquarePlus size={compact ? 16 : 18} />
+                            <span className={cn('font-medium', compact ? 'text-xs' : 'text-sm')}>New thread</span>
                         </button>
 
-                        <div className="group relative">
-                            <button
-                                type="button"
-                                disabled
-                                className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-2 py-2 text-sparkle-text-muted/10 grayscale transition-colors"
-                            >
-                                <svg className="h-[18px] w-[18px] opacity-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-                                <span className="text-sm font-medium opacity-40">Automations</span>
-                            </button>
+                        {!compact && (
+                            <>
+                                <div className="group relative">
+                                    <button
+                                        type="button"
+                                        disabled
+                                        className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-2 py-2 text-sparkle-text-muted/10 grayscale transition-colors"
+                                    >
+                                        <svg className="h-[18px] w-[18px] opacity-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                                        <span className="text-sm font-medium opacity-40">Automations</span>
+                                    </button>
 
-                            {/* "Coming Soon" Tooltip - Positioned inside to avoid overflow-x-hidden clipping */}
-                            <div className="pointer-events-none absolute right-2 top-1/2 z-50 -translate-y-1/2 scale-90 whitespace-nowrap rounded-md border border-white/10 bg-sparkle-card/90 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-sparkle-text-muted opacity-0 backdrop-blur-md shadow-xl transition-all duration-200 group-hover:scale-100 group-hover:opacity-100">
-                                Coming Soon
-                            </div>
-                        </div>
+                                    {/* "Coming Soon" Tooltip - Positioned inside to avoid overflow-x-hidden clipping */}
+                                    <div className="pointer-events-none absolute right-2 top-1/2 z-50 -translate-y-1/2 scale-90 whitespace-nowrap rounded-md border border-white/10 bg-sparkle-card/90 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-sparkle-text-muted opacity-0 backdrop-blur-md shadow-xl transition-all duration-200 group-hover:scale-100 group-hover:opacity-100">
+                                        Coming Soon
+                                    </div>
+                                </div>
 
-                        <button
-                            type="button"
-                            className="flex items-center gap-3 rounded-lg px-2 py-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
-                        >
-                            <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.29 7 12 12 20.71 7" /><line x1="12" y1="22" x2="12" y2="12" /></svg>
-                            <span className="text-sm font-medium">Skills</span>
-                        </button>
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-3 rounded-lg px-2 py-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                                >
+                                    <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.29 7 12 12 20.71 7" /><line x1="12" y1="22" x2="12" y2="12" /></svg>
+                                    <span className="text-sm font-medium">Skills</span>
+                                </button>
+                            </>
+                        )}
                     </div>
 
                     {/* ── Threads Section Label (Divider style) ── */}
-                    <div className="mb-4 flex items-center gap-3 px-1">
+                    <div className={cn('flex items-center gap-3 px-1', compact ? 'mb-3' : 'mb-4')}>
                         <div className="h-px flex-1 bg-white/5" />
                         <h3 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-sparkle-text-muted/40">Threads</h3>
                         <div className="h-px flex-1 bg-white/5" />
                     </div>
 
                     {/* ── Session list ── */}
-                    <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
+                    <div className={cn('flex-1 overflow-y-auto no-scrollbar', compact ? 'space-y-3' : 'space-y-4')}>
                         {groupedSessions.map((group) => {
                             const isExpanded = expandedGroupKeys.has(group.key)
-                            const isShowingAll = showAllGroupKeys.has(group.key)
                             const groupHasActiveSession = group.sessions.some((session) => session.id === activeSessionId)
-                            const visibleSessions = isShowingAll ? group.sessions : group.sessions.slice(0, 6)
+                            const visibleSessions = group.sessions
 
                             return (
-                                <section key={group.key} className="space-y-1">
+                                <section key={group.key} className={cn(compact ? 'space-y-0.5' : 'space-y-1')}>
                                     {/* Folder group header */}
                                     <button
                                         type="button"
@@ -358,7 +413,8 @@ export function AssistantSessionsSidebar({
                                             />
                                         </div>
                                         <span className={cn(
-                                            'truncate text-[13px] font-semibold transition-colors flex-1',
+                                            'truncate font-semibold transition-colors flex-1',
+                                            compact ? 'text-[12px]' : 'text-[13px]',
                                             groupHasActiveSession ? 'text-sparkle-text' : 'text-sparkle-text-secondary group-hover:text-sparkle-text'
                                         )}>
                                             {group.label}
@@ -375,7 +431,7 @@ export function AssistantSessionsSidebar({
                                     </button>
 
                                     <AnimatedHeight isOpen={isExpanded} duration={500}>
-                                        <div className="ml-4 space-y-0.5 border-l border-white/5 pb-2 pl-2 pt-1">
+                                        <div className={cn('ml-4 space-y-0.5 border-l border-white/5 pb-2 pt-1', compact ? 'pl-1.5' : 'pl-2')}>
                                             {visibleSessions.map((session) => {
                                                 const isActive = session.id === activeSessionId
                                                 const timeAgo = Math.floor((Date.now() - (session.createdAt || session.updatedAt)) / 3600000)
@@ -385,15 +441,19 @@ export function AssistantSessionsSidebar({
                                                     <div
                                                         key={session.id}
                                                         className={cn(
-                                                            'group relative flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all duration-200 backdrop-blur-[2px]',
+                                                            'group relative flex items-center rounded-lg border transition-all duration-200 backdrop-blur-[2px]',
+                                                            compact ? 'gap-2 px-2 py-2' : 'gap-3 px-3 py-2.5',
                                                             isActive
                                                                 ? 'border-white/10 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] shadow-[0_2px_10px_rgba(0,0,0,0.05)]'
                                                                 : 'border-white/5 bg-sparkle-bg/40 text-sparkle-text-secondary hover:border-sparkle-border hover:bg-sparkle-card-hover/60 hover:text-sparkle-text'
                                                         )}
                                                     >
                                                         <button
-                                                            className="flex-1 truncate text-left text-[13px] font-medium outline-none"
-                                                            onClick={() => void onSelectSession(session.id)}
+                                                            className={cn('flex-1 truncate text-left font-medium outline-none', compact ? 'text-[12px]' : 'text-[13px]')}
+                                                            onClick={() => {
+                                                                void onSelectSession(session.id)
+                                                                autoMinimizeIfCompactExpanded()
+                                                            }}
                                                             title={getDisplayTitle(session.title)}
                                                         >
                                                             {getDisplayTitle(session.title)}
@@ -427,25 +487,6 @@ export function AssistantSessionsSidebar({
                                                 )
                                             })}
 
-                                            {/* Show more toggle */}
-                                            {group.sessions.length > 6 && (
-                                                <button
-                                                    onClick={() => toggleShowAll(group.key)}
-                                                    className="mt-1 flex w-full items-center gap-2 px-3 py-1 text-[11px] font-semibold text-[var(--accent-primary)]/80 transition-colors hover:text-[var(--accent-primary)]"
-                                                >
-                                                    {isShowingAll ? (
-                                                        <>
-                                                            <ChevronDown size={12} className="rotate-180" />
-                                                            <span>Show less</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <ChevronRight size={12} className="rotate-90" />
-                                                            <span>Show more ({group.sessions.length - 6})</span>
-                                                        </>
-                                                    )}
-                                                </button>
-                                            )}
                                         </div>
                                     </AnimatedHeight>
                                 </section>
@@ -453,8 +494,8 @@ export function AssistantSessionsSidebar({
                         })}
 
                         {groupedSessions.length === 0 && (
-                            <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-                                <MessageSquarePlus size={24} className="text-sparkle-text-muted/30" />
+                            <div className={cn('flex flex-col items-center gap-2 px-4 text-center', compact ? 'py-6' : 'py-8')}>
+                                <MessageSquarePlus size={compact ? 20 : 24} className="text-sparkle-text-muted/30" />
                                 <p className="text-xs text-sparkle-text-muted">No threads yet</p>
                             </div>
                         )}
@@ -462,9 +503,9 @@ export function AssistantSessionsSidebar({
                 </div>
             )}
 
-            {renameTarget && (
+            {renameTarget && typeof document !== 'undefined' && createPortal(
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    className="fixed inset-0 z-[120] flex items-center justify-center p-4"
                     onClick={closeRenameModal}
                 >
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-md animate-fadeIn" />
@@ -525,7 +566,8 @@ export function AssistantSessionsSidebar({
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             <ConfirmModal
@@ -536,6 +578,7 @@ export function AssistantSessionsSidebar({
                 onConfirm={confirmDelete}
                 onCancel={() => setSessionToDelete(null)}
                 variant="danger"
+                fullscreen
             />
         </aside>
     )

@@ -1,7 +1,7 @@
 import {
     ArrowLeft, FolderOpen, Terminal, ExternalLink,
     RefreshCw, Copy, Check, BookOpen,
-    GitBranch, GitPullRequest, Folder
+    GitBranch, GitPullRequest, Folder, Bot
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ProjectIcon, { FrameworkBadge } from '@/components/ui/ProjectIcon'
@@ -30,6 +30,7 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
         changedFiles,
         unpushedCommits,
         onBrowseFolder,
+        onShipToAssistant,
         loadProjectDetails
     } = props
 
@@ -200,6 +201,14 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                     >
                         <Folder size={16} />
                         <span className="text-sm font-medium hidden sm:inline">Browse Folder</span>
+                    </button>
+
+                    <button
+                        onClick={onShipToAssistant}
+                        className="h-11 w-11 inline-flex items-center justify-center text-[#E2A257] bg-[#E2A257]/12 border border-[#E2A257]/35 hover:bg-[#E2A257]/22 rounded-xl transition-all shadow-sm shrink-0"
+                        title="Open assistant"
+                    >
+                        <Bot size={16} />
                     </button>
 
                     <button

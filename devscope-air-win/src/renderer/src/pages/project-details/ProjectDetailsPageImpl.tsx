@@ -4,6 +4,7 @@ import { useTerminal } from '@/App'
 import { useFilePreview } from '@/components/ui/FilePreviewModal'
 import { useSettings } from '@/lib/settings'
 import { trackRecentProject } from '@/lib/recentProjects'
+import { openAssistantDock } from '@/lib/assistantDockStore'
 import { useScriptRunModal } from './useScriptRunModal'
 import { useProjectFileView } from './useProjectFileView'
 import { createProjectGitActions } from './gitActions'
@@ -188,6 +189,12 @@ export default function ProjectDetailsPage() {
             return
         }
         navigate('/projects')
+    }
+    const handleShipToAssistant = async () => {
+        const projectScopePath = String(project?.path || decodedPath || '').trim()
+        if (!projectScopePath) return
+
+        openAssistantDock({ contextPath: projectScopePath })
     }
     const showToast = (message: string, actionLabel?: string, actionTo?: string) => {
         setToast({ message, visible: false, actionLabel, actionTo })
@@ -424,6 +431,7 @@ export default function ProjectDetailsPage() {
                     const encodedPath = encodeURIComponent(project.path)
                     navigate(`/folder-browse/${encodedPath}`)
                 }}
+                onShipToAssistant={() => void handleShipToAssistant()}
                 loadProjectDetails={loadProjectDetails}
                 readmeContentRef={readmeContentRef}
                 readmeExpanded={readmeExpanded}

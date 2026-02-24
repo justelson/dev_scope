@@ -2,6 +2,7 @@ import type {
     AssistantActivity,
     AssistantApproval,
     AssistantEvent,
+    AssistantHistoryAttachment,
     AssistantHistoryMessage,
     AssistantReasoning,
     AssistantSession,
@@ -16,6 +17,7 @@ import {
     parseApprovalDecisionPayload,
     parseApprovalPayload
 } from './assistant-page-types'
+import { toDisplayText, toDisplayTextTrimmed } from './assistant-text-utils'
 
 type RuntimeDeps = {
     getStreamingTurnId: () => string | null
@@ -37,6 +39,84 @@ type RuntimeDeps = {
     setErrorMessage: (value: string | null) => void
 }
 
+const LIVE_PREVIEW_REASONING_METHOD = 'assistant-live-preview'
+
+function normalizeRole(value: unknown): AssistantHistoryMessage['role'] {
+    if (value === 'assistant' || value === 'user' || value === 'system') return value
+    return 'system'
+}
+
+function normalizeAttachmentKind(value: unknown): AssistantHistoryAttachment['kind'] | undefined {
+    const normalized = toDisplayTextTrimmed(value).toLowerCase()
+    if (normalized === 'image' || normalized === 'doc' || normalized === 'code' || normalized === 'file') {
+        return normalized
+    }
+    return undefined
+}
+
+function normalizeHistoryMessages(historyRaw: unknown[]): AssistantHistoryMessage[] {
+    return historyRaw.map((rawEntry, index) => {
+        const entry = (rawEntry && typeof rawEntry === 'object')
+            ? rawEntry as Record<string, unknown>
+            : {}
+        const attachmentsRaw = Array.isArray(entry.attachments) ? entry.attachments : []
+        const attachments = attachmentsRaw
+            .map((rawAttachment) => {
+                if (!rawAttachment || typeof rawAttachment !== 'object') return null
+                const attachment = rawAttachment as Record<string, unknown>
+                const path = toDisplayTextTrimmed(attachment.path)
+                if (!path) return null
+                const sizeBytesRaw = Number(attachment.sizeBytes)
+                return {
+                    path,
+                    name: toDisplayTextTrimmed(attachment.name) || undefined,
+                    mimeType: toDisplayTextTrimmed(attachment.mimeType) || undefined,
+                    kind: normalizeAttachmentKind(attachment.kind),
+                    sizeBytes: Number.isFinite(sizeBytesRaw) ? sizeBytesRaw : undefined,
+                    previewText: toDisplayText(attachment.previewText) || undefined,
+                    previewDataUrl: toDisplayTextTrimmed(attachment.previewDataUrl) || undefined,
+                    textPreview: toDisplayText(attachment.textPreview) || undefined
+                }
+            })
+            .filter((item): item is AssistantHistoryAttachment => Boolean(item))
+
+        return {
+            id: toDisplayTextTrimmed(entry.id) || `history-${index + 1}`,
+            role: normalizeRole(entry.role),
+            text: toDisplayText(entry.text),
+            attachments: attachments.length > 0 ? attachments : undefined,
+            sourcePrompt: toDisplayText(entry.sourcePrompt) || undefined,
+            reasoningText: toDisplayText(entry.reasoningText) || undefined,
+            createdAt: Number.isFinite(Number(entry.createdAt)) ? Number(entry.createdAt) : Date.now(),
+            turnId: toDisplayTextTrimmed(entry.turnId) || undefined,
+            attemptGroupId: toDisplayTextTrimmed(entry.attemptGroupId) || undefined,
+            attemptIndex: Number.isFinite(Number(entry.attemptIndex)) ? Number(entry.attemptIndex) : undefined,
+            isActiveAttempt: typeof entry.isActiveAttempt === 'boolean' ? entry.isActiveAttempt : undefined
+        }
+    })
+}
+
+function stripLivePreviewReasoning(
+    source: Record<string, AssistantReasoning[]>,
+    turnId?: string | null
+): Record<string, AssistantReasoning[]> {
+    const targetTurnId = typeof turnId === 'string' ? turnId.trim() : ''
+    let changed = false
+    const next: Record<string, AssistantReasoning[]> = {}
+
+    for (const [groupId, entries] of Object.entries(source)) {
+        const filtered = entries.filter((entry) => {
+            if (entry.method !== LIVE_PREVIEW_REASONING_METHOD) return true
+            if (!targetTurnId) return false
+            return entry.turnId !== targetTurnId
+        })
+        if (filtered.length !== entries.length) changed = true
+        if (filtered.length > 0) next[groupId] = filtered
+    }
+
+    return changed ? next : source
+}
+
 export function createLoadSnapshot(deps: RuntimeDeps) {
     return async (options?: { hydrateChat?: boolean }) => {
         const hydrateChat = options?.hydrateChat === true
@@ -55,7 +135,7 @@ export function createLoadSnapshot(deps: RuntimeDeps) {
                 deps.setStatus(statusResult.status as AssistantStatus)
             }
             const snapshotHistory = historyResult?.success && Array.isArray(historyResult.history)
-                ? historyResult.history as AssistantHistoryMessage[]
+                ? normalizeHistoryMessages(historyResult.history as unknown[])
                 : []
             deps.setHistory(snapshotHistory)
 
@@ -116,23 +196,27 @@ export function createLoadSnapshot(deps: RuntimeDeps) {
                 for (const ev of eventsResult.events) {
                     if (ev.type === 'assistant-reasoning') {
                         if (!isTelemetryEventInScope(ev.payload, snapshotScope)) continue
+                        const turnId = toDisplayTextTrimmed(ev.payload.turnId)
+                        const attemptGroupId = toDisplayTextTrimmed(ev.payload.attemptGroupId) || turnId || 'unknown'
                         const r = {
-                            turnId: String(ev.payload.turnId || ''),
-                            attemptGroupId: String(ev.payload.attemptGroupId || ''),
-                            text: String(ev.payload.text || ''),
-                            method: String(ev.payload.method || ''),
+                            turnId,
+                            attemptGroupId,
+                            text: toDisplayText(ev.payload.text),
+                            method: toDisplayTextTrimmed(ev.payload.method),
                             timestamp: ev.timestamp
                         }
                         if (!nextReasoning[r.attemptGroupId]) nextReasoning[r.attemptGroupId] = []
                         nextReasoning[r.attemptGroupId].push(r)
                     } else if (ev.type === 'assistant-activity') {
                         if (!isTelemetryEventInScope(ev.payload, snapshotScope)) continue
+                        const turnId = toDisplayTextTrimmed(ev.payload.turnId)
+                        const attemptGroupId = toDisplayTextTrimmed(ev.payload.attemptGroupId) || turnId || 'unknown'
                         const a = {
-                            turnId: String(ev.payload.turnId || ''),
-                            attemptGroupId: String(ev.payload.attemptGroupId || ''),
-                            kind: String(ev.payload.kind || ''),
-                            summary: String(ev.payload.summary || ''),
-                            method: String(ev.payload.method || ''),
+                            turnId,
+                            attemptGroupId,
+                            kind: toDisplayTextTrimmed(ev.payload.kind) || 'event',
+                            summary: toDisplayText(ev.payload.summary),
+                            method: toDisplayTextTrimmed(ev.payload.method) || 'runtime',
                             payload: (ev.payload.payload || {}) as Record<string, unknown>,
                             timestamp: ev.timestamp
                         }
@@ -172,8 +256,10 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
             return
         }
         if (event.type === 'history') {
-            const nextHistory = event.payload.history as AssistantHistoryMessage[] | undefined
-            if (Array.isArray(nextHistory)) deps.setHistory(nextHistory)
+            const nextHistory = Array.isArray(event.payload.history)
+                ? normalizeHistoryMessages(event.payload.history as unknown[])
+                : null
+            if (nextHistory) deps.setHistory(nextHistory)
             void window.devscope.assistant.listSessions().then((sessionsResult) => {
                 if (!sessionsResult?.success || !Array.isArray(sessionsResult.sessions)) return
                 const normalizedSessions = sessionsResult.sessions.map((session: any) => ({
@@ -192,13 +278,45 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
         }
         if (event.type === 'assistant-delta') {
             const turnId = typeof event.payload.turnId === 'string' ? event.payload.turnId : null
-            const text = typeof event.payload.text === 'string' ? event.payload.text : ''
+            const text = toDisplayText(event.payload.text)
+            const streamKind = typeof event.payload.streamKind === 'string'
+                ? event.payload.streamKind.toLowerCase()
+                : ''
             deps.setStreamingTurnId(turnId)
+            if (streamKind === 'provisional') {
+                deps.setStreamingText('')
+                deps.setReasoningByTurn((prev: Record<string, AssistantReasoning[]>) =>
+                    stripLivePreviewReasoning(prev, turnId)
+                )
+                return
+            }
+            deps.setReasoningByTurn((prev: Record<string, AssistantReasoning[]>) =>
+                stripLivePreviewReasoning(prev, turnId)
+            )
             deps.setStreamingText(text)
             return
         }
-        if (event.type === 'assistant-final') return
-        if (event.type === 'turn-cancelled' || event.type === 'turn-complete') return
+        if (event.type === 'assistant-final') {
+            const turnId = typeof event.payload.turnId === 'string' ? event.payload.turnId : null
+            const text = toDisplayText(event.payload.text)
+            deps.setStreamingTurnId(turnId)
+            deps.setReasoningByTurn((prev: Record<string, AssistantReasoning[]>) =>
+                stripLivePreviewReasoning(prev, turnId)
+            )
+            deps.setStreamingText(text)
+            return
+        }
+        if (event.type === 'turn-cancelled' || event.type === 'turn-complete') {
+            const turnId = typeof event.payload.turnId === 'string' ? event.payload.turnId : null
+            deps.setReasoningByTurn((prev: Record<string, AssistantReasoning[]>) =>
+                stripLivePreviewReasoning(prev, turnId)
+            )
+            if (!turnId || deps.getStreamingTurnId() === turnId) {
+                deps.setStreamingTurnId(null)
+                deps.setStreamingText('')
+            }
+            return
+        }
 
         if (event.type === 'workflow-status') {
             const kindRaw = typeof event.payload.workflow === 'string' ? event.payload.workflow : ''
@@ -226,16 +344,21 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
             return
         }
         if (event.type === 'error') {
-            const message = typeof event.payload.message === 'string'
-                ? event.payload.message
-                : 'Assistant request failed.'
+            const message = toDisplayTextTrimmed(event.payload.message) || 'Assistant request failed.'
             deps.setErrorMessage(message)
             return
         }
 
         if (event.type === 'assistant-reasoning') {
             if (!isTelemetryEventInScope(event.payload, deps.scopeRef.current)) return
-            const payload = event.payload as unknown as Omit<AssistantReasoning, 'timestamp'>
+            const turnId = toDisplayTextTrimmed(event.payload.turnId)
+            const attemptGroupId = toDisplayTextTrimmed(event.payload.attemptGroupId) || turnId || 'unknown'
+            const payload = {
+                turnId,
+                attemptGroupId,
+                text: toDisplayText(event.payload.text),
+                method: toDisplayTextTrimmed(event.payload.method)
+            } as Omit<AssistantReasoning, 'timestamp'>
             deps.setReasoningByTurn((prev: Record<string, AssistantReasoning[]>) => {
                 const arr = prev[payload.attemptGroupId] || []
                 return {
@@ -248,7 +371,16 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
 
         if (event.type === 'assistant-activity') {
             if (!isTelemetryEventInScope(event.payload, deps.scopeRef.current)) return
-            const payload = event.payload as unknown as Omit<AssistantActivity, 'timestamp'>
+            const turnId = toDisplayTextTrimmed(event.payload.turnId)
+            const attemptGroupId = toDisplayTextTrimmed(event.payload.attemptGroupId) || turnId || 'unknown'
+            const payload = {
+                turnId,
+                attemptGroupId,
+                kind: toDisplayTextTrimmed(event.payload.kind) || 'event',
+                summary: toDisplayText(event.payload.summary),
+                method: toDisplayTextTrimmed(event.payload.method) || 'runtime',
+                payload: (event.payload.payload || {}) as Record<string, unknown>
+            } as Omit<AssistantActivity, 'timestamp'>
             deps.setActivitiesByTurn((prev: Record<string, AssistantActivity[]>) => {
                 const arr = prev[payload.attemptGroupId] || []
                 return {

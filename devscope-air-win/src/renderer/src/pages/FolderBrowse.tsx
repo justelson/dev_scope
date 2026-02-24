@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
 import { useTerminal } from '@/App'
 import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
+import { openAssistantDock } from '@/lib/assistantDockStore'
 import { trackRecentProject } from '@/lib/recentProjects'
 import { useSettings } from '@/lib/settings'
 import { FolderBrowseContent } from './folder-browse/FolderBrowseContent'
@@ -327,6 +328,7 @@ export default function FolderBrowse() {
                 canNavigateUp={canNavigateUp}
                 onViewAsProject={handleViewAsProject}
                 onOpenTerminal={() => openTerminal({ displayName: folderName, id: 'main', category: 'folder' }, decodedPath)}
+                onOpenAssistant={() => openAssistantDock({ contextPath: decodedPath })}
                 onCopyPath={handleCopyPath}
                 copiedPath={copiedPath}
                 onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}

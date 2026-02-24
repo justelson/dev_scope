@@ -101,7 +101,7 @@ const ASSISTANT_PROFILES: AssistantProfile[] = ['safe-dev', 'review', 'yolo-fast
 function clampAssistantSidebarWidth(value: unknown): number {
     const numeric = Number(value)
     if (!Number.isFinite(numeric)) return 320
-    return Math.max(240, Math.min(520, Math.round(numeric)))
+    return Math.max(180, Math.min(520, Math.round(numeric)))
 }
 
 function normalizeAssistantProfile(value: unknown): AssistantProfile {

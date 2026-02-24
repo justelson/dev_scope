@@ -1,5 +1,8 @@
 import { FileText, Search, Terminal, Wrench } from 'lucide-react'
 import type { AssistantReasoning } from './assistant-page-types'
+import { toDisplayText } from './assistant-text-utils'
+
+const LIVE_PREVIEW_REASONING_METHOD = 'assistant-live-preview'
 
 export function concatReasoningChunk(base: string, chunk: string): string {
     if (!chunk) return base
@@ -40,7 +43,7 @@ export function shouldConcatReasoningChunk(prevText: string, nextText: string, g
 
 export function normalizeReasoningMarkdown(text: string): string {
     if (!text) return ''
-    let next = String(text)
+    let next = toDisplayText(text)
         .replace(/\u0000/g, '')
         .replace(/\r/g, '')
 
@@ -71,7 +74,7 @@ export function mergeReasoningEntries(
     return [...entries]
         .sort((a, b) => a.timestamp - b.timestamp)
         .reduce<AssistantReasoning[]>((acc, entry) => {
-            const rawText = String(entry.text || '')
+            const rawText = toDisplayText(entry.text)
             if (!rawText) return acc
 
             const normalizedEntry: AssistantReasoning = {
@@ -79,7 +82,12 @@ export function mergeReasoningEntries(
                 text: rawText
             }
             const last = acc[acc.length - 1]
+            const hasLivePreviewMethod = normalizedEntry.method === LIVE_PREVIEW_REASONING_METHOD
+                || last?.method === LIVE_PREVIEW_REASONING_METHOD
+            const sameMethod = Boolean(last) && last.method === normalizedEntry.method
             const canMerge = Boolean(last)
+                && sameMethod
+                && !hasLivePreviewMethod
                 && shouldConcatReasoningChunk(
                     last.text,
                     normalizedEntry.text,

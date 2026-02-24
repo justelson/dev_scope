@@ -33,7 +33,7 @@ export function createMarkdownComponents(filePath?: string): Components {
             <h6 className="text-sm font-semibold text-sparkle-text-dark mt-4 mb-2">{children}</h6>
         ),
         p: ({ children }) => (
-            <p className="text-sparkle-text-dark leading-relaxed mb-4 last:mb-0">
+            <p className="text-sparkle-text-dark leading-relaxed mb-4 last:mb-0 break-words [overflow-wrap:anywhere]">
                 {renderColorAwareChildren(children, 'p')}
             </p>
         ),
@@ -77,7 +77,7 @@ export function createMarkdownComponents(filePath?: string): Components {
         ol: ({ children }) => (
             <ol className="list-decimal list-outside ml-6 mb-4 space-y-1 text-sparkle-text-dark">{children}</ol>
         ),
-        li: ({ children }) => <li className="leading-relaxed pl-1">{renderColorAwareChildren(children, 'li')}</li>,
+        li: ({ children }) => <li className="leading-relaxed pl-1 break-words [overflow-wrap:anywhere]">{renderColorAwareChildren(children, 'li')}</li>,
         blockquote: ({ children }) => (
             <blockquote className="border-l-4 border-blue-500/50 pl-4 py-1 my-4 bg-blue-500/5 rounded-r-lg text-sparkle-text-secondary italic">
                 {renderColorAwareChildren(children, 'blockquote')}
@@ -116,7 +116,7 @@ export function createMarkdownComponents(filePath?: string): Components {
             </th>
         ),
         td: ({ children }) => (
-            <td className="px-4 py-3 text-sparkle-text-dark border-r border-sparkle-border last:border-r-0">
+            <td className="px-4 py-3 text-sparkle-text-dark border-r border-sparkle-border last:border-r-0 break-words [overflow-wrap:anywhere]">
                 {renderColorAwareChildren(children, 'td')}
             </td>
         ),

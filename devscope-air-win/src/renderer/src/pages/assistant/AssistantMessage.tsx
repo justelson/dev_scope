@@ -9,7 +9,6 @@ import {
     ChevronRight,
     Copy,
     RotateCcw,
-    Shield,
     type LucideIcon
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -17,9 +16,7 @@ import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
 import type { AssistantActivity, AssistantApproval, AssistantReasoning } from './assistant-page-types'
 import {
     ActivityIcon,
-    formatStatTimestamp,
-    mergeReasoningEntries,
-    normalizeReasoningMarkdown
+    formatStatTimestamp
 } from './assistant-message-utils'
 
 type AssistantMessageAttempt = {
@@ -36,6 +33,9 @@ interface AssistantMessageProps {
     attempts: AssistantMessageAttempt[]
     onRegenerate: (turnId: string) => void | Promise<void>
     isBusy: boolean
+    compact?: boolean
+    activeModel?: string
+    activeProfile?: string
     streamingTurnId?: string | null
     streamingText?: string
     reasoning?: AssistantReasoning[]
@@ -47,11 +47,12 @@ export function AssistantMessage({
     attempts,
     onRegenerate,
     isBusy,
+    compact = false,
+    activeModel = 'default',
+    activeProfile = 'safe-dev',
     streamingTurnId = null,
     streamingText = '',
-    reasoning = [],
     activities = [],
-    approvals = []
 }: AssistantMessageProps) {
     const activeIndex = attempts.findIndex((attempt) => attempt.isActiveAttempt)
     const initialIndex = activeIndex >= 0 ? activeIndex : Math.max(0, attempts.length - 1)
@@ -59,6 +60,7 @@ export function AssistantMessage({
     const [viewIndex, setViewIndex] = useState(initialIndex)
     const [copied, setCopied] = useState(false)
     const [isThoughtsOpen, setIsThoughtsOpen] = useState(false)
+    const [isMessageInfoOpen, setIsMessageInfoOpen] = useState(false)
     const [isRegenerating, setIsRegenerating] = useState(false)
     const [isAttemptPinned, setIsAttemptPinned] = useState(false)
     const [elapsedNowMs, setElapsedNowMs] = useState(() => Date.now())
@@ -85,43 +87,19 @@ export function AssistantMessage({
 
     const currentAttempt = attempts[viewIndex]
     if (!currentAttempt) return null
-    const isStreamingCurrentAttempt = Boolean(streamingText)
-        && Boolean(currentAttempt.turnId)
-        && currentAttempt.turnId === streamingTurnId
+    const isStreamingCurrentAttempt = Boolean(streamingText) && (
+        (Boolean(currentAttempt.turnId) && currentAttempt.turnId === streamingTurnId)
+        || (Boolean(currentAttempt.isActiveAttempt) && !currentAttempt.turnId)
+    )
     const displayedText = isStreamingCurrentAttempt ? streamingText : currentAttempt.text
 
-    const turnReasoning = reasoning.filter((entry) => {
-        const sameTurn = Boolean(currentAttempt.turnId) && entry.turnId === currentAttempt.turnId
-        const sameGroup = Boolean(currentAttempt.attemptGroupId) && entry.attemptGroupId === currentAttempt.attemptGroupId
-        return sameTurn || sameGroup
-    })
     const turnActivities = activities.filter((entry) => {
         const sameTurn = Boolean(currentAttempt.turnId) && entry.turnId === currentAttempt.turnId
         const sameGroup = Boolean(currentAttempt.attemptGroupId) && entry.attemptGroupId === currentAttempt.attemptGroupId
         return sameTurn || sameGroup
     })
-    const turnApprovals = approvals.filter((entry) => {
-        const sameTurn = Boolean(currentAttempt.turnId && entry.turnId) && entry.turnId === currentAttempt.turnId
-        const sameGroup = Boolean(currentAttempt.attemptGroupId && entry.attemptGroupId) && entry.attemptGroupId === currentAttempt.attemptGroupId
-        return sameTurn || sameGroup
-    })
-
-    const persistedReasoningText = String(currentAttempt.reasoningText || '').trim()
-    const persistedReasoning: AssistantReasoning[] = persistedReasoningText
-        ? [{
-            turnId: currentAttempt.turnId || 'persisted',
-            attemptGroupId: currentAttempt.attemptGroupId || currentAttempt.turnId || 'persisted',
-            text: persistedReasoningText,
-            method: 'persisted',
-            timestamp: 0
-        }]
-        : []
-
-    const normalizedReasoning = persistedReasoning.length > 0
-        ? persistedReasoning
-        : mergeReasoningEntries(turnReasoning)
-
-    const allThoughts = [...normalizedReasoning, ...turnActivities, ...turnApprovals].sort(
+    const commandActivities = turnActivities.filter((entry) => String(entry.kind || '').toLowerCase() === 'command')
+    const allThoughts = [...commandActivities].sort(
         (a, b) => a.timestamp - b.timestamp
     )
     const firstThoughtAt = allThoughts.length > 0 ? allThoughts[0].timestamp : null
@@ -159,9 +137,9 @@ export function AssistantMessage({
     const hasThoughts = allThoughts.length > 0
     const outputChars = displayedText.trim().length
     const outputTokens = outputChars > 0 ? Math.max(1, Math.round(outputChars / 4)) : 0
-    const thoughtSummaryCount = normalizedReasoning.length
-    const activityCount = turnActivities.length
-    const approvalCount = turnApprovals.length
+    const thoughtSummaryCount = commandActivities.length
+    const activityCount = commandActivities.length
+    const approvalCount = 0
     const canRegenerate = Boolean(currentAttempt.turnId)
     const timestampLabel = formatStatTimestamp(currentAttempt.createdAt)
     const thoughtElapsedLabel = thoughtElapsedMs > 0
@@ -169,13 +147,21 @@ export function AssistantMessage({
         : isLiveAttempt
             ? 'live'
             : '0.0s'
+    const isCurrentThinkingTurn = isBusy && (
+        Boolean(currentAttempt.isActiveAttempt)
+        || (Boolean(currentAttempt.turnId) && currentAttempt.turnId === streamingTurnId)
+    )
     const stats = [
         { id: 'tok', prefix: '', value: String(outputTokens), suffix: 'tok' },
         { id: 'chars', prefix: '', value: String(outputChars), suffix: 'chars' },
-        { id: 'thoughts', prefix: '', value: String(thoughtSummaryCount), suffix: 'thoughts' },
+        { id: 'commands', prefix: '', value: String(thoughtSummaryCount), suffix: 'commands' },
         { id: 'actions', prefix: '', value: String(activityCount), suffix: 'actions' },
         { id: 'approvals', prefix: '', value: String(approvalCount), suffix: 'approvals' },
         { id: 'time', prefix: 'at', value: timestampLabel, suffix: '' },
+        { id: 'elapsed', prefix: 'elapsed', value: thoughtElapsedLabel, suffix: '' }
+    ] as const
+    const compactStats = [
+        { id: 'commands', prefix: '', value: String(thoughtSummaryCount), suffix: 'commands' },
         { id: 'elapsed', prefix: 'elapsed', value: thoughtElapsedLabel, suffix: '' }
     ] as const
 
@@ -188,10 +174,9 @@ export function AssistantMessage({
     }, [isLiveAttempt])
 
     useEffect(() => {
-        if (isBusy && hasThoughts) {
-            setIsThoughtsOpen(true)
-        }
-    }, [isBusy, hasThoughts])
+        if (!isCurrentThinkingTurn || !hasThoughts) return
+        setIsThoughtsOpen(true)
+    }, [isCurrentThinkingTurn, hasThoughts])
 
     useEffect(() => {
         if (!isThoughtsOpen) return
@@ -210,20 +195,21 @@ export function AssistantMessage({
                     <button
                         type="button"
                         onClick={() => setIsThoughtsOpen((prev) => !prev)}
-                        className="flex w-full items-center justify-between px-3 py-2 text-xs text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover"
+                        className={cn(
+                            'flex w-full items-center justify-between px-3 py-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover',
+                            compact ? 'text-[10px]' : 'text-xs'
+                        )}
                     >
                         <div className="flex items-center gap-2.5">
                             <Brain size={13} className="text-indigo-300" />
-                            <span className="font-mono text-[10px] uppercase tracking-wide text-sparkle-text-muted">Thought Process</span>
+                            <span className={cn('font-mono uppercase tracking-wide text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>Commands Ran</span>
                             {isBusy && (
                                 <span className="inline-flex h-2 w-2 rounded-full bg-indigo-300 animate-pulse" />
                             )}
-                            <span className="rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-[10px] text-sparkle-text-muted">
+                            <span className={cn('rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>
                                 {allThoughts.length}
                             </span>
-                            <span className="rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-[10px] text-sparkle-text-muted">
-                                Thought for {thoughtElapsedLabel}
-                            </span>
+                            <span className={cn('rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>for {thoughtElapsedLabel}</span>
                         </div>
                         <ChevronDown
                             size={13}
@@ -237,79 +223,32 @@ export function AssistantMessage({
                             className="max-h-[42vh] space-y-2 overflow-y-auto border-t border-sparkle-border p-3"
                         >
                             {allThoughts.map((item, index) => {
-                                // ... (rest of the content remains the same)
                                 const animationStyle = {
                                     animationDelay: `${Math.min(index, 10) * 45}ms`,
                                     animationFillMode: 'both' as const
                                 }
-                                if ('text' in item) {
-                                    return (
-                                        <div
-                                            key={`reason-${index}`}
-                                            className="rounded-md border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm text-sparkle-text-secondary animate-fadeIn"
-                                            style={animationStyle}
-                                        >
-                                            <MarkdownRenderer
-                                                content={normalizeReasoningMarkdown(item.text)}
-                                                className="bg-transparent p-0 text-sparkle-text-secondary prose-invert max-w-none break-words prose-p:my-1 prose-p:break-words prose-p:whitespace-pre-wrap prose-li:break-words prose-li:whitespace-pre-wrap prose-pre:my-1 prose-pre:whitespace-pre-wrap prose-code:text-xs"
-                                            />
-                                        </div>
-                                    )
-                                }
-
-                                if ('kind' in item) {
-                                    return (
-                                        <div
-                                            key={`activity-${index}`}
-                                            className="flex items-start gap-2 rounded-md border border-sparkle-border bg-sparkle-bg px-3 py-2 text-xs animate-fadeIn"
-                                            style={animationStyle}
-                                        >
-                                            <span className="mt-0.5">
-                                                <ActivityIcon kind={item.kind} />
-                                            </span>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2 text-sparkle-text">
-                                                    <span className="rounded-full border border-sparkle-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-sparkle-text-muted">
-                                                        {item.kind}
-                                                    </span>
-                                                    <span className="font-mono text-[11px] text-sparkle-text-secondary">
-                                                        {item.method}
-                                                    </span>
-                                                </div>
-                                                <p className="mt-1 text-sparkle-text-secondary">{item.summary}</p>
-                                            </div>
-                                        </div>
-                                    )
-                                }
-
-                                const isDeclined = item.decision === 'decline'
-                                const isApproved = item.decision === 'acceptForSession'
-
                                 return (
                                     <div
-                                        key={`approval-${index}`}
+                                        key={`activity-${index}`}
                                         className={cn(
-                                            'flex items-start gap-2 rounded-md border px-3 py-2 text-xs animate-fadeIn',
-                                            isDeclined
-                                                ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-                                                : isApproved
-                                                    ? 'border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]'
-                                                    : 'border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary'
+                                            'flex items-start gap-2 rounded-md border border-sparkle-border bg-sparkle-bg px-3 py-2 animate-fadeIn',
+                                            compact ? 'text-[10px]' : 'text-xs'
                                         )}
                                         style={animationStyle}
                                     >
-                                        <Shield size={14} className="mt-0.5" />
-                                        <div>
-                                            <p className="font-medium">
-                                                {isDeclined ? 'Blocked' : isApproved ? 'Approved' : 'Pending'} - {item.method}
-                                            </p>
-                                            <p className="mt-1 opacity-85">
-                                                {isDeclined
-                                                    ? 'Action was blocked by current approval policy.'
-                                                    : isApproved
-                                                        ? 'Action was approved for this session.'
-                                                        : 'Waiting for approval decision.'}
-                                            </p>
+                                        <span className="mt-0.5">
+                                            <ActivityIcon kind={item.kind} />
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 text-sparkle-text">
+                                                <span className="rounded-full border border-sparkle-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-sparkle-text-muted">
+                                                    {item.kind}
+                                                </span>
+                                                <span className={cn('font-mono text-sparkle-text-secondary', compact ? 'text-[9px]' : 'text-[11px]')}>
+                                                    {item.method}
+                                                </span>
+                                            </div>
+                                            <p className={cn('mt-1 text-sparkle-text-secondary', compact && 'text-[10px]')}>{item.summary}</p>
                                         </div>
                                     </div>
                                 )
@@ -365,7 +304,10 @@ export function AssistantMessage({
                     </div>
                 </div>
 
-                <div className="max-w-[86ch] text-[15px] leading-7 text-sparkle-text relative min-h-[1.75rem]">
+                <div className={cn(
+                    'max-w-[86ch] text-sparkle-text relative min-h-[1.75rem] break-words [overflow-wrap:anywhere] [word-break:break-word]',
+                    compact ? 'text-[12px] leading-5' : 'text-[15px] leading-7'
+                )}>
                     {(!displayedText && isBusy) ? (
                         <div className="space-y-3 py-2 animate-fadeIn">
                             {!hasThoughts ? (
@@ -385,18 +327,72 @@ export function AssistantMessage({
                         <div className={cn("transition-opacity duration-500", !displayedText ? "opacity-0" : "opacity-100")}>
                             <MarkdownRenderer
                                 content={displayedText}
-                                className="bg-transparent p-0 text-sparkle-text prose-invert"
+                                className="bg-transparent p-0 text-sparkle-text prose-invert break-words [overflow-wrap:anywhere] prose-p:break-words prose-p:[overflow-wrap:anywhere] prose-li:break-words prose-li:[overflow-wrap:anywhere] prose-td:break-words prose-td:[overflow-wrap:anywhere]"
                             />
                         </div>
                     )}
                 </div>
 
+                {compact && isMessageInfoOpen && (
+                    <div className="mt-2 rounded-md border border-sparkle-border bg-sparkle-bg/85 p-2.5 text-xs text-sparkle-text-secondary">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                            <span className="font-mono text-[10px] uppercase tracking-wider text-sparkle-text-muted">Message Info</span>
+                            <button
+                                type="button"
+                                onClick={() => setIsMessageInfoOpen(false)}
+                                className="rounded-md border border-sparkle-border bg-sparkle-card px-2 py-0.5 text-[10px] font-medium text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                            >
+                                Minimize
+                            </button>
+                        </div>
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <span className="rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-[10px]">
+                                model {activeModel || 'default'}
+                            </span>
+                            <span className="rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-[10px]">
+                                profile {activeProfile || 'safe-dev'}
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {stats.map((stat) => (
+                                <span
+                                    key={`full-${stat.id}`}
+                                    className="rounded-[4px] border border-sparkle-border bg-sparkle-card px-2 py-0.5 font-mono text-[10px] tabular-nums"
+                                >
+                                    {stat.prefix ? `${stat.prefix} ` : ''}
+                                    {stat.value}
+                                    {stat.suffix ? ` ${stat.suffix}` : ''}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="mt-2 flex w-full items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-xs text-sparkle-text-muted">
-                        {stats.map((stat) => (
+                        {compact && (
+                            <button
+                                type="button"
+                                onClick={() => setIsMessageInfoOpen((prev) => !prev)}
+                                className={cn(
+                                    'rounded-[4px] border bg-sparkle-bg/85 px-2 py-0.5 font-mono tabular-nums transition-colors',
+                                    compact ? 'text-[9px]' : 'text-[10px]',
+                                    isMessageInfoOpen
+                                        ? 'border-[var(--accent-primary)]/45 text-[var(--accent-primary)]'
+                                        : 'border-sparkle-border text-sparkle-text-secondary hover:border-[var(--accent-primary)]/30 hover:text-sparkle-text'
+                                )}
+                                title="Show full message info"
+                            >
+                                model {activeModel || 'default'}
+                            </button>
+                        )}
+                        {(compact ? compactStats : stats).map((stat) => (
                             <span
                                 key={stat.id}
-                                className="rounded-[4px] border border-sparkle-border bg-sparkle-bg/85 px-2 py-0.5 font-mono text-[10px] text-sparkle-text-secondary tabular-nums"
+                                className={cn(
+                                    'rounded-[4px] border border-sparkle-border bg-sparkle-bg/85 px-2 py-0.5 font-mono text-sparkle-text-secondary tabular-nums',
+                                    compact ? 'text-[9px]' : 'text-[10px]'
+                                )}
                             >
                                 {stat.prefix ? `${stat.prefix} ` : ''}
                                 <span className="tabular-nums">{stat.value}</span>

@@ -9,6 +9,8 @@ import { SettingsProvider, useSettings } from './lib/settings'
 import { CommandPaletteProvider } from './lib/commandPalette'
 import CommandPalette from './components/CommandPalette'
 import LinkHoverStatus from './components/ui/LinkHoverStatus'
+import { AssistantDock } from './components/assistant/AssistantDock'
+import { useAssistantDockState } from './lib/assistantDockStore'
 
 const Settings = lazy(() => import('./pages/Settings'))
 const Home = lazy(() => import('./pages/Home'))
@@ -54,6 +56,14 @@ const TerminalContext = createContext<TerminalContextType>(BASE_TERMINAL_CONTEXT
 
 export const useTerminal = () => useContext(TerminalContext)
 
+function isProjectsAreaPath(pathname: string): boolean {
+    return (
+        pathname === '/projects'
+        || pathname.startsWith('/projects/')
+        || pathname.startsWith('/folder-browse/')
+    )
+}
+
 function PageLoader() {
     return <LoadingSpinner message="Loading page..." />
 }
@@ -63,8 +73,11 @@ function MainContent() {
     const location = useLocation()
     const isSettingsRoute = location.pathname.startsWith('/settings')
     const isAssistantRoute = location.pathname === '/assistant'
+    const isProjectsAreaRoute = isProjectsAreaPath(location.pathname)
     const { isCollapsed } = useSidebar()
     const { settings } = useSettings()
+    const dock = useAssistantDockState()
+    const dockOffset = isProjectsAreaRoute && !isAssistantRoute && dock.open ? dock.width : 0
 
     const { targetY, currentY, animationFrame, isAnimating } = useSmoothScroll(mainRef, {
         ease: 0.12,
@@ -89,7 +102,8 @@ function MainContent() {
     return (
         <main
             ref={mainRef}
-            className={`flex-1 min-h-0 focus:outline-none transition-[margin] duration-300 ease-in-out ${isAssistantRoute ? 'p-0 overflow-hidden' : 'p-6 overflow-y-auto overflow-x-hidden'}${isSettingsRoute ? '' : ' theme-adaptive'} ${isCollapsed ? 'ml-16' : 'ml-64'}`}
+            className={`flex-1 min-h-0 focus:outline-none transition-[margin-left,margin-right] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${isAssistantRoute ? 'p-0 overflow-hidden' : 'p-6 overflow-y-auto overflow-x-hidden'}${isSettingsRoute ? '' : ' theme-adaptive'} ${isCollapsed ? 'ml-16' : 'ml-64'}`}
+            style={{ marginRight: `${dockOffset}px` }}
             tabIndex={0}
         >
             <Suspense fallback={<PageLoader />}>
@@ -200,6 +214,7 @@ function AppContent() {
                     <Sidebar />
                     <MainContent />
                 </div>
+                <AssistantDock />
             </SidebarProvider>
             <LinkHoverStatus />
         </div>

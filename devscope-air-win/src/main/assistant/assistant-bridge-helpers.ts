@@ -117,6 +117,103 @@ export function extractCompletedAgentText(params: Record<string, unknown>): stri
     return readString(item.message).trim()
 }
 
+export function extractCompletedAgentPhase(params: Record<string, unknown>): string {
+    const item = readRecord(params.item)
+    if (!item) return ''
+    return readString(item.phase).trim()
+}
+
+export function extractAgentMessageDeltaPhase(params: Record<string, unknown>): string {
+    const item = readRecord(params.item)
+    const phase = readString(item?.phase).trim() || readString(params.phase).trim()
+    return phase
+}
+
+export function extractAgentMessageDeltaItemType(params: Record<string, unknown>): string {
+    const item = readRecord(params.item)
+    return normalizeToken(readString(item?.type).trim())
+}
+
+export function shouldTreatAgentDeltaAsProvisional(params: Record<string, unknown>): boolean {
+    const itemType = extractAgentMessageDeltaItemType(params)
+    if (itemType === 'reasoning') return true
+
+    const phase = extractAgentMessageDeltaPhase(params)
+    if (!phase) return true
+
+    return !isFinalAnswerPhase(phase)
+}
+
+function longestSuffixPrefixOverlap(base: string, next: string): number {
+    const left = String(base || '')
+    const right = String(next || '')
+    if (!left || !right) return 0
+
+    const maxProbe = Math.min(left.length, right.length, 320)
+    for (let size = maxProbe; size >= 1; size -= 1) {
+        if (left.slice(-size) === right.slice(0, size)) {
+            return size
+        }
+    }
+    return 0
+}
+
+function appendChunkText(base: string, chunk: string): string {
+    const left = String(base || '')
+    const right = String(chunk || '')
+    if (!left) return right
+    if (!right) return left
+
+    const needsSpace = /[A-Za-z0-9]$/.test(left) && /^[A-Za-z0-9]/.test(right)
+    return needsSpace ? `${left} ${right}` : `${left}${right}`
+}
+
+export function mergeAgentMessageDraft(
+    current: string,
+    incoming: string,
+    options?: { preferReplaceForDisjointLong?: boolean }
+): string {
+    const existing = String(current || '')
+    const next = String(incoming || '')
+    if (!next) return existing
+    if (!existing) return next
+    if (next === existing) return existing
+
+    if (next.startsWith(existing) || next.includes(existing)) {
+        return next
+    }
+    if (existing.startsWith(next)) {
+        const looksLikeSnapshotCorrection = next.length >= Math.max(24, Math.floor(existing.length * 0.6))
+        if (looksLikeSnapshotCorrection) {
+            return next
+        }
+    }
+
+    const overlap = longestSuffixPrefixOverlap(existing, next)
+    if (overlap > 0) {
+        return `${existing}${next.slice(overlap)}`
+    }
+
+    const tokenLike = next.length <= 22 || !/\s/.test(next)
+    if (tokenLike) {
+        return appendChunkText(existing, next)
+    }
+
+    if (options?.preferReplaceForDisjointLong) {
+        return next
+    }
+
+    return appendChunkText(existing, next)
+}
+
+export function isFinalAnswerPhase(phase: string): boolean {
+    const normalized = normalizeToken(String(phase || ''))
+    return normalized === 'final'
+        || normalized === 'finalanswer'
+        || normalized === 'answer'
+        || normalized === 'finalresponse'
+}
+
 function normalizeModelId(value: string): string {
     return value.replace(/^models\//i, '').trim().toLowerCase()
 }

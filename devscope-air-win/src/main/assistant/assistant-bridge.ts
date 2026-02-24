@@ -97,6 +97,8 @@ type TurnTerminalReason = 'completed' | 'failed' | 'interrupted' | 'cancelled'
 type TurnBuffer = {
     draft: string
     pendingFinal: string | null
+    pendingFinalPhase: string | null
+    draftKind: 'provisional' | 'final' | null
     source: TurnEventSource | null
 }
 type TurnContext = {

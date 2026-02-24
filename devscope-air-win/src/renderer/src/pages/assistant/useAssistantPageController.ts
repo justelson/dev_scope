@@ -235,25 +235,37 @@ export function useAssistantPageController() {
             .find((entry) => entry.turnId)?.turnId || null
         const pendingTurnId = status.activeTurnId || streamingTurnId || latestThoughtTurnId
 
-        // If we are sending but don't have a pending turn ID yet, or if we have a pending turn ID
-        // but no streaming text or thoughts yet, we should show a placeholder assistant message.
-        if (isSending || (pendingTurnId && !streamingText && !allReasoning.some(r => r.turnId === pendingTurnId) && !allActivities.some(a => a.turnId === pendingTurnId))) {
-            const hasAssistantForPendingTurn = pendingTurnId && history.some((message) => message.role === 'assistant' && message.turnId === pendingTurnId)
-            if (!hasAssistantForPendingTurn) {
-                const pendingId = pendingTurnId ? `streaming-${pendingTurnId}` : 'pending-assistant'
-                return [...groupedHistory, {
-                    id: pendingId,
+        const hasAssistantForPendingTurn = Boolean(pendingTurnId)
+            && history.some((message) => message.role === 'assistant' && message.turnId === pendingTurnId)
+        const hasPendingTelemetry = Boolean(pendingTurnId) && (
+            allReasoning.some((entry) => entry.turnId === pendingTurnId)
+            || allActivities.some((entry) => entry.turnId === pendingTurnId)
+            || allApprovals.some((entry) => entry.turnId === pendingTurnId)
+        )
+        const shouldInjectPendingAssistant = (
+            Boolean(pendingTurnId)
+            && !hasAssistantForPendingTurn
+            && (isSending || isBusy || Boolean(streamingText) || hasPendingTelemetry)
+        ) || (
+            !pendingTurnId
+            && (isSending || isBusy || Boolean(streamingText))
+        )
+
+        if (shouldInjectPendingAssistant) {
+            const syntheticTurnId = pendingTurnId || streamingTurnId || null
+            const pendingId = syntheticTurnId ? `streaming-${syntheticTurnId}` : 'pending-assistant'
+            return [...groupedHistory, {
+                id: pendingId,
+                role: 'assistant' as const,
+                messages: [{
+                    id: `${pendingId}-msg`,
                     role: 'assistant' as const,
-                    messages: [{
-                        id: `${pendingId}-msg`,
-                        role: 'assistant' as const,
-                        text: streamingText || '',
-                        createdAt: Date.now(),
-                        turnId: pendingTurnId || undefined,
-                        isActiveAttempt: true
-                    }]
+                    text: streamingText || '',
+                    createdAt: Date.now(),
+                    turnId: syntheticTurnId || undefined,
+                    isActiveAttempt: true
                 }]
-            }
+            }]
         }
 
         if (!pendingTurnId) return groupedHistory

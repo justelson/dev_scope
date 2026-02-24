@@ -46,6 +46,11 @@ type ActionContext = {
 }
 
 export function createAssistantPageActions(ctx: ActionContext) {
+    const clampSidebarWidth = (value: number): number => {
+        if (!Number.isFinite(value)) return 320
+        return Math.max(180, Math.min(520, Math.round(value)))
+    }
+
     const persistActiveSessionProjectPath = async (nextPath: string): Promise<boolean> => {
         const sessionId = String(ctx.activeSessionId || '').trim()
         if (!sessionId) return true
@@ -253,6 +258,12 @@ export function createAssistantPageActions(ctx: ActionContext) {
         ctx.updateSettings({ assistantSidebarCollapsed: collapsed })
     }
 
+    const handleAssistantSidebarWidthChange = (nextWidth: number) => {
+        const normalizedWidth = clampSidebarWidth(nextWidth)
+        if (normalizedWidth === Number(ctx.settings.assistantSidebarWidth || 320)) return
+        ctx.updateSettings({ assistantSidebarWidth: normalizedWidth })
+    }
+
     const handleToggleEventConsole = () => {
         if (!ctx.settings.assistantAllowEventConsole) {
             ctx.setShowEventConsole(false)
@@ -452,6 +463,7 @@ export function createAssistantPageActions(ctx: ActionContext) {
         handleEnableSafeMode,
         handleSelectChatProjectPath,
         handleSessionsSidebarCollapsed,
+        handleAssistantSidebarWidthChange,
         handleToggleEventConsole,
         handleExportConversation,
         handleExportEvents,

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUp, Check, Code, Copy, ExternalLink, FolderOpen, RefreshCw, Terminal } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Bot, Check, Code, Copy, ExternalLink, FolderOpen, RefreshCw, Terminal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface FolderBrowseHeaderProps {
@@ -12,6 +12,7 @@ interface FolderBrowseHeaderProps {
     canNavigateUp: boolean
     onViewAsProject: () => void
     onOpenTerminal: () => void
+    onOpenAssistant: () => void
     onCopyPath: () => void
     copiedPath: boolean
     onOpenInExplorer: () => void
@@ -29,6 +30,7 @@ export function FolderBrowseHeader({
     canNavigateUp,
     onViewAsProject,
     onOpenTerminal,
+    onOpenAssistant,
     onCopyPath,
     copiedPath,
     onOpenInExplorer,
@@ -115,6 +117,13 @@ export function FolderBrowseHeader({
                         <Terminal size={17} />
                         <span>Terminal</span>
                     </button>
+                    <button
+                        onClick={onOpenAssistant}
+                        className="h-10 w-10 inline-flex items-center justify-center text-[#E2A257] bg-[#E2A257]/12 hover:bg-[#E2A257]/22 border border-[#E2A257]/35 rounded-xl transition-all"
+                        title="Open assistant in this folder context"
+                    >
+                        <Bot size={17} />
+                    </button>
                 </div>
             </div>
 
@@ -127,15 +136,15 @@ export function FolderBrowseHeader({
                 <button
                     onClick={onCopyPath}
                     className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-transparent",
                         copiedPath
-                            ? "text-green-400 bg-green-500/10"
-                            : "text-white/30 hover:text-white hover:bg-white/10"
+                            ? "text-green-400 bg-green-500/10 border-green-500/20"
+                            : "text-white/40 hover:text-white hover:bg-white/10 hover:border-white/5"
                     )}
                     title={copiedPath ? "Copied path" : "Copy path"}
                 >
                     {copiedPath ? <Check size={14} /> : <Copy size={14} />}
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="leading-none">
                         {copiedPath ? 'Copied!' : 'Copy Path'}
                     </span>
                 </button>

@@ -3,11 +3,17 @@ import log from 'electron-log'
 import readline from 'readline'
 import type { Readable, Writable } from 'stream'
 import {
+    extractAgentMessageDeltaPhase,
+    extractAgentMessageDeltaItemType,
+    extractCompletedAgentPhase,
     extractCompletedAgentText,
     extractLegacyTurnId,
     extractTurnError,
     extractTurnIdFromParams,
     isServerRequestMessage,
+    isFinalAnswerPhase,
+    mergeAgentMessageDraft,
+    shouldTreatAgentDeltaAsProvisional,
     now,
     readRecord,
     readString
@@ -17,7 +23,7 @@ const REQUEST_TIMEOUT_MS = 120000
 const CODEX_BIN = process.env.CODEX_BIN || 'codex'
 
 type BridgeRpcContext = any
-type BridgeProcess = ChildProcessByStdio<Writable, Readable, null>
+type BridgeProcess = ChildProcessByStdio<Writable, Readable, Readable>
 
 type JsonRpcNotification = {
     method?: string
@@ -47,10 +53,17 @@ export async function bridgeStartProcess(bridge: BridgeRpcContext): Promise<void
     }
 
     const proc = spawn(CODEX_BIN, ['app-server'], {
-        stdio: ['pipe', 'pipe', 'inherit'],
-        shell: process.platform === 'win32'
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: process.platform === 'win32',
+        windowsHide: true
     }) as BridgeProcess
     bridge.proc = proc
+
+    proc.stderr?.on('data', (chunk) => {
+        const message = String(chunk || '').trim()
+        if (!message) return
+        log.warn('[AssistantBridge] codex stderr:', message)
+    })
 
     proc.on('error', (error) => {
         const shouldAttemptReconnect = bridge.status.connected
@@ -297,25 +310,90 @@ export function bridgeHandleNotification(
 
     if (method === 'item/agentMessage/delta') {
         const turnId = extractTurnIdFromParams(params) || bridge.activeTurnId
+        const snapshotText = readString(params.text) || readString(params.message)
         const delta = readString(params.delta)
             || readString(params.textDelta)
             || readString(params.outputTextDelta)
-        if (!turnId || !delta) return
+        if (!turnId || (!delta && !snapshotText)) return
         const buffer = bridge.claimTurnBuffer(turnId, 'modern')
         if (!buffer) return
-        buffer.draft += delta
-        bridge.emitEvent('assistant-delta', { turnId, delta, text: buffer.draft })
+        const attemptGroupId = bridge.turnContexts.get(turnId)?.attemptGroupId
+            || bridge.turnAttemptGroupByTurnId.get(turnId)
+            || turnId
+        const phase = extractAgentMessageDeltaPhase(params)
+        const itemType = extractAgentMessageDeltaItemType(params)
+        const isProvisional = shouldTreatAgentDeltaAsProvisional(params)
+        const updateText = snapshotText || delta
+
+        if (isProvisional && updateText) {
+            // Provisional streams can be either cumulative snapshots or token deltas.
+            // Merge intelligently: replace on disjoint "new status" updates, append on continuations.
+            buffer.draft = mergeAgentMessageDraft(buffer.draft, updateText, {
+                preferReplaceForDisjointLong: true
+            })
+            buffer.draftKind = 'provisional'
+            bridge.emitEvent('assistant-delta', {
+                turnId,
+                attemptGroupId,
+                delta: updateText,
+                text: buffer.draft,
+                streamKind: 'provisional',
+                draftKind: 'provisional'
+            })
+            return
+        }
+
+        if (isFinalAnswerPhase(phase) && buffer.draftKind === 'provisional') {
+            // Clear provisional preview text when final-answer streaming starts.
+            buffer.draft = ''
+        }
+        if (itemType && itemType !== 'agentmessage' && itemType !== 'assistantmessage' && itemType !== 'message') {
+            buffer.draftKind = 'provisional'
+        } else {
+            buffer.draftKind = 'final'
+        }
+
+        if (snapshotText) {
+            // Some providers send the full provisional text on each update.
+            // Replace instead of append so status updates do not stack.
+            buffer.draft = snapshotText
+            bridge.emitEvent('assistant-delta', {
+                turnId,
+                attemptGroupId,
+                delta: delta || snapshotText,
+                text: buffer.draft,
+                streamKind: buffer.draftKind === 'provisional' ? 'provisional' : 'final',
+                draftKind: buffer.draftKind || undefined
+            })
+            return
+        }
+
+        buffer.draft = mergeAgentMessageDraft(buffer.draft, delta)
+        bridge.emitEvent('assistant-delta', {
+            turnId,
+            attemptGroupId,
+            delta,
+            text: buffer.draft,
+            streamKind: buffer.draftKind === 'provisional' ? 'provisional' : 'final',
+            draftKind: buffer.draftKind || undefined
+        })
         return
     }
 
     if (method === 'item/completed') {
         const text = extractCompletedAgentText(params)
         if (!text) return
+        const phase = extractCompletedAgentPhase(params)
         const turnId = extractTurnIdFromParams(params) || bridge.activeTurnId
         if (!turnId) return
         const buffer = bridge.claimTurnBuffer(turnId, 'modern')
         if (!buffer) return
-        buffer.pendingFinal = text
+        if (isFinalAnswerPhase(phase)) {
+            buffer.pendingFinalPhase = text
+            buffer.draftKind = 'final'
+        } else {
+            buffer.pendingFinal = text
+        }
         return
     }
 
@@ -381,12 +459,8 @@ export function bridgeHandleLegacyNotification(
     if (!turnId) return
 
     if (eventType === 'agent_message_delta' || eventType === 'agent_message_content_delta') {
-        const delta = readString(payload.delta)
-        if (!delta) return
-        const buffer = bridge.claimTurnBuffer(turnId, 'legacy')
-        if (!buffer) return
-        buffer.draft += delta
-        bridge.emitEvent('assistant-delta', { turnId, delta, text: buffer.draft })
+        // Ignore legacy token deltas for assistant rendering.
+        // Some models emit provisional token streams here that should not be treated as final output.
         return
     }
 
@@ -395,7 +469,21 @@ export function bridgeHandleLegacyNotification(
         if (!text) return
         const buffer = bridge.claimTurnBuffer(turnId, 'legacy')
         if (!buffer) return
+        const attemptGroupId = bridge.turnContexts.get(turnId)?.attemptGroupId
+            || bridge.turnAttemptGroupByTurnId.get(turnId)
+            || turnId
         buffer.pendingFinal = text
+        // Legacy agent_message events are provisional updates; keep the latest visible.
+        buffer.draft = text
+        buffer.draftKind = 'provisional'
+        bridge.emitEvent('assistant-delta', {
+            turnId,
+            attemptGroupId,
+            delta: text,
+            text: buffer.draft,
+            streamKind: 'provisional',
+            draftKind: 'provisional'
+        })
         return
     }
 
@@ -475,7 +563,7 @@ export function bridgeEnsureTurnBuffer(
 ): any {
     const existing = bridge.turnBuffers.get(turnId)
     if (existing) return existing
-    const created = { draft: '', pendingFinal: null, source: null }
+    const created = { draft: '', pendingFinal: null, pendingFinalPhase: null, draftKind: null, source: null }
     bridge.turnBuffers.set(turnId, created)
     return created
 }

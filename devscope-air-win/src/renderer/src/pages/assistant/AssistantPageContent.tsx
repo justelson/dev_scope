@@ -15,14 +15,19 @@ import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import type { AssistantPageController } from './useAssistantPageController'
 import type { AssistantHistoryMessage } from './assistant-page-types'
+import type { ComposerContextFile } from './assistant-composer-types'
+import { toDisplayText } from './assistant-text-utils'
 
-type Props = { controller: AssistantPageController }
+type Props = {
+    controller: AssistantPageController
+    layoutMode?: 'page' | 'dock'
+}
 
 function getUserMessageDisplayText(message: AssistantHistoryMessage): string {
-    const sourcePrompt = String(message.sourcePrompt || '').trim()
+    const sourcePrompt = toDisplayText(message.sourcePrompt).trim()
     if (sourcePrompt) return sourcePrompt
 
-    const rawText = String(message.text || '')
+    const rawText = toDisplayText(message.text)
     if (!rawText) return ''
 
     const withoutLegacyAttachmentBlock = rawText
@@ -34,7 +39,7 @@ function getUserMessageDisplayText(message: AssistantHistoryMessage): string {
     return rawText
 }
 
-export function AssistantPageContent({ controller }: Props) {
+export function AssistantPageContent({ controller, layoutMode = 'page' }: Props) {
     const {
         settings,
         status,
@@ -77,12 +82,13 @@ export function AssistantPageContent({ controller }: Props) {
         handleDisconnect,
         handleSelectModel,
         handleRefreshModels,
-        handleSend,
+        handleSend: baseHandleSend,
         handleRegenerate,
         handleCancelTurn,
         handleEnableYoloMode,
         handleSelectChatProjectPath,
         handleSessionsSidebarCollapsed,
+        handleAssistantSidebarWidthChange,
         handleToggleEventConsole,
         handleExportConversation,
         handleClearHistory,
@@ -105,9 +111,31 @@ export function AssistantPageContent({ controller }: Props) {
         availableProjectRoots.forEach((r) => paths.add(r))
         return Array.from(paths).sort((a, b) => a.localeCompare(b))
     }, [activeSessions, availableProjectRoots])
+    const recentProjectPathPreview = useMemo(
+        () => recentProjectPaths.slice(0, 3),
+        [recentProjectPaths]
+    )
+    const hasMoreRecentProjectPaths = recentProjectPaths.length > recentProjectPathPreview.length
+    const sessionSidebarItems = useMemo(() => activeSessions.map((session) => ({
+        id: session.id,
+        title: session.title,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        projectPath: session.projectPath
+    })), [activeSessions])
 
     const [showProjectDropdown, setShowProjectDropdown] = useState(false)
+    const [showProjectSelectorModal, setShowProjectSelectorModal] = useState(false)
     const projectDropdownRef = useRef<HTMLDivElement>(null)
+    const [isSidebarHeaderMinimized, setIsSidebarHeaderMinimized] = useState(layoutMode === 'dock')
+    const pendingSendResolverRef = useRef<((result: boolean) => void) | null>(null)
+    const latestBaseSendRef = useRef(baseHandleSend)
+    const [crossDirSendState, setCrossDirSendState] = useState<{
+        prompt: string
+        contextFiles: ComposerContextFile[]
+        sessionPath: string
+        uiPath: string
+    } | null>(null)
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -123,8 +151,117 @@ export function AssistantPageContent({ controller }: Props) {
         }
     }, [showProjectDropdown])
 
+    const isDockMode = layoutMode === 'dock'
+    const showCompactSidebarHeader = isDockMode && isSidebarHeaderMinimized
     const canUseEventConsole = settings.assistantAllowEventConsole
     const hasChatMessages = displayHistoryGroups.length > 0
+    const sessionSidebarWidth = Number(settings.assistantSidebarWidth) || 320
+    const compactSidebarWidth = Math.max(180, Math.min(340, sessionSidebarWidth - 24))
+    const eventConsoleWidth = isDockMode ? 340 : 430
+    const isDockSessionsExpanded = isDockMode && !settings.assistantSidebarCollapsed
+    const isDockEventConsoleExpanded = isDockMode && canUseEventConsole && showEventConsole
+    const showDockOverlayBackdrop = isDockSessionsExpanded || isDockEventConsoleExpanded
+
+    const normalizeComparablePath = (value: string): string => (
+        String(value || '')
+            .trim()
+            .replace(/\//g, '\\')
+            .replace(/[\\]+$/, '')
+            .toLowerCase()
+    )
+
+    const resolvePathLabel = (path: string): string => {
+        const normalized = String(path || '').trim()
+        if (!normalized) return 'not set'
+        const parts = normalized.split(/[\\/]/).filter(Boolean)
+        return parts[parts.length - 1] || normalized
+    }
+
+    const clearCrossDirSendState = (result: boolean) => {
+        const resolver = pendingSendResolverRef.current
+        pendingSendResolverRef.current = null
+        setCrossDirSendState(null)
+        if (resolver) resolver(result)
+    }
+
+    useEffect(() => {
+        latestBaseSendRef.current = baseHandleSend
+    }, [baseHandleSend])
+
+    useEffect(() => {
+        if (isDockMode) {
+            setIsSidebarHeaderMinimized(true)
+            return
+        }
+        setIsSidebarHeaderMinimized(false)
+    }, [isDockMode])
+
+    const sendWithLatestControllerState = async (prompt: string, contextFiles: ComposerContextFile[]) => {
+        await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => resolve())
+        })
+        return await latestBaseSendRef.current(prompt, contextFiles)
+    }
+
+    const handleSend = async (prompt: string, contextFiles: ComposerContextFile[]): Promise<boolean> => {
+        const activeSession = activeSessions.find((session) => session.id === activeSessionId) || null
+        const sessionPath = String(activeSession?.projectPath || '').trim()
+        const uiPath = String(effectiveProjectPath || '').trim()
+        const hasCrossDirMismatch = Boolean(activeSessionId && sessionPath && uiPath)
+            && normalizeComparablePath(sessionPath) !== normalizeComparablePath(uiPath)
+
+        if (hasCrossDirMismatch) {
+            if (pendingSendResolverRef.current) {
+                pendingSendResolverRef.current(false)
+                pendingSendResolverRef.current = null
+            }
+            return await new Promise<boolean>((resolve) => {
+                pendingSendResolverRef.current = resolve
+                setCrossDirSendState({
+                    prompt,
+                    contextFiles,
+                    sessionPath,
+                    uiPath
+                })
+            })
+        }
+
+        return await baseHandleSend(prompt, contextFiles)
+    }
+
+    const runCrossDirSendAction = async (
+        action: 'new-session-ui-dir' | 'send-session-dir' | 'switch-session-ui-dir'
+    ) => {
+        const pending = crossDirSendState
+        if (!pending) {
+            clearCrossDirSendState(false)
+            return
+        }
+
+        try {
+            if (action === 'new-session-ui-dir') {
+                await handleCreateSession(pending.uiPath)
+            } else if (action === 'send-session-dir') {
+                await handleApplyChatProjectPath(pending.sessionPath)
+            } else {
+                await handleApplyChatProjectPath(pending.uiPath)
+            }
+
+            const sent = await sendWithLatestControllerState(pending.prompt, pending.contextFiles)
+            clearCrossDirSendState(sent)
+        } catch {
+            clearCrossDirSendState(false)
+        }
+    }
+
+    useEffect(() => {
+        return () => {
+            if (pendingSendResolverRef.current) {
+                pendingSendResolverRef.current(false)
+                pendingSendResolverRef.current = null
+            }
+        }
+    }, [])
 
     return (
         <div className="h-full flex flex-col animate-fadeIn">
@@ -173,106 +310,222 @@ export function AssistantPageContent({ controller }: Props) {
                 </div>
             ) : (
                 <div className="flex-1 min-h-0 overflow-hidden">
-                    <div className="h-full flex">
-                        <AssistantSessionsSidebar
-                            collapsed={settings.assistantSidebarCollapsed}
-                            width={Number(settings.assistantSidebarWidth) || 320}
-                            sessions={activeSessions.map((session) => ({
-                                id: session.id,
-                                title: session.title,
-                                createdAt: session.createdAt,
-                                updatedAt: session.updatedAt,
-                                projectPath: session.projectPath
-                            }))}
-                            activeSessionId={activeSessionId}
-                            onSetCollapsed={handleSessionsSidebarCollapsed}
-                            onCreateSession={handleCreateSession}
-                            onSelectSession={handleSelectSession}
-                            onRenameSession={handleRenameSession}
-                            onArchiveSession={handleArchiveSession}
-                            onDeleteSession={handleDeleteSession}
-                        />
-                        <div className="flex-1 flex min-w-0">
-                            <section className={cn('flex min-w-0 flex-1 flex-col transition-all duration-300', canUseEventConsole && showEventConsole && 'border-r border-sparkle-border')}>
+                    <div className={cn('h-full flex', isDockMode && 'relative')}>
+                        {!isDockMode && (
+                            <AssistantSessionsSidebar
+                                collapsed={settings.assistantSidebarCollapsed}
+                                width={sessionSidebarWidth}
+                                compact={false}
+                                sessions={sessionSidebarItems}
+                                activeSessionId={activeSessionId}
+                                onSetCollapsed={handleSessionsSidebarCollapsed}
+                                onWidthChange={handleAssistantSidebarWidthChange}
+                                onCreateSession={handleCreateSession}
+                                onSelectSession={handleSelectSession}
+                                onRenameSession={handleRenameSession}
+                                onArchiveSession={handleArchiveSession}
+                                onDeleteSession={handleDeleteSession}
+                            />
+                        )}
+
+                        {isDockMode && (
+                            <>
+                                <button
+                                    type="button"
+                                    aria-label="Dismiss assistant overlays"
+                                    onClick={() => {
+                                        if (isDockSessionsExpanded) {
+                                            handleSessionsSidebarCollapsed(true)
+                                        }
+                                        if (isDockEventConsoleExpanded) {
+                                            handleToggleEventConsole()
+                                        }
+                                    }}
+                                    className={cn(
+                                        'absolute inset-0 z-20 bg-black/40 backdrop-blur-[1px] transition-opacity duration-300',
+                                        showDockOverlayBackdrop
+                                            ? 'opacity-100 pointer-events-auto'
+                                            : 'opacity-0 pointer-events-none'
+                                    )}
+                                />
+                                <div className={cn(
+                                    'relative z-10 shrink-0 overflow-hidden transition-[width,opacity,transform] duration-300 ease-out',
+                                    settings.assistantSidebarCollapsed
+                                        ? 'w-14 opacity-100 translate-x-0'
+                                        : 'w-0 opacity-0 -translate-x-2 pointer-events-none'
+                                )}>
+                                    <AssistantSessionsSidebar
+                                        collapsed
+                                        width={compactSidebarWidth}
+                                        compact
+                                        sessions={sessionSidebarItems}
+                                        activeSessionId={activeSessionId}
+                                        onSetCollapsed={handleSessionsSidebarCollapsed}
+                                        onWidthChange={handleAssistantSidebarWidthChange}
+                                        onCreateSession={handleCreateSession}
+                                        onSelectSession={handleSelectSession}
+                                        onRenameSession={handleRenameSession}
+                                        onArchiveSession={handleArchiveSession}
+                                        onDeleteSession={handleDeleteSession}
+                                    />
+                                </div>
+                                <div className={cn(
+                                    'absolute inset-y-0 left-0 z-30 transition-[opacity,transform] duration-300 ease-out',
+                                    settings.assistantSidebarCollapsed
+                                        ? 'pointer-events-none -translate-x-4 opacity-0'
+                                        : 'pointer-events-auto translate-x-0 opacity-100'
+                                )}>
+                                    <AssistantSessionsSidebar
+                                        collapsed={false}
+                                        width={compactSidebarWidth}
+                                        compact
+                                        sessions={sessionSidebarItems}
+                                        activeSessionId={activeSessionId}
+                                        onSetCollapsed={handleSessionsSidebarCollapsed}
+                                        onWidthChange={handleAssistantSidebarWidthChange}
+                                        onCreateSession={handleCreateSession}
+                                        onSelectSession={handleSelectSession}
+                                        onRenameSession={handleRenameSession}
+                                        onArchiveSession={handleArchiveSession}
+                                        onDeleteSession={handleDeleteSession}
+                                    />
+                                </div>
+                            </>
+                        )}
+
+                        <div className={cn('flex-1 flex min-w-0', isDockMode && 'relative')}>
+                            <section className={cn(
+                                'flex min-w-0 flex-1 flex-col transition-all duration-300',
+                                !isDockMode && canUseEventConsole && showEventConsole && 'border-r border-sparkle-border'
+                            )}>
                                 {!isEmptyChatState && (
-                                    <div className="flex items-center justify-between gap-3 border-b border-sparkle-border bg-sparkle-card px-4 py-2.5 animate-slideInFromTop">
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <MessageSquare size={15} className="text-sparkle-text-secondary" />
-                                                <h2 className="text-sm font-semibold text-sparkle-text">Conversation</h2>
+                                    <div className={cn(
+                                        'flex items-center justify-between border-b border-sparkle-border bg-sparkle-card animate-slideInFromTop',
+                                        isDockMode
+                                            ? (showCompactSidebarHeader ? 'gap-1.5 px-2.5 py-1.5' : 'gap-2 px-3 py-2')
+                                            : 'gap-3 px-4 py-2.5'
+                                    )}>
+                                        <div className="min-w-0 flex-1">
+                                            <div className={cn('flex items-center', isDockMode ? 'gap-1.5' : 'gap-2')}>
+                                                <MessageSquare size={isDockMode ? 14 : 15} className="text-sparkle-text-secondary" />
+                                                <h2 className={cn('font-semibold text-sparkle-text', isDockMode ? 'text-xs' : 'text-sm')}>Conversation</h2>
+                                                {showCompactSidebarHeader && (
+                                                    <>
+                                                        <span className="rounded-full border border-sparkle-border bg-sparkle-bg px-1.5 py-0.5 text-[9px] text-sparkle-text-secondary">
+                                                            Thread <strong className="inline-block max-w-[16ch] truncate align-bottom">{activeSessionTitle}</strong>
+                                                        </span>
+                                                        {isBusy && (
+                                                            <span className="inline-flex h-2 w-2 rounded-full bg-amber-300 animate-pulse" />
+                                                        )}
+                                                    </>
+                                                )}
                                             </div>
-                                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                                <span className="rounded-full border border-sparkle-border bg-sparkle-bg px-2 py-0.5 text-[10px] text-sparkle-text-secondary">
-                                                    Thread <strong className="inline-block max-w-[24ch] truncate align-bottom">{activeSessionTitle}</strong>
-                                                </span>
-                                                <span className="rounded-full border border-sparkle-border bg-sparkle-bg px-2 py-0.5 text-[10px] text-sparkle-text-secondary">
-                                                    Turn <strong>{isBusy ? 'running' : 'idle'}</strong>
-                                                </span>
-                                                <span
-                                                    className="max-w-[56ch] rounded-full border border-sparkle-border bg-sparkle-bg px-2 py-0.5 text-[10px] text-sparkle-text-secondary"
-                                                    title={effectiveProjectPath || 'No chat path selected'}
-                                                >
-                                                    Path <strong className="inline-block max-w-[42ch] truncate align-bottom">{effectiveProjectPath || 'not set'}</strong>
-                                                </span>
-                                            </div>
+                                            {!showCompactSidebarHeader && (
+                                                <div className={cn('mt-1 flex flex-wrap items-center', isDockMode ? 'gap-1' : 'gap-1.5')}>
+                                                    <span className={cn(
+                                                        'rounded-full border border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary',
+                                                        isDockMode ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]'
+                                                    )}>
+                                                        Thread <strong className="inline-block max-w-[24ch] truncate align-bottom">{activeSessionTitle}</strong>
+                                                    </span>
+                                                    {!isDockMode && (
+                                                        <span className="rounded-full border border-sparkle-border bg-sparkle-bg px-2 py-0.5 text-[10px] text-sparkle-text-secondary">
+                                                            Turn <strong>{isBusy ? 'running' : 'idle'}</strong>
+                                                        </span>
+                                                    )}
+                                                    <span
+                                                        className={cn(
+                                                            'rounded-full border border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary',
+                                                            isDockMode ? 'max-w-[34ch] px-1.5 py-0.5 text-[9px]' : 'max-w-[56ch] px-2 py-0.5 text-[10px]'
+                                                        )}
+                                                        title={effectiveProjectPath || 'No chat path selected'}
+                                                    >
+                                                        Path <strong className={cn('inline-block truncate align-bottom', isDockMode ? 'max-w-[24ch]' : 'max-w-[42ch]')}>{effectiveProjectPath || 'not set'}</strong>
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="relative flex items-center gap-2" ref={headerMenuRef}>
-                                            {!hasChatMessages && (
+                                        <div className={cn('relative flex shrink-0 items-center', isDockMode ? 'gap-1' : 'gap-2')} ref={headerMenuRef}>
+                                            {isDockMode && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsSidebarHeaderMinimized((prev) => !prev)}
+                                                    className={cn(
+                                                        'rounded-lg border border-sparkle-border text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text',
+                                                        showCompactSidebarHeader ? 'h-6 w-6 p-0 inline-flex items-center justify-center' : 'p-1'
+                                                    )}
+                                                    title={isSidebarHeaderMinimized ? 'Expand conversation header' : 'Minimize conversation header'}
+                                                >
+                                                    <ChevronDown
+                                                        size={12}
+                                                        className={cn('transition-transform', !isSidebarHeaderMinimized && 'rotate-180')}
+                                                    />
+                                                </button>
+                                            )}
+                                            {!showCompactSidebarHeader && !hasChatMessages && (
                                                 <button
                                                     type="button"
                                                     onClick={() => void handleSelectChatProjectPath()}
-                                                    className="p-1.5 rounded-lg border border-sparkle-border text-sparkle-text-secondary hover:bg-sparkle-card-hover transition-colors"
+                                                    className={cn(
+                                                        'rounded-lg border border-sparkle-border text-sparkle-text-secondary hover:bg-sparkle-card-hover transition-colors',
+                                                        isDockMode ? 'p-1' : 'p-1.5'
+                                                    )}
                                                     title="Choose chat path"
                                                 >
-                                                    <FolderOpen size={14} />
+                                                    <FolderOpen size={isDockMode ? 13 : 14} />
                                                 </button>
                                             )}
-                                            <div className="inline-flex rounded-md border border-sparkle-border bg-sparkle-bg p-0.5">
-                                                <button
-                                                    onClick={() => {
-                                                        if (status.approvalMode === 'safe') return
-                                                        void handleEnableSafeMode()
-                                                    }}
-                                                    className={cn(
-                                                        'p-1.5 rounded transition-colors',
-                                                        status.approvalMode === 'safe'
-                                                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/35'
-                                                            : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
-                                                    )}
-                                                    title="Safe approval mode"
-                                                >
-                                                    <Shield size={13} />
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        if (status.approvalMode === 'yolo') return
-                                                        setShowYoloConfirmModal(true)
-                                                    }}
-                                                    className={cn(
-                                                        'p-1.5 rounded transition-colors',
-                                                        status.approvalMode === 'yolo'
-                                                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/35'
-                                                            : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
-                                                    )}
-                                                    title="YOLO approval mode"
-                                                >
-                                                    <Zap size={13} />
-                                                </button>
-                                            </div>
+                                            {!showCompactSidebarHeader && (
+                                                <div className={cn('inline-flex rounded-md border border-sparkle-border bg-sparkle-bg', isDockMode ? 'p-[3px]' : 'p-0.5')}>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (status.approvalMode === 'safe') return
+                                                            void handleEnableSafeMode()
+                                                        }}
+                                                        className={cn(
+                                                            'rounded transition-colors',
+                                                            isDockMode ? 'p-1' : 'p-1.5',
+                                                            status.approvalMode === 'safe'
+                                                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/35'
+                                                                : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
+                                                        )}
+                                                        title="Safe approval mode"
+                                                    >
+                                                        <Shield size={isDockMode ? 12 : 13} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (status.approvalMode === 'yolo') return
+                                                            setShowYoloConfirmModal(true)
+                                                        }}
+                                                        className={cn(
+                                                            'rounded transition-colors',
+                                                            isDockMode ? 'p-1' : 'p-1.5',
+                                                            status.approvalMode === 'yolo'
+                                                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/35'
+                                                                : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
+                                                        )}
+                                                        title="YOLO approval mode"
+                                                    >
+                                                        <Zap size={isDockMode ? 12 : 13} />
+                                                    </button>
+                                                </div>
+                                            )}
 
-                                            {canUseEventConsole && (
+                                            {canUseEventConsole && !showCompactSidebarHeader && (
                                                 <button
                                                     type="button"
                                                     onClick={handleToggleEventConsole}
                                                     className={cn(
-                                                        'p-1.5 rounded-lg border transition-colors',
+                                                        'rounded-lg border transition-colors',
+                                                        isDockMode ? 'p-1' : 'p-1.5',
                                                         showEventConsole
                                                             ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-300 shadow-[0_0_0_1px_rgba(34,211,238,0.22)]'
                                                             : 'border-sparkle-border hover:bg-sparkle-card-hover text-sparkle-text-secondary'
                                                     )}
                                                     title="Toggle Event Console"
                                                 >
-                                                    <Terminal size={14} />
+                                                    <Terminal size={isDockMode ? 13 : 14} />
                                                 </button>
                                             )}
 
@@ -280,10 +533,13 @@ export function AssistantPageContent({ controller }: Props) {
                                                 <button
                                                     type="button"
                                                     onClick={handleCancelTurn}
-                                                    className="p-1.5 rounded-lg border border-amber-500/40 text-amber-300 bg-amber-500/10 hover:bg-amber-500/15 transition-colors"
+                                                    className={cn(
+                                                        'rounded-lg border border-amber-500/40 text-amber-300 bg-amber-500/10 hover:bg-amber-500/15 transition-colors',
+                                                        isDockMode ? 'p-1' : 'p-1.5'
+                                                    )}
                                                     title="Cancel active turn"
                                                 >
-                                                    <XCircle size={14} />
+                                                    <XCircle size={isDockMode ? 13 : 14} />
                                                 </button>
                                             )}
 
@@ -298,26 +554,96 @@ export function AssistantPageContent({ controller }: Props) {
                                                 }}
                                                 disabled={isConnecting}
                                                 className={cn(
-                                                    'p-1.5 rounded-lg border transition-colors disabled:opacity-60',
+                                                    'rounded-lg border transition-colors disabled:opacity-60',
+                                                    isDockMode
+                                                        ? (showCompactSidebarHeader ? 'h-6 w-6 p-0 inline-flex items-center justify-center' : 'p-1')
+                                                        : 'p-1.5',
                                                     connectionState === 'connected'
                                                         ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/15'
                                                         : 'border-sparkle-border text-sparkle-text-secondary hover:bg-sparkle-card-hover'
                                                 )}
                                                 title={connectionState === 'connected' ? 'Disconnect assistant' : 'Connect assistant'}
                                             >
-                                                <PlugZap size={14} />
+                                                <PlugZap size={isDockMode ? 13 : 14} />
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setShowHeaderMenu((prev) => !prev)}
-                                                className="p-1.5 rounded-lg border border-sparkle-border text-sparkle-text-secondary hover:bg-sparkle-card-hover transition-colors"
+                                                className={cn(
+                                                    'rounded-lg border border-sparkle-border text-sparkle-text-secondary hover:bg-sparkle-card-hover transition-colors',
+                                                    isDockMode
+                                                        ? (showCompactSidebarHeader ? 'h-6 w-6 p-0 inline-flex items-center justify-center' : 'p-1')
+                                                        : 'p-1.5'
+                                                )}
                                                 title="More actions"
                                             >
-                                                <MoreHorizontal size={14} />
+                                                <MoreHorizontal size={isDockMode ? 13 : 14} />
                                             </button>
 
                                             {showHeaderMenu && (
-                                                <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-lg border border-sparkle-border bg-sparkle-card p-1 shadow-lg">
+                                                <div className={cn(
+                                                    'absolute right-0 top-full z-20 mt-2 rounded-lg border border-sparkle-border bg-sparkle-card p-1 shadow-lg',
+                                                    isDockMode ? 'w-48' : 'w-52'
+                                                )}>
+                                                    {isDockMode && showCompactSidebarHeader && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (status.approvalMode !== 'safe') {
+                                                                        void handleEnableSafeMode()
+                                                                    }
+                                                                    setShowHeaderMenu(false)
+                                                                }}
+                                                                className={cn(
+                                                                    'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors',
+                                                                    status.approvalMode === 'safe'
+                                                                        ? 'text-emerald-300 hover:bg-emerald-500/10'
+                                                                        : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                                                )}
+                                                            >
+                                                                <Shield size={13} />
+                                                                Safe Mode
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (status.approvalMode !== 'yolo') {
+                                                                        setShowYoloConfirmModal(true)
+                                                                    }
+                                                                    setShowHeaderMenu(false)
+                                                                }}
+                                                                className={cn(
+                                                                    'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors',
+                                                                    status.approvalMode === 'yolo'
+                                                                        ? 'text-amber-300 hover:bg-amber-500/10'
+                                                                        : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                                                )}
+                                                            >
+                                                                <Zap size={13} />
+                                                                YOLO Mode
+                                                            </button>
+                                                            {canUseEventConsole && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        handleToggleEventConsole()
+                                                                        setShowHeaderMenu(false)
+                                                                    }}
+                                                                    className={cn(
+                                                                        'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs transition-colors',
+                                                                        showEventConsole
+                                                                            ? 'text-cyan-300 hover:bg-cyan-500/10'
+                                                                            : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                                                    )}
+                                                                >
+                                                                    <Terminal size={13} />
+                                                                    {showEventConsole ? 'Hide Event Console' : 'Show Event Console'}
+                                                                </button>
+                                                            )}
+                                                            <div className="my-1 border-t border-sparkle-border" />
+                                                        </>
+                                                    )}
                                                     {connectionState === 'connected' && (
                                                         <button
                                                             type="button"
@@ -362,23 +688,29 @@ export function AssistantPageContent({ controller }: Props) {
                                 )}
 
                                 {isChatHydrating ? (
-                                    <div className="flex-1 bg-sparkle-bg px-4 py-3">
+                                    <div className={cn('flex-1 bg-sparkle-bg', isDockMode ? 'px-3 py-2.5' : 'px-4 py-3')}>
                                         <div className="flex h-full w-full items-center justify-center">
-                                            <div className="w-full max-w-[560px] rounded-2xl border border-sparkle-border bg-sparkle-card/80 px-6 py-8 text-center">
-                                                <div className="mx-auto mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-sparkle-border bg-sparkle-bg text-[var(--accent-primary)]">
-                                                    <Loader2 size={20} className="animate-spin" />
+                                            <div className={cn(
+                                                'w-full rounded-2xl border border-sparkle-border bg-sparkle-card/80 text-center',
+                                                isDockMode ? 'max-w-[460px] px-5 py-6' : 'max-w-[560px] px-6 py-8'
+                                            )}>
+                                                <div className={cn(
+                                                    'mx-auto mb-3 inline-flex items-center justify-center rounded-xl border border-sparkle-border bg-sparkle-bg text-[var(--accent-primary)]',
+                                                    isDockMode ? 'h-9 w-9' : 'h-11 w-11'
+                                                )}>
+                                                    <Loader2 size={isDockMode ? 17 : 20} className="animate-spin" />
                                                 </div>
-                                                <h3 className="text-base font-semibold text-sparkle-text">Loading chat</h3>
-                                                <p className="mt-2 text-sm text-sparkle-text-secondary">
+                                                <h3 className={cn('font-semibold text-sparkle-text', isDockMode ? 'text-sm' : 'text-base')}>Loading chat</h3>
+                                                <p className={cn('mt-2 text-sparkle-text-secondary', isDockMode ? 'text-xs' : 'text-sm')}>
                                                     Restoring this session from memory...
                                                 </p>
                                             </div>
                                         </div>
                                     </div>
                                 ) : (
-                                    <div ref={chatScrollRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto bg-sparkle-bg px-4 py-3 scrollbar-hide">
+                                    <div ref={chatScrollRef} onScroll={handleChatScroll} className={cn('flex-1 overflow-y-auto bg-sparkle-bg scrollbar-hide', isDockMode ? 'px-3 py-2.5' : 'px-4 py-3')}>
                                         <div className={cn('flex min-h-full w-full flex-col gap-3', isEmptyChatState ? 'justify-center items-center pb-0' : 'justify-end pb-8')}>
-                                            <div className={cn('w-full space-y-3', isEmptyChatState ? 'pb-0 max-w-2xl' : 'pb-4')}>
+                                            <div className={cn('w-full space-y-3', isEmptyChatState ? (isDockMode ? 'pb-0 max-w-xl' : 'pb-0 max-w-2xl') : 'pb-4')}>
                                                 {displayHistoryGroups.map((group) => {
                                                     if (group.role === 'assistant') {
                                                         return (
@@ -387,6 +719,9 @@ export function AssistantPageContent({ controller }: Props) {
                                                                     attempts={group.messages}
                                                                     onRegenerate={handleRegenerate}
                                                                     isBusy={isBusy || isSending}
+                                                                    compact={isDockMode}
+                                                                    activeModel={activeModel}
+                                                                    activeProfile={activeProfile}
                                                                     streamingTurnId={streamingTurnId}
                                                                     streamingText={streamingText}
                                                                     reasoning={allReasoning}
@@ -404,6 +739,7 @@ export function AssistantPageContent({ controller }: Props) {
                                                                 text={getUserMessageDisplayText(message)}
                                                                 isUser={message.role === 'user'}
                                                                 attachments={message.attachments}
+                                                                compact={isDockMode}
                                                             />
                                                         </div>
                                                     )
@@ -411,34 +747,44 @@ export function AssistantPageContent({ controller }: Props) {
 
                                                 {isEmptyChatState && (
                                                     <div className="flex flex-col items-center animate-fadeIn">
-                                                        <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-3xl bg-sparkle-card border border-sparkle-border shadow-2xl relative">
+                                                        <div className={cn(
+                                                            'flex items-center justify-center rounded-3xl bg-sparkle-card border border-sparkle-border shadow-2xl relative',
+                                                            isDockMode ? 'mb-5 h-14 w-14' : 'mb-8 h-20 w-20'
+                                                        )}>
                                                             <div className="absolute inset-0 bg-sparkle-primary/5 rounded-3xl blur-xl" />
                                                             <div className="relative flex flex-col items-center">
-                                                                <div className="w-10 h-8 rounded-lg border-[3px] border-sparkle-text-muted/20 flex items-center justify-center">
-                                                                    <div className="w-4 h-[2px] bg-sparkle-text-muted/30" />
+                                                                <div className={cn(
+                                                                    'rounded-lg border-[3px] border-sparkle-text-muted/20 flex items-center justify-center',
+                                                                    isDockMode ? 'w-8 h-6' : 'w-10 h-8'
+                                                                )}>
+                                                                    <div className={cn('h-[2px] bg-sparkle-text-muted/30', isDockMode ? 'w-3' : 'w-4')} />
                                                                 </div>
                                                             </div>
                                                         </div>
 
-                                                        <h1 className="text-5xl font-bold text-white tracking-tight mb-10">
+                                                        <h1 className={cn(
+                                                            'font-bold text-white tracking-tight',
+                                                            isDockMode ? 'mb-6 text-2xl' : 'mb-10 text-5xl'
+                                                        )}>
                                                             <span className="text-[var(--accent-primary)]">devs</span> don't use <span className="text-[var(--accent-primary)]">light mode</span>
                                                         </h1>
 
-                                                        <div className="relative mb-12 w-80 mx-auto" ref={projectDropdownRef}>
+                                                        <div className={cn('relative mx-auto', isDockMode ? 'mb-8 w-64' : 'mb-12 w-80')} ref={projectDropdownRef}>
                                                             <button
                                                                 onClick={() => setShowProjectDropdown((prev) => !prev)}
                                                                 className={cn(
-                                                                    "group flex w-full items-center gap-3 px-5 py-2.5 bg-sparkle-card border transition-all shadow-xl",
+                                                                    'group flex w-full items-center bg-sparkle-card border transition-all shadow-xl',
+                                                                    isDockMode ? 'gap-2 px-3.5 py-2' : 'gap-3 px-5 py-2.5',
                                                                     showProjectDropdown
                                                                         ? "rounded-t-2xl border-sparkle-border border-b-transparent bg-sparkle-card-hover"
                                                                         : "rounded-2xl border-sparkle-border hover:bg-sparkle-card-hover hover:border-sparkle-border-hover"
                                                                 )}
                                                             >
-                                                                <Folder size={16} className={cn("transition-colors", showProjectDropdown ? "text-[var(--accent-primary)]" : "text-sparkle-text-secondary")} />
-                                                                <span className="text-[14px] font-medium text-sparkle-text flex-1 text-left">
+                                                                <Folder size={isDockMode ? 14 : 16} className={cn("transition-colors", showProjectDropdown ? "text-[var(--accent-primary)]" : "text-sparkle-text-secondary")} />
+                                                                <span className={cn('font-medium text-sparkle-text flex-1 text-left', isDockMode ? 'text-[12px]' : 'text-[14px]')}>
                                                                     {effectiveProjectPath ? effectiveProjectPath.split(/[\\/]/).pop() : 'Select Project'}
                                                                 </span>
-                                                                <ChevronDown size={14} className={cn("text-sparkle-text-muted transition-transform duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]", showProjectDropdown && "rotate-180")} />
+                                                                <ChevronDown size={isDockMode ? 12 : 14} className={cn("text-sparkle-text-muted transition-transform duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]", showProjectDropdown && "rotate-180")} />
                                                             </button>
 
                                                             <div className="absolute left-0 top-full z-30 w-full overflow-hidden">
@@ -448,7 +794,7 @@ export function AssistantPageContent({ controller }: Props) {
                                                                             Recent Projects
                                                                         </div>
                                                                         <div className="max-h-64 overflow-y-auto space-y-0.5 scrollbar-hide text-left px-1 pb-1">
-                                                                            {recentProjectPaths.map((root) => {
+                                                                            {recentProjectPathPreview.map((root) => {
                                                                                 const isActive = root === effectiveProjectPath
                                                                                 return (
                                                                                     <button
@@ -458,7 +804,8 @@ export function AssistantPageContent({ controller }: Props) {
                                                                                             setShowProjectDropdown(false)
                                                                                         }}
                                                                                         className={cn(
-                                                                                            'group relative flex w-full items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-200 backdrop-blur-[2px]',
+                                                                                            'group relative flex w-full items-center gap-3 rounded-lg border transition-all duration-200 backdrop-blur-[2px]',
+                                                                                            isDockMode ? 'px-2 py-1.5' : 'px-3 py-2',
                                                                                             isActive
                                                                                                 ? 'border-white/10 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] shadow-[0_2px_10px_rgba(0,0,0,0.05)]'
                                                                                                 : 'border-white/5 bg-sparkle-bg/40 text-sparkle-text-secondary hover:border-sparkle-border hover:bg-sparkle-card-hover/60 hover:text-sparkle-text'
@@ -466,16 +813,40 @@ export function AssistantPageContent({ controller }: Props) {
                                                                                     >
                                                                                         <div className="min-w-0 flex-1 overflow-hidden">
                                                                                             <div className={cn(
-                                                                                                "truncate text-[13px] leading-tight transition-colors",
+                                                                                                'truncate leading-tight transition-colors',
+                                                                                                isDockMode ? 'text-[12px]' : 'text-[13px]',
                                                                                                 isActive ? "font-bold" : "font-medium"
                                                                                             )}>
                                                                                                 {root.split(/[\\/]/).pop() || root}
                                                                                             </div>
-                                                                                            <div className="truncate text-[9px] opacity-30 font-medium" title={root}>{root}</div>
+                                                                                            <div className={cn('truncate opacity-30 font-medium', isDockMode ? 'text-[8px]' : 'text-[9px]')} title={root}>{root}</div>
                                                                                         </div>
                                                                                     </button>
                                                                                 )
                                                                             })}
+                                                                            {hasMoreRecentProjectPaths && (
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        setShowProjectSelectorModal(true)
+                                                                                        setShowProjectDropdown(false)
+                                                                                    }}
+                                                                                    className={cn(
+                                                                                        'group relative flex w-full items-center gap-3 rounded-lg border transition-all duration-200 backdrop-blur-[2px]',
+                                                                                        isDockMode ? 'px-2 py-1.5' : 'px-3 py-2',
+                                                                                        'border-white/5 bg-sparkle-bg/40 text-sparkle-text-secondary hover:border-sparkle-border hover:bg-sparkle-card-hover/60 hover:text-sparkle-text'
+                                                                                    )}
+                                                                                >
+                                                                                    <div className="min-w-0 flex-1 overflow-hidden text-center">
+                                                                                        <div className={cn('truncate leading-tight font-medium', isDockMode ? 'text-[12px]' : 'text-[13px]')}>
+                                                                                            Show more...
+                                                                                        </div>
+                                                                                        <div className={cn('truncate opacity-30 font-medium', isDockMode ? 'text-[8px]' : 'text-[9px]')}>
+                                                                                            Browse all {recentProjectPaths.length} paths
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <ChevronDown size={isDockMode ? 11 : 12} className="-rotate-90 opacity-60" />
+                                                                                </button>
+                                                                            )}
                                                                         </div>
 
                                                                         <div className="mt-1 border-t border-sparkle-border/30 pt-1 px-1">
@@ -484,9 +855,12 @@ export function AssistantPageContent({ controller }: Props) {
                                                                                     void handleSelectChatProjectPath()
                                                                                     setShowProjectDropdown(false)
                                                                                 }}
-                                                                                className="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/10 transition-colors"
+                                                                                className={cn(
+                                                                                    'flex w-full items-center justify-center gap-2 rounded-lg font-semibold text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/10 transition-colors',
+                                                                                    isDockMode ? 'px-2 py-1.5 text-[12px]' : 'px-3 py-2 text-[13px]'
+                                                                                )}
                                                                             >
-                                                                                <FolderOpen size={13} />
+                                                                                <FolderOpen size={isDockMode ? 12 : 13} />
                                                                                 <span>Open other path...</span>
                                                                             </button>
                                                                         </div>
@@ -501,8 +875,12 @@ export function AssistantPageContent({ controller }: Props) {
                                     </div>
                                 )}
 
-                                <div className={cn('bg-sparkle-bg px-4 pb-4 transition-all duration-500 ease-in-out', isEmptyChatState ? 'pt-0' : 'pt-3 border-t border-sparkle-border')}>
-                                    <div className={cn('mx-auto w-full transition-all duration-500 ease-in-out', isEmptyChatState && 'max-w-3xl')}>
+                                <div className={cn(
+                                    'bg-sparkle-bg pb-4 transition-all duration-500 ease-in-out',
+                                    isDockMode ? 'px-3' : 'px-4',
+                                    isEmptyChatState ? 'pt-0' : 'pt-3 border-t border-sparkle-border'
+                                )}>
+                                    <div className={cn('mx-auto w-full transition-all duration-500 ease-in-out', isEmptyChatState && (isDockMode ? 'max-w-xl' : 'max-w-3xl'))}>
                                         <AssistantComposer
                                             onSend={handleSend}
                                             disabled={isBusy || isChatHydrating}
@@ -516,33 +894,38 @@ export function AssistantPageContent({ controller }: Props) {
                                             onSelectModel={handleSelectModel}
                                             onRefreshModels={handleRefreshModels}
                                             activeProfile={activeProfile}
+                                            compact={isDockMode}
                                         />
                                     </div>
 
                                     {isEmptyChatState && (
-                                        <div className="mt-6 flex items-center justify-between px-2 text-[11px] font-medium text-sparkle-text-muted/60">
+                                        <div className={cn(
+                                            'mt-6 flex items-center justify-between px-2 font-medium text-sparkle-text-muted/60',
+                                            isDockMode ? 'text-[10px]' : 'text-[11px]'
+                                        )}>
                                             <div className="flex items-center gap-4">
                                                 <span className="text-white font-bold opacity-100 cursor-default">Local</span>
                                             </div>
                                             <div className="flex items-center gap-1.5 opacity-40">
-                                                <GitBranch size={11} />
+                                                <GitBranch size={isDockMode ? 10 : 11} />
                                                 <span>local-dev</span>
                                             </div>
                                         </div>
                                     )}
                                 </div>
                             </section>
-                            {canUseEventConsole && (
+                            {canUseEventConsole && !isDockMode && (
                                 <aside
                                     aria-hidden={!showEventConsole}
                                     className={cn(
-                                        'shrink-0 overflow-hidden bg-sparkle-bg transition-all duration-300 ease-out',
+                                        'shrink-0 overflow-hidden bg-sparkle-bg transition-[width,opacity,transform,border-color] duration-300 ease-out',
                                         showEventConsole
-                                            ? 'w-[430px] opacity-100 translate-x-0 border-l border-sparkle-border'
-                                            : 'w-0 opacity-0 translate-x-4 pointer-events-none border-l border-transparent'
+                                            ? 'opacity-100 translate-x-0 border-l border-sparkle-border'
+                                            : 'opacity-0 translate-x-4 pointer-events-none border-l border-transparent'
                                     )}
+                                    style={{ width: showEventConsole ? `${eventConsoleWidth}px` : '0px' }}
                                 >
-                                    <div className="h-full w-[430px]">
+                                    <div className="h-full" style={{ width: `${eventConsoleWidth}px` }}>
                                         <AssistantEventConsole
                                             events={eventLog}
                                             onClear={handleClearEvents}
@@ -551,6 +934,145 @@ export function AssistantPageContent({ controller }: Props) {
                                     </div>
                                 </aside>
                             )}
+                            {canUseEventConsole && isDockMode && (
+                                <aside
+                                    aria-hidden={!showEventConsole}
+                                    className={cn(
+                                        'absolute inset-y-0 right-0 z-30 overflow-hidden border-l border-sparkle-border bg-sparkle-bg shadow-2xl transition-[opacity,transform] duration-300 ease-out',
+                                        showEventConsole
+                                            ? 'opacity-100 translate-x-0'
+                                            : 'opacity-0 translate-x-full pointer-events-none'
+                                    )}
+                                    style={{ width: `${eventConsoleWidth}px`, maxWidth: '100%' }}
+                                >
+                                    <div className="h-full" style={{ width: `${eventConsoleWidth}px`, maxWidth: '100%' }}>
+                                        <AssistantEventConsole
+                                            events={eventLog}
+                                            onClear={handleClearEvents}
+                                            onExport={() => void handleExportEvents()}
+                                        />
+                                    </div>
+                                </aside>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+            {crossDirSendState && (
+                <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
+                    <div
+                        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+                        onClick={() => clearCrossDirSendState(false)}
+                    />
+                    <div className="relative w-full max-w-xl rounded-2xl border border-sparkle-border bg-sparkle-card p-5 shadow-2xl">
+                        <h3 className="text-base font-semibold text-sparkle-text">
+                            Send with different directory context?
+                        </h3>
+                        <p className="mt-2 text-sm text-sparkle-text-secondary">
+                            This thread belongs to <span className="font-semibold text-sparkle-text">{resolvePathLabel(crossDirSendState.sessionPath)}</span>,
+                            but you are currently in <span className="font-semibold text-sparkle-text">{resolvePathLabel(crossDirSendState.uiPath)}</span>.
+                        </p>
+                        <div className="mt-4 grid gap-2">
+                            <button
+                                type="button"
+                                onClick={() => void runCrossDirSendAction('new-session-ui-dir')}
+                                className="w-full rounded-lg border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/12 px-3 py-2 text-left text-sm font-semibold text-[var(--accent-primary)] transition-colors hover:bg-[var(--accent-primary)]/20"
+                            >
+                                Create new session in current dir (Recommended)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void runCrossDirSendAction('send-session-dir')}
+                                className="w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-left text-sm text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                            >
+                                Send in this session directory
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void runCrossDirSendAction('switch-session-ui-dir')}
+                                className="w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-left text-sm text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                            >
+                                Switch this session to current directory
+                            </button>
+                        </div>
+                        <div className="mt-3 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => clearCrossDirSendState(false)}
+                                className="rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-1.5 text-xs font-medium text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showProjectSelectorModal && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+                    <div
+                        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+                        onClick={() => setShowProjectSelectorModal(false)}
+                    />
+                    <div className="relative w-full max-w-2xl rounded-2xl border border-sparkle-border bg-sparkle-card p-5 shadow-2xl">
+                        <h3 className="text-center text-base font-semibold text-sparkle-text">
+                            Select project path
+                        </h3>
+                        <p className="mt-2 text-center text-sm text-sparkle-text-secondary">
+                            Choose from recent paths or open another directory.
+                        </p>
+                        <div className="mt-4 max-h-[55vh] space-y-1 overflow-y-auto pr-1 scrollbar-hide">
+                            {recentProjectPaths.length > 0 ? (
+                                recentProjectPaths.map((root) => {
+                                    const isActive = root === effectiveProjectPath
+                                    return (
+                                        <button
+                                            key={`modal-${root}`}
+                                            onClick={() => {
+                                                void handleApplyChatProjectPath(root)
+                                                setShowProjectSelectorModal(false)
+                                            }}
+                                            className={cn(
+                                                'group relative flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-center transition-all duration-200 backdrop-blur-[2px]',
+                                                isActive
+                                                    ? 'border-white/10 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] shadow-[0_2px_10px_rgba(0,0,0,0.05)]'
+                                                    : 'border-white/5 bg-sparkle-bg/40 text-sparkle-text-secondary hover:border-sparkle-border hover:bg-sparkle-card-hover/60 hover:text-sparkle-text'
+                                            )}
+                                        >
+                                            <div className="min-w-0 flex-1 overflow-hidden text-center">
+                                                <div className="truncate text-[13px] font-medium leading-tight">
+                                                    {root.split(/[\\/]/).pop() || root}
+                                                </div>
+                                                <div className="truncate text-[10px] font-medium opacity-30" title={root}>
+                                                    {root}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    )
+                                })
+                            ) : (
+                                <div className="rounded-lg border border-sparkle-border bg-sparkle-bg/40 px-3 py-3 text-sm text-sparkle-text-secondary">
+                                    No recent paths yet.
+                                </div>
+                            )}
+                        </div>
+                        <div className="mt-4 flex items-center justify-between gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowProjectSelectorModal(false)}
+                                className="rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-1.5 text-xs font-medium text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                            >
+                                Close
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    void handleSelectChatProjectPath()
+                                    setShowProjectSelectorModal(false)
+                                }}
+                                className="rounded-lg border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/12 px-3 py-1.5 text-xs font-semibold text-[var(--accent-primary)] transition-colors hover:bg-[var(--accent-primary)]/20"
+                            >
+                                Open other path...
+                            </button>
                         </div>
                     </div>
                 </div>
