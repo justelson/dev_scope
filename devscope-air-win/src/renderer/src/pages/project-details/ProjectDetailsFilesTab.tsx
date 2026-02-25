@@ -16,6 +16,55 @@ interface ProjectDetailsFilesTabProps {
 
 const EMPTY_SET = new Set<string>()
 
+type FileGitStatus = 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown' | undefined
+
+function getGitStatusVisual(status: FileGitStatus) {
+    switch (status) {
+        case 'modified':
+            return {
+                rowClass: 'border-l-2 border-l-[#E2C08D] bg-[#E2C08D]/[0.08]',
+                nameClass: '!text-[#F4D6A7]',
+                badgeClass: 'bg-[#E2C08D]/30 text-[#F4D6A7]',
+                badgeLabel: 'M'
+            }
+        case 'added':
+            return {
+                rowClass: 'border-l-2 border-l-[#73C991] bg-[#73C991]/[0.08]',
+                nameClass: '!text-[#8DE2AA]',
+                badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
+                badgeLabel: 'A'
+            }
+        case 'untracked':
+            return {
+                rowClass: 'border-l-2 border-l-[#73C991] bg-[#73C991]/[0.08]',
+                nameClass: '!text-[#8DE2AA]',
+                badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
+                badgeLabel: 'U'
+            }
+        case 'deleted':
+            return {
+                rowClass: 'border-l-2 border-l-[#FF6B6B] bg-[#FF6B6B]/[0.08]',
+                nameClass: '!text-[#FF8A8A] line-through',
+                badgeClass: 'bg-[#FF6B6B]/30 text-[#FF8A8A]',
+                badgeLabel: 'D'
+            }
+        case 'renamed':
+            return {
+                rowClass: 'border-l-2 border-l-blue-400 bg-blue-500/[0.08]',
+                nameClass: '!text-blue-300',
+                badgeClass: 'bg-blue-500/30 text-blue-300',
+                badgeLabel: 'R'
+            }
+        default:
+            return {
+                rowClass: '',
+                nameClass: '',
+                badgeClass: '',
+                badgeLabel: ''
+            }
+    }
+}
+
 export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
     const {
         fileSearch,
@@ -139,145 +188,143 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                     </div>
                 ) : (
                     visibleFileList.map(({ node, depth, isExpanded, isFolder, ext, isPreviewable, childInfo }: any) => (
-                        <div
-                            key={node.path}
-                            className={cn(
-                                "grid grid-cols-12 gap-2 px-4 py-1.5 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
-                                node.isHidden && "opacity-50"
-                            )}
-                            style={{ paddingLeft: `${16 + depth * 20}px` }}
-                            onClick={() => {
-                                if (isFolder) {
-                                    startTransition(() => {
-                                        setExpandedFolders((prev: Set<string>) => {
-                                            const next = new Set(prev)
-                                            if (next.has(node.path)) {
-                                                next.delete(node.path)
-                                            } else {
-                                                next.add(node.path)
-                                            }
-                                            return next
-                                        })
-                                    })
-                                } else {
-                                    openPreview({ name: node.name, path: node.path }, ext)
-                                }
-                            }}
-                        >
-                            <div className="col-span-6 flex items-center gap-2 min-w-0">
-                                {isFolder ? (
-                                    <ChevronRight size={14} className={cn("text-white/30 transition-transform", isExpanded && "rotate-90")} />
-                                ) : (
-                                    <span className="w-3.5" />
-                                )}
-                                {getFileIcon(node.name, isFolder, isExpanded)}
-                                <span className={cn(
-                                    "text-sm truncate",
-                                    isFolder ? "text-white/80 font-medium" : "text-white/60",
-                                    node.gitStatus === 'modified' && "text-[#E2C08D]",
-                                    node.gitStatus === 'added' && "text-[#73C991]",
-                                    node.gitStatus === 'untracked' && "text-[#73C991]",
-                                    node.gitStatus === 'deleted' && "text-[#FF6B6B] line-through",
-                                    node.gitStatus === 'renamed' && "text-blue-300"
-                                )}>
-                                    {node.name}
-                                </span>
-                                {node.gitStatus && node.gitStatus !== 'ignored' && node.gitStatus !== 'unknown' && (
-                                    <span className={cn(
-                                        "text-[9px] uppercase font-bold px-1 py-0.5 rounded shrink-0",
-                                        node.gitStatus === 'modified' && "bg-[#E2C08D]/20 text-[#E2C08D]",
-                                        node.gitStatus === 'added' && "bg-[#73C991]/20 text-[#73C991]",
-                                        node.gitStatus === 'untracked' && "bg-[#73C991]/20 text-[#73C991]",
-                                        node.gitStatus === 'deleted' && "bg-[#FF6B6B]/20 text-[#FF6B6B]",
-                                        node.gitStatus === 'renamed' && "bg-blue-500/20 text-blue-300"
-                                    )}>
-                                        {node.gitStatus === 'renamed' ? 'R' : node.gitStatus.charAt(0)}
-                                    </span>
-                                )}
-                            </div>
-
-                            <div className="col-span-2 flex items-center">
-                                <span className="text-xs text-white/40 uppercase">
-                                    {isFolder ? 'Folder' : ext || '-'}
-                                </span>
-                            </div>
-
-                            <div className="col-span-2 flex items-center">
-                                <span className="text-xs text-white/40 font-mono">
-                                    {isFolder ? '-' : formatFileSize(node.size)}
-                                </span>
-                            </div>
-
-                            <div className="col-span-2 flex items-center justify-end gap-2">
-                                {isFolder && childInfo && (
-                                    <span className="text-[10px] text-white/30">
-                                        {childInfo.folders > 0 && `${childInfo.folders} folders`}
-                                        {childInfo.folders > 0 && childInfo.files > 0 && ', '}
-                                        {childInfo.files > 0 && `${childInfo.files} files`}
-                                    </span>
-                                )}
-                                {isPreviewable && !isFolder && (
-                                    <span className="text-[10px] text-[var(--accent-primary)] opacity-0 group-hover:opacity-100 transition-opacity">
-                                        Preview
-                                    </span>
-                                )}
-                                <FileActionsMenu
-                                    title={`${node.name} actions`}
-                                    items={[
-                                        {
-                                            id: 'open',
-                                            label: 'Open',
-                                            icon: <FolderOpen size={13} />,
-                                            onSelect: () => onFileTreeOpen(node)
-                                        },
-                                        ...(!isFolder ? [{
-                                            id: 'open-with',
-                                            label: 'Open With...',
-                                            icon: <AppWindow size={13} />,
-                                            onSelect: () => onFileTreeOpenWith(node)
-                                        }] : []),
-                                        {
-                                            id: 'open-in-explorer',
-                                            label: 'Open in Explorer',
-                                            icon: <ExternalLink size={13} />,
-                                            onSelect: () => onFileTreeOpenInExplorer(node)
-                                        },
-                                        {
-                                            id: 'copy-path',
-                                            label: 'Copy Path',
-                                            icon: <Copy size={13} />,
-                                            onSelect: () => onFileTreeCopyPath(node)
-                                        },
-                                        {
-                                            id: 'copy',
-                                            label: 'Copy',
-                                            icon: <Copy size={13} />,
-                                            onSelect: () => onFileTreeCopy(node)
-                                        },
-                                        {
-                                            id: 'paste',
-                                            label: 'Paste',
-                                            icon: <ClipboardPaste size={13} />,
-                                            disabled: !hasFileClipboardItem,
-                                            onSelect: () => onFileTreePaste(node)
-                                        },
-                                        {
-                                            id: 'rename',
-                                            label: 'Rename',
-                                            icon: <Pencil size={13} />,
-                                            onSelect: () => onFileTreeRename(node)
-                                        },
-                                        {
-                                            id: 'delete',
-                                            label: 'Delete',
-                                            icon: <Trash2 size={13} />,
-                                            danger: true,
-                                            onSelect: () => onFileTreeDelete(node)
+                        (() => {
+                            const visual = getGitStatusVisual(node.gitStatus)
+                            return (
+                                <div
+                                    key={node.path}
+                                    className={cn(
+                                        "grid grid-cols-12 gap-2 px-4 py-1 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
+                                        visual.rowClass,
+                                        node.isHidden && "opacity-50"
+                                    )}
+                                    style={{ paddingLeft: `${12 + depth * 16}px` }}
+                                    onClick={() => {
+                                        if (isFolder) {
+                                            startTransition(() => {
+                                                setExpandedFolders((prev: Set<string>) => {
+                                                    const next = new Set(prev)
+                                                    if (next.has(node.path)) {
+                                                        next.delete(node.path)
+                                                    } else {
+                                                        next.add(node.path)
+                                                    }
+                                                    return next
+                                                })
+                                            })
+                                        } else {
+                                            openPreview({ name: node.name, path: node.path }, ext)
                                         }
-                                    ]}
-                                />
-                            </div>
-                        </div>
+                                    }}
+                                >
+                                    <div className="col-span-6 flex items-center gap-2 min-w-0">
+                                        {isFolder ? (
+                                            <ChevronRight size={12} className={cn("text-white/30 transition-transform", isExpanded && "rotate-90")} />
+                                        ) : (
+                                            <span className="w-3" />
+                                        )}
+                                        {getFileIcon(node.name, isFolder, isExpanded)}
+                                        <span className={cn(
+                                            "text-[13px] truncate",
+                                            isFolder ? "text-white/80 font-medium" : "text-white/60",
+                                            visual.nameClass
+                                        )}>
+                                            {node.name}
+                                        </span>
+                                        {node.gitStatus && node.gitStatus !== 'ignored' && node.gitStatus !== 'unknown' && (
+                                            <span className={cn(
+                                                "text-[8px] uppercase font-bold px-1 py-0.5 rounded shrink-0",
+                                                visual.badgeClass
+                                            )}>
+                                                {visual.badgeLabel}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="col-span-2 flex items-center">
+                                        <span className="text-[11px] text-white/40 uppercase">
+                                            {isFolder ? 'Folder' : ext || '-'}
+                                        </span>
+                                    </div>
+
+                                    <div className="col-span-2 flex items-center">
+                                        <span className="text-[11px] text-white/40 font-mono">
+                                            {isFolder ? '-' : formatFileSize(node.size)}
+                                        </span>
+                                    </div>
+
+                                    <div className="col-span-2 flex items-center justify-end gap-2">
+                                        {isFolder && childInfo && (
+                                            <span className="text-[10px] text-white/30">
+                                                {childInfo.folders > 0 && `${childInfo.folders} folders`}
+                                                {childInfo.folders > 0 && childInfo.files > 0 && ', '}
+                                                {childInfo.files > 0 && `${childInfo.files} files`}
+                                            </span>
+                                        )}
+                                        {isPreviewable && !isFolder && (
+                                            <span className="text-[10px] text-[var(--accent-primary)] opacity-0 group-hover:opacity-100 transition-opacity">
+                                                Preview
+                                            </span>
+                                        )}
+                                        <FileActionsMenu
+                                            title={`${node.name} actions`}
+                                            items={[
+                                                {
+                                                    id: 'open',
+                                                    label: 'Open',
+                                                    icon: <FolderOpen size={13} />,
+                                                    onSelect: () => onFileTreeOpen(node)
+                                                },
+                                                ...(!isFolder ? [{
+                                                    id: 'open-with',
+                                                    label: 'Open With...',
+                                                    icon: <AppWindow size={13} />,
+                                                    onSelect: () => onFileTreeOpenWith(node)
+                                                }] : []),
+                                                {
+                                                    id: 'open-in-explorer',
+                                                    label: 'Open in Explorer',
+                                                    icon: <ExternalLink size={13} />,
+                                                    onSelect: () => onFileTreeOpenInExplorer(node)
+                                                },
+                                                {
+                                                    id: 'copy-path',
+                                                    label: 'Copy Path',
+                                                    icon: <Copy size={13} />,
+                                                    onSelect: () => onFileTreeCopyPath(node)
+                                                },
+                                                {
+                                                    id: 'copy',
+                                                    label: 'Copy',
+                                                    icon: <Copy size={13} />,
+                                                    onSelect: () => onFileTreeCopy(node)
+                                                },
+                                                {
+                                                    id: 'paste',
+                                                    label: 'Paste',
+                                                    icon: <ClipboardPaste size={13} />,
+                                                    disabled: !hasFileClipboardItem,
+                                                    onSelect: () => onFileTreePaste(node)
+                                                },
+                                                {
+                                                    id: 'rename',
+                                                    label: 'Rename',
+                                                    icon: <Pencil size={13} />,
+                                                    onSelect: () => onFileTreeRename(node)
+                                                },
+                                                {
+                                                    id: 'delete',
+                                                    label: 'Delete',
+                                                    icon: <Trash2 size={13} />,
+                                                    danger: true,
+                                                    onSelect: () => onFileTreeDelete(node)
+                                                }
+                                            ]}
+                                        />
+                                    </div>
+                                </div>
+                            )
+                        })()
                     ))
                 )}
             </div>
