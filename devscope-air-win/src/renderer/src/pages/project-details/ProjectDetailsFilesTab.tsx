@@ -168,6 +168,13 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
         return changedStatusLookup.get(normalizedNodePath)
     }
 
+    const resolveDirectStatus = (node: any): FileGitStatus => {
+        const normalizedNodePath = normalizePath(node.path || '')
+        const direct = changedStatusLookup.get(normalizedNodePath)
+        if (direct && direct !== 'unknown' && direct !== 'ignored') return direct
+        return undefined
+    }
+
     const folderHasNestedChanges = (folderPath: string): boolean => {
         const normalizedFolderPath = normalizePath(folderPath)
         if (!normalizedFolderPath) return false
@@ -285,10 +292,12 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                     </div>
                 ) : (
                     visibleFileList.map(({ node, depth, isExpanded, isFolder, ext, isPreviewable, childInfo }: any) => {
+                        const directStatus = resolveDirectStatus(node)
                         const hasNestedChanges = isFolder && folderHasNestedChanges(node.path)
                         const nestedStatus = isFolder ? resolveFolderNestedStatus(node.path) : undefined
-                        const effectiveStatus = resolveNodeStatus(node) || nestedStatus
+                        const effectiveStatus = resolveNodeStatus(node) || nestedStatus || (hasNestedChanges ? 'modified' : undefined)
                         const effectiveVisual = getGitStatusVisual(effectiveStatus)
+                        const directVisual = getGitStatusVisual(directStatus)
                         return (
                             <div
                                 key={node.path}
@@ -334,15 +343,11 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         {isFolder && hasNestedChanges && (
                                             <span className="relative inline-flex w-3.5 h-3.5 shrink-0">
                                                 <span
-                                                    className="absolute inset-0 rounded-full"
-                                                    style={{ backgroundColor: effectiveVisual.pulseColor || '#7dd3fc', opacity: 0.2 }}
-                                                />
-                                                <span
                                                     className="absolute inset-[1px] rounded-full border"
                                                     style={{ borderColor: effectiveVisual.pulseColor || '#7dd3fc', backgroundColor: 'rgba(255,255,255,0.16)' }}
                                                 />
                                                 <span
-                                                    className="absolute inset-[4px] rounded-[2px]"
+                                                    className="absolute inset-[4px] rounded-full"
                                                     style={{ backgroundColor: effectiveVisual.pulseColor || '#7dd3fc' }}
                                                 />
                                             </span>
@@ -352,6 +357,14 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         )}
                                         {!isFolder && (
                                             <span className="w-3.5 h-3.5 shrink-0" />
+                                        )}
+                                        {directStatus && (
+                                            <span className={cn(
+                                                "text-[8px] uppercase font-bold px-1 py-0.5 rounded shrink-0",
+                                                directVisual.badgeClass
+                                            )}>
+                                                {directVisual.badgeLabel}
+                                            </span>
                                         )}
                                     </div>
 
