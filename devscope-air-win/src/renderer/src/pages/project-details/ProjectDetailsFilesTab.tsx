@@ -24,6 +24,8 @@ function getGitStatusVisual(status: FileGitStatus) {
             return {
                 rowClass: 'border-l-2 border-l-[#E2C08D] bg-[#E2C08D]/[0.08]',
                 nameClass: '!text-[#F4D6A7]',
+                metaClass: '!text-[#D9BE93]',
+                pulseClass: 'bg-[#E2C08D]',
                 badgeClass: 'bg-[#E2C08D]/30 text-[#F4D6A7]',
                 badgeLabel: 'M'
             }
@@ -31,6 +33,8 @@ function getGitStatusVisual(status: FileGitStatus) {
             return {
                 rowClass: 'border-l-2 border-l-[#73C991] bg-[#73C991]/[0.08]',
                 nameClass: '!text-[#8DE2AA]',
+                metaClass: '!text-[#76C895]',
+                pulseClass: 'bg-[#73C991]',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
                 badgeLabel: 'A'
             }
@@ -38,6 +42,8 @@ function getGitStatusVisual(status: FileGitStatus) {
             return {
                 rowClass: 'border-l-2 border-l-[#73C991] bg-[#73C991]/[0.08]',
                 nameClass: '!text-[#8DE2AA]',
+                metaClass: '!text-[#76C895]',
+                pulseClass: 'bg-[#73C991]',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
                 badgeLabel: 'U'
             }
@@ -45,6 +51,8 @@ function getGitStatusVisual(status: FileGitStatus) {
             return {
                 rowClass: 'border-l-2 border-l-[#FF6B6B] bg-[#FF6B6B]/[0.08]',
                 nameClass: '!text-[#FF8A8A] line-through',
+                metaClass: '!text-[#E07A7A]',
+                pulseClass: 'bg-[#FF6B6B]',
                 badgeClass: 'bg-[#FF6B6B]/30 text-[#FF8A8A]',
                 badgeLabel: 'D'
             }
@@ -52,6 +60,8 @@ function getGitStatusVisual(status: FileGitStatus) {
             return {
                 rowClass: 'border-l-2 border-l-blue-400 bg-blue-500/[0.08]',
                 nameClass: '!text-blue-300',
+                metaClass: '!text-blue-300/80',
+                pulseClass: 'bg-blue-400',
                 badgeClass: 'bg-blue-500/30 text-blue-300',
                 badgeLabel: 'R'
             }
@@ -59,6 +69,8 @@ function getGitStatusVisual(status: FileGitStatus) {
             return {
                 rowClass: '',
                 nameClass: '',
+                metaClass: '',
+                pulseClass: '',
                 badgeClass: '',
                 badgeLabel: ''
             }
@@ -194,7 +206,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                 <div
                                     key={node.path}
                                     className={cn(
-                                        "grid grid-cols-12 gap-2 px-4 py-1 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
+                                        "grid grid-cols-12 gap-2 px-4 py-0.5 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
                                         visual.rowClass,
                                         node.isHidden && "opacity-50"
                                     )}
@@ -225,12 +237,18 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         )}
                                         {getFileIcon(node.name, isFolder, isExpanded)}
                                         <span className={cn(
-                                            "text-[13px] truncate",
+                                            "text-[12px] truncate",
                                             isFolder ? "text-white/80 font-medium" : "text-white/60",
                                             visual.nameClass
                                         )}>
                                             {node.name}
                                         </span>
+                                        {isFolder && node.gitStatus && node.gitStatus !== 'ignored' && node.gitStatus !== 'unknown' && (
+                                            <span className="relative w-2 h-2 shrink-0">
+                                                <span className={cn("absolute inset-0 rounded-full opacity-80 animate-ping", visual.pulseClass)} />
+                                                <span className={cn("absolute inset-[1px] rounded-full", visual.pulseClass)} />
+                                            </span>
+                                        )}
                                         {node.gitStatus && node.gitStatus !== 'ignored' && node.gitStatus !== 'unknown' && (
                                             <span className={cn(
                                                 "text-[8px] uppercase font-bold px-1 py-0.5 rounded shrink-0",
@@ -242,20 +260,20 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                     </div>
 
                                     <div className="col-span-2 flex items-center">
-                                        <span className="text-[11px] text-white/40 uppercase">
+                                        <span className={cn("text-[10px] text-white/40 uppercase", visual.metaClass)}>
                                             {isFolder ? 'Folder' : ext || '-'}
                                         </span>
                                     </div>
 
                                     <div className="col-span-2 flex items-center">
-                                        <span className="text-[11px] text-white/40 font-mono">
+                                        <span className={cn("text-[10px] text-white/40 font-mono", visual.metaClass)}>
                                             {isFolder ? '-' : formatFileSize(node.size)}
                                         </span>
                                     </div>
 
                                     <div className="col-span-2 flex items-center justify-end gap-2">
                                         {isFolder && childInfo && (
-                                            <span className="text-[10px] text-white/30">
+                                            <span className={cn("text-[9px] text-white/30", visual.metaClass)}>
                                                 {childInfo.folders > 0 && `${childInfo.folders} folders`}
                                                 {childInfo.folders > 0 && childInfo.files > 0 && ', '}
                                                 {childInfo.files > 0 && `${childInfo.files} files`}
