@@ -87,6 +87,19 @@ function getGitStatusVisual(status: FileGitStatus) {
     }
 }
 
+function statusPriority(status: FileGitStatus): number {
+    switch (status) {
+        case 'deleted': return 5
+        case 'modified': return 4
+        case 'renamed': return 3
+        case 'added':
+        case 'untracked':
+            return 2
+        default:
+            return 0
+    }
+}
+
 export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
     const {
         fileSearch,
@@ -162,6 +175,21 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
             changedPath === normalizedFolderPath
             || changedPath.startsWith(`${normalizedFolderPath}/`)
         ))
+    }
+
+    const resolveFolderNestedStatus = (folderPath: string): FileGitStatus => {
+        const normalizedFolderPath = normalizePath(folderPath)
+        if (!normalizedFolderPath) return undefined
+
+        let best: FileGitStatus = undefined
+        for (const [pathKey, status] of changedStatusLookup.entries()) {
+            if (pathKey === normalizedFolderPath || pathKey.startsWith(`${normalizedFolderPath}/`)) {
+                if (statusPriority(status) > statusPriority(best)) {
+                    best = status
+                }
+            }
+        }
+        return best
     }
 
     return (
@@ -257,9 +285,10 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                     </div>
                 ) : (
                     visibleFileList.map(({ node, depth, isExpanded, isFolder, ext, isPreviewable, childInfo }: any) => {
-                        const effectiveStatus = resolveNodeStatus(node)
-                        const effectiveVisual = getGitStatusVisual(effectiveStatus)
                         const hasNestedChanges = isFolder && folderHasNestedChanges(node.path)
+                        const nestedStatus = isFolder ? resolveFolderNestedStatus(node.path) : undefined
+                        const effectiveStatus = resolveNodeStatus(node) || nestedStatus
+                        const effectiveVisual = getGitStatusVisual(effectiveStatus)
                         return (
                             <div
                                 key={node.path}
@@ -305,8 +334,8 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         {isFolder && hasNestedChanges && (
                                             <span className="relative inline-flex w-3.5 h-3.5 shrink-0">
                                                 <span
-                                                    className="absolute inset-0 rounded-full animate-ping"
-                                                    style={{ backgroundColor: effectiveVisual.pulseColor || '#7dd3fc', opacity: 0.4 }}
+                                                    className="absolute inset-0 rounded-full"
+                                                    style={{ backgroundColor: effectiveVisual.pulseColor || '#7dd3fc', opacity: 0.2 }}
                                                 />
                                                 <span
                                                     className="absolute inset-[1px] rounded-full border"
@@ -323,14 +352,6 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         )}
                                         {!isFolder && (
                                             <span className="w-3.5 h-3.5 shrink-0" />
-                                        )}
-                                        {effectiveStatus && effectiveStatus !== 'ignored' && effectiveStatus !== 'unknown' && (
-                                            <span className={cn(
-                                                "text-[8px] uppercase font-bold px-1 py-0.5 rounded shrink-0",
-                                                effectiveVisual.badgeClass
-                                            )}>
-                                                {effectiveVisual.badgeLabel}
-                                            </span>
                                         )}
                                     </div>
 
