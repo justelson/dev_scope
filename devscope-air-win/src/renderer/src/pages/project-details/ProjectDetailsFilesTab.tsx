@@ -26,50 +26,50 @@ function getGitStatusVisual(status: FileGitStatus) {
     switch (status) {
         case 'modified':
             return {
-                nameClass: 'font-semibold',
-                metaClass: '',
-                nameColor: '#F6D38F',
-                metaColor: '#EAC883',
+                nameClass: '!text-[#F6D38F] font-semibold',
+                metaClass: '!text-[#EAC883]',
+                nameColor: '',
+                metaColor: '',
                 pulseColor: '#E2C08D',
                 badgeClass: 'bg-[#E2C08D]/30 text-[#F4D6A7]',
                 badgeLabel: 'M'
             }
         case 'added':
             return {
-                nameClass: 'font-semibold',
-                metaClass: '',
-                nameColor: '#9AF3B5',
-                metaColor: '#86E0A2',
+                nameClass: '!text-[#9AF3B5] font-semibold',
+                metaClass: '!text-[#86E0A2]',
+                nameColor: '',
+                metaColor: '',
                 pulseColor: '#73C991',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
                 badgeLabel: 'A'
             }
         case 'untracked':
             return {
-                nameClass: 'font-semibold',
-                metaClass: '',
-                nameColor: '#9AF3B5',
-                metaColor: '#86E0A2',
+                nameClass: '!text-[#9AF3B5] font-semibold',
+                metaClass: '!text-[#86E0A2]',
+                nameColor: '',
+                metaColor: '',
                 pulseColor: '#73C991',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
                 badgeLabel: 'U'
             }
         case 'deleted':
             return {
-                nameClass: 'font-semibold line-through',
-                metaClass: '',
-                nameColor: '#FF9A9A',
-                metaColor: '#EF8A8A',
+                nameClass: '!text-[#FF9A9A] font-semibold line-through',
+                metaClass: '!text-[#EF8A8A]',
+                nameColor: '',
+                metaColor: '',
                 pulseColor: '#FF6B6B',
                 badgeClass: 'bg-[#FF6B6B]/30 text-[#FF8A8A]',
                 badgeLabel: 'D'
             }
         case 'renamed':
             return {
-                nameClass: 'font-semibold',
-                metaClass: '',
-                nameColor: '#88CCFF',
-                metaColor: '#78BFF5',
+                nameClass: '!text-[#88CCFF] font-semibold',
+                metaClass: '!text-[#78BFF5]',
+                nameColor: '',
+                metaColor: '',
                 pulseColor: '#60A5FA',
                 badgeClass: 'bg-blue-500/30 text-blue-300',
                 badgeLabel: 'R'
@@ -302,7 +302,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                             <div
                                 key={node.path}
                                 className={cn(
-                                    "grid grid-cols-12 gap-2 px-4 py-1.5 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
+                                    "grid grid-cols-12 gap-2 px-4 py-0.5 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
                                     node.isHidden && "opacity-50"
                                 )}
                                 style={{ paddingLeft: `${12 + depth * 16}px` }}
@@ -335,9 +335,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                             "text-[14px] truncate",
                                             isFolder ? "text-white/80 font-medium" : "text-white/60",
                                             effectiveVisual.nameClass
-                                        )}
-                                        style={effectiveVisual.nameColor ? { color: effectiveVisual.nameColor } : undefined}
-                                        >
+                                        )}>
                                             {node.name}
                                         </span>
                                         {isFolder && hasNestedChanges && (
@@ -371,7 +369,6 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                     <div className="col-span-2 flex items-center">
                                         <span
                                             className={cn("text-[12px] text-white/40 uppercase", effectiveVisual.metaClass)}
-                                            style={effectiveVisual.metaColor ? { color: effectiveVisual.metaColor } : undefined}
                                         >
                                             {isFolder ? 'Folder' : ext || '-'}
                                         </span>
@@ -380,7 +377,6 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                     <div className="col-span-2 flex items-center">
                                         <span
                                             className={cn("text-[12px] text-white/40 font-mono", effectiveVisual.metaClass)}
-                                            style={effectiveVisual.metaColor ? { color: effectiveVisual.metaColor } : undefined}
                                         >
                                             {isFolder ? '-' : formatFileSize(node.size)}
                                         </span>
@@ -390,7 +386,6 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         {isFolder && childInfo && (
                                             <span
                                                 className={cn("text-[11px] text-white/30", effectiveVisual.metaClass)}
-                                                style={effectiveVisual.metaColor ? { color: effectiveVisual.metaColor } : undefined}
                                             >
                                                 {childInfo.folders > 0 && `${childInfo.folders} folders`}
                                                 {childInfo.folders > 0 && childInfo.files > 0 && ', '}
