@@ -19,54 +19,89 @@ const INDEX_LOCK_MAX_ATTEMPTS = 8
 const INDEX_LOCK_RETRY_DELAY_MS = 350
 
 type GitAction<T> = (git: ReturnType<typeof createGit>) => Promise<T>
+const repoWriteQueues = new Map<string, Promise<void>>()
+
+function isBranchPathspecNotFound(message: string): boolean {
+    return /pathspec .* did not match any file/i.test(message)
+        || /did not match any branch/i.test(message)
+}
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function getQueueKey(projectPath: string): string {
+    const normalized = projectPath.trim()
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function enqueueRepoWrite<T>(projectPath: string, actionLabel: string, task: () => Promise<T>): Promise<T> {
+    const queueKey = getQueueKey(projectPath)
+    const previous = repoWriteQueues.get(queueKey) ?? Promise.resolve()
+
+    const run = previous
+        .catch(() => undefined)
+        .then(async () => {
+            log.debug(`[GitQueue] Starting ${actionLabel} in ${projectPath}`)
+            return await task()
+        })
+
+    const completion = run.then(() => undefined, () => undefined)
+    repoWriteQueues.set(queueKey, completion)
+    completion.finally(() => {
+        if (repoWriteQueues.get(queueKey) === completion) {
+            repoWriteQueues.delete(queueKey)
+        }
+    })
+
+    return run
+}
+
 async function withIndexLockRecovery<T>(projectPath: string, actionLabel: string, action: GitAction<T>): Promise<T> {
-    let lastError: unknown = null
+    return enqueueRepoWrite(projectPath, actionLabel, async () => {
+        let lastError: unknown = null
 
-    for (let attempt = 1; attempt <= INDEX_LOCK_MAX_ATTEMPTS; attempt += 1) {
-        const git = createGit(projectPath)
-
-        try {
-            return await action(git)
-        } catch (err) {
-            lastError = err
-            const message = toErrorMessage(err, `Failed to ${actionLabel}`)
-            if (!isGitIndexLockConflict(message)) {
-                throw err
-            }
+        for (let attempt = 1; attempt <= INDEX_LOCK_MAX_ATTEMPTS; attempt += 1) {
+            const git = createGit(projectPath)
 
             try {
-                const cleanupResult = await cleanupStaleIndexLock(projectPath)
-                if (cleanupResult === 'removed') {
-                    log.warn(`[Git] Removed stale index.lock before retrying ${actionLabel}`)
+                return await action(git)
+            } catch (err) {
+                lastError = err
+                const message = toErrorMessage(err, `Failed to ${actionLabel}`)
+                if (!isGitIndexLockConflict(message)) {
+                    throw err
                 }
 
-                const hasMoreAttempts = attempt < INDEX_LOCK_MAX_ATTEMPTS
-                if (!hasMoreAttempts) {
-                    if (cleanupResult === 'active') {
-                        throw new Error(
-                            `Git index is locked by another running Git process. Wait for it to finish, then retry ${actionLabel}.`
-                        )
+                try {
+                    const cleanupResult = await cleanupStaleIndexLock(projectPath)
+                    if (cleanupResult === 'removed') {
+                        log.warn(`[Git] Removed stale index.lock before retrying ${actionLabel}`)
                     }
-                    break
-                }
 
-                const delayMs = cleanupResult === 'active'
-                    ? INDEX_LOCK_RETRY_DELAY_MS * attempt
-                    : 60
-                await sleep(delayMs)
-            } catch (lockCleanupErr) {
-                lastError = lockCleanupErr
-                throw lockCleanupErr
+                    const hasMoreAttempts = attempt < INDEX_LOCK_MAX_ATTEMPTS
+                    if (!hasMoreAttempts) {
+                        if (cleanupResult === 'active') {
+                            throw new Error(
+                                `Git index is locked by another running Git process. Wait for it to finish, then retry ${actionLabel}.`
+                            )
+                        }
+                        break
+                    }
+
+                    const delayMs = cleanupResult === 'active'
+                        ? INDEX_LOCK_RETRY_DELAY_MS * attempt
+                        : 60
+                    await sleep(delayMs)
+                } catch (lockCleanupErr) {
+                    lastError = lockCleanupErr
+                    throw lockCleanupErr
+                }
             }
         }
-    }
 
-    throw toError(lastError, `Failed to ${actionLabel}`)
+        throw toError(lastError, `Failed to ${actionLabel}`)
+    })
 }
 
 /**
@@ -258,15 +293,40 @@ export async function listBranches(projectPath: string): Promise<GitBranchSummar
         const git = createGit(projectPath)
         const local = await git.branchLocal()
         const remote = await git.branch(['-r'])
-        const remoteSet = new Set(remote.all)
+        const remoteSet = new Set(remote.all.map((name) => name.trim()))
 
-        return local.all.map((name) => ({
+        const localSummaries: GitBranchSummary[] = local.all.map((name) => ({
             name,
             current: local.current === name,
             commit: local.branches[name]?.commit || '',
             label: local.branches[name]?.label || '',
-            isRemote: remoteSet.has(`origin/${name}`)
+            isRemote: remoteSet.has(`origin/${name}`),
+            isLocal: true
         }))
+
+        const localNames = new Set(local.all)
+        const remoteOnlySummaries: GitBranchSummary[] = remote.all
+            .map((name) => name.trim())
+            .filter((name) => name.startsWith('origin/'))
+            .filter((name) => !name.startsWith('origin/HEAD'))
+            .map((name) => name.replace(/^origin\//, ''))
+            .filter((name) => !!name && !localNames.has(name))
+            .map((name) => ({
+                name,
+                current: false,
+                commit: '',
+                label: 'Remote tracking branch',
+                isRemote: true,
+                isLocal: false
+            }))
+
+        const combined = [...localSummaries, ...remoteOnlySummaries]
+        combined.sort((a, b) => {
+            if (a.current !== b.current) return a.current ? -1 : 1
+            return a.name.localeCompare(b.name)
+        })
+
+        return combined
     } catch (err) {
         log.error('Failed to list branches', err)
         throw toError(err, 'Failed to list branches')
@@ -295,66 +355,81 @@ export async function checkoutBranch(
     branchName: string,
     options: CheckoutBranchOptions = {}
 ): Promise<CheckoutBranchResult> {
-    assertNonEmpty(branchName, 'Branch name')
-    const git = createGit(projectPath)
-    const targetBranch = branchName.trim()
-    const shouldAutoStash = options.autoStash !== false
-    const shouldAutoCleanupLock = options.autoCleanupLock !== false
-    let cleanedLock = false
-
-    try {
-        await git.checkout(targetBranch)
-        return { stashed: false }
-    } catch (err) {
-        let checkoutError: unknown = err
-        let message = toErrorMessage(err, 'Failed to checkout branch')
-
-        if (shouldAutoCleanupLock && isGitIndexLockConflict(message)) {
-            try {
-                const cleanupResult = await cleanupStaleIndexLock(projectPath)
-                if (cleanupResult === 'active') {
-                    throw new Error(
-                        'Git index is currently locked by another running Git process. Close other Git operations and try again.'
-                    )
-                }
-
-                if (cleanupResult === 'removed') {
-                    cleanedLock = true
-                    await git.checkout(targetBranch)
-                    return { stashed: false, cleanedLock: true }
-                }
-            } catch (lockRecoveryErr) {
-                checkoutError = lockRecoveryErr
-                message = toErrorMessage(lockRecoveryErr, message)
-            }
-        }
-
-        if (!shouldAutoStash || !isCheckoutBlockedByLocalChanges(message)) {
-            log.error('Failed to checkout branch', checkoutError)
-            throw toError(checkoutError, 'Failed to checkout branch')
-        }
+    return enqueueRepoWrite(projectPath, 'checkout branch', async () => {
+        assertNonEmpty(branchName, 'Branch name')
+        const git = createGit(projectPath)
+        const targetBranch = branchName.trim()
+        const shouldAutoStash = options.autoStash !== false
+        const shouldAutoCleanupLock = options.autoCleanupLock !== false
+        let cleanedLock = false
 
         try {
-            const stashMessage = `DevScope auto-stash before switching to ${targetBranch} at ${new Date().toISOString()}`
-            const beforeStashCount = (await git.stashList().catch(() => ({ total: 0 }))).total || 0
-
-            await git.raw(['stash', 'push', '-u', '-m', stashMessage])
             await git.checkout(targetBranch)
+            return { stashed: false }
+        } catch (err) {
+            let checkoutError: unknown = err
+            let message = toErrorMessage(err, 'Failed to checkout branch')
 
-            const afterStashCount = (await git.stashList().catch(() => ({ total: beforeStashCount }))).total || beforeStashCount
-            const stashed = afterStashCount > beforeStashCount
+            if (isBranchPathspecNotFound(message)) {
+                const remoteBranch = `origin/${targetBranch}`
+                const remoteBranches = await git.branch(['-r']).catch(() => ({ all: [] as string[] }))
+                const hasRemoteBranch = remoteBranches.all
+                    .map((name) => name.trim())
+                    .includes(remoteBranch)
 
-            return {
-                stashed,
-                cleanedLock: cleanedLock || undefined,
-                stashRef: stashed ? 'stash@{0}' : undefined,
-                stashMessage: stashed ? stashMessage : undefined
+                if (hasRemoteBranch) {
+                    await git.checkout(['--track', remoteBranch])
+                    return { stashed: false }
+                }
             }
-        } catch (autoStashErr) {
-            log.error('Failed to checkout branch after auto-stash fallback', autoStashErr)
-            throw toError(autoStashErr, `Failed to checkout branch: ${message}`)
+
+            if (shouldAutoCleanupLock && isGitIndexLockConflict(message)) {
+                try {
+                    const cleanupResult = await cleanupStaleIndexLock(projectPath)
+                    if (cleanupResult === 'active') {
+                        throw new Error(
+                            'Git index is currently locked by another running Git process. Close other Git operations and try again.'
+                        )
+                    }
+
+                    if (cleanupResult === 'removed') {
+                        cleanedLock = true
+                        await git.checkout(targetBranch)
+                        return { stashed: false, cleanedLock: true }
+                    }
+                } catch (lockRecoveryErr) {
+                    checkoutError = lockRecoveryErr
+                    message = toErrorMessage(lockRecoveryErr, message)
+                }
+            }
+
+            if (!shouldAutoStash || !isCheckoutBlockedByLocalChanges(message)) {
+                log.error('Failed to checkout branch', checkoutError)
+                throw toError(checkoutError, 'Failed to checkout branch')
+            }
+
+            try {
+                const stashMessage = `DevScope auto-stash before switching to ${targetBranch} at ${new Date().toISOString()}`
+                const beforeStashCount = (await git.stashList().catch(() => ({ total: 0 }))).total || 0
+
+                await git.raw(['stash', 'push', '-u', '-m', stashMessage])
+                await git.checkout(targetBranch)
+
+                const afterStashCount = (await git.stashList().catch(() => ({ total: beforeStashCount }))).total || beforeStashCount
+                const stashed = afterStashCount > beforeStashCount
+
+                return {
+                    stashed,
+                    cleanedLock: cleanedLock || undefined,
+                    stashRef: stashed ? 'stash@{0}' : undefined,
+                    stashMessage: stashed ? stashMessage : undefined
+                }
+            } catch (autoStashErr) {
+                log.error('Failed to checkout branch after auto-stash fallback', autoStashErr)
+                throw toError(autoStashErr, `Failed to checkout branch: ${message}`)
+            }
         }
-    }
+    })
 }
 
 export async function deleteBranch(projectPath: string, branchName: string, force: boolean = false): Promise<void> {

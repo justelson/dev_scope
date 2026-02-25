@@ -15,88 +15,168 @@ import {
 } from './core'
 import type {
     GitCommit,
+    GitStatusDetail,
     GitHistoryResult,
     GitStatusMap,
     GitFileStatus,
     ProjectGitOverview
 } from './types'
 
+function classifyGitStatus(code: string): GitFileStatus {
+    if (code === '??') return 'untracked'
+    if (code === '!!') return 'ignored'
+    if (code.includes('R') || code.includes('C')) return 'renamed'
+    if (code.includes('U')) return 'modified'
+    if (code.includes('T')) return 'modified'
+    if (code.includes('A')) return 'added'
+    if (code.includes('D')) return 'deleted'
+    if (code.includes('M')) return 'modified'
+    return 'unknown'
+}
+
+function toStatusDetailMap(details: GitStatusDetail[]): GitStatusMap {
+    const statusMap: GitStatusMap = {}
+    for (const detail of details) {
+        statusMap[detail.path] = detail.status
+        statusMap[detail.path.replace(/\//g, '\\')] = detail.status
+        if (detail.previousPath) {
+            statusMap[detail.previousPath] = 'renamed'
+            statusMap[detail.previousPath.replace(/\//g, '\\')] = 'renamed'
+        }
+    }
+    return statusMap
+}
+
+function toNumstatPath(pathText: string): string {
+    const trimmed = normalizeGitPath(pathText).trim()
+    if (!trimmed.includes(' => ')) return trimmed
+    const rhs = trimmed.split(' => ').pop() || trimmed
+    return rhs.replace(/[{}]/g, '').trim()
+}
+
+function parseNumstat(stdout: string, projectRelativeToRepo: string): Map<string, { additions: number; deletions: number }> {
+    const result = new Map<string, { additions: number; deletions: number }>()
+    for (const rawLine of stdout.split(/\r?\n/)) {
+        const line = rawLine.trim()
+        if (!line) continue
+        const columns = line.split('\t')
+        if (columns.length < 3) continue
+
+        const additions = columns[0] === '-' ? 0 : Number.parseInt(columns[0], 10)
+        const deletions = columns[1] === '-' ? 0 : Number.parseInt(columns[1], 10)
+        const candidatePath = toNumstatPath(columns.slice(2).join('\t'))
+        const path = stripPathPrefix(candidatePath, projectRelativeToRepo)
+        if (!path) continue
+
+        const prev = result.get(path) || { additions: 0, deletions: 0 }
+        result.set(path, {
+            additions: prev.additions + (Number.isNaN(additions) ? 0 : additions),
+            deletions: prev.deletions + (Number.isNaN(deletions) ? 0 : deletions)
+        })
+    }
+    return result
+}
+
+export async function getGitStatusDetailed(projectPath: string): Promise<GitStatusDetail[]> {
+    try {
+        const git = createGit(projectPath)
+        const repoContext = await getRepoContext(git, projectPath)
+        const stdout = await git.raw(['-c', 'status.relativePaths=true', 'status', '--porcelain=v1', '--ignored', '-z'])
+        const [stagedNumstatRaw, unstagedNumstatRaw] = await Promise.all([
+            git.raw(['diff', '--cached', '--numstat']).catch(() => ''),
+            git.raw(['diff', '--numstat']).catch(() => '')
+        ])
+
+        const stagedNumstat = parseNumstat(stagedNumstatRaw, repoContext.projectRelativeToRepo)
+        const unstagedNumstat = parseNumstat(unstagedNumstatRaw, repoContext.projectRelativeToRepo)
+
+        const entries = stdout.split('\0').filter(Boolean)
+        const details: GitStatusDetail[] = []
+
+        for (let i = 0; i < entries.length; i += 1) {
+            const line = entries[i]
+            if (line.length < 3) continue
+            const code = line.substring(0, 2)
+            const rawPath = line.substring(3)
+            const status = classifyGitStatus(code)
+            const path = stripPathPrefix(normalizeGitPath(rawPath), repoContext.projectRelativeToRepo)
+            if (!path) continue
+
+            const indexCode = code[0] || ' '
+            const workTreeCode = code[1] || ' '
+            const staged = code !== '??' && code !== '!!' && indexCode !== ' '
+            const unstaged = code === '??' || (code !== '!!' && workTreeCode !== ' ')
+
+            let previousPath: string | undefined
+            if (status === 'renamed') {
+                const rawPrevious = entries[i + 1]
+                if (rawPrevious) {
+                    previousPath = stripPathPrefix(normalizeGitPath(rawPrevious), repoContext.projectRelativeToRepo) || undefined
+                    i += 1
+                }
+            }
+
+            const stagedStats = stagedNumstat.get(path) || { additions: 0, deletions: 0 }
+            const unstagedStats = unstagedNumstat.get(path) || { additions: 0, deletions: 0 }
+
+            details.push({
+                path,
+                previousPath,
+                status,
+                code,
+                staged,
+                unstaged,
+                additions: stagedStats.additions + unstagedStats.additions,
+                deletions: stagedStats.deletions + unstagedStats.deletions,
+                stagedAdditions: stagedStats.additions,
+                stagedDeletions: stagedStats.deletions,
+                unstagedAdditions: unstagedStats.additions,
+                unstagedDeletions: unstagedStats.deletions
+            })
+        }
+
+        details.sort((a, b) => a.path.localeCompare(b.path))
+        return details
+    } catch (err) {
+        log.error('Failed to get detailed git status', err)
+        throw toError(err, 'Failed to get detailed git status')
+    }
+}
+
 /**
  * Get git status for a project
  */
 export async function getGitStatus(projectPath: string): Promise<GitStatusMap> {
     try {
-        const git = createGit(projectPath)
-        const repoContext = await getRepoContext(git, projectPath)
-        const stdout = await git.raw(['-c', 'status.relativePaths=true', 'status', '--porcelain=v1', '--ignored', '-z'])
-
-        const statusMap: GitStatusMap = {}
-        const entries = stdout.split('\0').filter(Boolean)
-
-        for (let i = 0; i < entries.length; i++) {
-            const line = entries[i]
-            if (line.length < 3) continue
-            const statusPart = line.substring(0, 2)
-            const rawPath = line.substring(3)
-            let status: GitFileStatus = 'unknown'
-
-            if (statusPart === '??') status = 'untracked'
-            else if (statusPart === '!!') status = 'ignored'
-            else if (statusPart.includes('R') || statusPart.includes('C')) status = 'renamed'
-            else if (statusPart.includes('U')) status = 'modified'
-            else if (statusPart.includes('T')) status = 'modified'
-            else if (statusPart.includes('A')) status = 'added'
-            else if (statusPart.includes('D')) status = 'deleted'
-            else if (statusPart.includes('M')) status = 'modified'
-
-            const normalizedPath = stripPathPrefix(normalizeGitPath(rawPath), repoContext.projectRelativeToRepo)
-            if (!normalizedPath) continue
-            statusMap[normalizedPath] = status
-            statusMap[normalizedPath.replace(/\//g, '\\')] = status
-
-            if (status === 'renamed') {
-                const previousPath = entries[i + 1]
-                if (previousPath) {
-                    const normalizedPrevious = stripPathPrefix(
-                        normalizeGitPath(previousPath),
-                        repoContext.projectRelativeToRepo
-                    )
-                    if (!normalizedPrevious) {
-                        i += 1
-                        continue
-                    }
-                    statusMap[normalizedPrevious] = 'renamed'
-                    statusMap[normalizedPrevious.replace(/\//g, '\\')] = 'renamed'
-                    i += 1
-                }
-            }
-        }
-
-        return statusMap
-    } catch {
-        return {}
+        const details = await getGitStatusDetailed(projectPath)
+        return toStatusDetailMap(details)
+    } catch (err) {
+        log.error('Failed to get git status', err)
+        throw toError(err, 'Failed to get git status')
     }
 }
 
 /**
  * Get git history for a project
  */
-export async function getGitHistory(projectPath: string, limit: number = 100): Promise<GitHistoryResult> {
+export async function getGitHistory(projectPath: string, limit: number = 0): Promise<GitHistoryResult> {
     try {
         const git = createGit(projectPath)
-        const safeLimit = Math.max(1, Math.min(1000, Math.trunc(limit) || 100))
+        const safeLimit = Math.trunc(limit)
+        const limitArgs = safeLimit > 0 ? ['-n', String(Math.max(1, Math.min(5000, safeLimit)))] : []
         const stdout = await git.raw([
             'log',
             '--all',
             '--date=iso',
-            '--pretty=format:%H%x1f%P%x1f%an%x1f%ad%x1f%s%x1e',
-            '-n',
-            String(safeLimit)
+            '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
+            '--numstat',
+            ...limitArgs
         ])
 
         return { commits: parseCommitLog(stdout) }
-    } catch {
-        return { commits: [] }
+    } catch (err) {
+        log.error('Failed to get git history', err)
+        throw toError(err, 'Failed to get git history')
     }
 }
 
@@ -117,7 +197,11 @@ export async function getCommitDiff(projectPath: string, commitHash: string): Pr
 /**
  * Get diff for working changes (unstaged + staged)
  */
-export async function getWorkingDiff(projectPath: string, filePath?: string): Promise<string> {
+export async function getWorkingDiff(
+    projectPath: string,
+    filePath?: string,
+    mode: 'combined' | 'staged' | 'unstaged' = 'combined'
+): Promise<string> {
     try {
         const git = createGit(projectPath)
         const repoContext = filePath ? await getRepoContext(git, projectPath) : null
@@ -127,10 +211,14 @@ export async function getWorkingDiff(projectPath: string, filePath?: string): Pr
         const staged = await git.raw(['diff', '--cached', ...pathSpec]).catch(() => '')
         const unstaged = await git.raw(['diff', ...pathSpec]).catch(() => '')
 
-        let combined = ''
-        if (staged) combined += `${staged}\n`
-        if (unstaged) combined += unstaged
+        if (mode === 'staged') {
+            return staged || 'No changes'
+        }
+        if (mode === 'unstaged') {
+            return unstaged || 'No changes'
+        }
 
+        const combined = [staged, unstaged].filter(Boolean).join('\n')
         return combined || 'No changes'
     } catch (err) {
         log.error('Failed to get working diff', err)
@@ -211,8 +299,9 @@ export async function hasRemoteOrigin(projectPath: string): Promise<boolean> {
         const git = createGit(projectPath)
         const remotes = await git.getRemotes(true)
         return remotes.some((remote) => remote.name === 'origin' && (remote.refs.fetch || remote.refs.push))
-    } catch {
-        return false
+    } catch (err) {
+        log.error('Failed to inspect remotes', err)
+        throw toError(err, 'Failed to inspect remotes')
     }
 }
 
@@ -234,21 +323,24 @@ export async function getUnpushedCommits(projectPath: string): Promise<GitCommit
                 'log',
                 `${upstreamRef}..HEAD`,
                 '--date=iso',
-                '--pretty=format:%H%x1f%P%x1f%an%x1f%ad%x1f%s%x1e'
+                '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
+                '--numstat'
             ]).catch(() => '')
         } else if (hasRemote && currentBranch !== 'HEAD') {
             stdout = await git.raw([
                 'log',
                 `origin/${currentBranch}..HEAD`,
                 '--date=iso',
-                '--pretty=format:%H%x1f%P%x1f%an%x1f%ad%x1f%s%x1e'
+                '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
+                '--numstat'
             ]).catch(() => '')
         } else {
             stdout = await git.raw([
                 'log',
                 'HEAD',
                 '--date=iso',
-                '--pretty=format:%H%x1f%P%x1f%an%x1f%ad%x1f%s%x1e',
+                '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
+                '--numstat',
                 '-n',
                 '50'
             ]).catch(() => '')
@@ -256,15 +348,16 @@ export async function getUnpushedCommits(projectPath: string): Promise<GitCommit
 
         if (!stdout.trim()) return []
         return parseCommitLog(stdout)
-    } catch {
-        return []
+    } catch (err) {
+        log.error('Failed to get unpushed commits', err)
+        throw toError(err, 'Failed to get unpushed commits')
     }
 }
 
 export async function getGitUser(projectPath: string): Promise<{ name: string; email: string } | null> {
     try {
         const git = createGit(projectPath)
-        const config = await git.listConfig().catch(() => ({ all: {} as Record<string, string> }))
+        const config = await git.listConfig()
         const toSingleValue = (value: string | string[] | undefined): string =>
             (Array.isArray(value) ? value[0] : value) || ''
 
@@ -272,8 +365,9 @@ export async function getGitUser(projectPath: string): Promise<{ name: string; e
         const email = toSingleValue(config.all?.['user.email']).trim()
         if (!name && !email) return null
         return { name, email }
-    } catch {
-        return null
+    } catch (err) {
+        log.error('Failed to get git user config', err)
+        throw toError(err, 'Failed to get git user config')
     }
 }
 
@@ -284,8 +378,9 @@ export async function getRepoOwner(projectPath: string): Promise<string | null> 
         const origin = remotes.find((remote) => remote.name === 'origin')
         const remoteUrl = origin?.refs.fetch || origin?.refs.push || ''
         return parseRepoOwner(remoteUrl)
-    } catch {
-        return null
+    } catch (err) {
+        log.error('Failed to get repository owner', err)
+        throw toError(err, 'Failed to get repository owner')
     }
 }
 
@@ -293,8 +388,9 @@ export async function checkIsGitRepo(projectPath: string): Promise<boolean> {
     try {
         const git = createGit(projectPath)
         return await git.checkIsRepo()
-    } catch {
-        return false
+    } catch (err) {
+        log.error('Failed to detect git repository', err)
+        throw toError(err, 'Failed to detect git repository')
     }
 }
 

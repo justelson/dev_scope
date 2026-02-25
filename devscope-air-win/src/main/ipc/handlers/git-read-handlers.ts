@@ -6,6 +6,7 @@ import {
     getCommitDiff,
     getGitHistory,
     getGitStatus,
+    getGitStatusDetailed,
     getGitUser,
     getGitignorePatterns,
     getGitignoreTemplates,
@@ -37,9 +38,14 @@ export async function handleGetCommitDiff(_event: Electron.IpcMainInvokeEvent, p
     }
 }
 
-export async function handleGetWorkingDiff(_event: Electron.IpcMainInvokeEvent, projectPath: string, filePath?: string) {
+export async function handleGetWorkingDiff(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    filePath?: string,
+    mode: 'combined' | 'staged' | 'unstaged' = 'combined'
+) {
     try {
-        const diff = await getWorkingDiff(projectPath, filePath)
+        const diff = await getWorkingDiff(projectPath, filePath, mode)
         return { success: true, diff }
     } catch (err: any) {
         log.error('Failed to get working diff:', err)
@@ -63,6 +69,16 @@ export async function handleGetGitStatus(_event: Electron.IpcMainInvokeEvent, pr
         return { success: true, status }
     } catch (err: any) {
         log.error('Failed to get git status:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetGitStatusDetailed(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const entries = await getGitStatusDetailed(projectPath)
+        return { success: true, entries }
+    } catch (err: any) {
+        log.error('Failed to get detailed git status:', err)
         return { success: false, error: err.message }
     }
 }

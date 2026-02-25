@@ -58,6 +58,7 @@ import {
     handleGetCommitDiff,
     handleGetGitHistory,
     handleGetGitStatus,
+    handleGetGitStatusDetailed,
     handleGetGitUser,
     handleGetGitignorePatterns,
     handleGetGitignoreTemplates,
@@ -215,6 +216,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getWorkingDiff', handleGetWorkingDiff)
     ipcMain.handle('devscope:getWorkingChangesForAI', handleGetWorkingChangesForAI)
     ipcMain.handle('devscope:getGitStatus', handleGetGitStatus)
+    ipcMain.handle('devscope:getGitStatusDetailed', handleGetGitStatusDetailed)
     ipcMain.handle('devscope:getUnpushedCommits', handleGetUnpushedCommits)
     ipcMain.handle('devscope:getGitUser', handleGetGitUser)
     ipcMain.handle('devscope:getRepoOwner', handleGetRepoOwner)

@@ -1,5 +1,6 @@
 export type {
     GitFileStatus,
+    GitStatusDetail,
     GitStatusMap,
     ProjectGitOverview,
     GitBranchSummary,
@@ -14,6 +15,7 @@ export type {
 
 export {
     getGitStatus,
+    getGitStatusDetailed,
     getGitHistory,
     getCommitDiff,
     getWorkingDiff,

@@ -1,9 +1,15 @@
-import type { GitCommit } from './types'
+import type { FileTreeNode, GitCommit, GitStatusDetail } from './types'
+
+type RefreshGitOptions = {
+    quiet?: boolean
+}
 
 interface GitActionParams {
     decodedPath: string
     commitMessage: string
     changedFiles: Array<{ path: string }>
+    stagedFiles: Array<{ path: string }>
+    unstagedFiles: Array<{ path: string }>
     gitUser: { name: string; email: string } | null
     repoOwner: string | null
     settings: any
@@ -20,14 +26,18 @@ interface GitActionParams {
     remoteUrl: string
     dontShowAuthorWarning: boolean
     projectPath?: string
-    refreshGitData: (refreshFileTree?: boolean) => Promise<void>
-    showToast: (message: string, actionLabel?: string, actionTo?: string) => void
+    refreshGitData: (refreshFileTree?: boolean, options?: RefreshGitOptions) => Promise<void>
+    showToast: (
+        message: string,
+        actionLabel?: string,
+        actionTo?: string,
+        tone?: 'success' | 'error' | 'info'
+    ) => void
     setSelectedCommit: (commit: GitCommit | null) => void
     setLoadingDiff: (loading: boolean) => void
     setCommitDiff: (diff: string) => void
     setShowAuthorMismatch: (show: boolean) => void
     setIsGeneratingCommitMessage: (loading: boolean) => void
-    setError: (value: string | null) => void
     setCommitMessage: (value: string) => void
     setIsCommitting: (loading: boolean) => void
     setIsPushing: (loading: boolean) => void
@@ -39,18 +49,111 @@ interface GitActionParams {
     setHasRemote: (value: boolean) => void
     setShowInitModal: (value: boolean) => void
     setIsAddingRemote: (value: boolean) => void
+    setGitStatusDetails: (
+        value: GitStatusDetail[] | ((prev: GitStatusDetail[]) => GitStatusDetail[])
+    ) => void
+    setGitStatusMap: (
+        value: Record<string, FileTreeNode['gitStatus']> | ((prev: Record<string, FileTreeNode['gitStatus']>) => Record<string, FileTreeNode['gitStatus']>)
+    ) => void
+}
+
+const PUSH_TRANSIENT_ERROR_PATTERNS: RegExp[] = [
+    /\bHTTP\s*408\b/i,
+    /\bcurl\s*22\b.*\b408\b/i,
+    /\bRPC failed\b/i,
+    /\bunexpected disconnect\b/i,
+    /\bremote end hung up unexpectedly\b/i,
+    /\bsideband packet\b/i,
+    /\btimed out\b/i
+]
+
+function isTransientPushError(message: string): boolean {
+    return PUSH_TRANSIENT_ERROR_PATTERNS.some((pattern) => pattern.test(message))
+}
+
+function summarizePushError(rawMessage: string): string {
+    const message = String(rawMessage || '').trim()
+    const compact = message.replace(/\s+/g, ' ')
+
+    if (/\bHTTP\s*408\b/i.test(message) || /\bcurl\s*22\b.*\b408\b/i.test(message)) {
+        return 'Push timed out (HTTP 408). Retry push. If it keeps failing, check network/VPN/proxy or remote status.'
+    }
+
+    if (isTransientPushError(message)) {
+        return 'Push connection dropped while uploading pack data. Retry push; if it repeats, verify network stability and remote availability.'
+    }
+
+    if (/\bAuthentication failed\b/i.test(message) || /\b403\b/.test(message) || /\b401\b/.test(message)) {
+        return 'Push was rejected by remote authentication. Re-authenticate Git credentials/token and retry.'
+    }
+
+    if (/\bnon-fast-forward\b/i.test(message) || /\brejected\b/i.test(message)) {
+        return 'Push rejected (non-fast-forward). Pull/rebase the latest remote changes, then push again.'
+    }
+
+    return compact || 'Failed to push commits'
+}
+
+function normalizePath(path: string): string {
+    return path.replace(/\\/g, '/').trim()
+}
+
+function buildStatusMap(details: GitStatusDetail[]): Record<string, FileTreeNode['gitStatus']> {
+    const statusMap: Record<string, FileTreeNode['gitStatus']> = {}
+    for (const detail of details) {
+        statusMap[detail.path] = detail.status
+        statusMap[detail.path.replace(/\//g, '\\')] = detail.status
+        if (detail.previousPath) {
+            statusMap[detail.previousPath] = 'renamed'
+            statusMap[detail.previousPath.replace(/\//g, '\\')] = 'renamed'
+        }
+    }
+    return statusMap
+}
+
+function toStagedDetail(detail: GitStatusDetail): GitStatusDetail {
+    return {
+        ...detail,
+        status: detail.status === 'untracked' ? 'added' : detail.status,
+        staged: true,
+        unstaged: false
+    }
+}
+
+function toUnstagedDetail(detail: GitStatusDetail): GitStatusDetail {
+    return {
+        ...detail,
+        status: detail.status === 'added' ? 'untracked' : detail.status,
+        staged: false,
+        unstaged: true
+    }
 }
 
 export function createProjectGitActions(params: GitActionParams) {
+    const applyOptimisticDetails = (
+        mutate: (prev: GitStatusDetail[]) => GitStatusDetail[]
+    ): (() => void) => {
+        let snapshot: GitStatusDetail[] = []
+        params.setGitStatusDetails((prev) => {
+            snapshot = prev
+            const next = mutate(prev)
+            params.setGitStatusMap(buildStatusMap(next))
+            return next
+        })
+
+        return () => {
+            params.setGitStatusDetails(snapshot)
+            params.setGitStatusMap(buildStatusMap(snapshot))
+        }
+    }
+
     const performCommit = async () => {
         if (!params.decodedPath || !params.commitMessage.trim()) return
 
         params.setIsCommitting(true)
         try {
-            const filePaths = params.changedFiles.map((file) => file.path)
-            const stageResult = await window.devscope.stageFiles(params.decodedPath, filePaths)
-            if (!stageResult?.success) {
-                throw new Error(stageResult?.error || 'Failed to stage files')
+            if (params.stagedFiles.length === 0) {
+                throw new Error('No staged files to commit')
             }
 
             const commitResult = await window.devscope.createCommit(params.decodedPath, params.commitMessage)
@@ -59,9 +162,9 @@ export function createProjectGitActions(params: GitActionParams) {
             }
 
             params.setCommitMessage('')
-            await params.refreshGitData(true)
+            await params.refreshGitData(false)
         } catch (err: any) {
-            params.setError(`Failed to commit: ${err.message}`)
+            params.showToast(`Failed to commit: ${err.message}`, undefined, undefined, 'error')
         } finally {
             params.setIsCommitting(false)
         }
@@ -89,7 +192,7 @@ export function createProjectGitActions(params: GitActionParams) {
     }
 
     const handleCommit = async () => {
-        if (!params.decodedPath || !params.commitMessage.trim() || params.changedFiles.length === 0) return
+        if (!params.decodedPath || !params.commitMessage.trim() || params.stagedFiles.length === 0) return
 
         const shouldWarn = localStorage.getItem('dontShowAuthorWarning') !== 'true'
         if (shouldWarn && params.gitUser && params.repoOwner && params.gitUser.name !== params.repoOwner) {
@@ -98,6 +201,100 @@ export function createProjectGitActions(params: GitActionParams) {
         }
 
         await performCommit()
+    }
+
+    const handleStageFile = async (filePath: string) => {
+        if (!params.decodedPath || !filePath.trim()) return
+        const normalizedTarget = normalizePath(filePath)
+        const rollback = applyOptimisticDetails((prev) => {
+            let changed = false
+            const next = prev.map((detail) => {
+                if (normalizePath(detail.path) !== normalizedTarget) return detail
+                changed = true
+                return toStagedDetail(detail)
+            })
+            return changed ? next : prev
+        })
+
+        try {
+            const result = await window.devscope.stageFiles(params.decodedPath, [filePath])
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to stage file')
+            }
+            void params.refreshGitData(false, { quiet: true })
+        } catch (err: any) {
+            rollback()
+            params.showToast(`Failed to stage file: ${err.message}`, undefined, undefined, 'error')
+        }
+    }
+
+    const handleUnstageFile = async (filePath: string) => {
+        if (!params.decodedPath || !filePath.trim()) return
+        const normalizedTarget = normalizePath(filePath)
+        const rollback = applyOptimisticDetails((prev) => {
+            let changed = false
+            const next = prev.map((detail) => {
+                if (normalizePath(detail.path) !== normalizedTarget) return detail
+                changed = true
+                return toUnstagedDetail(detail)
+            })
+            return changed ? next : prev
+        })
+
+        try {
+            const result = await window.devscope.unstageFiles(params.decodedPath, [filePath])
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to unstage file')
+            }
+            void params.refreshGitData(false, { quiet: true })
+        } catch (err: any) {
+            rollback()
+            params.showToast(`Failed to unstage file: ${err.message}`, undefined, undefined, 'error')
+        }
+    }
+
+    const handleStageAll = async () => {
+        if (!params.decodedPath || params.unstagedFiles.length === 0) return
+        const rollback = applyOptimisticDetails((prev) => {
+            const next = prev.map((detail) => (detail.unstaged ? toStagedDetail(detail) : detail))
+            return next
+        })
+
+        try {
+            const result = await window.devscope.stageFiles(
+                params.decodedPath,
+                params.unstagedFiles.map((file) => file.path)
+            )
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to stage all files')
+            }
+            void params.refreshGitData(false, { quiet: true })
+        } catch (err: any) {
+            rollback()
+            params.showToast(`Failed to stage files: ${err.message}`, undefined, undefined, 'error')
+        }
+    }
+
+    const handleUnstageAll = async () => {
+        if (!params.decodedPath || params.stagedFiles.length === 0) return
+        const rollback = applyOptimisticDetails((prev) => {
+            const next = prev.map((detail) => (detail.staged ? toUnstagedDetail(detail) : detail))
+            return next
+        })
+
+        try {
+            const result = await window.devscope.unstageFiles(
+                params.decodedPath,
+                params.stagedFiles.map((file) => file.path)
+            )
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to unstage all files')
+            }
+            void params.refreshGitData(false, { quiet: true })
+        } catch (err: any) {
+            rollback()
+            params.showToast(`Failed to unstage files: ${err.message}`, undefined, undefined, 'error')
+        }
     }
 
     const handleGenerateCommitMessage = async () => {
@@ -124,7 +321,6 @@ export function createProjectGitActions(params: GitActionParams) {
         const apiKey = selectedProvider === 'groq' ? params.settings.groqApiKey : params.settings.geminiApiKey
 
         params.setIsGeneratingCommitMessage(true)
-        params.setError(null)
         try {
             const contextResult = await window.devscope.getWorkingChangesForAI(params.decodedPath)
             if (!contextResult?.success) {
@@ -146,25 +342,52 @@ export function createProjectGitActions(params: GitActionParams) {
 
             params.setCommitMessage(generateResult.message.trim())
         } catch (err: any) {
-            params.setError(`AI generation failed: ${err.message || 'Unknown error'}`)
+            params.showToast(`AI generation failed: ${err.message || 'Unknown error'}`, undefined, undefined, 'error')
         } finally {
             params.setIsGeneratingCommitMessage(false)
         }
     }
 
-    const handlePush = async () => {
-        if (!params.decodedPath || params.unpushedCommits.length === 0) return
+    const handlePush = async (mode: 'push' | 'publish' = 'push') => {
+        if (!params.decodedPath) return
+        const hadUnpushedCommits = params.unpushedCommits.length > 0
 
         params.setIsPushing(true)
         try {
-            const pushResult = await window.devscope.pushCommits(params.decodedPath)
-            if (!pushResult?.success) {
-                throw new Error(pushResult?.error || 'Failed to push commits')
+            let retriedAfterTransientError = false
+            const runPush = async () => {
+                const pushResult = await window.devscope.pushCommits(params.decodedPath)
+                if (!pushResult?.success) {
+                    throw new Error(pushResult?.error || 'Failed to push commits')
+                }
+            }
+
+            try {
+                await runPush()
+            } catch (initialError: any) {
+                const initialMessage = String(initialError?.message || initialError || '')
+                if (!isTransientPushError(initialMessage)) {
+                    throw initialError
+                }
+
+                params.showToast('Push interrupted by network timeout. Retrying once...')
+                await new Promise((resolve) => setTimeout(resolve, 1200))
+                await runPush()
+                retriedAfterTransientError = true
+                params.showToast('Push succeeded after retry.')
             }
 
             await params.refreshGitData(false)
+            if (!retriedAfterTransientError) {
+                if (mode === 'publish' || !hadUnpushedCommits) {
+                    params.showToast(`Published branch "${params.currentBranch || 'current'}" to remote.`)
+                } else {
+                    params.showToast('Pushed commits to remote.')
+                }
+            }
         } catch (err: any) {
-            params.setError(`Failed to push: ${err.message}`)
+            const rawMessage = String(err?.message || err || 'Failed to push commits')
+            params.showToast(`Failed to push: ${summarizePushError(rawMessage)}`, undefined, undefined, 'error')
         } finally {
             params.setIsPushing(false)
         }
@@ -192,7 +415,7 @@ export function createProjectGitActions(params: GitActionParams) {
                 params.showToast(`Switched branch after auto-stashing local changes (${checkoutResult.stashRef || 'stash@{0}'}).`)
             }
         } catch (err: any) {
-            params.setError(`Failed to switch branch: ${err.message}`)
+            params.showToast(`Failed to switch branch: ${err.message}`, undefined, undefined, 'error')
         } finally {
             params.setIsSwitchingBranch(false)
         }
@@ -228,7 +451,7 @@ export function createProjectGitActions(params: GitActionParams) {
             )
 
             if (!initResult.success) {
-                params.setError(`Failed to initialize git: ${initResult.error}`)
+                params.showToast(`Failed to initialize git: ${initResult.error}`, undefined, undefined, 'error')
                 params.setIsInitializing(false)
                 return
             }
@@ -242,14 +465,19 @@ export function createProjectGitActions(params: GitActionParams) {
                 )
 
                 if (!commitResult.success) {
-                    params.setError(`Git initialized but failed to create initial commit: ${commitResult.error}`)
+                    params.showToast(
+                        `Git initialized but failed to create initial commit: ${commitResult.error}`,
+                        undefined,
+                        undefined,
+                        'error'
+                    )
                 }
             }
 
             await params.refreshGitData(true)
             params.setInitStep('remote')
         } catch (err: any) {
-            params.setError(`Failed to initialize git: ${err.message}`)
+            params.showToast(`Failed to initialize git: ${err.message}`, undefined, undefined, 'error')
         } finally {
             params.setIsInitializing(false)
         }
@@ -263,7 +491,7 @@ export function createProjectGitActions(params: GitActionParams) {
             const result = await window.devscope.addRemoteOrigin(params.decodedPath, params.remoteUrl)
 
             if (!result.success) {
-                params.setError(`Failed to add remote: ${result.error}`)
+                params.showToast(`Failed to add remote: ${result.error}`, undefined, undefined, 'error')
                 params.setIsAddingRemote(false)
                 return
             }
@@ -276,7 +504,7 @@ export function createProjectGitActions(params: GitActionParams) {
 
             await params.refreshGitData(true)
         } catch (err: any) {
-            params.setError(`Failed to add remote: ${err.message}`)
+            params.showToast(`Failed to add remote: ${err.message}`, undefined, undefined, 'error')
         } finally {
             params.setIsAddingRemote(false)
         }
@@ -305,10 +533,10 @@ export function createProjectGitActions(params: GitActionParams) {
             try {
                 const result = await window.devscope.openInExplorer?.(params.projectPath)
                 if (result && !result.success) {
-                    alert(`Failed to open folder: ${result.error}`)
+                    params.showToast(`Failed to open folder: ${result.error}`, undefined, undefined, 'error')
                 }
             } catch (err) {
-                alert(`Failed to invoke openInExplorer: ${err}`)
+                params.showToast(`Failed to invoke openInExplorer: ${err}`, undefined, undefined, 'error')
             }
         }
     }
@@ -318,6 +546,10 @@ export function createProjectGitActions(params: GitActionParams) {
         handleCommit,
         handleGenerateCommitMessage,
         handlePush,
+        handleStageFile,
+        handleUnstageFile,
+        handleStageAll,
+        handleUnstageAll,
         handleSwitchBranch,
         handleInitGit,
         handleAddRemote,

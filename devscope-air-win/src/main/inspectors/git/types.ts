@@ -4,6 +4,21 @@ export interface GitStatusMap {
     [relativePath: string]: GitFileStatus
 }
 
+export interface GitStatusDetail {
+    path: string
+    previousPath?: string
+    status: GitFileStatus
+    code: string
+    staged: boolean
+    unstaged: boolean
+    additions: number
+    deletions: number
+    stagedAdditions: number
+    stagedDeletions: number
+    unstagedAdditions: number
+    unstagedDeletions: number
+}
+
 export interface ProjectGitOverview {
     path: string
     isGitRepo: boolean
@@ -19,6 +34,7 @@ export interface GitBranchSummary {
     commit: string
     label: string
     isRemote: boolean
+    isLocal?: boolean
 }
 
 export interface GitRemoteSummary {
@@ -51,6 +67,9 @@ export interface GitCommit {
     author: string
     date: string
     message: string
+    additions: number
+    deletions: number
+    filesChanged: number
 }
 
 export interface GitHistoryResult {

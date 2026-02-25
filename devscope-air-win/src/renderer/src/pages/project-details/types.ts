@@ -53,6 +53,24 @@ export interface GitCommit {
     author: string
     date: string
     message: string
+    additions: number
+    deletions: number
+    filesChanged: number
+}
+
+export interface GitStatusDetail {
+    path: string
+    previousPath?: string
+    status: 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown'
+    code: string
+    staged: boolean
+    unstaged: boolean
+    additions: number
+    deletions: number
+    stagedAdditions: number
+    stagedDeletions: number
+    unstagedAdditions: number
+    unstagedDeletions: number
 }
 
 export interface PendingScriptRun {
@@ -68,6 +86,7 @@ export interface GitBranchSummary {
     commit: string
     label: string
     isRemote: boolean
+    isLocal?: boolean
 }
 
 export interface GitRemoteSummary {
@@ -85,4 +104,3 @@ export interface GitStashSummary {
     hash: string
     message: string
 }
-

@@ -27,6 +27,28 @@ interface UseProjectFileViewParams {
     previewableFileNames: Set<string>
 }
 
+type GitVisualStatus = Exclude<FileTreeNode['gitStatus'], 'ignored' | 'unknown' | undefined>
+
+function normalizeStatusPath(path: string): string {
+    return path.replace(/\\/g, '/').replace(/^\.\/+/, '').replace(/\/{2,}/g, '/').replace(/\/$/, '')
+}
+
+function gitStatusWeight(status: GitVisualStatus): number {
+    switch (status) {
+        case 'deleted': return 50
+        case 'modified': return 40
+        case 'renamed': return 30
+        case 'added': return 20
+        case 'untracked': return 20
+        default: return 0
+    }
+}
+
+function mergeGitStatus(current: GitVisualStatus | undefined, incoming: GitVisualStatus): GitVisualStatus {
+    if (!current) return incoming
+    return gitStatusWeight(incoming) > gitStatusWeight(current) ? incoming : current
+}
+
 export function useProjectFileView({
     fileTree,
     gitStatusMap,
@@ -38,6 +60,44 @@ export function useProjectFileView({
     previewableExtensions,
     previewableFileNames
 }: UseProjectFileViewParams) {
+    const treeWithGitStatus = useMemo(() => {
+        const directStatusMap = new Map<string, GitVisualStatus>()
+        const folderStatusMap = new Map<string, GitVisualStatus>()
+
+        for (const [rawPath, rawStatus] of Object.entries(gitStatusMap)) {
+            if (!rawStatus || rawStatus === 'ignored' || rawStatus === 'unknown') continue
+            const normalizedPath = normalizeStatusPath(rawPath)
+            if (!normalizedPath) continue
+            const status = rawStatus as GitVisualStatus
+
+            const existingDirect = directStatusMap.get(normalizedPath)
+            directStatusMap.set(normalizedPath, mergeGitStatus(existingDirect, status))
+
+            const segments = normalizedPath.split('/').filter(Boolean)
+            let prefix = ''
+            for (let i = 0; i < Math.max(0, segments.length - 1); i += 1) {
+                prefix = prefix ? `${prefix}/${segments[i]}` : segments[i]
+                const existingFolder = folderStatusMap.get(prefix)
+                folderStatusMap.set(prefix, mergeGitStatus(existingFolder, status))
+            }
+        }
+
+        const decorateNode = (node: FileTreeNode): FileTreeNode => {
+            const normalizedPath = normalizeStatusPath(node.path)
+            const nodeStatus = node.type === 'directory'
+                ? (folderStatusMap.get(normalizedPath) || node.gitStatus)
+                : (directStatusMap.get(normalizedPath) || node.gitStatus)
+
+            return {
+                ...node,
+                gitStatus: nodeStatus,
+                children: node.children?.map(decorateNode)
+            }
+        }
+
+        return fileTree.map(decorateNode)
+    }, [fileTree, gitStatusMap])
+
     const changedFiles = useMemo(() => {
         const byPath = new Map<string, FileTreeNode>()
 
@@ -63,12 +123,12 @@ export function useProjectFileView({
         return Array.from(byPath.values()).sort((a, b) => a.path.localeCompare(b.path))
     }, [gitStatusMap])
 
-    const allFolderPathsSet = useMemo(() => new Set(getAllFolderPaths(fileTree)), [fileTree])
+    const allFolderPathsSet = useMemo(() => new Set(getAllFolderPaths(treeWithGitStatus)), [treeWithGitStatus])
     const deferredFileSearch = useDeferredValue(fileSearch)
     const parsedFileSearch = useMemo(() => parseFileSearchQuery(deferredFileSearch), [deferredFileSearch])
     const hasFileSearch = deferredFileSearch.trim().length > 0
-    const fileSearchIndex = useMemo(() => buildFileSearchIndex(fileTree), [fileTree])
-    const folderChildInfoMap = useMemo(() => buildDirectoryChildInfoMap(fileTree), [fileTree])
+    const fileSearchIndex = useMemo(() => buildFileSearchIndex(treeWithGitStatus), [treeWithGitStatus])
+    const folderChildInfoMap = useMemo(() => buildDirectoryChildInfoMap(treeWithGitStatus), [treeWithGitStatus])
 
     const indexedSearch = useMemo(() => {
         if (!hasFileSearch) return null
@@ -122,10 +182,10 @@ export function useProjectFileView({
             }
         }
 
-        processNodes(fileTree, 0)
+        processNodes(treeWithGitStatus, 0)
         return result
     }, [
-        fileTree,
+        treeWithGitStatus,
         showHidden,
         hasFileSearch,
         indexedSearch,

@@ -20,6 +20,7 @@ import type {
     GitBranchSummary,
     GitCommit,
     GitRemoteSummary,
+    GitStatusDetail,
     GitStashSummary,
     GitTagSummary,
     ProjectDetails
@@ -99,6 +100,7 @@ export default function ProjectDetailsPage() {
     const [activePorts, setActivePorts] = useState<number[]>([])
     const [gitHistory, setGitHistory] = useState<GitCommit[]>([])
     const [loadingGit, setLoadingGit] = useState(false)
+    const [gitError, setGitError] = useState<string | null>(null)
     const [loadingFiles, setLoadingFiles] = useState(true)
     const [gitView, setGitView] = useState<'changes' | 'history' | 'unpushed' | 'manage'>('manage')
     const [commitPage, setCommitPage] = useState(1)
@@ -143,6 +145,7 @@ export default function ProjectDetailsPage() {
     const [remotes, setRemotes] = useState<GitRemoteSummary[]>([])
     const [tags, setTags] = useState<GitTagSummary[]>([])
     const [stashes, setStashes] = useState<GitStashSummary[]>([])
+    const [gitStatusDetails, setGitStatusDetails] = useState<GitStatusDetail[]>([])
     const [gitStatusMap, setGitStatusMap] = useState<Record<string, FileTreeNode['gitStatus']>>({})
     const [targetBranch, setTargetBranch] = useState('')
     const [isSwitchingBranch, setIsSwitchingBranch] = useState(false)
@@ -268,7 +271,9 @@ export default function ProjectDetailsPage() {
         setFileTree,
         setActiveTab,
         setLoadingGit,
+        setGitError,
         setIsGitRepo,
+        setGitStatusDetails,
         setGitHistory,
         setUnpushedCommits,
         setGitUser,
@@ -313,6 +318,28 @@ export default function ProjectDetailsPage() {
         previewableExtensions: PREVIEWABLE_EXTENSIONS,
         previewableFileNames: PREVIEWABLE_FILE_NAMES
     })
+    const stagedFiles = useMemo(() => (
+        gitStatusDetails
+            .filter((item) => item.staged)
+            .map((item) => {
+                const normalizedPath = item.path.replace(/\\/g, '/')
+                const segments = normalizedPath.split('/').filter(Boolean)
+                const name = segments[segments.length - 1] || normalizedPath
+                return { ...item, path: normalizedPath, name, gitStatus: item.status }
+            })
+            .sort((a, b) => a.path.localeCompare(b.path))
+    ), [gitStatusDetails])
+    const unstagedFiles = useMemo(() => (
+        gitStatusDetails
+            .filter((item) => item.unstaged)
+            .map((item) => {
+                const normalizedPath = item.path.replace(/\\/g, '/')
+                const segments = normalizedPath.split('/').filter(Boolean)
+                const name = segments[segments.length - 1] || normalizedPath
+                return { ...item, path: normalizedPath, name, gitStatus: item.status }
+            })
+            .sort((a, b) => a.path.localeCompare(b.path))
+    ), [gitStatusDetails])
     const handleCopyPath = async () => {
         if (project?.path) {
             try {
@@ -328,7 +355,7 @@ export default function ProjectDetailsPage() {
                 setTimeout(() => setCopiedPath(false), 2000)
             } catch (err) {
                 console.error('Failed to copy path:', err)
-                setError('Failed to copy path to clipboard')
+                showToast('Failed to copy path to clipboard', undefined, undefined, 'error')
             }
         }
     }
@@ -338,7 +365,7 @@ export default function ProjectDetailsPage() {
             if (window.devscope.copyToClipboard) {
                 const result = await window.devscope.copyToClipboard(value)
                 if (!result.success) {
-                    setError(result.error || 'Failed to copy to clipboard')
+                    showToast(result.error || 'Failed to copy to clipboard', undefined, undefined, 'error')
                     return false
                 }
             } else {
@@ -347,7 +374,7 @@ export default function ProjectDetailsPage() {
             if (successMessage) showToast(successMessage)
             return true
         } catch (err: any) {
-            setError(err?.message || 'Failed to copy to clipboard')
+            showToast(err?.message || 'Failed to copy to clipboard', undefined, undefined, 'error')
             return false
         }
     }
@@ -368,14 +395,14 @@ export default function ProjectDetailsPage() {
         if (node.type === 'directory') return
         const result = await window.devscope.openWith(node.path)
         if (!result.success) {
-            setError(result.error || `Failed to open "${node.name}" with...`)
+            showToast(result.error || `Failed to open "${node.name}" with...`, undefined, undefined, 'error')
         }
     }
 
     const handleFileTreeOpenInExplorer = async (node: FileTreeNode) => {
         const result = await window.devscope.openInExplorer(node.path)
         if (!result.success) {
-            setError(result.error || `Failed to open "${node.name}" in explorer`)
+            showToast(result.error || `Failed to open "${node.name}" in explorer`, undefined, undefined, 'error')
         }
     }
 
@@ -412,13 +439,13 @@ export default function ProjectDetailsPage() {
             : getParentFolderPath(node.path)
 
         if (!destinationDirectory) {
-            setError('Unable to resolve destination folder for paste.')
+            showToast('Unable to resolve destination folder for paste.', undefined, undefined, 'error')
             return
         }
 
         const result = await window.devscope.pasteFileSystemItem(fileClipboardItem.path, destinationDirectory)
         if (!result.success) {
-            setError(result.error || `Failed to paste "${fileClipboardItem.name}"`)
+            showToast(result.error || `Failed to paste "${fileClipboardItem.name}"`, undefined, undefined, 'error')
             return
         }
 
@@ -462,7 +489,7 @@ export default function ProjectDetailsPage() {
         if (!deleteTarget) return
         const result = await window.devscope.deleteFileSystemItem(deleteTarget.path)
         if (!result.success) {
-            setError(result.error || `Failed to delete "${deleteTarget.name}"`)
+            showToast(result.error || `Failed to delete "${deleteTarget.name}"`, undefined, undefined, 'error')
             return
         }
 
@@ -480,6 +507,10 @@ export default function ProjectDetailsPage() {
         handleCommit,
         handleGenerateCommitMessage,
         handlePush,
+        handleStageFile,
+        handleUnstageFile,
+        handleStageAll,
+        handleUnstageAll,
         handleSwitchBranch,
         handleInitGit,
         handleAddRemote,
@@ -490,6 +521,8 @@ export default function ProjectDetailsPage() {
         decodedPath,
         commitMessage,
         changedFiles,
+        stagedFiles,
+        unstagedFiles,
         gitUser,
         repoOwner,
         settings,
@@ -513,7 +546,6 @@ export default function ProjectDetailsPage() {
         setCommitDiff,
         setShowAuthorMismatch,
         setIsGeneratingCommitMessage,
-        setError,
         setCommitMessage,
         setIsCommitting,
         setIsPushing,
@@ -524,7 +556,9 @@ export default function ProjectDetailsPage() {
         setRemoteUrl,
         setHasRemote,
         setShowInitModal,
-        setIsAddingRemote
+        setIsAddingRemote,
+        setGitStatusDetails,
+        setGitStatusMap
     })
     const formatRelTime = (ts?: number) => {
         if (!ts) return ''
@@ -534,7 +568,7 @@ export default function ProjectDetailsPage() {
     if (loading) {
         return <ProjectDetailsLoadingView />
     }
-    if (error || !project) {
+    if (!project) {
         return <ProjectDetailsErrorView error={error} onBackToProjects={() => navigate('/projects')} />
     }
     const themeColor = project.typeInfo?.themeColor || '#525252'
@@ -603,6 +637,8 @@ export default function ProjectDetailsPage() {
                 loadingGit={loadingGit}
                 loadingFiles={loadingFiles}
                 changedFiles={changedFiles}
+                stagedFiles={stagedFiles}
+                unstagedFiles={unstagedFiles}
                 unpushedCommits={unpushedCommits}
                 onBrowseFolder={() => {
                     const encodedPath = encodeURIComponent(project.path)
@@ -640,6 +676,7 @@ export default function ProjectDetailsPage() {
                 hasFileClipboardItem={Boolean(fileClipboardItem)}
                 gitUser={gitUser}
                 repoOwner={repoOwner}
+                gitError={gitError}
                 gitView={gitView}
                 setGitView={setGitView}
                 refreshGitData={refreshGitData}
@@ -658,6 +695,10 @@ export default function ProjectDetailsPage() {
                 isCommitting={isCommitting}
                 settings={settings}
                 handleCommit={handleCommit}
+                handleStageFile={handleStageFile}
+                handleUnstageFile={handleUnstageFile}
+                handleStageAll={handleStageAll}
+                handleUnstageAll={handleUnstageAll}
                 hasRemote={hasRemote}
                 setInitStep={setInitStep}
                 handlePush={handlePush}

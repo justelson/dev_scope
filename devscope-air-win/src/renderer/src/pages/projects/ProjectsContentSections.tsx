@@ -159,12 +159,16 @@ export function ProjectsContentSections({
                                             className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-cyan-300/30 hover:bg-cyan-300/5 cursor-pointer flex flex-col relative"
                                             title={file.path}
                                         >
-                                            <div className="mb-2 flex items-start justify-between">
-                                                <div className="inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
-                                                    <File size={15} className="text-cyan-300/80" />
-                                                </div>
+                                            <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
+                                                <File size={15} className="text-cyan-300/80" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className={cn('text-sm text-white/80 group-hover:text-white leading-5', WRAP_AND_CLAMP_2)} title={file.name}>{file.name}</div>
+                                                <div className="truncate text-[11px] text-sparkle-text-muted" title={parentPath}>{parentPath}</div>
+                                            </div>
+                                            <div className="flex items-center justify-end gap-1 mt-auto pt-2">
                                                 <FileActionsMenu
-                                                    buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    buttonClassName="h-7 w-7 text-white/20 group-hover:text-white/40 hover:!text-white transition-all"
                                                     items={[
                                                         {
                                                             id: 'open-parent',
@@ -180,13 +184,7 @@ export function ProjectsContentSections({
                                                         }
                                                     ]}
                                                 />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className={cn('text-sm text-white/80 group-hover:text-white leading-5', WRAP_AND_CLAMP_2)} title={file.name}>{file.name}</div>
-                                                <div className="truncate text-[11px] text-sparkle-text-muted" title={parentPath}>{parentPath}</div>
-                                            </div>
-                                            <div className="flex justify-end mt-2">
-                                                <ExternalLink size={12} className="text-white/20 group-hover:text-white/60 transition-colors" />
+                                                <ExternalLink size={14} className="text-white/10 group-hover:text-white/40 transition-colors shrink-0" />
                                             </div>
                                         </div>
                                     )
@@ -213,16 +211,20 @@ export function ProjectsContentSections({
                                         onClick={() => onFolderOpen(folder.path)}
                                         className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15 flex flex-col relative cursor-pointer"
                                     >
-                                        <div className="mb-2 flex items-start justify-between">
-                                            <div className="inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
-                                                {isGit ? (
-                                                    <Github size={16} className="text-orange-400/70 group-hover:text-orange-400 transition-colors" />
-                                                ) : (
-                                                    <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors" />
-                                                )}
-                                            </div>
+                                        <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
+                                            {isGit ? (
+                                                <Github size={16} className="text-orange-400/70 group-hover:text-orange-400 transition-colors" />
+                                            ) : (
+                                                <Folder size={16} className="text-yellow-400/70 group-hover:text-yellow-400 transition-colors" />
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)} title={entry.name}>{entry.name}</div>
+                                            <div className="text-[10px] text-white/30">{isGit ? 'Git Repo' : 'Folder'}</div>
+                                        </div>
+                                        <div className="flex items-center justify-end gap-1 mt-auto pt-2">
                                             <FileActionsMenu
-                                                buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                buttonClassName="h-7 w-7 text-white/20 group-hover:text-white/40 hover:!text-white transition-all"
                                                 items={[
                                                     {
                                                         id: 'open',
@@ -238,13 +240,7 @@ export function ProjectsContentSections({
                                                     }
                                                 ]}
                                             />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className={cn('text-sm text-white/70 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)} title={entry.name}>{entry.name}</div>
-                                            <div className="text-[10px] text-white/30">{isGit ? 'Git Repo' : 'Folder'}</div>
-                                        </div>
-                                        <div className="flex justify-end mt-2">
-                                            <ChevronRight size={12} className="text-white/20 group-hover:text-white/60 transition-colors" />
+                                            <ChevronRight size={14} className="text-white/10 group-hover:text-white/40 transition-colors shrink-0" />
                                         </div>
                                     </div>
                                 )

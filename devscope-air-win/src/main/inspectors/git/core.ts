@@ -1,6 +1,9 @@
+import { spawnSync } from 'child_process'
+import log from 'electron-log'
 import { stat, unlink } from 'fs/promises'
-import { isAbsolute, join, relative } from 'path'
+import { dirname, delimiter, isAbsolute, join, relative } from 'path'
 import { simpleGit, type SimpleGit } from 'simple-git'
+import { getAugmentedEnv } from '../safe-exec'
 import type { CompactPatchResult, GitCommit, GitStatusMap, RepoContext } from './types'
 
 const AI_NOISY_PATCH_FILE_PATTERN = /(?:^|\/)(?:package-lock\.json|yarn\.lock|pnpm-lock\.ya?ml|bun\.lockb?|bun\.lock|min\.(?:js|css)|dist\/|build\/|coverage\/)/i
@@ -8,13 +11,75 @@ const AI_PATCH_MAX_FILES = 16
 const AI_PATCH_MAX_LINES_PER_FILE = 120
 const AI_PATCH_MAX_LINES_TOTAL = 900
 
+type GitRuntime = {
+    binary: string
+    env: NodeJS.ProcessEnv
+}
+
+let cachedGitRuntime: GitRuntime | null = null
+
+function resolveGitRuntime(): GitRuntime {
+    if (cachedGitRuntime) return cachedGitRuntime
+
+    const env = getAugmentedEnv()
+    const locateCommand = process.platform === 'win32' ? 'where' : 'which'
+    const locateResult = spawnSync(locateCommand, ['git'], {
+        encoding: 'utf8',
+        windowsHide: true,
+        env
+    })
+
+    const resolvedPath = locateResult.status === 0
+        ? (locateResult.stdout || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .find(Boolean)
+        : ''
+
+    if (!resolvedPath) {
+        log.warn('[Git] Falling back to `git` from PATH. Could not resolve binary path via where/which.')
+    } else {
+        const gitDir = dirname(resolvedPath)
+        const pathCandidates = [env.Path, env.PATH].filter((value): value is string => typeof value === 'string' && value.length > 0)
+        const allSegments = pathCandidates.flatMap((value) => value.split(delimiter))
+        const alreadyPresent = allSegments.some((segment) => segment.trim().toLowerCase() === gitDir.toLowerCase())
+        if (!alreadyPresent) {
+            const currentPath = env.Path || env.PATH || ''
+            const nextPath = currentPath ? `${gitDir}${delimiter}${currentPath}` : gitDir
+            env.Path = nextPath
+            env.PATH = nextPath
+        }
+    }
+
+    // Use plain `git` so simple-git can apply its own command safety checks.
+    cachedGitRuntime = { binary: 'git', env }
+    return cachedGitRuntime
+}
+
 export function createGit(projectPath: string): SimpleGit {
-    return simpleGit({
+    const runtime = resolveGitRuntime()
+    const git = simpleGit({
         baseDir: projectPath,
-        binary: 'git',
+        binary: runtime.binary,
         maxConcurrentProcesses: 6,
         trimmed: false
     })
+
+    const pathValue = runtime.env.Path || runtime.env.PATH
+    if (pathValue) {
+        git.env('Path', pathValue)
+        git.env('PATH', pathValue)
+    }
+
+    const inheritedKeys = ['HOME', 'USERPROFILE', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_TERMINAL_PROMPT']
+    for (const key of inheritedKeys) {
+        const value = runtime.env[key]
+        if (typeof value === 'string' && value.length > 0) {
+            git.env(key, value)
+        }
+    }
+
+    return git
 }
 
 export function normalizeGitPath(path: string): string {
@@ -229,20 +294,46 @@ export function parseCommitLog(stdout: string): GitCommit[] {
     const recordSep = '\x1e'
     const fieldSep = '\x1f'
     const commits: GitCommit[] = []
-    const records = stdout.split(recordSep).map((record) => record.trim()).filter(Boolean)
+    const records = stdout
+        .split(recordSep)
+        .map((record) => record.replace(/^\s+/, '').replace(/\s+$/, ''))
+        .filter(Boolean)
 
     for (const record of records) {
-        const parts = record.split(fieldSep)
+        const lines = record.split(/\r?\n/).map((line) => line.trimEnd())
+        const header = lines[0] || ''
+        const parts = header.split(fieldSep)
         if (parts.length < 5) continue
         const [hash, parentText, author, date, ...messageParts] = parts
         const message = messageParts.join(fieldSep)
+
+        let additions = 0
+        let deletions = 0
+        let filesChanged = 0
+        for (const statLine of lines.slice(1)) {
+            const line = statLine.trim()
+            if (!line) continue
+
+            const columns = line.split('\t', 3)
+            if (columns.length < 3) continue
+
+            const added = columns[0] === '-' ? 0 : Number.parseInt(columns[0], 10)
+            const deleted = columns[1] === '-' ? 0 : Number.parseInt(columns[1], 10)
+            if (!Number.isNaN(added)) additions += added
+            if (!Number.isNaN(deleted)) deletions += deleted
+            filesChanged += 1
+        }
+
         commits.push({
             hash,
             shortHash: hash.substring(0, 7),
             parents: parentText ? parentText.split(' ').filter(Boolean) : [],
             author,
             date,
-            message
+            message,
+            additions,
+            deletions,
+            filesChanged
         })
     }
 
@@ -280,7 +371,10 @@ export function isGitIndexLockConflict(message: string): boolean {
 }
 
 export async function cleanupStaleIndexLock(projectPath: string, staleMs: number = 15_000): Promise<'removed' | 'active' | 'missing'> {
-    const lockPath = join(projectPath, '.git', 'index.lock')
+    const git = createGit(projectPath)
+    const gitDirRaw = await git.raw(['rev-parse', '--path-format=absolute', '--git-dir']).catch(() => '')
+    const gitDir = gitDirRaw.trim() || join(projectPath, '.git')
+    const lockPath = join(gitDir, 'index.lock')
 
     try {
         const lockStat = await stat(lockPath)

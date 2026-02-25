@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Calendar, User } from 'lucide-react'
 import type { GitCommit } from './types'
+import { DiffStats } from './DiffStats'
 
 const BRANCH_COLORS = [
     '#22c55e',
@@ -153,23 +154,28 @@ export function GitGraph({
                             style={{ height: rowHeight }}
                             onClick={() => onCommitClick?.(commit)}
                         >
-                            <div className="flex-1 min-w-0 pr-4">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="text-sm font-medium text-white truncate">{commit.message}</span>
-                                    {isMerge && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: `${color}20`, color }}>
-                                            Merge
+                            <div className="flex-1 min-w-0 pr-4 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                        <span className="text-sm font-medium text-white truncate">{commit.message}</span>
+                                        {isMerge && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: `${color}20`, color }}>
+                                                Merge
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs text-white/40">
+                                        <span className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-white/50">{commit.shortHash}</span>
+                                        <span className="flex items-center gap-1">
+                                            <User size={10} /> {commit.author}
                                         </span>
-                                    )}
+                                        <span className="flex items-center gap-1">
+                                            <Calendar size={10} /> {new Date(commit.date).toLocaleDateString()}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-3 text-xs text-white/40">
-                                    <span className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-white/50">{commit.shortHash}</span>
-                                    <span className="flex items-center gap-1">
-                                        <User size={10} /> {commit.author}
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <Calendar size={10} /> {new Date(commit.date).toLocaleDateString()}
-                                    </span>
+                                <div className="shrink-0">
+                                    <DiffStats additions={commit.additions} deletions={commit.deletions} compact />
                                 </div>
                             </div>
                         </div>

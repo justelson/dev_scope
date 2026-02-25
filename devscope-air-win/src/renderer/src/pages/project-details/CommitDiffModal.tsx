@@ -2,9 +2,6 @@ import { useMemo, useState } from 'react'
 import {
     Calendar,
     Check,
-    ChevronRight,
-    ChevronsDownUp,
-    ChevronsUpDown,
     Code,
     Copy,
     File,
@@ -21,6 +18,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GitCommit } from './types'
+import { DiffStats } from './DiffStats'
+import { FileDiffDetailModal } from './FileDiffDetailModal'
 
 function getFileIcon(name: string, isDirectory: boolean, isExpanded?: boolean) {
     if (isDirectory) {
@@ -59,13 +58,10 @@ function getFileIcon(name: string, isDirectory: boolean, isExpanded?: boolean) {
 }
 
 export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: GitCommit, diff: string, loading: boolean, onClose: () => void }) {
-    const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set())
-    const [showFullDiff, setShowFullDiff] = useState<Set<string>>(new Set())
     const [showCommitInfo, setShowCommitInfo] = useState(false)
     const [copiedHash, setCopiedHash] = useState(false)
     const [copiedPath, setCopiedPath] = useState<string | null>(null)
-
-    const PREVIEW_LINES = 10 // Show first 10 lines when truncated
+    const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
 
     const handleCopyPath = (path: string, e: React.MouseEvent) => {
         e.stopPropagation()
@@ -168,6 +164,10 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
 
     const totalAdditions = useMemo(() => parsedDiff.reduce((sum, file) => sum + file.additions, 0), [parsedDiff])
     const totalDeletions = useMemo(() => parsedDiff.reduce((sum, file) => sum + file.deletions, 0), [parsedDiff])
+    const selectedFileDiff = useMemo(
+        () => parsedDiff.find((file) => file.path === selectedFilePath) || null,
+        [parsedDiff, selectedFilePath]
+    )
 
     const copyCommitHash = async () => {
         const value = commitMeta.fullHash || commit.hash
@@ -182,39 +182,6 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
         } catch {
             setCopiedHash(false)
         }
-    }
-
-    const toggleFile = (path: string) => {
-        setExpandedFiles(prev => {
-            const next = new Set(prev)
-            if (next.has(path)) {
-                next.delete(path)
-            } else {
-                next.add(path)
-            }
-            return next
-        })
-    }
-
-    const toggleFullDiff = (path: string) => {
-        setShowFullDiff(prev => {
-            const next = new Set(prev)
-            if (next.has(path)) {
-                next.delete(path)
-            } else {
-                next.add(path)
-            }
-            return next
-        })
-    }
-
-    const expandAll = () => {
-        setExpandedFiles(new Set(parsedDiff.map(f => f.path)))
-    }
-
-    const collapseAll = () => {
-        setExpandedFiles(new Set())
-        setShowFullDiff(new Set())
     }
 
     return (
@@ -322,22 +289,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                                 -{totalDeletions}
                             </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={expandAll}
-                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all flex items-center gap-1.5"
-                            >
-                                <ChevronsUpDown size={12} />
-                                Expand All
-                            </button>
-                            <button
-                                onClick={collapseAll}
-                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all flex items-center gap-1.5"
-                            >
-                                <ChevronsDownUp size={12} />
-                                Collapse All
-                            </button>
-                        </div>
+                        <span className="text-xs text-white/40">Open any file to view its full diff</span>
                     </div>
                 )}
 
@@ -351,103 +303,38 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                     ) : parsedDiff.length > 0 ? (
                         <div className="space-y-2">
                             {parsedDiff.map((file, idx) => {
-                                const isExpanded = expandedFiles.has(file.path)
-                                const showFull = showFullDiff.has(file.path)
-                                const diffLines = file.diff.split('\n')
-                                const shouldTruncate = diffLines.length > PREVIEW_LINES + 5 // Only truncate if significantly longer
-                                const displayLines = (isExpanded && !showFull && shouldTruncate)
-                                    ? diffLines.slice(0, PREVIEW_LINES)
-                                    : diffLines
-
                                 return (
-                                    <div key={idx} className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
-                                        {/* File Header */}
-                                        <button
-                                            onClick={() => toggleFile(file.path)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors group"
-                                        >
-                                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                <ChevronRight
-                                                    size={16}
-                                                    className={cn(
-                                                        "text-white/40 transition-transform shrink-0",
-                                                        isExpanded && "rotate-90"
-                                                    )}
-                                                />
+                                    <div key={idx} className="bg-black/30 rounded-xl border border-white/5 p-3 group">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-start gap-3 flex-1 min-w-0">
                                                 {getFileIcon(file.path.split('/').pop() || '', false)}
-                                                <span className="text-sm font-mono text-white/80 truncate">
-                                                    {file.path}
-                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-mono text-white/80 truncate">{file.path}</p>
+                                                    <p className="text-xs text-white/45">{file.totalLines} diff lines</p>
+                                                </div>
                                                 <button
                                                     onClick={(e) => handleCopyPath(file.path, e)}
                                                     className={cn(
-                                                        "p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100",
+                                                        'p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100',
                                                         copiedPath === file.path
-                                                            ? "text-emerald-400 bg-emerald-400/10"
-                                                            : "text-white/40 hover:text-white hover:bg-white/10"
+                                                            ? 'text-emerald-400 bg-emerald-400/10'
+                                                            : 'text-white/40 hover:text-white hover:bg-white/10'
                                                     )}
-                                                    title={copiedPath === file.path ? "Copied!" : `Copy path: ${file.path}`}
+                                                    title={copiedPath === file.path ? 'Copied!' : `Copy path: ${file.path}`}
                                                 >
                                                     {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
                                                 </button>
                                             </div>
-                                            <div className="flex items-center gap-3 text-xs shrink-0">
-                                                {file.additions > 0 && (
-                                                    <span className="text-green-400 font-mono">
-                                                        +{file.additions}
-                                                    </span>
-                                                )}
-                                                {file.deletions > 0 && (
-                                                    <span className="text-red-400 font-mono">
-                                                        -{file.deletions}
-                                                    </span>
-                                                )}
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <DiffStats additions={file.additions} deletions={file.deletions} compact />
+                                                <button
+                                                    onClick={() => setSelectedFilePath(file.path)}
+                                                    className="px-2 py-1 text-[11px] rounded border border-blue-400/25 text-blue-300 hover:text-blue-100 hover:bg-blue-500/10"
+                                                >
+                                                    View Diff
+                                                </button>
                                             </div>
-                                        </button>
-
-                                        {/* File Diff (Collapsible) */}
-                                        {isExpanded && (
-                                            <div className="border-t border-white/5 bg-black/40">
-                                                <pre className="text-xs font-mono text-white/70 whitespace-pre-wrap break-words p-4 overflow-x-auto">
-                                                    {displayLines.map((line, lineIdx) => {
-                                                        let lineClass = ''
-                                                        if (line.startsWith('+') && !line.startsWith('+++')) {
-                                                            lineClass = 'text-green-400 bg-green-500/10'
-                                                        } else if (line.startsWith('-') && !line.startsWith('---')) {
-                                                            lineClass = 'text-red-400 bg-red-500/10'
-                                                        } else if (line.startsWith('@@')) {
-                                                            lineClass = 'text-blue-400 bg-blue-500/10'
-                                                        } else if (line.startsWith('diff') || line.startsWith('index') || line.startsWith('---') || line.startsWith('+++')) {
-                                                            lineClass = 'text-white/40'
-                                                        }
-
-                                                        return (
-                                                            <div key={lineIdx} className={cn('px-2 -mx-2', lineClass)}>
-                                                                {line || ' '}
-                                                            </div>
-                                                        )
-                                                    })}
-                                                </pre>
-
-                                                {/* Show More/Less Button */}
-                                                {shouldTruncate && (
-                                                    <div className="border-t border-white/5 p-3 text-center">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                toggleFullDiff(file.path)
-                                                            }}
-                                                            className="text-xs text-[var(--accent-primary)] hover:text-white transition-colors font-medium"
-                                                        >
-                                                            {showFull
-                                                                ? `Show Less`
-                                                                : `Show ${diffLines.length - PREVIEW_LINES} More Lines...`
-                                                            }
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
+                                        </div>
                                     </div>
                                 )
                             })}
@@ -504,8 +391,17 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                         </div>
                     </div>
                 )}
+
+                <FileDiffDetailModal
+                    isOpen={Boolean(selectedFileDiff)}
+                    filePath={selectedFileDiff?.path || ''}
+                    diff={selectedFileDiff?.diff || ''}
+                    additions={selectedFileDiff?.additions || 0}
+                    deletions={selectedFileDiff?.deletions || 0}
+                    subtitle={selectedFileDiff ? `Commit diff • ${commit.shortHash}` : undefined}
+                    onClose={() => setSelectedFilePath(null)}
+                />
             </div>
         </div>
     )
 }
-

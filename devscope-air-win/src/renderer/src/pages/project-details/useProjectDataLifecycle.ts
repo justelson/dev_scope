@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { unstable_batchedUpdates } from 'react-dom'
 import {
     getCachedFileTree,
     getCachedProjectDetails,
@@ -11,6 +12,7 @@ import type {
     GitBranchSummary,
     GitCommit,
     GitRemoteSummary,
+    GitStatusDetail,
     GitStashSummary,
     GitTagSummary,
     ProjectDetails
@@ -43,7 +45,9 @@ interface UseProjectDataLifecycleParams {
     setFileTree: Dispatch<SetStateAction<FileTreeNode[]>>
     setActiveTab: Dispatch<SetStateAction<'readme' | 'files' | 'git'>>
     setLoadingGit: Dispatch<SetStateAction<boolean>>
+    setGitError: Dispatch<SetStateAction<string | null>>
     setIsGitRepo: Dispatch<SetStateAction<boolean | null>>
+    setGitStatusDetails: Dispatch<SetStateAction<GitStatusDetail[]>>
     setGitHistory: Dispatch<SetStateAction<GitCommit[]>>
     setUnpushedCommits: Dispatch<SetStateAction<GitCommit[]>>
     setGitUser: Dispatch<SetStateAction<{ name: string; email: string } | null>>
@@ -87,7 +91,9 @@ export function useProjectDataLifecycle({
     setFileTree,
     setActiveTab,
     setLoadingGit,
+    setGitError,
     setIsGitRepo,
+    setGitStatusDetails,
     setGitHistory,
     setUnpushedCommits,
     setGitUser,
@@ -114,6 +120,7 @@ export function useProjectDataLifecycle({
     setLoadingFiles
 }: UseProjectDataLifecycleParams) {
     const loadDetailsRequestRef = useRef(0)
+    const refreshGitRequestRef = useRef(0)
 
     const measureReadmeOverflow = useCallback(() => {
         const element = readmeContentRef.current
@@ -222,10 +229,18 @@ export function useProjectDataLifecycle({
         }
     }, [decodedPath, setLoading, setError, setProject, setActiveTab, setFileTree, setLoadingFiles])
 
-    const refreshGitData = useCallback(async (refreshFileTree: boolean = false) => {
+    const refreshGitData = useCallback(async (
+        refreshFileTree: boolean = false,
+        options?: { quiet?: boolean }
+    ) => {
         if (!decodedPath) return
 
-        setLoadingGit(true)
+        const requestId = ++refreshGitRequestRef.current
+        const isStaleRefresh = () => requestId !== refreshGitRequestRef.current
+        const quiet = Boolean(options?.quiet)
+        if (!quiet) {
+            setLoadingGit(true)
+        }
         await yieldToBrowserPaint()
 
         try {
@@ -233,11 +248,13 @@ export function useProjectDataLifecycle({
                 setLoadingFiles(true)
                 try {
                     const treeResult = await window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
-                    if (treeResult?.success && treeResult.tree) {
+                    if (!isStaleRefresh() && treeResult?.success && treeResult.tree) {
                         setFileTree(treeResult.tree)
                     }
                 } finally {
-                    setLoadingFiles(false)
+                    if (!isStaleRefresh()) {
+                        setLoadingFiles(false)
+                    }
                 }
             }
 
@@ -247,24 +264,27 @@ export function useProjectDataLifecycle({
             }
 
             if (!repoResult.isGitRepo) {
-                setIsGitRepo(false)
-                setGitHistory([])
-                setUnpushedCommits([])
-                setGitUser(null)
-                setRepoOwner(null)
-                setHasRemote(false)
-                setGitStatusMap({})
-                setBranches([])
-                setRemotes([])
-                setTags([])
-                setStashes([])
+                if (isStaleRefresh()) return
+                unstable_batchedUpdates(() => {
+                    setGitError(null)
+                    setIsGitRepo(false)
+                    setGitStatusDetails([])
+                    setGitHistory([])
+                    setUnpushedCommits([])
+                    setGitUser(null)
+                    setRepoOwner(null)
+                    setHasRemote(false)
+                    setGitStatusMap({})
+                    setBranches([])
+                    setRemotes([])
+                    setTags([])
+                    setStashes([])
+                })
                 return
             }
 
-            setIsGitRepo(true)
-
             const responses = await Promise.allSettled([
-                window.devscope.getGitStatus(decodedPath),
+                window.devscope.getGitStatusDetailed(decodedPath),
                 window.devscope.getGitHistory(decodedPath),
                 window.devscope.getUnpushedCommits(decodedPath),
                 window.devscope.getGitUser(decodedPath),
@@ -275,6 +295,7 @@ export function useProjectDataLifecycle({
                 window.devscope.listTags(decodedPath),
                 window.devscope.listStashes(decodedPath)
             ])
+            if (isStaleRefresh()) return
 
             const [
                 statusResult,
@@ -289,46 +310,99 @@ export function useProjectDataLifecycle({
                 stashesResult
             ] = responses
 
-            if (statusResult.status === 'fulfilled' && statusResult.value?.success) {
-                setGitStatusMap(statusResult.value.status || {})
+            const readErrors: string[] = []
+            const appendError = (label: string, result: PromiseSettledResult<any>) => {
+                if (result.status === 'rejected') {
+                    readErrors.push(`${label}: ${result.reason?.message || 'request failed'}`)
+                    return
+                }
+                if (!result.value?.success) {
+                    readErrors.push(`${label}: ${result.value?.error || 'request failed'}`)
+                }
             }
-            if (historyResult.status === 'fulfilled' && historyResult.value?.success) {
-                setGitHistory(historyResult.value.commits || [])
+
+            appendError('status', statusResult)
+            appendError('history', historyResult)
+            appendError('unpushed', unpushedResult)
+            appendError('user', userResult)
+            appendError('owner', ownerResult)
+            appendError('remote', remoteResult)
+            appendError('branches', branchesResult)
+            appendError('remotes', remotesResult)
+            appendError('tags', tagsResult)
+            appendError('stashes', stashesResult)
+
+            let nextGitError: string | null = null
+            if (readErrors.length > 0) {
+                const preview = readErrors.slice(0, 3).join(' | ')
+                const suffix = readErrors.length > 3 ? ` (+${readErrors.length - 3} more)` : ''
+                nextGitError = `Git data partially loaded: ${preview}${suffix}`
             }
-            if (unpushedResult.status === 'fulfilled' && unpushedResult.value?.success) {
-                setUnpushedCommits(unpushedResult.value.commits || [])
-            }
-            if (userResult.status === 'fulfilled' && userResult.value?.success) {
-                setGitUser(userResult.value.user || null)
-            }
-            if (ownerResult.status === 'fulfilled' && ownerResult.value?.success) {
-                setRepoOwner(ownerResult.value.owner || null)
-            }
-            if (remoteResult.status === 'fulfilled' && remoteResult.value?.success) {
-                setHasRemote(remoteResult.value.hasRemote)
-            }
-            if (branchesResult.status === 'fulfilled' && branchesResult.value?.success) {
-                setBranches(branchesResult.value.branches || [])
-            }
-            if (remotesResult.status === 'fulfilled' && remotesResult.value?.success) {
-                setRemotes(remotesResult.value.remotes || [])
-            }
-            if (tagsResult.status === 'fulfilled' && tagsResult.value?.success) {
-                setTags(tagsResult.value.tags || [])
-            }
-            if (stashesResult.status === 'fulfilled' && stashesResult.value?.success) {
-                setStashes(stashesResult.value.stashes || [])
-            }
+
+            unstable_batchedUpdates(() => {
+                setIsGitRepo(true)
+                setGitError(nextGitError)
+
+                if (statusResult.status === 'fulfilled' && statusResult.value?.success) {
+                    const details = (statusResult.value.entries || []) as GitStatusDetail[]
+                    setGitStatusDetails(details)
+                    const statusMap: Record<string, FileTreeNode['gitStatus']> = {}
+                    for (const detail of details) {
+                        statusMap[detail.path] = detail.status
+                        statusMap[detail.path.replace(/\//g, '\\')] = detail.status
+                        if (detail.previousPath) {
+                            statusMap[detail.previousPath] = 'renamed'
+                            statusMap[detail.previousPath.replace(/\//g, '\\')] = 'renamed'
+                        }
+                    }
+                    setGitStatusMap(statusMap)
+                }
+                if (historyResult.status === 'fulfilled' && historyResult.value?.success) {
+                    setGitHistory(historyResult.value.commits || [])
+                }
+                if (unpushedResult.status === 'fulfilled' && unpushedResult.value?.success) {
+                    setUnpushedCommits(unpushedResult.value.commits || [])
+                }
+                if (userResult.status === 'fulfilled' && userResult.value?.success) {
+                    setGitUser(userResult.value.user || null)
+                }
+                if (ownerResult.status === 'fulfilled' && ownerResult.value?.success) {
+                    setRepoOwner(ownerResult.value.owner || null)
+                }
+                if (remoteResult.status === 'fulfilled' && remoteResult.value?.success) {
+                    setHasRemote(remoteResult.value.hasRemote)
+                }
+                if (branchesResult.status === 'fulfilled' && branchesResult.value?.success) {
+                    setBranches(branchesResult.value.branches || [])
+                }
+                if (remotesResult.status === 'fulfilled' && remotesResult.value?.success) {
+                    setRemotes(remotesResult.value.remotes || [])
+                }
+                if (tagsResult.status === 'fulfilled' && tagsResult.value?.success) {
+                    setTags(tagsResult.value.tags || [])
+                }
+                if (stashesResult.status === 'fulfilled' && stashesResult.value?.success) {
+                    setStashes(stashesResult.value.stashes || [])
+                }
+            })
         } catch (err: any) {
-            setError(err?.message || 'Failed to load git details')
+            if (!isStaleRefresh()) {
+                setGitError(err?.message || 'Failed to load git details')
+            }
         } finally {
-            setLoadingGit(false)
+            if (!isStaleRefresh()) {
+                if (!quiet) {
+                    setLoadingGit(false)
+                }
+            }
         }
     }, [
         decodedPath,
         setLoadingGit,
+        setGitError,
         setFileTree,
         setIsGitRepo,
+        setGitStatusDetails,
         setGitHistory,
         setUnpushedCommits,
         setGitUser,
@@ -352,7 +426,9 @@ export function useProjectDataLifecycle({
         setGitUser(null)
         setRepoOwner(null)
         setHasRemote(null)
+        setGitError(null)
         setIsGitRepo(null)
+        setGitStatusDetails([])
         setGitStatusMap({})
         setBranches([])
         setRemotes([])
@@ -370,7 +446,9 @@ export function useProjectDataLifecycle({
         setGitUser,
         setRepoOwner,
         setHasRemote,
+        setGitError,
         setIsGitRepo,
+        setGitStatusDetails,
         setGitStatusMap,
         setBranches,
         setRemotes,
@@ -390,7 +468,7 @@ export function useProjectDataLifecycle({
 
     useEffect(() => {
         if (activeTab !== 'git' || !decodedPath) return
-        void refreshGitData(true)
+        void refreshGitData(false)
     }, [activeTab, decodedPath, refreshGitData])
 
     useEffect(() => {

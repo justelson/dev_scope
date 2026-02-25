@@ -1,6 +1,7 @@
-import { GitBranch, GitCommitHorizontal, GitPullRequest, Link, Plus, RefreshCw, Sparkles } from 'lucide-react'
+import { GitBranch, Link, Plus, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/FormControls'
+import { DiffStats } from './DiffStats'
 
 interface ProjectDetailsGitManageViewProps {
     [key: string]: any
@@ -17,18 +18,9 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
         isSwitchingBranch,
         handleSwitchBranch,
         changedFiles,
-        commitMessage,
-        setCommitMessage,
-        handleGenerateCommitMessage,
-        isGeneratingCommitMessage,
-        isCommitting,
-        settings,
-        handleCommit,
         hasRemote,
         setInitStep,
         unpushedCommits,
-        handlePush,
-        isPushing,
         gitHistory,
         setGitView,
         remotes,
@@ -75,7 +67,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                         onChange={setTargetBranch}
                         options={branches.map((branch: any) => ({
                             value: branch.name,
-                            label: `${branch.current ? '* ' : ''}${branch.name}`
+                            label: `${branch.current ? '* ' : ''}${branch.name}${branch.isLocal === false ? ' (remote)' : ''}`
                         }))}
                         placeholder="No branches found"
                         disabled={branches.length === 0 || isSwitchingBranch}
@@ -102,63 +94,6 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                 </div>
             </div>
 
-            {changedFiles.length > 0 && (
-                <div className="bg-black/20 rounded-xl border border-white/5 p-4">
-                    <h3 className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
-                        <GitCommitHorizontal size={16} />
-                        Create Commit
-                    </h3>
-                    <div className="relative">
-                        <textarea
-                            value={commitMessage}
-                            onChange={(e) => setCommitMessage(e.target.value)}
-                            placeholder="Enter commit message..."
-                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 pr-12 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-[var(--accent-primary)]/50 resize-none mb-3"
-                            rows={3}
-                        />
-                    </div>
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                        <button
-                            onClick={handleGenerateCommitMessage}
-                            disabled={isGeneratingCommitMessage || isCommitting}
-                            className="px-3 py-2 bg-violet-500/15 hover:bg-violet-500/25 disabled:opacity-50 disabled:cursor-not-allowed border border-violet-500/30 text-violet-300 text-xs font-medium rounded-lg transition-all flex items-center gap-2"
-                        >
-                            {isGeneratingCommitMessage ? (
-                                <>
-                                    <RefreshCw size={14} className="animate-spin" />
-                                    Generating...
-                                </>
-                            ) : (
-                                <>
-                                    <Sparkles size={14} />
-                                    Generate with AI
-                                </>
-                            )}
-                        </button>
-                        <span className="text-[11px] text-white/40 uppercase tracking-wide">
-                            {settings.commitAIProvider}
-                        </span>
-                    </div>
-                    <button
-                        onClick={handleCommit}
-                        disabled={!commitMessage.trim() || isCommitting}
-                        className="w-full px-4 py-2.5 bg-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/80 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2"
-                    >
-                        {isCommitting ? (
-                            <>
-                                <RefreshCw size={16} className="animate-spin" />
-                                Committing...
-                            </>
-                        ) : (
-                            <>
-                                <GitCommitHorizontal size={16} />
-                                Commit {changedFiles.length} {changedFiles.length === 1 ? 'File' : 'Files'}
-                            </>
-                        )}
-                    </button>
-                </div>
-            )}
-
             {hasRemote === false ? (
                 <div className="bg-amber-500/10 rounded-xl border border-amber-500/20 p-4">
                     <h3 className="text-sm font-medium text-amber-400 mb-3 flex items-center gap-2">
@@ -179,34 +114,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                         Add Remote Repository
                     </button>
                 </div>
-            ) : unpushedCommits.length > 0 && (
-                <div className="bg-black/20 rounded-xl border border-white/5 p-4">
-                    <h3 className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
-                        <GitPullRequest size={16} />
-                        Push to Remote
-                    </h3>
-                    <p className="text-xs text-white/50 mb-3">
-                        You have {unpushedCommits.length} unpushed {unpushedCommits.length === 1 ? 'commit' : 'commits'}
-                    </p>
-                    <button
-                        onClick={handlePush}
-                        disabled={isPushing}
-                        className="w-full px-4 py-2.5 bg-blue-500/20 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-blue-400 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 border border-blue-500/30"
-                    >
-                        {isPushing ? (
-                            <>
-                                <RefreshCw size={16} className="animate-spin" />
-                                Pushing...
-                            </>
-                        ) : (
-                            <>
-                                <GitPullRequest size={16} />
-                                Push Commits
-                            </>
-                        )}
-                    </button>
-                </div>
-            )}
+            ) : null}
 
             <div className="space-y-3">
                 {(() => {
@@ -220,8 +128,8 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
 
                     return (
                         <div className={cn(
-                            "grid gap-3",
-                            visibleSummaryCards >= 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"
+                            'grid gap-3',
+                            visibleSummaryCards >= 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'
                         )}>
                             {hasWorkingChanges && (
                                 <div className="bg-[#E2C08D]/5 rounded-xl border border-[#E2C08D]/20 p-4">
@@ -233,23 +141,10 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                     </div>
                                     <div className="space-y-1">
                                         {changedFiles.slice(0, 3).map((file: any) => (
-                                            <div key={file.path} className="flex items-center gap-2 text-xs text-white/60">
-                                                <span className={cn(
-                                                    "text-[9px] uppercase font-bold px-1 py-0.5 rounded",
-                                                    file.gitStatus === 'modified' && "bg-[#E2C08D]/20 text-[#E2C08D]",
-                                                    file.gitStatus === 'added' && "bg-[#73C991]/20 text-[#73C991]",
-                                                    file.gitStatus === 'deleted' && "bg-[#FF6B6B]/20 text-[#FF6B6B]"
-                                                )}>
-                                                    {file.gitStatus?.substring(0, 1)}
-                                                </span>
-                                                <span className="truncate">{file.name}</span>
-                                            </div>
+                                            <div key={file.path} className="text-xs text-white/60 truncate">{file.name}</div>
                                         ))}
                                         {changedFiles.length > 3 && (
-                                            <button
-                                                onClick={() => setGitView('changes')}
-                                                className="text-xs text-[#E2C08D] hover:underline"
-                                            >
+                                            <button onClick={() => setGitView('changes')} className="text-xs text-[#E2C08D] hover:underline">
                                                 +{changedFiles.length - 3} more...
                                             </button>
                                         )}
@@ -260,22 +155,26 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                             {hasUnpushedCommits && (
                                 <div className="bg-blue-500/5 rounded-xl border border-blue-500/20 p-4">
                                     <div className="flex items-center justify-between mb-2">
-                                        <h4 className="text-sm font-medium text-blue-400">Recent Changes (To Push)</h4>
+                                        <h4 className="text-sm font-medium text-blue-400">To Push</h4>
                                         <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
                                             {unpushedCommits.length}
                                         </span>
                                     </div>
                                     <div className="space-y-1">
                                         {unpushedCommits.slice(0, 3).map((commit: any) => (
-                                            <div key={commit.hash} className="text-xs text-white/60 truncate">
-                                                <span className="font-mono text-white/40">{commit.shortHash}</span> {commit.message}
+                                            <div key={commit.hash} className="rounded-md border border-white/5 bg-black/20 px-2 py-1.5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="text-xs text-white/60 truncate min-w-0">
+                                                        <span className="font-mono text-white/40">{commit.shortHash}</span> {commit.message}
+                                                    </div>
+                                                    <div className="shrink-0">
+                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact />
+                                                    </div>
+                                                </div>
                                             </div>
                                         ))}
                                         {unpushedCommits.length > 3 && (
-                                            <button
-                                                onClick={() => setGitView('unpushed')}
-                                                className="text-xs text-blue-400 hover:underline"
-                                            >
+                                            <button onClick={() => setGitView('unpushed')} className="text-xs text-blue-400 hover:underline">
                                                 +{unpushedCommits.length - 3} more...
                                             </button>
                                         )}
@@ -285,8 +184,8 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
 
                             {hasRecentCommits && (
                                 <div className={cn(
-                                    "bg-white/5 rounded-xl border border-white/5 p-4",
-                                    visibleSummaryCards === 3 && "md:col-span-2"
+                                    'bg-white/5 rounded-xl border border-white/5 p-4',
+                                    visibleSummaryCards === 3 && 'md:col-span-2'
                                 )}>
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="text-sm font-medium text-white/80">Recent Commits</h4>
@@ -296,15 +195,19 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                     </div>
                                     <div className="space-y-1">
                                         {gitHistory.slice(0, 3).map((commit: any) => (
-                                            <div key={commit.hash} className="text-xs text-white/60 truncate">
-                                                <span className="font-mono text-white/40">{commit.shortHash}</span> {commit.message}
+                                            <div key={commit.hash} className="rounded-md border border-white/5 bg-black/20 px-2 py-1.5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="text-xs text-white/60 truncate min-w-0">
+                                                        <span className="font-mono text-white/40">{commit.shortHash}</span> {commit.message}
+                                                    </div>
+                                                    <div className="shrink-0">
+                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact />
+                                                    </div>
+                                                </div>
                                             </div>
                                         ))}
                                         {gitHistory.length > 3 && (
-                                            <button
-                                                onClick={() => setGitView('history')}
-                                                className="text-xs text-[var(--accent-primary)] hover:underline"
-                                            >
+                                            <button onClick={() => setGitView('history')} className="text-xs text-[var(--accent-primary)] hover:underline">
                                                 View all...
                                             </button>
                                         )}
@@ -340,32 +243,6 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                 <div className="text-white/80 font-medium">{stashes.length}</div>
                             </div>
                         </div>
-
-                        {branches.length > 0 && (
-                            <div className="space-y-1">
-                                <div className="text-xs text-white/40">Active Branches</div>
-                                {branches.slice(0, 4).map((branch: any) => (
-                                    <div key={branch.name} className="text-xs text-white/65 truncate">
-                                        <span className={cn('font-mono', branch.current && 'text-green-300')}>
-                                            {branch.current ? '* ' : ''}{branch.name}
-                                        </span>
-                                        {branch.isRemote ? ' (remote)' : ''}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {remotes.length > 0 && (
-                            <div className="space-y-1">
-                                <div className="text-xs text-white/40">Remotes</div>
-                                {remotes.slice(0, 3).map((remote: any) => (
-                                    <div key={remote.name} className="text-xs text-white/65 truncate">
-                                        <span className="font-mono">{remote.name}</span>{' '}
-                                        <span className="text-white/40">{remote.fetchUrl || remote.pushUrl}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </div>
                 )}
             </div>

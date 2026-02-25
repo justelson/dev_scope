@@ -22,6 +22,20 @@ export type DevScopeAssistantEvent = {
 }
 
 export type DevScopeGitFileStatus = 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown'
+export type DevScopeGitStatusDetail = {
+    path: string
+    previousPath?: string
+    status: DevScopeGitFileStatus
+    code: string
+    staged: boolean
+    unstaged: boolean
+    additions: number
+    deletions: number
+    stagedAdditions: number
+    stagedDeletions: number
+    unstagedAdditions: number
+    unstagedDeletions: number
+}
 
 export type DevScopeProject = {
     name: string
@@ -79,6 +93,9 @@ export type DevScopeGitCommit = {
     author: string
     date: string
     message: string
+    additions: number
+    deletions: number
+    filesChanged: number
 }
 
 export type DevScopeGitBranchSummary = {
@@ -87,6 +104,7 @@ export type DevScopeGitBranchSummary = {
     commit: string
     label: string
     isRemote: boolean
+    isLocal?: boolean
 }
 
 export type DevScopeGitRemoteSummary = {
@@ -295,9 +313,14 @@ export interface DevScopeApi {
     getFileTree: (projectPath: string, options?: { showHidden?: boolean; maxDepth?: number }) => Promise<DevScopeResult<{ tree: DevScopeFileTreeNode[] }>>
     getGitHistory: (projectPath: string) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
     getCommitDiff: (projectPath: string, commitHash: string) => Promise<DevScopeResult<{ diff: string }>>
-    getWorkingDiff: (projectPath: string, filePath?: string) => Promise<DevScopeResult<{ diff: string }>>
+    getWorkingDiff: (
+        projectPath: string,
+        filePath?: string,
+        mode?: 'combined' | 'staged' | 'unstaged'
+    ) => Promise<DevScopeResult<{ diff: string }>>
     getWorkingChangesForAI: (projectPath: string) => Promise<DevScopeResult<{ context: string }>>
     getGitStatus: (projectPath: string) => Promise<DevScopeResult<{ status: Record<string, DevScopeGitFileStatus | undefined> }>>
+    getGitStatusDetailed: (projectPath: string) => Promise<DevScopeResult<{ entries: DevScopeGitStatusDetail[] }>>
     getUnpushedCommits: (projectPath: string) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
     getGitUser: (projectPath: string) => Promise<DevScopeResult<{ user: { name: string; email: string } | null }>>
     getRepoOwner: (projectPath: string) => Promise<DevScopeResult<{ owner: string | null }>>

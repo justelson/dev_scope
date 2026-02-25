@@ -13,9 +13,14 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:getFileTree', projectPath, options),
         getGitHistory: (projectPath: string) => ipcRenderer.invoke('devscope:getGitHistory', projectPath),
         getCommitDiff: (projectPath: string, commitHash: string) => ipcRenderer.invoke('devscope:getCommitDiff', projectPath, commitHash),
-        getWorkingDiff: (projectPath: string, filePath?: string) => ipcRenderer.invoke('devscope:getWorkingDiff', projectPath, filePath),
+        getWorkingDiff: (
+            projectPath: string,
+            filePath?: string,
+            mode?: 'combined' | 'staged' | 'unstaged'
+        ) => ipcRenderer.invoke('devscope:getWorkingDiff', projectPath, filePath, mode),
         getWorkingChangesForAI: (projectPath: string) => ipcRenderer.invoke('devscope:getWorkingChangesForAI', projectPath),
         getGitStatus: (projectPath: string) => ipcRenderer.invoke('devscope:getGitStatus', projectPath),
+        getGitStatusDetailed: (projectPath: string) => ipcRenderer.invoke('devscope:getGitStatusDetailed', projectPath),
         getUnpushedCommits: (projectPath: string) => ipcRenderer.invoke('devscope:getUnpushedCommits', projectPath),
         getGitUser: (projectPath: string) => ipcRenderer.invoke('devscope:getGitUser', projectPath),
         getRepoOwner: (projectPath: string) => ipcRenderer.invoke('devscope:getRepoOwner', projectPath),

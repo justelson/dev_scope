@@ -142,7 +142,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                         <div
                             key={node.path}
                             className={cn(
-                                "grid grid-cols-12 gap-2 px-4 py-2 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
+                                "grid grid-cols-12 gap-2 px-4 py-1.5 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
                                 node.isHidden && "opacity-50"
                             )}
                             style={{ paddingLeft: `${16 + depth * 20}px` }}
@@ -177,7 +177,8 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                     node.gitStatus === 'modified' && "text-[#E2C08D]",
                                     node.gitStatus === 'added' && "text-[#73C991]",
                                     node.gitStatus === 'untracked' && "text-[#73C991]",
-                                    node.gitStatus === 'deleted' && "text-[#FF6B6B] line-through"
+                                    node.gitStatus === 'deleted' && "text-[#FF6B6B] line-through",
+                                    node.gitStatus === 'renamed' && "text-blue-300"
                                 )}>
                                     {node.name}
                                 </span>
@@ -187,9 +188,10 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         node.gitStatus === 'modified' && "bg-[#E2C08D]/20 text-[#E2C08D]",
                                         node.gitStatus === 'added' && "bg-[#73C991]/20 text-[#73C991]",
                                         node.gitStatus === 'untracked' && "bg-[#73C991]/20 text-[#73C991]",
-                                        node.gitStatus === 'deleted' && "bg-[#FF6B6B]/20 text-[#FF6B6B]"
+                                        node.gitStatus === 'deleted' && "bg-[#FF6B6B]/20 text-[#FF6B6B]",
+                                        node.gitStatus === 'renamed' && "bg-blue-500/20 text-blue-300"
                                     )}>
-                                        {node.gitStatus.charAt(0)}
+                                        {node.gitStatus === 'renamed' ? 'R' : node.gitStatus.charAt(0)}
                                     </span>
                                 )}
                             </div>
