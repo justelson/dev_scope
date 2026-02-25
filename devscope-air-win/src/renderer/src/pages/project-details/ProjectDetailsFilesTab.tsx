@@ -22,7 +22,6 @@ function getGitStatusVisual(status: FileGitStatus) {
     switch (status) {
         case 'modified':
             return {
-                rowClass: 'border-l-2 border-l-[#E2C08D] bg-[#E2C08D]/[0.08]',
                 nameClass: '!text-[#F4D6A7]',
                 metaClass: '!text-[#D9BE93]',
                 pulseClass: 'bg-[#E2C08D]',
@@ -31,7 +30,6 @@ function getGitStatusVisual(status: FileGitStatus) {
             }
         case 'added':
             return {
-                rowClass: 'border-l-2 border-l-[#73C991] bg-[#73C991]/[0.08]',
                 nameClass: '!text-[#8DE2AA]',
                 metaClass: '!text-[#76C895]',
                 pulseClass: 'bg-[#73C991]',
@@ -40,7 +38,6 @@ function getGitStatusVisual(status: FileGitStatus) {
             }
         case 'untracked':
             return {
-                rowClass: 'border-l-2 border-l-[#73C991] bg-[#73C991]/[0.08]',
                 nameClass: '!text-[#8DE2AA]',
                 metaClass: '!text-[#76C895]',
                 pulseClass: 'bg-[#73C991]',
@@ -49,7 +46,6 @@ function getGitStatusVisual(status: FileGitStatus) {
             }
         case 'deleted':
             return {
-                rowClass: 'border-l-2 border-l-[#FF6B6B] bg-[#FF6B6B]/[0.08]',
                 nameClass: '!text-[#FF8A8A] line-through',
                 metaClass: '!text-[#E07A7A]',
                 pulseClass: 'bg-[#FF6B6B]',
@@ -58,7 +54,6 @@ function getGitStatusVisual(status: FileGitStatus) {
             }
         case 'renamed':
             return {
-                rowClass: 'border-l-2 border-l-blue-400 bg-blue-500/[0.08]',
                 nameClass: '!text-blue-300',
                 metaClass: '!text-blue-300/80',
                 pulseClass: 'bg-blue-400',
@@ -67,7 +62,6 @@ function getGitStatusVisual(status: FileGitStatus) {
             }
         default:
             return {
-                rowClass: '',
                 nameClass: '',
                 metaClass: '',
                 pulseClass: '',
@@ -207,7 +201,6 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                     key={node.path}
                                     className={cn(
                                         "grid grid-cols-12 gap-2 px-4 py-0.5 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
-                                        visual.rowClass,
                                         node.isHidden && "opacity-50"
                                     )}
                                     style={{ paddingLeft: `${12 + depth * 16}px` }}
@@ -244,10 +237,16 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                             {node.name}
                                         </span>
                                         {isFolder && node.gitStatus && node.gitStatus !== 'ignored' && node.gitStatus !== 'unknown' && (
-                                            <span className="relative w-2 h-2 shrink-0">
-                                                <span className={cn("absolute inset-0 rounded-full opacity-80 animate-ping", visual.pulseClass)} />
-                                                <span className={cn("absolute inset-[1px] rounded-full", visual.pulseClass)} />
-                                            </span>
+                                            <span className={cn(
+                                                "inline-block w-2.5 h-2.5 rounded-full animate-pulse ring-1 ring-white/40 shrink-0",
+                                                visual.pulseClass
+                                            )} />
+                                        )}
+                                        {isFolder && !node.gitStatus && (
+                                            <span className="w-2.5 h-2.5 shrink-0" />
+                                        )}
+                                        {!isFolder && (
+                                            <span className="w-2.5 h-2.5 shrink-0" />
                                         )}
                                         {node.gitStatus && node.gitStatus !== 'ignored' && node.gitStatus !== 'unknown' && (
                                             <span className={cn(
