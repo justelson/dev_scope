@@ -1,4 +1,4 @@
-import { startTransition } from 'react'
+import { startTransition, useMemo } from 'react'
 import {
     Search, RefreshCw, ChevronsDownUp, ChevronsUpDown, Eye, EyeOff,
     ChevronUp, ChevronDown, ChevronRight, AppWindow, ClipboardPaste, Copy,
@@ -17,6 +17,10 @@ interface ProjectDetailsFilesTabProps {
 const EMPTY_SET = new Set<string>()
 
 type FileGitStatus = 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown' | undefined
+
+function normalizePath(path: string): string {
+    return path.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '').toLowerCase()
+}
 
 function getGitStatusVisual(status: FileGitStatus) {
     switch (status) {
@@ -88,6 +92,8 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
         sortAsc,
         setSortAsc,
         visibleFileList,
+        changedFiles,
+        project,
         openPreview,
         onFileTreeOpen,
         onFileTreeOpenWith,
@@ -100,6 +106,51 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
         hasFileClipboardItem,
         loadingFiles
     } = props
+
+    const projectRootPath = useMemo(() => normalizePath(project?.path || ''), [project?.path])
+
+    const changedStatusLookup = useMemo(() => {
+        const lookup = new Map<string, Exclude<FileGitStatus, undefined>>()
+        for (const file of (changedFiles || [])) {
+            const status = file?.gitStatus as Exclude<FileGitStatus, undefined>
+            const relPath = normalizePath(file?.path || '')
+            if (!status || !relPath) continue
+            lookup.set(relPath, status)
+            if (projectRootPath) {
+                lookup.set(normalizePath(`${projectRootPath}/${relPath}`), status)
+            }
+        }
+        return lookup
+    }, [changedFiles, projectRootPath])
+
+    const changedPathList = useMemo(() => {
+        const paths: string[] = []
+        for (const file of (changedFiles || [])) {
+            const relPath = normalizePath(file?.path || '')
+            if (!relPath) continue
+            paths.push(relPath)
+            if (projectRootPath) {
+                paths.push(normalizePath(`${projectRootPath}/${relPath}`))
+            }
+        }
+        return paths
+    }, [changedFiles, projectRootPath])
+
+    const resolveNodeStatus = (node: any): FileGitStatus => {
+        const fromNode = node.gitStatus as FileGitStatus
+        if (fromNode && fromNode !== 'unknown' && fromNode !== 'ignored') return fromNode
+        const normalizedNodePath = normalizePath(node.path || '')
+        return changedStatusLookup.get(normalizedNodePath)
+    }
+
+    const folderHasNestedChanges = (folderPath: string): boolean => {
+        const normalizedFolderPath = normalizePath(folderPath)
+        if (!normalizedFolderPath) return false
+        return changedPathList.some((changedPath) => (
+            changedPath === normalizedFolderPath
+            || changedPath.startsWith(`${normalizedFolderPath}/`)
+        ))
+    }
 
     return (
         <div className="flex flex-col h-full">
@@ -193,35 +244,36 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                         )}
                     </div>
                 ) : (
-                    visibleFileList.map(({ node, depth, isExpanded, isFolder, ext, isPreviewable, childInfo }: any) => (
-                        (() => {
-                            const visual = getGitStatusVisual(node.gitStatus)
-                            return (
-                                <div
-                                    key={node.path}
-                                    className={cn(
-                                        "grid grid-cols-12 gap-2 px-4 py-0.5 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
-                                        node.isHidden && "opacity-50"
-                                    )}
-                                    style={{ paddingLeft: `${12 + depth * 16}px` }}
-                                    onClick={() => {
-                                        if (isFolder) {
-                                            startTransition(() => {
-                                                setExpandedFolders((prev: Set<string>) => {
-                                                    const next = new Set(prev)
-                                                    if (next.has(node.path)) {
-                                                        next.delete(node.path)
-                                                    } else {
-                                                        next.add(node.path)
-                                                    }
-                                                    return next
-                                                })
+                    visibleFileList.map(({ node, depth, isExpanded, isFolder, ext, isPreviewable, childInfo }: any) => {
+                        const effectiveStatus = resolveNodeStatus(node)
+                        const effectiveVisual = getGitStatusVisual(effectiveStatus)
+                        const hasNestedChanges = isFolder && folderHasNestedChanges(node.path)
+                        return (
+                            <div
+                                key={node.path}
+                                className={cn(
+                                    "grid grid-cols-12 gap-2 px-4 py-1 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
+                                    node.isHidden && "opacity-50"
+                                )}
+                                style={{ paddingLeft: `${12 + depth * 16}px` }}
+                                onClick={() => {
+                                    if (isFolder) {
+                                        startTransition(() => {
+                                            setExpandedFolders((prev: Set<string>) => {
+                                                const next = new Set(prev)
+                                                if (next.has(node.path)) {
+                                                    next.delete(node.path)
+                                                } else {
+                                                    next.add(node.path)
+                                                }
+                                                return next
                                             })
-                                        } else {
-                                            openPreview({ name: node.name, path: node.path }, ext)
-                                        }
-                                    }}
-                                >
+                                        })
+                                    } else {
+                                        openPreview({ name: node.name, path: node.path }, ext)
+                                    }
+                                }}
+                            >
                                     <div className="col-span-6 flex items-center gap-2 min-w-0">
                                         {isFolder ? (
                                             <ChevronRight size={12} className={cn("text-white/30 transition-transform", isExpanded && "rotate-90")} />
@@ -232,47 +284,47 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         <span className={cn(
                                             "text-[12px] truncate",
                                             isFolder ? "text-white/80 font-medium" : "text-white/60",
-                                            visual.nameClass
+                                            effectiveVisual.nameClass
                                         )}>
                                             {node.name}
                                         </span>
-                                        {isFolder && node.gitStatus && node.gitStatus !== 'ignored' && node.gitStatus !== 'unknown' && (
+                                        {isFolder && hasNestedChanges && (
                                             <span className={cn(
                                                 "inline-block w-2.5 h-2.5 rounded-full animate-pulse ring-1 ring-white/40 shrink-0",
-                                                visual.pulseClass
+                                                effectiveVisual.pulseClass || 'bg-[var(--accent-primary)]'
                                             )} />
                                         )}
-                                        {isFolder && !node.gitStatus && (
+                                        {isFolder && !hasNestedChanges && (
                                             <span className="w-2.5 h-2.5 shrink-0" />
                                         )}
                                         {!isFolder && (
                                             <span className="w-2.5 h-2.5 shrink-0" />
                                         )}
-                                        {node.gitStatus && node.gitStatus !== 'ignored' && node.gitStatus !== 'unknown' && (
+                                        {effectiveStatus && effectiveStatus !== 'ignored' && effectiveStatus !== 'unknown' && (
                                             <span className={cn(
                                                 "text-[8px] uppercase font-bold px-1 py-0.5 rounded shrink-0",
-                                                visual.badgeClass
+                                                effectiveVisual.badgeClass
                                             )}>
-                                                {visual.badgeLabel}
+                                                {effectiveVisual.badgeLabel}
                                             </span>
                                         )}
                                     </div>
 
                                     <div className="col-span-2 flex items-center">
-                                        <span className={cn("text-[10px] text-white/40 uppercase", visual.metaClass)}>
+                                        <span className={cn("text-[10px] text-white/40 uppercase", effectiveVisual.metaClass)}>
                                             {isFolder ? 'Folder' : ext || '-'}
                                         </span>
                                     </div>
 
                                     <div className="col-span-2 flex items-center">
-                                        <span className={cn("text-[10px] text-white/40 font-mono", visual.metaClass)}>
+                                        <span className={cn("text-[10px] text-white/40 font-mono", effectiveVisual.metaClass)}>
                                             {isFolder ? '-' : formatFileSize(node.size)}
                                         </span>
                                     </div>
 
                                     <div className="col-span-2 flex items-center justify-end gap-2">
                                         {isFolder && childInfo && (
-                                            <span className={cn("text-[9px] text-white/30", visual.metaClass)}>
+                                            <span className={cn("text-[9px] text-white/30", effectiveVisual.metaClass)}>
                                                 {childInfo.folders > 0 && `${childInfo.folders} folders`}
                                                 {childInfo.folders > 0 && childInfo.files > 0 && ', '}
                                                 {childInfo.files > 0 && `${childInfo.files} files`}
@@ -339,10 +391,9 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                             ]}
                                         />
                                     </div>
-                                </div>
-                            )
-                        })()
-                    ))
+                            </div>
+                        )
+                    })
                 )}
             </div>
         </div>
