@@ -26,41 +26,51 @@ function getGitStatusVisual(status: FileGitStatus) {
     switch (status) {
         case 'modified':
             return {
-                nameClass: '!text-amber-300 font-semibold',
-                metaClass: '!text-amber-200/95',
-                pulseClass: 'bg-[#E2C08D]',
+                nameClass: 'font-semibold',
+                metaClass: '',
+                nameColor: '#F6D38F',
+                metaColor: '#EAC883',
+                pulseColor: '#E2C08D',
                 badgeClass: 'bg-[#E2C08D]/30 text-[#F4D6A7]',
                 badgeLabel: 'M'
             }
         case 'added':
             return {
-                nameClass: '!text-lime-300 font-semibold',
-                metaClass: '!text-lime-200/95',
-                pulseClass: 'bg-[#73C991]',
+                nameClass: 'font-semibold',
+                metaClass: '',
+                nameColor: '#9AF3B5',
+                metaColor: '#86E0A2',
+                pulseColor: '#73C991',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
                 badgeLabel: 'A'
             }
         case 'untracked':
             return {
-                nameClass: '!text-lime-300 font-semibold',
-                metaClass: '!text-lime-200/95',
-                pulseClass: 'bg-[#73C991]',
+                nameClass: 'font-semibold',
+                metaClass: '',
+                nameColor: '#9AF3B5',
+                metaColor: '#86E0A2',
+                pulseColor: '#73C991',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
                 badgeLabel: 'U'
             }
         case 'deleted':
             return {
-                nameClass: '!text-rose-300 font-semibold line-through',
-                metaClass: '!text-rose-200/95',
-                pulseClass: 'bg-[#FF6B6B]',
+                nameClass: 'font-semibold line-through',
+                metaClass: '',
+                nameColor: '#FF9A9A',
+                metaColor: '#EF8A8A',
+                pulseColor: '#FF6B6B',
                 badgeClass: 'bg-[#FF6B6B]/30 text-[#FF8A8A]',
                 badgeLabel: 'D'
             }
         case 'renamed':
             return {
-                nameClass: '!text-sky-300 font-semibold',
-                metaClass: '!text-sky-200/95',
-                pulseClass: 'bg-blue-400',
+                nameClass: 'font-semibold',
+                metaClass: '',
+                nameColor: '#88CCFF',
+                metaColor: '#78BFF5',
+                pulseColor: '#60A5FA',
                 badgeClass: 'bg-blue-500/30 text-blue-300',
                 badgeLabel: 'R'
             }
@@ -68,7 +78,9 @@ function getGitStatusVisual(status: FileGitStatus) {
             return {
                 nameClass: '',
                 metaClass: '',
-                pulseClass: '',
+                nameColor: '',
+                metaColor: '',
+                pulseColor: '',
                 badgeClass: '',
                 badgeLabel: ''
             }
@@ -285,20 +297,32 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                             "text-[14px] truncate",
                                             isFolder ? "text-white/80 font-medium" : "text-white/60",
                                             effectiveVisual.nameClass
-                                        )}>
+                                        )}
+                                        style={effectiveVisual.nameColor ? { color: effectiveVisual.nameColor } : undefined}
+                                        >
                                             {node.name}
                                         </span>
                                         {isFolder && hasNestedChanges && (
-                                            <span className={cn(
-                                                "inline-block w-2.5 h-2.5 rounded-full animate-pulse ring-1 ring-white/40 shrink-0",
-                                                effectiveVisual.pulseClass || 'bg-[var(--accent-primary)]'
-                                            )} />
+                                            <span className="relative inline-flex w-3.5 h-3.5 shrink-0">
+                                                <span
+                                                    className="absolute inset-0 rounded-full animate-ping"
+                                                    style={{ backgroundColor: effectiveVisual.pulseColor || '#7dd3fc', opacity: 0.4 }}
+                                                />
+                                                <span
+                                                    className="absolute inset-[1px] rounded-full border"
+                                                    style={{ borderColor: effectiveVisual.pulseColor || '#7dd3fc', backgroundColor: 'rgba(255,255,255,0.16)' }}
+                                                />
+                                                <span
+                                                    className="absolute inset-[4px] rounded-[2px]"
+                                                    style={{ backgroundColor: effectiveVisual.pulseColor || '#7dd3fc' }}
+                                                />
+                                            </span>
                                         )}
                                         {isFolder && !hasNestedChanges && (
-                                            <span className="w-2.5 h-2.5 shrink-0" />
+                                            <span className="w-3.5 h-3.5 shrink-0" />
                                         )}
                                         {!isFolder && (
-                                            <span className="w-2.5 h-2.5 shrink-0" />
+                                            <span className="w-3.5 h-3.5 shrink-0" />
                                         )}
                                         {effectiveStatus && effectiveStatus !== 'ignored' && effectiveStatus !== 'unknown' && (
                                             <span className={cn(
@@ -311,20 +335,29 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                     </div>
 
                                     <div className="col-span-2 flex items-center">
-                                        <span className={cn("text-[12px] text-white/40 uppercase", effectiveVisual.metaClass)}>
+                                        <span
+                                            className={cn("text-[12px] text-white/40 uppercase", effectiveVisual.metaClass)}
+                                            style={effectiveVisual.metaColor ? { color: effectiveVisual.metaColor } : undefined}
+                                        >
                                             {isFolder ? 'Folder' : ext || '-'}
                                         </span>
                                     </div>
 
                                     <div className="col-span-2 flex items-center">
-                                        <span className={cn("text-[12px] text-white/40 font-mono", effectiveVisual.metaClass)}>
+                                        <span
+                                            className={cn("text-[12px] text-white/40 font-mono", effectiveVisual.metaClass)}
+                                            style={effectiveVisual.metaColor ? { color: effectiveVisual.metaColor } : undefined}
+                                        >
                                             {isFolder ? '-' : formatFileSize(node.size)}
                                         </span>
                                     </div>
 
                                     <div className="col-span-2 flex items-center justify-end gap-2">
                                         {isFolder && childInfo && (
-                                            <span className={cn("text-[11px] text-white/30", effectiveVisual.metaClass)}>
+                                            <span
+                                                className={cn("text-[11px] text-white/30", effectiveVisual.metaClass)}
+                                                style={effectiveVisual.metaColor ? { color: effectiveVisual.metaColor } : undefined}
+                                            >
                                                 {childInfo.folders > 0 && `${childInfo.folders} folders`}
                                                 {childInfo.folders > 0 && childInfo.files > 0 && ', '}
                                                 {childInfo.files > 0 && `${childInfo.files} files`}
