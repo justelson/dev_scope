@@ -26,40 +26,40 @@ function getGitStatusVisual(status: FileGitStatus) {
     switch (status) {
         case 'modified':
             return {
-                nameClass: '!text-[#F4D6A7]',
-                metaClass: '!text-[#D9BE93]',
+                nameClass: '!text-amber-300 font-semibold',
+                metaClass: '!text-amber-200/95',
                 pulseClass: 'bg-[#E2C08D]',
                 badgeClass: 'bg-[#E2C08D]/30 text-[#F4D6A7]',
                 badgeLabel: 'M'
             }
         case 'added':
             return {
-                nameClass: '!text-[#8DE2AA]',
-                metaClass: '!text-[#76C895]',
+                nameClass: '!text-lime-300 font-semibold',
+                metaClass: '!text-lime-200/95',
                 pulseClass: 'bg-[#73C991]',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
                 badgeLabel: 'A'
             }
         case 'untracked':
             return {
-                nameClass: '!text-[#8DE2AA]',
-                metaClass: '!text-[#76C895]',
+                nameClass: '!text-lime-300 font-semibold',
+                metaClass: '!text-lime-200/95',
                 pulseClass: 'bg-[#73C991]',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
                 badgeLabel: 'U'
             }
         case 'deleted':
             return {
-                nameClass: '!text-[#FF8A8A] line-through',
-                metaClass: '!text-[#E07A7A]',
+                nameClass: '!text-rose-300 font-semibold line-through',
+                metaClass: '!text-rose-200/95',
                 pulseClass: 'bg-[#FF6B6B]',
                 badgeClass: 'bg-[#FF6B6B]/30 text-[#FF8A8A]',
                 badgeLabel: 'D'
             }
         case 'renamed':
             return {
-                nameClass: '!text-blue-300',
-                metaClass: '!text-blue-300/80',
+                nameClass: '!text-sky-300 font-semibold',
+                metaClass: '!text-sky-200/95',
                 pulseClass: 'bg-blue-400',
                 badgeClass: 'bg-blue-500/30 text-blue-300',
                 badgeLabel: 'R'
@@ -252,7 +252,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                             <div
                                 key={node.path}
                                 className={cn(
-                                    "grid grid-cols-12 gap-2 px-4 py-1 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
+                                    "grid grid-cols-12 gap-2 px-4 py-1.5 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
                                     node.isHidden && "opacity-50"
                                 )}
                                 style={{ paddingLeft: `${12 + depth * 16}px` }}
@@ -282,7 +282,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         )}
                                         {getFileIcon(node.name, isFolder, isExpanded)}
                                         <span className={cn(
-                                            "text-[12px] truncate",
+                                            "text-[14px] truncate",
                                             isFolder ? "text-white/80 font-medium" : "text-white/60",
                                             effectiveVisual.nameClass
                                         )}>
@@ -311,20 +311,20 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                     </div>
 
                                     <div className="col-span-2 flex items-center">
-                                        <span className={cn("text-[10px] text-white/40 uppercase", effectiveVisual.metaClass)}>
+                                        <span className={cn("text-[12px] text-white/40 uppercase", effectiveVisual.metaClass)}>
                                             {isFolder ? 'Folder' : ext || '-'}
                                         </span>
                                     </div>
 
                                     <div className="col-span-2 flex items-center">
-                                        <span className={cn("text-[10px] text-white/40 font-mono", effectiveVisual.metaClass)}>
+                                        <span className={cn("text-[12px] text-white/40 font-mono", effectiveVisual.metaClass)}>
                                             {isFolder ? '-' : formatFileSize(node.size)}
                                         </span>
                                     </div>
 
                                     <div className="col-span-2 flex items-center justify-end gap-2">
                                         {isFolder && childInfo && (
-                                            <span className={cn("text-[9px] text-white/30", effectiveVisual.metaClass)}>
+                                            <span className={cn("text-[11px] text-white/30", effectiveVisual.metaClass)}>
                                                 {childInfo.folders > 0 && `${childInfo.folders} folders`}
                                                 {childInfo.folders > 0 && childInfo.files > 0 && ', '}
                                                 {childInfo.files > 0 && `${childInfo.files} files`}
