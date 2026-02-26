@@ -419,10 +419,12 @@ export default function FolderBrowse() {
     }, [showToast])
 
     const handleEntryRename = useCallback(async (entry: FileSystemClipboardItem) => {
-        const splitName = splitFileNameForRename(entry.name)
+        const splitName = entry.type === 'file'
+            ? splitFileNameForRename(entry.name)
+            : { baseName: entry.name, extensionSuffix: '' }
         setRenameTarget(entry)
         setRenameDraft(splitName.baseName)
-        setRenameExtensionSuffix(entry.type === 'file' ? splitName.extensionSuffix : '')
+        setRenameExtensionSuffix(splitName.extensionSuffix)
         setRenameErrorMessage(null)
     }, [])
 

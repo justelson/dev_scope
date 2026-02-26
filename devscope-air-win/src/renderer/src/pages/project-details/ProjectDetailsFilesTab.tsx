@@ -26,9 +26,9 @@ function getGitStatusVisual(status: FileGitStatus) {
     switch (status) {
         case 'modified':
             return {
-                nameClass: '!text-[#F6D38F] font-semibold',
+                nameClass: 'font-semibold',
                 metaClass: '!text-[#EAC883]',
-                nameColor: '',
+                nameColor: '#F6D38F',
                 metaColor: '',
                 pulseColor: '#E2C08D',
                 badgeClass: 'bg-[#E2C08D]/30 text-[#F4D6A7]',
@@ -36,9 +36,9 @@ function getGitStatusVisual(status: FileGitStatus) {
             }
         case 'added':
             return {
-                nameClass: '!text-[#9AF3B5] font-semibold',
+                nameClass: 'font-semibold',
                 metaClass: '!text-[#86E0A2]',
-                nameColor: '',
+                nameColor: '#9AF3B5',
                 metaColor: '',
                 pulseColor: '#73C991',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
@@ -46,9 +46,9 @@ function getGitStatusVisual(status: FileGitStatus) {
             }
         case 'untracked':
             return {
-                nameClass: '!text-[#9AF3B5] font-semibold',
+                nameClass: 'font-semibold',
                 metaClass: '!text-[#86E0A2]',
-                nameColor: '',
+                nameColor: '#9AF3B5',
                 metaColor: '',
                 pulseColor: '#73C991',
                 badgeClass: 'bg-[#73C991]/30 text-[#8DE2AA]',
@@ -56,9 +56,9 @@ function getGitStatusVisual(status: FileGitStatus) {
             }
         case 'deleted':
             return {
-                nameClass: '!text-[#FF9A9A] font-semibold line-through',
+                nameClass: 'font-semibold line-through',
                 metaClass: '!text-[#EF8A8A]',
-                nameColor: '',
+                nameColor: '#FF9A9A',
                 metaColor: '',
                 pulseColor: '#FF6B6B',
                 badgeClass: 'bg-[#FF6B6B]/30 text-[#FF8A8A]',
@@ -66,9 +66,9 @@ function getGitStatusVisual(status: FileGitStatus) {
             }
         case 'renamed':
             return {
-                nameClass: '!text-[#88CCFF] font-semibold',
+                nameClass: 'font-semibold',
                 metaClass: '!text-[#78BFF5]',
-                nameColor: '',
+                nameColor: '#88CCFF',
                 metaColor: '',
                 pulseColor: '#60A5FA',
                 badgeClass: 'bg-blue-500/30 text-blue-300',
@@ -298,6 +298,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                         const effectiveStatus = resolveNodeStatus(node) || nestedStatus || (hasNestedChanges ? 'modified' : undefined)
                         const effectiveVisual = getGitStatusVisual(effectiveStatus)
                         const directVisual = getGitStatusVisual(directStatus)
+                        const hasStatusNameColor = Boolean(effectiveVisual.nameColor)
                         return (
                             <div
                                 key={node.path}
@@ -333,9 +334,11 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         {getFileIcon(node.name, isFolder, isExpanded)}
                                         <span className={cn(
                                             "text-[14px] truncate",
-                                            isFolder ? "text-white/80 font-medium" : "text-white/60",
+                                            !hasStatusNameColor && (isFolder ? "text-white/80 font-medium" : "text-white/60"),
                                             effectiveVisual.nameClass
-                                        )}>
+                                        )}
+                                        style={effectiveVisual.nameColor ? { color: effectiveVisual.nameColor } : undefined}
+                                        >
                                             {node.name}
                                         </span>
                                         {isFolder && hasNestedChanges && (
