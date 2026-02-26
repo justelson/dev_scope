@@ -620,3 +620,21 @@
 .animate-slideInFromTop {
   animation: slideInFromTop 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+@keyframes brokenLightFlicker {
+  0%, 7%, 12%, 18%, 27%, 36%, 48%, 61%, 74%, 100% {
+    opacity: 1;
+  }
+
+  8%, 10%, 19%, 20%, 28%, 30%, 49%, 50%, 62%, 63%, 75%, 77% {
+    opacity: 0.3;
+  }
+
+  11%, 31%, 64% {
+    opacity: 0.08;
+  }
+}
+
+.animate-broken-light {
+  animation: brokenLightFlicker 2.3s steps(1, end) infinite;
+}
