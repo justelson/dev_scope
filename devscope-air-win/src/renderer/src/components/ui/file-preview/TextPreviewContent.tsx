@@ -10,10 +10,12 @@ interface TextPreviewContentProps {
     file: PreviewFile
     content: string
     meta: PreviewMeta
+    projectPath?: string
+    gitDiffText?: string
     csvDistinctColorsEnabled: boolean
 }
 
-export default function TextPreviewContent({ file, content, meta, csvDistinctColorsEnabled }: TextPreviewContentProps) {
+export default function TextPreviewContent({ file, content, meta, projectPath, gitDiffText, csvDistinctColorsEnabled }: TextPreviewContentProps) {
     const isLargeTextPreview = useMemo(() => {
         const lineCount = content.split(/\r?\n/).length
         return content.length > HIGHLIGHT_MAX_CHARS || lineCount > HIGHLIGHT_MAX_LINES
@@ -64,7 +66,7 @@ export default function TextPreviewContent({ file, content, meta, csvDistinctCol
                             {jsonState.skippedFormatting && (
                                 <div className="text-xs text-sky-300/80 px-4 pt-3">Large file: showing raw JSON preview.</div>
                             )}
-                            <SyntaxPreview content={content} language="json" filePath={file.path} />
+                            <SyntaxPreview content={content} language="json" filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} />
                         </div>
                     )}
                 </div>
@@ -80,13 +82,13 @@ export default function TextPreviewContent({ file, content, meta, csvDistinctCol
 
             {file.type === 'code' && (
                 <div className="w-full max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden">
-                    <SyntaxPreview content={content} language={file.language || 'text'} filePath={file.path} />
+                    <SyntaxPreview content={content} language={file.language || 'text'} filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} />
                 </div>
             )}
 
             {file.type === 'text' && (
                 <div className="w-full max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden">
-                    <SyntaxPreview content={content} language="text" filePath={file.path} />
+                    <SyntaxPreview content={content} language="text" filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} />
                 </div>
             )}
         </div>

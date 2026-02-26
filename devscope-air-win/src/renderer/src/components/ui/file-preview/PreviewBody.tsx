@@ -10,6 +10,8 @@ interface PreviewBodyProps {
     content: string
     loading?: boolean
     meta: PreviewMeta
+    projectPath?: string
+    gitDiffText?: string
     viewport: ViewportPreset
     presetConfig: ViewportPresetConfig
     htmlViewMode: 'rendered' | 'code'
@@ -21,6 +23,8 @@ export default function PreviewBody({
     content,
     loading,
     meta,
+    projectPath,
+    gitDiffText,
     viewport,
     presetConfig,
     htmlViewMode,
@@ -37,7 +41,7 @@ export default function PreviewBody({
     }
 
     if (isTextLike) {
-        return <TextPreviewContent file={file} content={content} meta={meta} csvDistinctColorsEnabled={csvDistinctColorsEnabled} />
+        return <TextPreviewContent file={file} content={content} meta={meta} projectPath={projectPath} gitDiffText={gitDiffText} csvDistinctColorsEnabled={csvDistinctColorsEnabled} />
     }
 
     if (file.type === 'image') {
@@ -78,7 +82,7 @@ export default function PreviewBody({
                     </div>
                 )}
                 <div className="w-full bg-sparkle-card rounded-xl border border-white/5 overflow-hidden">
-                    <SyntaxPreview content={content} language={file.language || 'html'} filePath={file.path} />
+                    <SyntaxPreview content={content} language={file.language || 'html'} filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} />
                 </div>
             </div>
         )

@@ -590,6 +590,7 @@ export default function FolderBrowse() {
                     truncated={previewTruncated}
                     size={previewSize}
                     previewBytes={previewBytes}
+                    projectPath={decodedPath}
                     onClose={closePreview}
                 />
             )}

@@ -83,8 +83,31 @@ function splitFileNameForRename(name: string): { baseName: string; extensionSuff
     }
 }
 
+const PROJECT_ACTIVE_TAB_STORAGE_PREFIX = 'devscope:project-details:active-tab:'
+
+function readStoredProjectActiveTab(projectPath: string): 'readme' | 'files' | 'git' | null {
+    try {
+        const key = `${PROJECT_ACTIVE_TAB_STORAGE_PREFIX}${projectPath}`
+        const raw = (window.localStorage.getItem(key) || '').trim()
+        if (raw === 'readme' || raw === 'files' || raw === 'git') return raw
+    } catch {
+        // ignore storage access issues
+    }
+    return null
+}
+
+function writeStoredProjectActiveTab(projectPath: string, tab: 'readme' | 'files' | 'git'): void {
+    try {
+        const key = `${PROJECT_ACTIVE_TAB_STORAGE_PREFIX}${projectPath}`
+        window.localStorage.setItem(key, tab)
+    } catch {
+        // ignore storage access issues
+    }
+}
+
 export default function ProjectDetailsPage() {
     const { projectPath } = useParams<{ projectPath: string }>()
+    const decodedPath = projectPath ? decodeURIComponent(projectPath) : ''
     const navigate = useNavigate()
     const { openTerminal } = useTerminal()
     const { settings } = useSettings()
@@ -94,7 +117,9 @@ export default function ProjectDetailsPage() {
     const [error, setError] = useState<string | null>(null)
     const [showHidden, setShowHidden] = useState(false)
     const [copiedPath, setCopiedPath] = useState(false)
-    const [activeTab, setActiveTab] = useState<'readme' | 'files' | 'git'>('files')
+    const [activeTab, setActiveTab] = useState<'readme' | 'files' | 'git'>(() => (
+        readStoredProjectActiveTab(decodedPath) || 'files'
+    ))
     const [showDependenciesModal, setShowDependenciesModal] = useState(false)
     const [isProjectLive, setIsProjectLive] = useState(false)
     const [activePorts, setActivePorts] = useState<number[]>([])
@@ -178,7 +203,6 @@ export default function ProjectDetailsPage() {
     const [renameExtensionSuffix, setRenameExtensionSuffix] = useState('')
     const [renameErrorMessage, setRenameErrorMessage] = useState<string | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<FileTreeNode | null>(null)
-    const decodedPath = projectPath ? decodeURIComponent(projectPath) : ''
     const currentBranch = useMemo(() => branches.find(branch => branch.current)?.name || '', [branches])
     const {
         scriptRunner,
@@ -213,6 +237,15 @@ export default function ProjectDetailsPage() {
         if (!decodedPath) return
         trackRecentProject(decodedPath, 'project')
     }, [decodedPath])
+    useEffect(() => {
+        if (!decodedPath) return
+        const storedTab = readStoredProjectActiveTab(decodedPath)
+        setActiveTab(storedTab || 'files')
+    }, [decodedPath])
+    useEffect(() => {
+        if (!decodedPath) return
+        writeStoredProjectActiveTab(decodedPath, activeTab)
+    }, [decodedPath, activeTab])
     const goBack = () => {
         const parentPath = getParentFolderPath(project?.path || decodedPath)
         if (parentPath) {
@@ -253,7 +286,8 @@ export default function ProjectDetailsPage() {
     }, [toast?.visible])
     const {
         loadProjectDetails,
-        refreshGitData
+        refreshGitData,
+        refreshFileTree
     } = useProjectDataLifecycle({
         decodedPath,
         activeTab,
@@ -269,7 +303,6 @@ export default function ProjectDetailsPage() {
         setError,
         setProject,
         setFileTree,
-        setActiveTab,
         setLoadingGit,
         setGitError,
         setIsGitRepo,
@@ -646,6 +679,7 @@ export default function ProjectDetailsPage() {
                 }}
                 onShipToAssistant={() => void handleShipToAssistant()}
                 loadProjectDetails={loadProjectDetails}
+                refreshFileTree={refreshFileTree}
                 readmeContentRef={readmeContentRef}
                 readmeExpanded={readmeExpanded}
                 readmeNeedsExpand={readmeNeedsExpand}
@@ -723,6 +757,7 @@ export default function ProjectDetailsPage() {
                 setShowDependenciesModal={setShowDependenciesModal}
             />
             <ProjectDetailsTransientUi
+                projectPath={project.path}
                 pendingScriptRun={pendingScriptRun}
                 scriptPortInput={scriptPortInput}
                 setScriptPortInput={setScriptPortInput}

@@ -129,7 +129,8 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
         onFileTreeDelete,
         onFileTreePaste,
         hasFileClipboardItem,
-        loadingFiles
+        loadingFiles,
+        refreshFileTree
     } = props
 
     const projectRootPath = useMemo(() => normalizePath(project?.path || ''), [project?.path])
@@ -214,6 +215,20 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                 </div>
 
                 <button
+                    onClick={() => { void refreshFileTree?.() }}
+                    disabled={loadingFiles}
+                    className={cn(
+                        "p-2 rounded-lg transition-all",
+                        loadingFiles
+                            ? "opacity-50 cursor-not-allowed text-white/30"
+                            : "text-white/40 hover:text-white hover:bg-white/5"
+                    )}
+                    title="Refresh files"
+                >
+                    <RefreshCw size={16} className={cn(loadingFiles && "animate-spin")} />
+                </button>
+
+                <button
                     onClick={() => {
                         setIsExpandingFolders(true)
                         startTransition(() => {
@@ -272,7 +287,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                {loadingFiles ? (
+                {loadingFiles && visibleFileList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 opacity-60">
                         <div className="w-10 h-10 rounded-full border-2 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] animate-spin mb-5" />
                         <div className="text-white font-medium text-lg">Loading files...</div>

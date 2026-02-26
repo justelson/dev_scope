@@ -570,6 +570,21 @@
   color: color-mix(in srgb, var(--color-text), transparent 40%) !important;
 }
 
+.monaco-editor .git-preview-gutter-added {
+  border-left: 3px solid #73C991;
+  margin-left: 3px;
+}
+
+.monaco-editor .git-preview-gutter-modified {
+  border-left: 3px solid #E2C08D;
+  margin-left: 3px;
+}
+
+.monaco-editor .git-preview-gutter-deleted {
+  border-left: 3px solid #FF6B6B;
+  margin-left: 3px;
+}
+
 @keyframes slideInFromTop {
   from {
     opacity: 0;

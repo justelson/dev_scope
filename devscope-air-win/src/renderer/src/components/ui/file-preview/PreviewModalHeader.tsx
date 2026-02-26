@@ -1,11 +1,14 @@
 import { Check, Code, Copy, ExternalLink, FileJson, FileText, FileType, Film, Image as ImageIcon, Table, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import type { GitDiffSummary } from './gitDiff'
 import type { PreviewFile } from './types'
 import { VIEWPORT_PRESETS, type ViewportPreset } from './viewport'
 
 interface PreviewModalHeaderProps {
     file: PreviewFile
+    gitDiffSummary?: GitDiffSummary | null
+    totalFileLines?: number
     viewport: ViewportPreset
     onViewportChange: (viewport: ViewportPreset) => void
     htmlViewMode: 'rendered' | 'code'
@@ -29,6 +32,8 @@ function PreviewFileIcon({ type }: { type: PreviewFile['type'] }) {
 
 export default function PreviewModalHeader({
     file,
+    gitDiffSummary,
+    totalFileLines = 0,
     viewport,
     onViewportChange,
     htmlViewMode,
@@ -72,6 +77,21 @@ export default function PreviewModalHeader({
     const isCompactHtmlHeader = isHtml && headerWidth < 1024
     const isVeryCompactHtmlHeader = isHtml && headerWidth < 820
     const isUltraCompactHtmlHeader = isHtml && headerWidth < 680
+
+    const statusTone = !gitDiffSummary ? 'bg-white/10 text-white/60'
+        : gitDiffSummary.status === 'added'
+            ? 'bg-[#73C991]/20 text-[#73C991]'
+            : gitDiffSummary.status === 'deleted'
+                ? 'bg-[#FF6B6B]/20 text-[#FF6B6B]'
+                : gitDiffSummary.status === 'renamed'
+                    ? 'bg-blue-500/20 text-blue-300'
+                    : gitDiffSummary.status === 'modified'
+                        ? 'bg-[#E2C08D]/20 text-[#E2C08D]'
+                        : 'bg-white/10 text-white/60'
+
+    const statusLabel = !gitDiffSummary
+        ? 'Unknown'
+        : gitDiffSummary.status.charAt(0).toUpperCase() + gitDiffSummary.status.slice(1)
 
     return (
         <div
@@ -161,6 +181,16 @@ export default function PreviewModalHeader({
             )}
 
             <div className={cn('flex items-center gap-2 shrink-0', isCompactHtmlHeader ? 'ml-auto' : '', isUltraCompactHtmlHeader ? 'w-full justify-end' : '')}>
+                {gitDiffSummary && (
+                    <div className="flex items-center gap-1.5">
+                        <span className={cn('text-[10px] uppercase font-semibold px-2 py-1 rounded', statusTone)}>
+                            {statusLabel}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-1 rounded bg-emerald-500/10 text-emerald-300">+{gitDiffSummary.additions}</span>
+                        <span className="text-[10px] px-1.5 py-1 rounded bg-red-500/10 text-red-300">-{gitDiffSummary.deletions}</span>
+                        <span className="text-[10px] px-1.5 py-1 rounded bg-white/5 text-white/50">{totalFileLines} lines</span>
+                    </div>
+                )}
                 <span className="text-[10px] text-white/30 uppercase px-2 py-1 bg-white/5 rounded">
                     {file.type}
                     {isHtml && ` - ${htmlViewMode}`}

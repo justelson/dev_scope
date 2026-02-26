@@ -26,6 +26,7 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
         scriptRunner,
         closeScriptRunModal,
         handleConfirmScriptRun,
+        projectPath,
         previewFile,
         previewContent,
         loadingPreview,
@@ -79,6 +80,7 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
                     truncated={previewTruncated}
                     size={previewSize}
                     previewBytes={previewBytes}
+                    projectPath={projectPath}
                     onClose={closePreview}
                 />
             )}

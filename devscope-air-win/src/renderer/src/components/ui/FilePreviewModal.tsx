@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { summarizeGitDiff, type GitDiffSummary } from './file-preview/gitDiff'
 import type { PreviewFile, PreviewMeta } from './file-preview/types'
 import PreviewBody from './file-preview/PreviewBody'
 import PreviewErrorBoundary from './file-preview/PreviewErrorBoundary'
@@ -15,16 +16,20 @@ interface FilePreviewModalProps extends PreviewMeta {
     file: PreviewFile
     content: string
     loading?: boolean
+    projectPath?: string
     onClose: () => void
 }
 
-export function FilePreviewModal({ file, content, loading, truncated, size, previewBytes, onClose }: FilePreviewModalProps) {
+export function FilePreviewModal({ file, content, loading, truncated, size, previewBytes, projectPath, onClose }: FilePreviewModalProps) {
     const isCsv = file.type === 'csv'
     const isHtml = file.type === 'html'
 
     const [viewport, setViewport] = useState<ViewportPreset>('responsive')
     const [htmlViewMode, setHtmlViewMode] = useState<'rendered' | 'code'>('rendered')
     const [csvDistinctColorsEnabled, setCsvDistinctColorsEnabled] = useState(true)
+    const [gitDiffText, setGitDiffText] = useState<string>('No changes')
+    const [gitDiffSummary, setGitDiffSummary] = useState<GitDiffSummary | null>(null)
+    const totalFileLines = typeof content === 'string' && content.length > 0 ? content.split(/\r?\n/).length : 0
     const presetConfig = VIEWPORT_PRESETS[viewport]
     const isCompactHtmlViewport = isHtml && viewport !== 'responsive' && presetConfig.width <= 768
 
@@ -47,6 +52,47 @@ export function FilePreviewModal({ file, content, loading, truncated, size, prev
     useEffect(() => {
         setHtmlViewMode('rendered')
     }, [file.path])
+
+    useEffect(() => {
+        let disposed = false
+
+        const loadGitDiffSummary = async () => {
+            if (!projectPath || !file.path) {
+                if (!disposed) {
+                    setGitDiffText('No changes')
+                    setGitDiffSummary(null)
+                }
+                return
+            }
+
+            try {
+                const result = await window.devscope.getWorkingDiff(projectPath, file.path, 'combined')
+                if (disposed || !result?.success) {
+                    if (!disposed) {
+                        setGitDiffText('No changes')
+                        setGitDiffSummary(null)
+                    }
+                    return
+                }
+
+                const rawDiff = String(result.diff || 'No changes')
+                if (!disposed) {
+                    setGitDiffText(rawDiff)
+                    setGitDiffSummary(summarizeGitDiff(rawDiff))
+                }
+            } catch {
+                if (!disposed) {
+                    setGitDiffText('No changes')
+                    setGitDiffSummary(null)
+                }
+            }
+        }
+
+        void loadGitDiffSummary()
+        return () => {
+            disposed = true
+        }
+    }, [projectPath, file.path])
 
     const handleOpenInBrowser = async () => {
         try {
@@ -74,6 +120,8 @@ export function FilePreviewModal({ file, content, loading, truncated, size, prev
             >
                 <PreviewModalHeader
                     file={file}
+                    gitDiffSummary={gitDiffSummary}
+                    totalFileLines={totalFileLines}
                     viewport={viewport}
                     onViewportChange={setViewport}
                     htmlViewMode={htmlViewMode}
@@ -98,6 +146,8 @@ export function FilePreviewModal({ file, content, loading, truncated, size, prev
                             content={content}
                             loading={loading}
                             meta={{ truncated, size, previewBytes }}
+                            projectPath={projectPath}
+                            gitDiffText={gitDiffText}
                             viewport={viewport}
                             presetConfig={presetConfig}
                             htmlViewMode={htmlViewMode}

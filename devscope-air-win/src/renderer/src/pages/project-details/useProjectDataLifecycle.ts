@@ -43,7 +43,6 @@ interface UseProjectDataLifecycleParams {
     setError: Dispatch<SetStateAction<string | null>>
     setProject: Dispatch<SetStateAction<ProjectDetails | null>>
     setFileTree: Dispatch<SetStateAction<FileTreeNode[]>>
-    setActiveTab: Dispatch<SetStateAction<'readme' | 'files' | 'git'>>
     setLoadingGit: Dispatch<SetStateAction<boolean>>
     setGitError: Dispatch<SetStateAction<string | null>>
     setIsGitRepo: Dispatch<SetStateAction<boolean | null>>
@@ -89,7 +88,6 @@ export function useProjectDataLifecycle({
     setError,
     setProject,
     setFileTree,
-    setActiveTab,
     setLoadingGit,
     setGitError,
     setIsGitRepo,
@@ -121,6 +119,7 @@ export function useProjectDataLifecycle({
 }: UseProjectDataLifecycleParams) {
     const loadDetailsRequestRef = useRef(0)
     const refreshGitRequestRef = useRef(0)
+    const refreshFilesRequestRef = useRef(0)
 
     const measureReadmeOverflow = useCallback(() => {
         const element = readmeContentRef.current
@@ -196,9 +195,6 @@ export function useProjectDataLifecycle({
             if (detailsResult.success) {
                 setProject(detailsResult.project)
                 setCachedProjectDetails(decodedPath, detailsResult.project)
-                if (detailsResult.project.readme) {
-                    setActiveTab('readme')
-                }
                 setError(null)
                 setLoading(false)
             } else {
@@ -227,7 +223,7 @@ export function useProjectDataLifecycle({
                 setLoadingFiles(false)
             }
         }
-    }, [decodedPath, setLoading, setError, setProject, setActiveTab, setFileTree, setLoadingFiles])
+    }, [decodedPath, setLoading, setError, setProject, setFileTree, setLoadingFiles])
 
     const refreshGitData = useCallback(async (
         refreshFileTree: boolean = false,
@@ -416,6 +412,26 @@ export function useProjectDataLifecycle({
         setError
     ])
 
+    const refreshFileTree = useCallback(async () => {
+        if (!decodedPath) return
+
+        const requestId = ++refreshFilesRequestRef.current
+        const isStaleRefresh = () => requestId !== refreshFilesRequestRef.current
+        setLoadingFiles(true)
+
+        try {
+            const treeResult = await window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
+            if (!isStaleRefresh() && treeResult?.success && treeResult.tree) {
+                setFileTree(treeResult.tree)
+                setCachedFileTree(decodedPath, treeResult.tree)
+            }
+        } finally {
+            if (!isStaleRefresh()) {
+                setLoadingFiles(false)
+            }
+        }
+    }, [decodedPath, setFileTree, setLoadingFiles])
+
     useEffect(() => {
         void loadProjectDetails()
     }, [loadProjectDetails])
@@ -567,6 +583,7 @@ export function useProjectDataLifecycle({
 
     return {
         loadProjectDetails,
-        refreshGitData
+        refreshGitData,
+        refreshFileTree
     }
 }

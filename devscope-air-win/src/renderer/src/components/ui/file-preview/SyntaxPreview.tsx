@@ -7,6 +7,8 @@ interface SyntaxPreviewProps {
     content: unknown
     language: string
     filePath?: string
+    projectPath?: string
+    gitDiffText?: string
 }
 
 function normalizeSyntaxContent(content: unknown): string {
@@ -22,7 +24,7 @@ function normalizeSyntaxContent(content: unknown): string {
     }
 }
 
-export default function SyntaxPreview({ content, language, filePath }: SyntaxPreviewProps) {
+export default function SyntaxPreview({ content, language, filePath, projectPath, gitDiffText }: SyntaxPreviewProps) {
     const safeContent = normalizeSyntaxContent(content)
     const monacoLanguage = resolveMonacoLanguage(language)
     const isLargeFile = safeContent.length > 300_000
@@ -42,6 +44,9 @@ export default function SyntaxPreview({ content, language, filePath }: SyntaxPre
                     language={monacoLanguage}
                     modelPath={modelPath}
                     isLargeFile={isLargeFile}
+                    filePath={filePath}
+                    projectPath={projectPath}
+                    gitDiffText={gitDiffText}
                 />
             </Suspense>
         </div>

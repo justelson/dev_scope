@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Check, Copy, RefreshCw, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DiffStats } from './DiffStats'
+import MonacoDiffViewer from '@/components/ui/diff-viewer/MonacoDiffViewer'
 
 interface FileDiffDetailModalProps {
     isOpen: boolean
@@ -58,7 +59,7 @@ export function FileDiffDetailModal({
     return (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
             <div
-                className="w-full max-w-6xl max-h-[86vh] overflow-hidden rounded-2xl bg-sparkle-card border border-white/10 shadow-2xl flex flex-col"
+                className="w-full max-w-6xl h-[86vh] min-h-[420px] max-h-[86vh] overflow-hidden rounded-2xl bg-sparkle-card border border-white/10 shadow-2xl flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-white/10 bg-white/[0.03]">
@@ -93,28 +94,14 @@ export function FileDiffDetailModal({
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-auto custom-scrollbar bg-black/20 p-4">
+                <div className="flex-1 min-h-0 overflow-hidden bg-black/20">
                     {loading ? (
                         <div className="flex items-center justify-center py-16 text-white/30">
                             <RefreshCw size={18} className="animate-spin mr-2" />
                             <span className="text-sm">Loading diff...</span>
                         </div>
                     ) : hasDiff ? (
-                        <pre className="text-xs font-mono text-white/75 whitespace-pre-wrap break-words">
-                            {lines.map((line, idx) => {
-                                let lineClass = ''
-                                if (line.startsWith('+') && !line.startsWith('+++')) lineClass = 'text-green-400 bg-green-500/10'
-                                else if (line.startsWith('-') && !line.startsWith('---')) lineClass = 'text-red-400 bg-red-500/10'
-                                else if (line.startsWith('@@')) lineClass = 'text-blue-300 bg-blue-500/10'
-                                else if (line.startsWith('diff') || line.startsWith('index') || line.startsWith('---') || line.startsWith('+++')) lineClass = 'text-white/45'
-
-                                return (
-                                    <div key={idx} className={cn('px-2 -mx-2', lineClass)}>
-                                        {line || ' '}
-                                    </div>
-                                )
-                            })}
-                        </pre>
+                        <MonacoDiffViewer filePath={filePath} diff={diff} />
                     ) : (
                         <div className="flex items-center justify-center py-16 text-white/35">
                             <span className="text-sm">No diff available for this file.</span>

@@ -1,5 +1,5 @@
 import Editor, { loader } from '@monaco-editor/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import * as monaco from 'monaco-editor'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
@@ -8,6 +8,7 @@ import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import { useSettings } from '@/lib/settings'
+import { parseUnifiedDiffMarkers, type GitLineMarker } from './gitDiff'
 
 const globalWithMonaco = globalThis as typeof globalThis & {
     MonacoEnvironment?: {
@@ -96,6 +97,9 @@ interface MonacoPreviewEditorProps {
     language: string
     modelPath?: string
     isLargeFile: boolean
+    filePath?: string
+    projectPath?: string
+    gitDiffText?: string
 }
 
 function readThemeVariable(name: string, fallback: string): string {
@@ -154,13 +158,16 @@ function applyMonacoTheme(theme: string) {
     }
 }
 
-export default function MonacoPreviewEditor({ value, language, modelPath, isLargeFile }: MonacoPreviewEditorProps) {
+export default function MonacoPreviewEditor({ value, language, modelPath, isLargeFile, filePath, projectPath, gitDiffText }: MonacoPreviewEditorProps) {
     const { settings } = useSettings()
     const editorTheme = useMemo(() => MONACO_THEME_ID, [])
     const [compactLayout, setCompactLayout] = useState(() => {
         if (typeof window === 'undefined') return false
         return window.innerWidth < 980
     })
+    const [lineMarkers, setLineMarkers] = useState<GitLineMarker[]>([])
+    const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
+    const decorationIdsRef = useRef<string[]>([])
 
     useEffect(() => {
         applyMonacoTheme(settings.theme)
@@ -177,14 +184,103 @@ export default function MonacoPreviewEditor({ value, language, modelPath, isLarg
         return () => window.removeEventListener('resize', updateLayout)
     }, [])
 
+    useEffect(() => {
+        let disposed = false
+
+        const loadGitMarkers = async () => {
+            if (typeof gitDiffText === 'string') {
+                if (!disposed) {
+                    setLineMarkers(parseUnifiedDiffMarkers(gitDiffText))
+                }
+                return
+            }
+
+            if (!projectPath || !filePath || isLargeFile) {
+                if (!disposed) setLineMarkers([])
+                return
+            }
+
+            try {
+                const response = await window.devscope.getWorkingDiff(projectPath, filePath, 'combined')
+                if (disposed || !response?.success) {
+                    if (!disposed) setLineMarkers([])
+                    return
+                }
+
+                const nextMarkers = parseUnifiedDiffMarkers(String(response.diff || ''))
+                if (!disposed) setLineMarkers(nextMarkers)
+            } catch {
+                if (!disposed) setLineMarkers([])
+            }
+        }
+
+        void loadGitMarkers()
+        return () => {
+            disposed = true
+        }
+    }, [gitDiffText, projectPath, filePath, isLargeFile, value])
+
+    useEffect(() => {
+        const editor = editorRef.current
+        if (!editor) return
+
+        const markerPalette = {
+            added: { solid: '#73C991', minimap: '#73C991B3' },
+            modified: { solid: '#E2C08D', minimap: '#E2C08DB3' },
+            deleted: { solid: '#FF6B6B', minimap: '#FF6B6BB3' }
+        } as const
+
+        const nextDecorations = lineMarkers.map((marker) => ({
+            range: new monaco.Range(marker.line, 1, marker.line, 1),
+            options: {
+                isWholeLine: false,
+                linesDecorationsClassName:
+                    marker.type === 'added'
+                        ? 'git-preview-gutter-added'
+                        : marker.type === 'modified'
+                            ? 'git-preview-gutter-modified'
+                            : 'git-preview-gutter-deleted',
+                overviewRuler: {
+                    color: markerPalette[marker.type].solid,
+                    position: monaco.editor.OverviewRulerLane.Full
+                },
+                minimap: {
+                    color: markerPalette[marker.type].minimap,
+                    position: monaco.editor.MinimapPosition.Inline
+                }
+            }
+        }))
+
+        decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, nextDecorations)
+    }, [lineMarkers])
+
+    useEffect(() => {
+        return () => {
+            const editor = editorRef.current
+            if (editor) {
+                editor.deltaDecorations(decorationIdsRef.current, [])
+            }
+            decorationIdsRef.current = []
+            editorRef.current = null
+        }
+    }, [])
+
     const editorOptions = useMemo<MonacoEditor.IStandaloneEditorConstructionOptions>(() => {
         const base = isLargeFile ? largeFileOptions : baseOptions
         if (!compactLayout) return base
 
         return {
             ...base,
-            minimap: { enabled: false },
-            overviewRulerLanes: 0,
+            minimap: {
+                enabled: true,
+                side: 'right',
+                renderCharacters: false,
+                showSlider: 'always',
+                size: 'fit',
+                scale: 1,
+                maxColumn: 90
+            },
+            overviewRulerLanes: 3,
             fontSize: 12,
             lineHeight: 18,
             padding: { top: 10, bottom: 10 }
@@ -198,6 +294,10 @@ export default function MonacoPreviewEditor({ value, language, modelPath, isLarg
             path={modelPath}
             theme={editorTheme}
             options={editorOptions}
+            onMount={(editor) => {
+                editorRef.current = editor
+                decorationIdsRef.current = editor.deltaDecorations([], [])
+            }}
         />
     )
 }

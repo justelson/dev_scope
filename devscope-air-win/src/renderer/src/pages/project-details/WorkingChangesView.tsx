@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type MouseEvent, type SetStateAction } from 'react'
+import { useEffect, useMemo, useState, type Dispatch, type MouseEvent, type SetStateAction } from 'react'
 import {
     Check,
     Copy,
@@ -24,6 +24,7 @@ export interface WorkingChangeItem {
 }
 
 type DiffMode = 'staged' | 'unstaged'
+const PAGE_SIZE = 10
 
 function getStatusBadge(status?: WorkingChangeItem['gitStatus']) {
     switch (status) {
@@ -102,6 +103,21 @@ function Section({
     setCopiedPath: Dispatch<SetStateAction<string | null>>
     onSetPendingActionPath: (path: string | null) => void
 }) {
+    const [currentPage, setCurrentPage] = useState(1)
+
+    const totalPages = Math.max(1, Math.ceil(files.length / PAGE_SIZE))
+    const paginatedFiles = useMemo(() => {
+        const start = (currentPage - 1) * PAGE_SIZE
+        return files.slice(start, start + PAGE_SIZE)
+    }, [files, currentPage])
+
+    useEffect(() => {
+        setCurrentPage((page) => Math.min(page, totalPages))
+    }, [totalPages])
+
+    const pageStart = files.length === 0 ? 0 : ((currentPage - 1) * PAGE_SIZE) + 1
+    const pageEnd = files.length === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, files.length)
+
     const handleCopyPath = (path: string, e: MouseEvent) => {
         e.stopPropagation()
         navigator.clipboard.writeText(path)
@@ -124,7 +140,7 @@ function Section({
 
             {files.length === 0 ? (
                 <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/40">{emptyText}</div>
-            ) : files.map((file) => {
+            ) : paginatedFiles.map((file) => {
                 const badge = getStatusBadge(file.gitStatus)
                 const diffKey = getDiffKey(diffMode, file.path)
                 const isLoadingDiff = loadingDiffKeys.has(diffKey)
@@ -182,6 +198,29 @@ function Section({
                     </div>
                 )
             })}
+
+            {files.length > PAGE_SIZE && (
+                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/55">
+                    <span>Showing {pageStart}-{pageEnd} of {files.length}</span>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                            disabled={currentPage <= 1}
+                            className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+                        >
+                            Prev
+                        </button>
+                        <span className="min-w-[54px] text-center text-white/65">{currentPage}/{totalPages}</span>
+                        <button
+                            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                            disabled={currentPage >= totalPages}
+                            className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
