@@ -135,7 +135,7 @@ export default function AssistantSettings() {
                 </div>
             </div>
 
-            <div className="mb-4 inline-flex rounded-xl border border-sparkle-border bg-sparkle-card p-1.5 gap-1">
+            <div className="mb-6 inline-flex flex-wrap items-center rounded-lg border border-sparkle-border bg-sparkle-card p-1">
                 <TabButton
                     title="Connection"
                     icon={<PlugZap size={14} />}
@@ -418,10 +418,10 @@ function TabButton({
             type="button"
             onClick={onClick}
             className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors',
+                'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-colors',
                 active
-                    ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/35'
-                    : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
+                    ? 'bg-[var(--accent-primary)] text-white'
+                    : 'text-sparkle-text-secondary hover:bg-sparkle-bg hover:text-sparkle-text'
             )}
         >
             {icon}
