@@ -585,6 +585,12 @@
   margin-left: 3px;
 }
 
+.monaco-editor .view-overlays .current-line,
+.monaco-editor .margin-view-overlays .current-line-margin {
+  border: none !important;
+  outline: none !important;
+}
+
 @keyframes slideInFromTop {
   from {
     opacity: 0;

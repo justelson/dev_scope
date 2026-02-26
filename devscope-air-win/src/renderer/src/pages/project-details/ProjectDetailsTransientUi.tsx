@@ -33,7 +33,9 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
         previewTruncated,
         previewSize,
         previewBytes,
+        previewModifiedAt,
         closePreview,
+        onPreviewSaved,
         toast,
         navigate,
         setToast
@@ -80,7 +82,9 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
                     truncated={previewTruncated}
                     size={previewSize}
                     previewBytes={previewBytes}
+                    modifiedAt={previewModifiedAt}
                     projectPath={projectPath}
+                    onSaved={onPreviewSaved}
                     onClose={closePreview}
                 />
             )}

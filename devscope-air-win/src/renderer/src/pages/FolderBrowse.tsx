@@ -172,6 +172,7 @@ export default function FolderBrowse() {
         previewTruncated,
         previewSize,
         previewBytes,
+        previewModifiedAt,
         openPreview,
         closePreview
     } = useFilePreview()
@@ -590,7 +591,11 @@ export default function FolderBrowse() {
                     truncated={previewTruncated}
                     size={previewSize}
                     previewBytes={previewBytes}
+                    modifiedAt={previewModifiedAt}
                     projectPath={decodedPath}
+                    onSaved={async () => {
+                        await loadContents(true)
+                    }}
                     onClose={closePreview}
                 />
             )}

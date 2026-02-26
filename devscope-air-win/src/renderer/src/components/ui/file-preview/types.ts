@@ -11,5 +11,5 @@ export interface PreviewMeta {
     truncated?: boolean
     size?: number | null
     previewBytes?: number | null
+    modifiedAt?: number | null
 }
-

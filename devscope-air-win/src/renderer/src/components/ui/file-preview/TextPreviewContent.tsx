@@ -13,9 +13,20 @@ interface TextPreviewContentProps {
     projectPath?: string
     gitDiffText?: string
     csvDistinctColorsEnabled: boolean
+    focusLine?: number | null
+    isExpanded?: boolean
 }
 
-export default function TextPreviewContent({ file, content, meta, projectPath, gitDiffText, csvDistinctColorsEnabled }: TextPreviewContentProps) {
+export default function TextPreviewContent({
+    file,
+    content,
+    meta,
+    projectPath,
+    gitDiffText,
+    csvDistinctColorsEnabled,
+    focusLine,
+    isExpanded = false
+}: TextPreviewContentProps) {
     const isLargeTextPreview = useMemo(() => {
         const lineCount = content.split(/\r?\n/).length
         return content.length > HIGHLIGHT_MAX_CHARS || lineCount > HIGHLIGHT_MAX_LINES
@@ -39,9 +50,9 @@ export default function TextPreviewContent({ file, content, meta, projectPath, g
     const totalSize = formatPreviewBytes(meta.size)
 
     return (
-        <div className="w-full flex flex-col items-center gap-3">
+        <div className={isExpanded ? 'w-full h-full min-h-0 flex flex-col items-stretch gap-0' : 'w-full h-full min-h-0 flex flex-col items-center gap-3'}>
             {meta.truncated && (
-                <div className="w-full max-w-5xl px-3 py-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <div className={isExpanded ? 'w-full px-3 py-2 text-xs text-amber-200 bg-amber-500/10 border-y border-amber-500/20' : 'w-full max-w-5xl px-3 py-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-lg'}>
                     Preview truncated for stability.
                     {previewSize ? ` Showing ${previewSize}` : ''}
                     {totalSize ? ` of ${totalSize}` : ''}.
@@ -49,24 +60,26 @@ export default function TextPreviewContent({ file, content, meta, projectPath, g
             )}
 
             {file.type === 'md' && (
-                <div className="w-full max-w-4xl bg-sparkle-card rounded-xl p-6 border border-white/5">
+                <div className={isExpanded ? 'w-full h-full bg-sparkle-card p-6 overflow-auto' : 'w-full max-w-4xl bg-sparkle-card rounded-xl p-6 border border-white/5'}>
                     <MarkdownRenderer content={content} filePath={file.path} />
                 </div>
             )}
 
             {file.type === 'json' && (
-                <div className="w-full max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden">
+                <div className={isExpanded ? 'w-full h-full min-h-0 bg-sparkle-card overflow-hidden' : 'w-full h-full min-h-0 max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden'}>
                     {jsonState.formatted ? (
-                        <SyntaxPreview content={jsonState.formatted} language="json" filePath={file.path} />
+                        <SyntaxPreview content={jsonState.formatted} language="json" filePath={file.path} focusLine={focusLine} height={isExpanded ? '100%' : undefined} />
                     ) : (
-                        <div>
+                        <div className={isExpanded ? 'h-full flex flex-col' : ''}>
                             {jsonState.invalid && (
                                 <div className="text-xs text-amber-300 px-4 pt-3">Invalid JSON format. Showing raw content.</div>
                             )}
                             {jsonState.skippedFormatting && (
                                 <div className="text-xs text-sky-300/80 px-4 pt-3">Large file: showing raw JSON preview.</div>
                             )}
-                            <SyntaxPreview content={content} language="json" filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} />
+                            <div className={isExpanded ? 'flex-1 min-h-0' : ''}>
+                                <SyntaxPreview content={content} language="json" filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} focusLine={focusLine} height={isExpanded ? '100%' : undefined} />
+                            </div>
                         </div>
                     )}
                 </div>
@@ -81,14 +94,14 @@ export default function TextPreviewContent({ file, content, meta, projectPath, g
             )}
 
             {file.type === 'code' && (
-                <div className="w-full max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden">
-                    <SyntaxPreview content={content} language={file.language || 'text'} filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} />
+                <div className={isExpanded ? 'w-full h-full min-h-0 bg-sparkle-card overflow-hidden' : 'w-full h-full min-h-0 max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden'}>
+                    <SyntaxPreview content={content} language={file.language || 'text'} filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} focusLine={focusLine} height={isExpanded ? '100%' : undefined} />
                 </div>
             )}
 
             {file.type === 'text' && (
-                <div className="w-full max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden">
-                    <SyntaxPreview content={content} language="text" filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} />
+                <div className={isExpanded ? 'w-full h-full min-h-0 bg-sparkle-card overflow-hidden' : 'w-full h-full min-h-0 max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden'}>
+                    <SyntaxPreview content={content} language="text" filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} focusLine={focusLine} height={isExpanded ? '100%' : undefined} />
                 </div>
             )}
         </div>

@@ -185,6 +185,7 @@ export default function ProjectDetailsPage() {
         previewTruncated,
         previewSize,
         previewBytes,
+        previewModifiedAt,
         openPreview,
         closePreview,
         openFile
@@ -781,6 +782,10 @@ export default function ProjectDetailsPage() {
                 previewTruncated={previewTruncated}
                 previewSize={previewSize}
                 previewBytes={previewBytes}
+                previewModifiedAt={previewModifiedAt}
+                onPreviewSaved={async () => {
+                    await Promise.all([refreshFileTree(), refreshGitData()])
+                }}
                 closePreview={closePreview}
                 toast={toast}
                 navigate={navigate}

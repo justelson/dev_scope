@@ -198,6 +198,18 @@ export type DevScopeAssistantModelInfo = {
     capabilities?: string[]
 }
 
+export type DevScopePythonPreviewEvent = {
+    sessionId: string
+    type: 'started' | 'stdout' | 'stderr' | 'exit' | 'error'
+    text?: string
+    code?: number | null
+    signal?: string | null
+    pid?: number | null
+    interpreter?: string
+    command?: string
+    stopped?: boolean
+}
+
 export interface DevScopeSystemApi {
     bootstrap: () => Promise<DevScopeResult<{ controlBuffer?: ArrayBuffer; metricsBuffer?: ArrayBuffer }>>
     subscribe: (options?: { intervalMs?: number }) => Promise<DevScopeResult>
@@ -356,7 +368,17 @@ export interface DevScopeApi {
     getGitignorePatterns: () => Promise<DevScopeResult<{ patterns: Array<{ id: string; label: string; description: string; category: string; patterns: string[] }> }>>
     generateCustomGitignoreContent: (selectedPatternIds: string[]) => Promise<DevScopeResult<{ content: string }>>
     copyToClipboard: (text: string) => Promise<DevScopeResult>
-    readFileContent: (filePath: string) => Promise<DevScopeResult<{ content: string; size: number; previewBytes: number; truncated: boolean }>>
+    readFileContent: (filePath: string) => Promise<DevScopeResult<{ content: string; size: number; previewBytes: number; truncated: boolean; modifiedAt: number }>>
+    readTextFileFull: (filePath: string) => Promise<DevScopeResult<{ content: string; size: number; modifiedAt: number }>>
+    writeTextFile: (
+        filePath: string,
+        content: string,
+        expectedModifiedAt?: number
+    ) => Promise<DevScopeResult<{ size: number; modifiedAt: number }> | (DevScopeErr & { conflict?: boolean; currentModifiedAt?: number })>
+    runPythonPreview: (input: { sessionId: string; filePath: string; projectPath?: string }) =>
+        Promise<DevScopeResult<{ pid: number | null; interpreter: string; command: string }>>
+    stopPythonPreview: (sessionId: string) => Promise<DevScopeResult<{ stopped: boolean }>>
+    onPythonPreviewEvent: (callback: (event: DevScopePythonPreviewEvent) => void) => () => void
     openFile: (filePath: string) => Promise<DevScopeResult>
     openWith: (filePath: string) => Promise<DevScopeResult>
     renameFileSystemItem: (targetPath: string, nextName: string) => Promise<DevScopeResult<{ path: string; name: string }>>

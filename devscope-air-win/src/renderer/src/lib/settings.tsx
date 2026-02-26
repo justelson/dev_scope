@@ -15,6 +15,7 @@ export type BrowserContentLayout = 'grouped' | 'explorer'
 export type AssistantProvider = 'codex'
 export type AssistantApprovalMode = 'safe' | 'yolo'
 export type AssistantProfile = 'safe-dev' | 'review' | 'yolo-fast' | 'custom'
+export type FilePreviewDefaultMode = 'preview' | 'edit'
 
 export interface AccentColor {
     name: string
@@ -68,6 +69,10 @@ export interface Settings {
     scrollMode: ScrollMode
     browserViewMode: BrowserViewMode
     browserContentLayout: BrowserContentLayout
+    filePreviewOpenInFullscreen: boolean
+    filePreviewFullscreenShowLeftPanel: boolean
+    filePreviewFullscreenShowRightPanel: boolean
+    filePreviewDefaultMode: FilePreviewDefaultMode
 
     // Projects
     projectsFolder: string
@@ -144,6 +149,10 @@ const DEFAULT_SETTINGS: Settings = {
     scrollMode: 'smooth',
     browserViewMode: 'grid',
     browserContentLayout: 'grouped',
+    filePreviewOpenInFullscreen: false,
+    filePreviewFullscreenShowLeftPanel: true,
+    filePreviewFullscreenShowRightPanel: false,
+    filePreviewDefaultMode: 'preview',
     projectsFolder: '',
     additionalFolders: [],
     enableFolderIndexing: true,
@@ -188,6 +197,10 @@ function loadSettings(): Settings {
                 scrollMode: candidate.scrollMode === 'native' ? 'native' : 'smooth',
                 browserViewMode: candidate.browserViewMode === 'finder' ? 'finder' : 'grid',
                 browserContentLayout: candidate.browserContentLayout === 'explorer' ? 'explorer' : 'grouped',
+                filePreviewOpenInFullscreen: !!candidate.filePreviewOpenInFullscreen,
+                filePreviewFullscreenShowLeftPanel: candidate.filePreviewFullscreenShowLeftPanel !== false,
+                filePreviewFullscreenShowRightPanel: !!candidate.filePreviewFullscreenShowRightPanel,
+                filePreviewDefaultMode: candidate.filePreviewDefaultMode === 'edit' ? 'edit' : 'preview',
                 projectsFolder: candidate.projectsFolder,
                 additionalFolders: candidate.additionalFolders,
                 enableFolderIndexing: candidate.enableFolderIndexing,

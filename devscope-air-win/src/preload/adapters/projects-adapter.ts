@@ -1,6 +1,9 @@
 import { ipcRenderer } from 'electron'
+import type { DevScopePythonPreviewEvent } from '../../shared/contracts/devscope-api'
 
 export function createProjectsAdapter() {
+    const PYTHON_PREVIEW_EVENT_CHANNEL = 'devscope:pythonPreview:event'
+
     return {
         selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),
         scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) =>
@@ -68,6 +71,22 @@ export function createProjectsAdapter() {
         generateCustomGitignoreContent: (selectedPatternIds: string[]) => ipcRenderer.invoke('devscope:generateCustomGitignoreContent', selectedPatternIds),
         copyToClipboard: (text: string) => ipcRenderer.invoke('devscope:copyToClipboard', text),
         readFileContent: (filePath: string) => ipcRenderer.invoke('devscope:readFileContent', filePath),
+        readTextFileFull: (filePath: string) => ipcRenderer.invoke('devscope:readTextFileFull', filePath),
+        writeTextFile: (filePath: string, content: string, expectedModifiedAt?: number) =>
+            ipcRenderer.invoke('devscope:writeTextFile', filePath, content, expectedModifiedAt),
+        runPythonPreview: (input: { sessionId: string; filePath: string; projectPath?: string }) =>
+            ipcRenderer.invoke('devscope:pythonPreview:run', input),
+        stopPythonPreview: (sessionId: string) =>
+            ipcRenderer.invoke('devscope:pythonPreview:stop', sessionId),
+        onPythonPreviewEvent: (callback: (event: DevScopePythonPreviewEvent) => void) => {
+            const listener = (_event: Electron.IpcRendererEvent, payload: DevScopePythonPreviewEvent) => {
+                callback(payload)
+            }
+            ipcRenderer.on(PYTHON_PREVIEW_EVENT_CHANNEL, listener)
+            return () => {
+                ipcRenderer.removeListener(PYTHON_PREVIEW_EVENT_CHANNEL, listener)
+            }
+        },
         openFile: (filePath: string) => ipcRenderer.invoke('devscope:openFile', filePath),
         openWith: (filePath: string) => ipcRenderer.invoke('devscope:openWith', filePath),
         renameFileSystemItem: (targetPath: string, nextName: string) =>

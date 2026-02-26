@@ -9,6 +9,17 @@ interface SyntaxPreviewProps {
     filePath?: string
     projectPath?: string
     gitDiffText?: string
+    readOnly?: boolean
+    onChange?: (value: string) => void
+    onEditorMount?: (editor: import('monaco-editor').editor.IStandaloneCodeEditor) => void
+    wordWrap?: 'on' | 'off'
+    minimapEnabled?: boolean
+    fontSize?: number
+    findRequestToken?: number
+    replaceRequestToken?: number
+    focusLine?: number | null
+    height?: string
+    lineMarkersOverride?: import('./gitDiff').GitLineMarker[]
 }
 
 function normalizeSyntaxContent(content: unknown): string {
@@ -24,14 +35,31 @@ function normalizeSyntaxContent(content: unknown): string {
     }
 }
 
-export default function SyntaxPreview({ content, language, filePath, projectPath, gitDiffText }: SyntaxPreviewProps) {
+export default function SyntaxPreview({
+    content,
+    language,
+    filePath,
+    projectPath,
+    gitDiffText,
+    readOnly = true,
+    onChange,
+    onEditorMount,
+    wordWrap,
+    minimapEnabled,
+    fontSize,
+    findRequestToken,
+    replaceRequestToken,
+    focusLine,
+    height,
+    lineMarkersOverride
+}: SyntaxPreviewProps) {
     const safeContent = normalizeSyntaxContent(content)
     const monacoLanguage = resolveMonacoLanguage(language)
     const isLargeFile = safeContent.length > 300_000
     const modelPath = filePath ? `file://${encodeURI(filePath.replace(/\\/g, '/'))}` : undefined
 
     return (
-        <div className="w-full" style={{ height: 'min(72vh, 900px)', background: 'var(--color-card)' }}>
+        <div className="w-full h-full min-h-0" style={{ height: height || '100%', background: 'var(--color-card)' }}>
             <Suspense
                 fallback={
                     <div className="h-full w-full grid place-items-center text-sm text-white/60 bg-sparkle-card">
@@ -47,6 +75,16 @@ export default function SyntaxPreview({ content, language, filePath, projectPath
                     filePath={filePath}
                     projectPath={projectPath}
                     gitDiffText={gitDiffText}
+                    readOnly={readOnly}
+                    onChange={onChange}
+                    onEditorMount={onEditorMount}
+                    wordWrap={wordWrap}
+                    minimapEnabled={minimapEnabled}
+                    fontSize={fontSize}
+                    findRequestToken={findRequestToken}
+                    replaceRequestToken={replaceRequestToken}
+                    focusLine={focusLine}
+                    lineMarkersOverride={lineMarkersOverride}
                 />
             </Suspense>
         </div>

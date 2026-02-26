@@ -47,6 +47,7 @@ const baseOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
     lineNumbers: 'on',
     scrollBeyondLastLine: false,
     renderLineHighlight: 'none',
+    renderLineHighlightOnlyWhenFocus: true,
     automaticLayout: true,
     smoothScrolling: false,
     contextmenu: true,
@@ -100,6 +101,16 @@ interface MonacoPreviewEditorProps {
     filePath?: string
     projectPath?: string
     gitDiffText?: string
+    readOnly?: boolean
+    onChange?: (value: string) => void
+    onEditorMount?: (editor: MonacoEditor.IStandaloneCodeEditor) => void
+    wordWrap?: 'on' | 'off'
+    minimapEnabled?: boolean
+    fontSize?: number
+    findRequestToken?: number
+    replaceRequestToken?: number
+    focusLine?: number | null
+    lineMarkersOverride?: GitLineMarker[]
 }
 
 function readThemeVariable(name: string, fallback: string): string {
@@ -126,12 +137,14 @@ function applyMonacoTheme(theme: string) {
         colors: {
             'editor.background': card,
             'editor.foreground': text,
-            'editor.lineHighlightBackground': 'transparent',
+            'editor.lineHighlightBackground': isLightTheme ? '#0f172a0d' : '#f8fafc12',
+            'editor.lineHighlightBorder': 'transparent',
             'editorCursor.foreground': accent,
             'editorLineNumber.foreground': textSecondary,
             'editorLineNumber.activeForeground': textDark,
-            'editor.selectionBackground': `${accent}33`,
-            'editor.inactiveSelectionBackground': `${accent}20`,
+            'editor.selectionBackground': isLightTheme ? '#47556933' : '#94a3b833',
+            'editor.inactiveSelectionBackground': isLightTheme ? '#64748b26' : '#94a3b826',
+            'editor.selectionHighlightBackground': 'transparent',
             'editorIndentGuide.background1': `${border}99`,
             'editorIndentGuide.activeBackground1': `${textSecondary}aa`,
             'editorRuler.foreground': `${border}99`,
@@ -158,7 +171,25 @@ function applyMonacoTheme(theme: string) {
     }
 }
 
-export default function MonacoPreviewEditor({ value, language, modelPath, isLargeFile, filePath, projectPath, gitDiffText }: MonacoPreviewEditorProps) {
+export default function MonacoPreviewEditor({
+    value,
+    language,
+    modelPath,
+    isLargeFile,
+    filePath,
+    projectPath,
+    gitDiffText,
+    readOnly = true,
+    onChange,
+    onEditorMount,
+    wordWrap = 'off',
+    minimapEnabled = true,
+    fontSize = 13,
+    findRequestToken = 0,
+    replaceRequestToken = 0,
+    focusLine = null,
+    lineMarkersOverride
+}: MonacoPreviewEditorProps) {
     const { settings } = useSettings()
     const editorTheme = useMemo(() => MONACO_THEME_ID, [])
     const [compactLayout, setCompactLayout] = useState(() => {
@@ -185,6 +216,11 @@ export default function MonacoPreviewEditor({ value, language, modelPath, isLarg
     }, [])
 
     useEffect(() => {
+        if (Array.isArray(lineMarkersOverride)) {
+            setLineMarkers(lineMarkersOverride)
+            return
+        }
+
         let disposed = false
 
         const loadGitMarkers = async () => {
@@ -218,7 +254,7 @@ export default function MonacoPreviewEditor({ value, language, modelPath, isLarg
         return () => {
             disposed = true
         }
-    }, [gitDiffText, projectPath, filePath, isLargeFile, value])
+    }, [gitDiffText, projectPath, filePath, isLargeFile, value, lineMarkersOverride])
 
     useEffect(() => {
         const editor = editorRef.current
@@ -267,12 +303,28 @@ export default function MonacoPreviewEditor({ value, language, modelPath, isLarg
 
     const editorOptions = useMemo<MonacoEditor.IStandaloneEditorConstructionOptions>(() => {
         const base = isLargeFile ? largeFileOptions : baseOptions
-        if (!compactLayout) return base
+        const nextBase: MonacoEditor.IStandaloneEditorConstructionOptions = {
+            ...base,
+            readOnly,
+            domReadOnly: readOnly,
+            cursorStyle: readOnly ? 'line-thin' : 'line',
+            renderLineHighlight: readOnly ? 'none' : 'gutter',
+            selectionHighlight: !readOnly,
+            quickSuggestions: !readOnly,
+            wordWrap,
+            fontSize,
+            minimap: {
+                ...(base.minimap || {}),
+                enabled: minimapEnabled
+            }
+        }
+
+        if (!compactLayout) return nextBase
 
         return {
-            ...base,
+            ...nextBase,
             minimap: {
-                enabled: true,
+                enabled: minimapEnabled,
                 side: 'right',
                 renderCharacters: false,
                 showSlider: 'always',
@@ -281,11 +333,36 @@ export default function MonacoPreviewEditor({ value, language, modelPath, isLarg
                 maxColumn: 90
             },
             overviewRulerLanes: 3,
-            fontSize: 12,
+            fontSize: Math.max(10, fontSize - 1),
             lineHeight: 18,
             padding: { top: 10, bottom: 10 }
         }
-    }, [compactLayout, isLargeFile])
+    }, [compactLayout, fontSize, isLargeFile, minimapEnabled, readOnly, wordWrap])
+
+    useEffect(() => {
+        if (findRequestToken <= 0) return
+        const editor = editorRef.current
+        if (!editor) return
+        editor.focus()
+        void editor.getAction('actions.find')?.run()
+    }, [findRequestToken])
+
+    useEffect(() => {
+        if (replaceRequestToken <= 0) return
+        const editor = editorRef.current
+        if (!editor) return
+        editor.focus()
+        void editor.getAction('editor.action.startFindReplaceAction')?.run()
+    }, [replaceRequestToken])
+
+    useEffect(() => {
+        if (!focusLine || focusLine < 1) return
+        const editor = editorRef.current
+        if (!editor) return
+        editor.revealLineInCenter(focusLine)
+        editor.setPosition({ lineNumber: focusLine, column: 1 })
+        editor.focus()
+    }, [focusLine])
 
     return (
         <Editor
@@ -294,9 +371,14 @@ export default function MonacoPreviewEditor({ value, language, modelPath, isLarg
             path={modelPath}
             theme={editorTheme}
             options={editorOptions}
+            onChange={(nextValue) => {
+                if (typeof onChange !== 'function') return
+                onChange(typeof nextValue === 'string' ? nextValue : '')
+            }}
             onMount={(editor) => {
                 editorRef.current = editor
                 decorationIdsRef.current = editor.deltaDecorations([], [])
+                onEditorMount?.(editor)
             }}
         />
     )

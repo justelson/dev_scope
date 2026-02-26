@@ -19,6 +19,7 @@ export interface UseFilePreviewReturn {
     previewTruncated: boolean
     previewSize: number | null
     previewBytes: number | null
+    previewModifiedAt: number | null
     openPreview: (file: { name: string; path: string }, ext: string) => Promise<void>
     closePreview: () => void
     openFile: (filePath: string) => Promise<void>
@@ -44,11 +45,13 @@ export function useFilePreview(): UseFilePreviewReturn {
     const [previewTruncated, setPreviewTruncated] = useState(false)
     const [previewSize, setPreviewSize] = useState<number | null>(null)
     const [previewBytes, setPreviewBytes] = useState<number | null>(null)
+    const [previewModifiedAt, setPreviewModifiedAt] = useState<number | null>(null)
 
     const resetMeta = () => {
         setPreviewTruncated(false)
         setPreviewSize(null)
         setPreviewBytes(null)
+        setPreviewModifiedAt(null)
     }
 
     const openFile = async (filePath: string) => {
@@ -93,6 +96,7 @@ export function useFilePreview(): UseFilePreviewReturn {
                 setPreviewTruncated(Boolean(res.truncated))
                 setPreviewSize(typeof res.size === 'number' ? res.size : null)
                 setPreviewBytes(typeof res.previewBytes === 'number' ? res.previewBytes : null)
+                setPreviewModifiedAt(typeof res.modifiedAt === 'number' ? res.modifiedAt : null)
             } else {
                 console.error('Failed to load file:', res.error)
                 setPreviewFile(null)
@@ -118,6 +122,7 @@ export function useFilePreview(): UseFilePreviewReturn {
         previewTruncated,
         previewSize,
         previewBytes,
+        previewModifiedAt,
         openPreview,
         closePreview,
         openFile

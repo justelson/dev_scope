@@ -48,9 +48,12 @@ import {
     handleGetFileTree,
     handlePasteFileSystemItem,
     handleReadFileContent,
-    handleRenameFileSystemItem
+    handleReadTextFileFull,
+    handleRenameFileSystemItem,
+    handleWriteTextFile
 } from './handlers/file-tree-handlers'
 import { handleOpenInTerminal } from './handlers/terminal-handlers'
+import { handleRunPythonPreview, handleStopPythonPreview } from './handlers/python-preview-handlers'
 import {
     handleCheckIsGitRepo,
     handleGenerateCustomGitignoreContent,
@@ -199,10 +202,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
     ipcMain.handle('devscope:openInExplorer', handleOpenInExplorer)
     ipcMain.handle('devscope:openInTerminal', handleOpenInTerminal)
+    ipcMain.handle('devscope:pythonPreview:run', handleRunPythonPreview)
+    ipcMain.handle('devscope:pythonPreview:stop', handleStopPythonPreview)
     ipcMain.handle('devscope:copyToClipboard', handleCopyToClipboard)
     ipcMain.handle('devscope:getProjectDetails', handleGetProjectDetails)
     ipcMain.handle('devscope:getFileTree', handleGetFileTree)
     ipcMain.handle('devscope:readFileContent', handleReadFileContent)
+    ipcMain.handle('devscope:readTextFileFull', handleReadTextFileFull)
+    ipcMain.handle('devscope:writeTextFile', handleWriteTextFile)
     ipcMain.handle('devscope:openFile', handleOpenFile)
     ipcMain.handle('devscope:openWith', handleOpenWith)
     ipcMain.handle('devscope:renameFileSystemItem', handleRenameFileSystemItem)

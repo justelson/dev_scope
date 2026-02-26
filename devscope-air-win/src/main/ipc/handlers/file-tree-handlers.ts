@@ -1,5 +1,5 @@
 import { shell } from 'electron'
-import { access, cp, lstat, open as fsOpen, readdir, rename, rm, stat } from 'fs/promises'
+import { access, cp, lstat, open as fsOpen, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join, parse, relative, resolve, sep } from 'path'
 import log from 'electron-log'
 import { getGitStatus, type GitFileStatus } from '../../inspectors/git'
@@ -183,13 +183,113 @@ export async function handleReadFileContent(_event: Electron.IpcMainInvokeEvent,
                 content,
                 size,
                 previewBytes,
-                truncated
+                truncated,
+                modifiedAt: stats.mtimeMs
             }
         } finally {
             await fileHandle.close().catch(() => undefined)
         }
     } catch (err: any) {
         log.error('Failed to read file:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleReadTextFileFull(_event: Electron.IpcMainInvokeEvent, filePath: string) {
+    log.info('IPC: readTextFileFull', filePath)
+
+    try {
+        await access(filePath)
+        const fileStats = await stat(filePath)
+
+        const fileHandle = await fsOpen(filePath, 'r')
+        try {
+            const probeBytes = Math.min(BINARY_DETECTION_BYTES, fileStats.size)
+            const probeBuffer = Buffer.alloc(probeBytes)
+            if (probeBytes > 0) {
+                await fileHandle.read(probeBuffer, 0, probeBytes, 0)
+            }
+
+            if (isLikelyBinaryBuffer(probeBuffer.subarray(0, probeBytes))) {
+                return {
+                    success: false,
+                    error: 'Binary files cannot be edited in text mode.',
+                    isBinary: true,
+                    size: fileStats.size
+                }
+            }
+        } finally {
+            await fileHandle.close().catch(() => undefined)
+        }
+
+        const fullText = await readFile(filePath, 'utf-8')
+        return {
+            success: true,
+            content: fullText,
+            size: fileStats.size,
+            modifiedAt: fileStats.mtimeMs
+        }
+    } catch (err: any) {
+        log.error('Failed to read full text file:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleWriteTextFile(
+    _event: Electron.IpcMainInvokeEvent,
+    filePath: string,
+    content: string,
+    expectedModifiedAt?: number
+) {
+    log.info('IPC: writeTextFile', filePath)
+
+    try {
+        const normalizedFilePath = String(filePath || '').trim()
+        if (!normalizedFilePath) {
+            return { success: false, error: 'File path is required.' }
+        }
+
+        await access(normalizedFilePath)
+        const currentStats = await stat(normalizedFilePath)
+        if (typeof expectedModifiedAt === 'number' && Number.isFinite(expectedModifiedAt)) {
+            const delta = Math.abs(currentStats.mtimeMs - expectedModifiedAt)
+            if (delta > 1) {
+                return {
+                    success: false,
+                    error: 'File changed on disk since it was opened.',
+                    conflict: true,
+                    currentModifiedAt: currentStats.mtimeMs
+                }
+            }
+        }
+
+        const fileHandle = await fsOpen(normalizedFilePath, 'r')
+        try {
+            const probeBytes = Math.min(BINARY_DETECTION_BYTES, currentStats.size)
+            const probeBuffer = Buffer.alloc(probeBytes)
+            if (probeBytes > 0) {
+                await fileHandle.read(probeBuffer, 0, probeBytes, 0)
+            }
+
+            if (isLikelyBinaryBuffer(probeBuffer.subarray(0, probeBytes))) {
+                return { success: false, error: 'Binary files cannot be edited in text mode.' }
+            }
+        } finally {
+            await fileHandle.close().catch(() => undefined)
+        }
+
+        await writeFile(normalizedFilePath, String(content ?? ''), 'utf-8')
+        const nextStats = await stat(normalizedFilePath)
+        invalidateScanProjectsCache(dirname(normalizedFilePath))
+        invalidateScanProjectsCache(normalizedFilePath, { includeParents: false })
+
+        return {
+            success: true,
+            size: nextStats.size,
+            modifiedAt: nextStats.mtimeMs
+        }
+    } catch (err: any) {
+        log.error('Failed to write text file:', err)
         return { success: false, error: err.message }
     }
 }
