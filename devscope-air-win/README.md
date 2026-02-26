@@ -144,8 +144,9 @@ Distributed under the MIT License. See `LICENSE` for more information.
 ---
 
 <p align="center">
-  Built with ❤️ for the developer community. By the developer community.
+  Built with ❤️ for the developer community. By the developer community. With all love.
 </p>
 
+---
 
-
+# Devs don't use light mode.
