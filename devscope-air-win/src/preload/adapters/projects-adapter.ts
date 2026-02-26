@@ -1,9 +1,14 @@
 import { ipcRenderer } from 'electron'
-import type { DevScopePreviewTerminalEvent, DevScopePythonPreviewEvent } from '../../shared/contracts/devscope-api'
+import type {
+    DevScopePreviewTerminalEvent,
+    DevScopePythonPreviewEvent,
+    DevScopeTaskEvent
+} from '../../shared/contracts/devscope-api'
 
 export function createProjectsAdapter() {
     const PYTHON_PREVIEW_EVENT_CHANNEL = 'devscope:pythonPreview:event'
     const PREVIEW_TERMINAL_EVENT_CHANNEL = 'devscope:previewTerminal:event'
+    const TASK_EVENT_CHANNEL = 'devscope:tasks:event'
 
     return {
         selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),
@@ -110,6 +115,17 @@ export function createProjectsAdapter() {
                 ipcRenderer.removeListener(PREVIEW_TERMINAL_EVENT_CHANNEL, listener)
             }
         },
+        listActiveTasks: (projectPath?: string) =>
+            ipcRenderer.invoke('devscope:tasks:listActive', projectPath),
+        onTaskEvent: (callback: (event: DevScopeTaskEvent) => void) => {
+            const listener = (_event: Electron.IpcRendererEvent, payload: DevScopeTaskEvent) => {
+                callback(payload)
+            }
+            ipcRenderer.on(TASK_EVENT_CHANNEL, listener)
+            return () => {
+                ipcRenderer.removeListener(TASK_EVENT_CHANNEL, listener)
+            }
+        },
         openFile: (filePath: string) => ipcRenderer.invoke('devscope:openFile', filePath),
         openWith: (filePath: string) => ipcRenderer.invoke('devscope:openWith', filePath),
         renameFileSystemItem: (targetPath: string, nextName: string) =>
@@ -119,6 +135,8 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:pasteFileSystemItem', sourcePath, destinationDirectory),
         getProjectSessions: (_projectPath: string) => Promise.resolve({ success: true, sessions: [] }),
         getProjectProcesses: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectProcesses', projectPath),
+        getRunningApps: (limit: number = 500) => ipcRenderer.invoke('devscope:getRunningApps', limit),
+        getActivePorts: () => ipcRenderer.invoke('devscope:getActivePorts'),
         indexAllFolders: (folders: string[]) => ipcRenderer.invoke('devscope:indexAllFolders', folders),
         getFileSystemRoots: () => ipcRenderer.invoke('devscope:getFileSystemRoots')
     }

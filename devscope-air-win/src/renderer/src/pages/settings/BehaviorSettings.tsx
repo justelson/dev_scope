@@ -4,14 +4,14 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Power, EyeOff, Mouse, Expand, Eye, Edit3, PanelLeft, PanelRight } from 'lucide-react'
+import { ArrowLeft, Power, EyeOff, Mouse, Expand, Eye, Edit3, PanelLeft, PanelRight, TerminalSquare, ListChecks, Activity, Gauge } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 
 export default function BehaviorSettings() {
     const { settings, updateSettings } = useSettings()
     const [startupStatus, setStartupStatus] = useState<string | null>(null)
-    const [activeTab, setActiveTab] = useState<'startup' | 'preview'>('startup')
+    const [activeTab, setActiveTab] = useState<'startup' | 'preview' | 'tasks'>('startup')
 
     useEffect(() => {
         let isMounted = true
@@ -107,6 +107,18 @@ export default function BehaviorSettings() {
                     )}
                 >
                     File Preview
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('tasks')}
+                    className={cn(
+                        'rounded-md px-3 py-1.5 text-xs transition-colors',
+                        activeTab === 'tasks'
+                            ? 'bg-[var(--accent-primary)] text-white'
+                            : 'text-sparkle-text-secondary hover:bg-sparkle-bg hover:text-sparkle-text'
+                    )}
+                >
+                    Tasks
                 </button>
             </div>
 
@@ -243,6 +255,47 @@ export default function BehaviorSettings() {
                                         </button>
                                     </div>
                                 </div>
+
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        {settings.filePreviewPythonRunMode === 'terminal'
+                                            ? <TerminalSquare size={20} className="text-sparkle-text-secondary" />
+                                            : <ListChecks size={20} className="text-sparkle-text-secondary" />}
+                                        <div>
+                                            <p className="text-sm font-medium text-sparkle-text">
+                                                Python run default: {settings.filePreviewPythonRunMode === 'terminal' ? 'Terminal' : 'Output tab'}
+                                            </p>
+                                            <p className="text-xs text-sparkle-text-secondary">Used by the preview Play button dropdown default selection</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="inline-flex items-center rounded-lg border border-sparkle-border bg-sparkle-bg p-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => updateSettings({ filePreviewPythonRunMode: 'terminal' })}
+                                            className={cn(
+                                                'px-3 py-1.5 rounded-md text-xs transition-colors',
+                                                settings.filePreviewPythonRunMode === 'terminal'
+                                                    ? 'bg-[var(--accent-primary)] text-white'
+                                                    : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
+                                            )}
+                                        >
+                                            Terminal
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateSettings({ filePreviewPythonRunMode: 'output' })}
+                                            className={cn(
+                                                'px-3 py-1.5 rounded-md text-xs transition-colors',
+                                                settings.filePreviewPythonRunMode === 'output'
+                                                    ? 'bg-[var(--accent-primary)] text-white'
+                                                    : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
+                                            )}
+                                        >
+                                            Output
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </SettingsSection>
 
@@ -275,6 +328,52 @@ export default function BehaviorSettings() {
                                 </div>
                             </div>
                         </SettingsSection>
+
+                    </>
+                )}
+
+                {activeTab === 'tasks' && (
+                    <>
+                        <SettingsSection title="Tasks Tab Availability" description="Enable or disable the entire Tasks page from app navigation">
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <Activity size={20} className="text-sparkle-text-secondary" />
+                                    <div>
+                                        <p className="text-sm font-medium text-sparkle-text">
+                                            {settings.tasksPageEnabled ? 'Tasks tab enabled' : 'Tasks tab disabled'}
+                                        </p>
+                                        <p className="text-xs text-sparkle-text-secondary">
+                                            When disabled, the Tasks tab is hidden and task-manager data is not fetched.
+                                        </p>
+                                    </div>
+                                </div>
+                                <ToggleSwitch
+                                    checked={settings.tasksPageEnabled}
+                                    onChange={(next) => updateSettings({ tasksPageEnabled: next })}
+                                />
+                            </div>
+                        </SettingsSection>
+
+                        <SettingsSection title="Running Apps Monitor" description="Enable or disable the Running Apps section inside the Tasks page">
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <Gauge size={20} className="text-sparkle-text-secondary" />
+                                    <div>
+                                        <p className="text-sm font-medium text-sparkle-text">
+                                            {settings.tasksRunningAppsEnabled ? 'Running Apps enabled' : 'Running Apps disabled'}
+                                        </p>
+                                        <p className="text-xs text-sparkle-text-secondary">
+                                            Disabled state stops running-app/process-resource queries entirely.
+                                        </p>
+                                    </div>
+                                </div>
+                                <ToggleSwitch
+                                    checked={settings.tasksRunningAppsEnabled}
+                                    onChange={(next) => updateSettings({ tasksRunningAppsEnabled: next })}
+                                    disabled={!settings.tasksPageEnabled}
+                                />
+                            </div>
+                        </SettingsSection>
                     </>
                 )}
             </div>
@@ -292,13 +391,24 @@ function SettingsSection({ title, description, children }: { title: string; desc
     )
 }
 
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function ToggleSwitch({
+    checked,
+    onChange,
+    disabled
+}: {
+    checked: boolean
+    onChange: (v: boolean) => void
+    disabled?: boolean
+}) {
     return (
         <button
-            onClick={() => onChange(!checked)}
+            type="button"
+            onClick={() => !disabled && onChange(!checked)}
+            disabled={disabled}
             className={cn(
                 'w-12 h-7 rounded-full transition-colors relative',
-                checked ? 'bg-[var(--accent-primary)]' : 'bg-sparkle-border'
+                checked ? 'bg-[var(--accent-primary)]' : 'bg-sparkle-border',
+                disabled && 'opacity-50 cursor-not-allowed'
             )}
         >
             <div

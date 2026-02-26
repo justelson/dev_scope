@@ -310,7 +310,7 @@ export function WorkingChangesView({
         <>
             <div className="space-y-5">
                 <div className="bg-black/20 rounded-xl border border-white/5 p-4">
-                    <h3 className="text-sm font-medium text-white/80 mb-3">Create Commit (Staged Changes)</h3>
+                    <h3 className="text-sm font-medium text-white/80 mb-3">Create Commit (Staged only {stagedFiles.length})</h3>
                     <textarea
                         value={commitMessage}
                         onChange={(e) => setCommitMessage(e.target.value)}
@@ -321,7 +321,7 @@ export function WorkingChangesView({
                     <div className="mb-3 flex items-center justify-between gap-2">
                         <button
                             onClick={() => { void handleGenerateCommitMessage() }}
-                            disabled={isGeneratingCommitMessage || isCommitting}
+                            disabled={isGeneratingCommitMessage || isCommitting || stagedFiles.length === 0}
                             className="px-3 py-2 bg-violet-500/15 hover:bg-violet-500/25 disabled:opacity-50 disabled:cursor-not-allowed border border-violet-500/30 text-violet-300 text-xs font-medium rounded-lg transition-all flex items-center gap-2"
                         >
                             {isGeneratingCommitMessage ? (

@@ -63,6 +63,12 @@ function createPreviewTerminalSessionId(): string {
     return `preview-term-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+function readCssVariable(name: string, fallback: string): string {
+    if (typeof window === 'undefined') return fallback
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+    return value || fallback
+}
+
 function isEditableFileType(fileType: PreviewFile['type']): boolean {
     return fileType === 'md'
         || fileType === 'json'
@@ -163,7 +169,7 @@ export function FilePreviewModal({
     onSaved,
     onClose
 }: FilePreviewModalProps) {
-    const { settings } = useSettings()
+    const { settings, updateSettings } = useSettings()
     const isCsv = file.type === 'csv'
     const isHtml = file.type === 'html'
     const canEdit = isEditableFileType(file.type)
@@ -213,6 +219,7 @@ export function FilePreviewModal({
     const [focusLine, setFocusLine] = useState<number | null>(null)
     const [pythonSessionId, setPythonSessionId] = useState(() => createPythonPreviewSessionId())
     const [pythonRunState, setPythonRunState] = useState<'idle' | 'running' | 'success' | 'failed' | 'stopped'>('idle')
+    const [pythonRunMode, setPythonRunMode] = useState<'terminal' | 'output'>(settings.filePreviewPythonRunMode)
     const [pythonOutputEntries, setPythonOutputEntries] = useState<PythonOutputEntry[]>([])
     const [pythonInterpreter, setPythonInterpreter] = useState('')
     const [pythonCommand, setPythonCommand] = useState('')
@@ -224,9 +231,12 @@ export function FilePreviewModal({
     const [terminalVisible, setTerminalVisible] = useState(false)
     const [terminalState, setTerminalState] = useState<PreviewTerminalState>('idle')
     const [terminalSessionId, setTerminalSessionId] = useState(() => createPreviewTerminalSessionId())
-    const [terminalHeight, setTerminalHeight] = useState(220)
+    const [terminalHeight, setTerminalHeight] = useState(() =>
+        Math.max(PREVIEW_TERMINAL_MIN_HEIGHT, Math.min(720, Math.round(settings.filePreviewTerminalPanelHeight || 220)))
+    )
     const [isResizingTerminal, setIsResizingTerminal] = useState(false)
     const [terminalError, setTerminalError] = useState<string | null>(null)
+    const [pendingTerminalCommand, setPendingTerminalCommand] = useState<string | null>(null)
     const panelResizeRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
     const outputResizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
     const terminalResizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
@@ -243,6 +253,37 @@ export function FilePreviewModal({
     const totalFileLines = countLines(mode === 'edit' ? draftContent : sourceContent)
     const presetConfig = VIEWPORT_PRESETS[viewport]
     const isCompactHtmlViewport = isHtml && viewport !== 'responsive' && presetConfig.width <= 768
+    const terminalTheme = useMemo(() => {
+        const accent = readCssVariable('--accent-primary', settings.accentColor.primary || '#38bdf8')
+        const card = readCssVariable('--color-card', '#0f172a')
+        const bg = readCssVariable('--color-bg', '#020617')
+        const text = readCssVariable('--color-text', '#e2e8f0')
+        const textSecondary = readCssVariable('--color-text-secondary', '#94a3b8')
+        const borderSecondary = readCssVariable('--color-border-secondary', '#334155')
+        return {
+            background: card,
+            foreground: text,
+            cursor: accent,
+            cursorAccent: card,
+            selectionBackground: `${accent}33`,
+            black: bg,
+            brightBlack: borderSecondary,
+            red: '#f87171',
+            brightRed: '#fca5a5',
+            green: '#4ade80',
+            brightGreen: '#86efac',
+            yellow: '#facc15',
+            brightYellow: '#fde047',
+            blue: '#60a5fa',
+            brightBlue: '#93c5fd',
+            magenta: '#c084fc',
+            brightMagenta: '#e9d5ff',
+            cyan: '#22d3ee',
+            brightCyan: '#67e8f9',
+            white: textSecondary,
+            brightWhite: text
+        }
+    }, [settings.accentColor.primary, settings.theme])
 
     useEffect(() => {
         const originalOverflow = document.body.style.overflow
@@ -259,6 +300,20 @@ export function FilePreviewModal({
     useEffect(() => {
         terminalSessionIdRef.current = terminalSessionId
     }, [terminalSessionId])
+
+    useEffect(() => {
+        if (!xtermRef.current) return
+        xtermRef.current.options.theme = terminalTheme
+    }, [terminalTheme])
+
+    useEffect(() => {
+        const normalizedHeight = Math.max(PREVIEW_TERMINAL_MIN_HEIGHT, Math.min(720, Math.round(terminalHeight)))
+        if (settings.filePreviewTerminalPanelHeight === normalizedHeight) return
+        const timer = window.setTimeout(() => {
+            updateSettings({ filePreviewTerminalPanelHeight: normalizedHeight })
+        }, 150)
+        return () => window.clearTimeout(timer)
+    }, [settings.filePreviewTerminalPanelHeight, terminalHeight, updateSettings])
 
     useEffect(() => {
         setViewport('responsive')
@@ -284,6 +339,7 @@ export function FilePreviewModal({
         setFocusLine(null)
         setPythonSessionId(createPythonPreviewSessionId())
         setPythonRunState('idle')
+        setPythonRunMode(settings.filePreviewPythonRunMode)
         setPythonOutputEntries([])
         setPythonInterpreter('')
         setPythonCommand('')
@@ -294,9 +350,13 @@ export function FilePreviewModal({
         setTerminalVisible(false)
         setTerminalState('idle')
         setTerminalSessionId(createPreviewTerminalSessionId())
-        setTerminalHeight(220)
+        setTerminalHeight(Math.max(
+            PREVIEW_TERMINAL_MIN_HEIGHT,
+            Math.min(720, Math.round(settings.filePreviewTerminalPanelHeight || 220))
+        ))
         setIsResizingTerminal(false)
         setTerminalError(null)
+        setPendingTerminalCommand(null)
         pythonOutputSequenceRef.current = 1
     }, [
         content,
@@ -517,7 +577,7 @@ export function FilePreviewModal({
         return true
     }, [appendPythonOutput, canRunPython, pythonRunState])
 
-    const runPythonPreview = useCallback(async () => {
+    const runPythonPreviewOutput = useCallback(async () => {
         if (!canRunPython || !file.path || pythonRunState === 'running') return
 
         if (mode === 'edit' && isDirty) {
@@ -556,6 +616,40 @@ export function FilePreviewModal({
         }
     }, [appendPythonOutput, canRunPython, file.name, file.path, handleSave, isDirty, mode, projectPath, pythonRunState])
 
+    const buildTerminalPythonCommand = useCallback(() => {
+        if (settings.defaultShell === 'cmd') {
+            const escapedPath = file.path.replace(/"/g, '""')
+            return `where py >nul 2>nul && py -3 "${escapedPath}" || (where python >nul 2>nul && python "${escapedPath}" || (where python3 >nul 2>nul && python3 "${escapedPath}" || echo [DevScope] Python not found in PATH.))`
+        }
+
+        const escapedPath = file.path.replace(/'/g, "''")
+        return `$__devscopePy='${escapedPath}'; if (Get-Command py -ErrorAction SilentlyContinue) { py -3 $__devscopePy } elseif (Get-Command python -ErrorAction SilentlyContinue) { python $__devscopePy } elseif (Get-Command python3 -ErrorAction SilentlyContinue) { python3 $__devscopePy } else { Write-Host '[DevScope] Python not found in PATH.' -ForegroundColor Red }`
+    }, [file.path, settings.defaultShell])
+
+    const runPythonInTerminal = useCallback(async () => {
+        if (!canRunPython || !file.path) return
+
+        if (mode === 'edit' && isDirty) {
+            const saved = await handleSave()
+            if (!saved) {
+                appendPythonOutput('system', '[DevScope] Save failed. Run cancelled.\n')
+                return
+            }
+        }
+
+        const command = buildTerminalPythonCommand()
+        setTerminalVisible(true)
+        setPendingTerminalCommand(`${command}\r`)
+    }, [appendPythonOutput, buildTerminalPythonCommand, canRunPython, file.path, handleSave, isDirty, mode])
+
+    const handleRunPython = useCallback(async () => {
+        if (pythonRunMode === 'terminal') {
+            await runPythonInTerminal()
+            return
+        }
+        await runPythonPreviewOutput()
+    }, [pythonRunMode, runPythonInTerminal, runPythonPreviewOutput])
+
     const clearPythonOutput = useCallback(() => {
         setPythonOutputEntries([])
         setPythonOutputVisible(false)
@@ -580,6 +674,7 @@ export function FilePreviewModal({
         if (!terminalVisible) {
             setTerminalState('idle')
             setTerminalError(null)
+            setPendingTerminalCommand(null)
             void closePreviewTerminal()
             disposePreviewTerminal()
             return
@@ -603,28 +698,7 @@ export function FilePreviewModal({
                 fontSize: 12,
                 convertEol: true,
                 allowProposedApi: true,
-                theme: {
-                    background: '#0b1220',
-                    foreground: '#d6deeb',
-                    cursor: '#7dd3fc',
-                    selectionBackground: '#33415588',
-                    black: '#0f172a',
-                    brightBlack: '#475569',
-                    red: '#f87171',
-                    brightRed: '#fca5a5',
-                    green: '#4ade80',
-                    brightGreen: '#86efac',
-                    yellow: '#facc15',
-                    brightYellow: '#fde047',
-                    blue: '#60a5fa',
-                    brightBlue: '#93c5fd',
-                    magenta: '#c084fc',
-                    brightMagenta: '#d8b4fe',
-                    cyan: '#22d3ee',
-                    brightCyan: '#67e8f9',
-                    white: '#e2e8f0',
-                    brightWhite: '#f8fafc'
-                }
+                theme: terminalTheme
             })
             fitAddon = new FitAddon()
             terminal.loadAddon(fitAddon)
@@ -665,7 +739,7 @@ export function FilePreviewModal({
             resizeObserver.disconnect()
             window.removeEventListener('resize', syncTerminalSize)
         }
-    }, [canUsePreviewTerminal, closePreviewTerminal, disposePreviewTerminal, terminalVisible])
+    }, [canUsePreviewTerminal, closePreviewTerminal, disposePreviewTerminal, terminalTheme, terminalVisible])
 
     useEffect(() => {
         if (!terminalVisible || !canUsePreviewTerminal) return
@@ -738,6 +812,19 @@ export function FilePreviewModal({
         })
         return () => unsubscribe()
     }, [file.path, projectPath, terminalVisible])
+
+    useEffect(() => {
+        if (!pendingTerminalCommand) return
+        if (!terminalVisible || terminalState !== 'active') return
+        const commandToWrite = pendingTerminalCommand
+        setPendingTerminalCommand(null)
+        void window.devscope.writePreviewTerminal({
+            sessionId: terminalSessionIdRef.current,
+            data: commandToWrite
+        }).catch((error: any) => {
+            setTerminalError(error?.message || 'Failed to send command to terminal.')
+        })
+    }, [pendingTerminalCommand, terminalState, terminalVisible])
 
     useEffect(() => {
         return () => {
@@ -1211,7 +1298,8 @@ export function FilePreviewModal({
             <div className="flex-1 min-h-0 p-2">
                 <div
                     ref={terminalHostRef}
-                    className="h-full w-full overflow-hidden rounded-md border border-sparkle-border-secondary bg-[#0b1220]"
+                    className="h-full w-full overflow-hidden rounded-md border border-sparkle-border-secondary"
+                    style={{ backgroundColor: terminalTheme.background }}
                 />
             </div>
             {terminalError && (
@@ -1332,9 +1420,11 @@ export function FilePreviewModal({
                     canRunPython={canRunPython}
                     pythonRunState={pythonRunState}
                     pythonHasOutput={pythonOutputEntries.length > 0}
-                    onRunPython={() => { void runPythonPreview() }}
+                    pythonRunMode={pythonRunMode}
+                    onRunPython={() => { void handleRunPython() }}
                     onStopPython={() => { void stopPythonRun() }}
                     onClearPythonOutput={clearPythonOutput}
+                    onPythonRunModeChange={setPythonRunMode}
                     canUseTerminal={canUsePreviewTerminal}
                     terminalVisible={showTerminalPanel}
                     onToggleTerminal={() => {

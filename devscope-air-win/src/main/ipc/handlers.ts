@@ -39,7 +39,9 @@ import {
     handleSelectFolder
 } from './handlers/project-discovery-handlers'
 import {
+    handleGetActivePorts,
     handleGetProjectDetails,
+    handleGetRunningApps,
     handleGetProjectProcesses,
     handleGetProjectSessions
 } from './handlers/project-details-handlers'
@@ -60,6 +62,7 @@ import {
     handleWritePreviewTerminal
 } from './handlers/preview-terminal-handlers'
 import { handleRunPythonPreview, handleStopPythonPreview } from './handlers/python-preview-handlers'
+import { handleListActiveTasks } from './handlers/task-manager-handlers'
 import {
     handleCheckIsGitRepo,
     handleGenerateCustomGitignoreContent,
@@ -208,6 +211,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
     ipcMain.handle('devscope:openInExplorer', handleOpenInExplorer)
     ipcMain.handle('devscope:openInTerminal', handleOpenInTerminal)
+    ipcMain.handle('devscope:tasks:listActive', handleListActiveTasks)
     ipcMain.handle('devscope:previewTerminal:create', handleCreatePreviewTerminal)
     ipcMain.handle('devscope:previewTerminal:write', handleWritePreviewTerminal)
     ipcMain.handle('devscope:previewTerminal:resize', handleResizePreviewTerminal)
@@ -227,6 +231,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:pasteFileSystemItem', handlePasteFileSystemItem)
     ipcMain.handle('devscope:getProjectSessions', handleGetProjectSessions)
     ipcMain.handle('devscope:getProjectProcesses', handleGetProjectProcesses)
+    ipcMain.handle('devscope:getRunningApps', handleGetRunningApps)
+    ipcMain.handle('devscope:getActivePorts', handleGetActivePorts)
 
     ipcMain.handle('devscope:getGitHistory', handleGetGitHistory)
     ipcMain.handle('devscope:getCommitDiff', handleGetCommitDiff)

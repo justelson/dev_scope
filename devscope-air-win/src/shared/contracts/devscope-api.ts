@@ -145,6 +145,14 @@ export type DevScopeProcessInfo = {
     type: 'dev-server' | 'node' | 'python' | 'other'
 }
 
+export type DevScopeRunningApp = {
+    name: string
+    category: 'app' | 'background'
+    processCount: number
+    cpu: number
+    memoryMb: number
+}
+
 export type DevScopeAssistantStatus = {
     connected: boolean
     state: 'offline' | 'connecting' | 'ready' | 'error'
@@ -218,6 +226,44 @@ export type DevScopePreviewTerminalEvent = {
     shell?: string
     cwd?: string
     exitCode?: number
+}
+
+export type DevScopeTaskType =
+    | 'git.commit'
+    | 'git.push'
+    | 'git.fetch'
+    | 'git.pull'
+    | 'git.checkout'
+    | 'git.init'
+    | 'git.remote'
+    | 'git.tag'
+    | 'git.stash'
+
+export type DevScopeTaskStatus = 'running' | 'success' | 'failed'
+
+export type DevScopeTaskLogEntry = {
+    at: number
+    level: 'info' | 'error'
+    message: string
+}
+
+export type DevScopeTask = {
+    id: string
+    type: DevScopeTaskType
+    title: string
+    status: DevScopeTaskStatus
+    projectPath?: string
+    startedAt: number
+    updatedAt: number
+    endedAt?: number
+    metadata?: Record<string, string | number | boolean>
+    logs: DevScopeTaskLogEntry[]
+}
+
+export type DevScopeTaskEvent = {
+    type: 'upsert' | 'remove'
+    task?: DevScopeTask
+    taskId?: string
 }
 
 export interface DevScopeSystemApi {
@@ -400,6 +446,8 @@ export interface DevScopeApi {
     resizePreviewTerminal: (input: { sessionId: string; cols: number; rows: number }) => Promise<DevScopeResult>
     closePreviewTerminal: (sessionId: string) => Promise<DevScopeResult<{ closed: boolean }>>
     onPreviewTerminalEvent: (callback: (event: DevScopePreviewTerminalEvent) => void) => () => void
+    listActiveTasks: (projectPath?: string) => Promise<DevScopeResult<{ tasks: DevScopeTask[] }>>
+    onTaskEvent: (callback: (event: DevScopeTaskEvent) => void) => () => void
     openFile: (filePath: string) => Promise<DevScopeResult>
     openWith: (filePath: string) => Promise<DevScopeResult>
     renameFileSystemItem: (targetPath: string, nextName: string) => Promise<DevScopeResult<{ path: string; name: string }>>
@@ -407,6 +455,8 @@ export interface DevScopeApi {
     pasteFileSystemItem: (sourcePath: string, destinationDirectory: string) => Promise<DevScopeResult<{ path: string; name: string }>>
     getProjectSessions: (projectPath: string) => Promise<DevScopeResult>
     getProjectProcesses: (projectPath: string) => Promise<DevScopeResult<{ isLive: boolean; processes: DevScopeProcessInfo[]; activePorts: number[] }>>
+    getRunningApps: (limit?: number) => Promise<DevScopeResult<{ apps: DevScopeRunningApp[] }>>
+    getActivePorts: () => Promise<DevScopeResult<{ ports: number[] }>>
     indexAllFolders: (folders: string[]) => Promise<DevScopeResult<{ projects: DevScopeIndexedProject[]; indexedCount: number; indexedFolders: number; scannedFolderPaths: string[]; errors?: Array<{ folder: string; error: string }> }>>
     getFileSystemRoots: () => Promise<DevScopeResult<{ roots: string[] }>>
 

@@ -298,7 +298,11 @@ export function createProjectGitActions(params: GitActionParams) {
     }
 
     const handleGenerateCommitMessage = async () => {
-        if (!params.decodedPath || params.changedFiles.length === 0) return
+        if (!params.decodedPath) return
+        if (params.stagedFiles.length === 0) {
+            params.showToast('Stage files first to generate an AI commit message.', undefined, undefined, 'info')
+            return
+        }
 
         const providerOrder = params.settings.commitAIProvider === 'groq'
             ? (['groq', 'gemini'] as const)
@@ -322,15 +326,20 @@ export function createProjectGitActions(params: GitActionParams) {
 
         params.setIsGeneratingCommitMessage(true)
         try {
-            const contextResult = await window.devscope.getWorkingChangesForAI(params.decodedPath)
-            if (!contextResult?.success) {
-                throw new Error(contextResult?.error || 'Failed to read working changes')
+            const stagedDiffResult = await window.devscope.getWorkingDiff(params.decodedPath, undefined, 'staged')
+            if (!stagedDiffResult?.success) {
+                throw new Error(stagedDiffResult?.error || 'Failed to read staged changes')
+            }
+
+            const stagedDiff = String(stagedDiffResult.diff || '').trim()
+            if (!stagedDiff || stagedDiff === 'No changes') {
+                throw new Error('No staged diff available to generate a commit message.')
             }
 
             const generateResult = await window.devscope.generateCommitMessage(
                 selectedProvider,
                 apiKey,
-                contextResult.context || ''
+                stagedDiff
             )
 
             if (!generateResult?.success) {

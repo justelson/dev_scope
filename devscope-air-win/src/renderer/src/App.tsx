@@ -1,6 +1,6 @@
 // ... imports
 import { useRef, lazy, Suspense, useEffect, useMemo, createContext, useContext, type ReactNode } from 'react'
-import { HashRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import TitleBar from './components/layout/TitleBar'
 import Sidebar, { SidebarProvider, useSidebar } from './components/layout/Sidebar'
 import { useSmoothScroll } from './lib/useSmoothScroll'
@@ -15,6 +15,7 @@ import { useAssistantDockState } from './lib/assistantDockStore'
 const Settings = lazy(() => import('./pages/Settings'))
 const Home = lazy(() => import('./pages/Home'))
 const Projects = lazy(() => import('./pages/Projects'))
+const Tasks = lazy(() => import('./pages/Tasks'))
 const ProjectDetails = lazy(() => import('./pages/ProjectDetails'))
 const FolderBrowse = lazy(() => import('./pages/FolderBrowse'))
 const Assistant = lazy(() => import('./pages/Assistant'))
@@ -30,6 +31,7 @@ const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
 const AssistantSettings = lazy(() => import('./pages/settings/AssistantSettings'))
 const AssistantAccountSettings = lazy(() => import('./pages/settings/AssistantAccountSettings'))
+const LAST_MAIN_TAB_KEY = 'devscope:last-main-tab:v1'
 
 // Terminal Context
 interface TerminalContextType {
@@ -64,6 +66,35 @@ function isProjectsAreaPath(pathname: string): boolean {
     )
 }
 
+function resolveMainTabPath(
+    pathname: string,
+    options?: { allowTasks?: boolean }
+): '/home' | '/projects' | '/assistant' | '/settings' | '/tasks' | null {
+    const allowTasks = options?.allowTasks !== false
+    if (pathname === '/home' || pathname.startsWith('/home/')) return '/home'
+    if (pathname === '/assistant' || pathname.startsWith('/assistant/')) return '/assistant'
+    if (allowTasks && (pathname === '/tasks' || pathname.startsWith('/tasks/'))) return '/tasks'
+    if (pathname === '/settings' || pathname.startsWith('/settings/')) return '/settings'
+    if (isProjectsAreaPath(pathname)) return '/projects'
+    return null
+}
+
+function readLastMainTabPath(allowTasks: boolean): '/home' | '/projects' | '/assistant' | '/settings' | '/tasks' {
+    try {
+        const stored = String(localStorage.getItem(LAST_MAIN_TAB_KEY) || '').trim()
+        const resolved = resolveMainTabPath(stored, { allowTasks })
+        if (resolved) return resolved
+    } catch {
+        // Ignore storage read errors.
+    }
+    return '/assistant'
+}
+
+function LaunchRedirect() {
+    const { settings } = useSettings()
+    return <Navigate to={readLastMainTabPath(settings.tasksPageEnabled)} replace />
+}
+
 function PageLoader() {
     return <LoadingSpinner message="Loading page..." />
 }
@@ -71,6 +102,7 @@ function PageLoader() {
 function MainContent() {
     const mainRef = useRef<HTMLElement>(null)
     const location = useLocation()
+    const navigate = useNavigate()
     const isSettingsRoute = location.pathname.startsWith('/settings')
     const isAssistantRoute = location.pathname === '/assistant'
     const isProjectsAreaRoute = isProjectsAreaPath(location.pathname)
@@ -99,6 +131,22 @@ function MainContent() {
         }
     }, [location.pathname])
 
+    useEffect(() => {
+        const mainTabPath = resolveMainTabPath(location.pathname, { allowTasks: settings.tasksPageEnabled })
+        if (!mainTabPath) return
+        try {
+            localStorage.setItem(LAST_MAIN_TAB_KEY, mainTabPath)
+        } catch {
+            // Ignore storage write errors.
+        }
+    }, [location.pathname, settings.tasksPageEnabled])
+
+    useEffect(() => {
+        if (settings.tasksPageEnabled) return
+        if (!location.pathname.startsWith('/tasks')) return
+        navigate('/home', { replace: true })
+    }, [settings.tasksPageEnabled, location.pathname, navigate])
+
     return (
         <main
             ref={mainRef}
@@ -108,9 +156,13 @@ function MainContent() {
         >
             <Suspense fallback={<PageLoader />}>
                 <Routes>
-                    <Route path="/" element={<Navigate to="/assistant" replace />} />
+                    <Route path="/" element={<LaunchRedirect />} />
                     <Route path="/home" element={<Home />} />
                     <Route path="/projects" element={<Projects />} />
+                    <Route
+                        path="/tasks"
+                        element={settings.tasksPageEnabled ? <Tasks /> : <Navigate to="/home" replace />}
+                    />
                     <Route path="/projects/:projectPath" element={<ProjectDetails />} />
                     <Route path="/folder-browse/:folderPath" element={<FolderBrowse />} />
                     <Route path="/assistant" element={<Assistant />} />
@@ -126,7 +178,7 @@ function MainContent() {
                     <Route path="/settings/assistant" element={<AssistantSettings />} />
                     <Route path="/settings/account" element={<AssistantAccountSettings />} />
                     <Route path="/settings/usage" element={<AssistantAccountSettings />} />
-                    <Route path="*" element={<Navigate to="/assistant" replace />} />
+                    <Route path="*" element={<LaunchRedirect />} />
                 </Routes>
             </Suspense>
         </main>

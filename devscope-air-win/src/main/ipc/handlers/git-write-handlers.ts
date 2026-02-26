@@ -25,6 +25,7 @@ import {
     stageFiles,
     unstageFiles
 } from '../../inspectors/git'
+import { appendTaskLog, completeTask, createTask } from '../task-manager'
 
 export async function handleStageFiles(_event: Electron.IpcMainInvokeEvent, projectPath: string, files: string[]) {
     try {
@@ -57,41 +58,74 @@ export async function handleDiscardChanges(_event: Electron.IpcMainInvokeEvent, 
 }
 
 export async function handleCreateCommit(_event: Electron.IpcMainInvokeEvent, projectPath: string, message: string) {
+    const task = createTask({
+        type: 'git.commit',
+        title: 'Create commit',
+        projectPath,
+        initialLog: `Preparing commit in ${projectPath}`
+    })
     try {
+        appendTaskLog(task.id, `Commit message: ${message}`)
         await createCommit(projectPath, message)
+        completeTask(task.id, 'success', 'Commit created successfully.')
         return { success: true }
     } catch (err: any) {
         log.error('Failed to create commit:', err)
+        completeTask(task.id, 'failed', err?.message || 'Failed to create commit.')
         return { success: false, error: err.message }
     }
 }
 
 export async function handlePushCommits(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    const task = createTask({
+        type: 'git.push',
+        title: 'Push commits',
+        projectPath,
+        initialLog: `Pushing commits for ${projectPath}`
+    })
     try {
         await pushCommits(projectPath)
+        completeTask(task.id, 'success', 'Push completed successfully.')
         return { success: true }
     } catch (err: any) {
         log.error('Failed to push commits:', err)
+        completeTask(task.id, 'failed', err?.message || 'Failed to push commits.')
         return { success: false, error: err.message }
     }
 }
 
 export async function handleFetchUpdates(_event: Electron.IpcMainInvokeEvent, projectPath: string, remoteName?: string) {
+    const task = createTask({
+        type: 'git.fetch',
+        title: 'Fetch updates',
+        projectPath,
+        initialLog: remoteName ? `Fetching from ${remoteName}` : 'Fetching from default remote'
+    })
     try {
         await fetchUpdates(projectPath, remoteName)
+        completeTask(task.id, 'success', 'Fetch completed successfully.')
         return { success: true }
     } catch (err: any) {
         log.error('Failed to fetch updates:', err)
+        completeTask(task.id, 'failed', err?.message || 'Failed to fetch updates.')
         return { success: false, error: err.message }
     }
 }
 
 export async function handlePullUpdates(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    const task = createTask({
+        type: 'git.pull',
+        title: 'Pull updates',
+        projectPath,
+        initialLog: 'Pulling latest changes from remote'
+    })
     try {
         await pullUpdates(projectPath)
+        completeTask(task.id, 'success', 'Pull completed successfully.')
         return { success: true }
     } catch (err: any) {
         log.error('Failed to pull updates:', err)
+        completeTask(task.id, 'failed', err?.message || 'Failed to pull updates.')
         return { success: false, error: err.message }
     }
 }
@@ -127,11 +161,19 @@ export async function handleCheckoutBranch(
     branchName: string,
     options?: { autoStash?: boolean; autoCleanupLock?: boolean }
 ) {
+    const task = createTask({
+        type: 'git.checkout',
+        title: `Checkout branch: ${branchName}`,
+        projectPath,
+        initialLog: `Switching to ${branchName}`
+    })
     try {
         const result = await checkoutBranch(projectPath, branchName, options)
+        completeTask(task.id, 'success', `Checked out ${branchName}.`)
         return { success: true, ...result }
     } catch (err: any) {
         log.error('Failed to checkout branch:', err)
+        completeTask(task.id, 'failed', err?.message || `Failed to checkout ${branchName}.`)
         return { success: false, error: err.message }
     }
 }
@@ -277,11 +319,23 @@ export async function handleInitGitRepo(
     createGitignore: boolean,
     gitignoreTemplate?: string
 ) {
+    const task = createTask({
+        type: 'git.init',
+        title: 'Initialize repository',
+        projectPath,
+        initialLog: `Initializing git repository (${branchName})`
+    })
     try {
         const result = await initGitRepo(projectPath, branchName, createGitignore, gitignoreTemplate)
+        if (result?.success) {
+            completeTask(task.id, 'success', 'Repository initialized.')
+        } else {
+            completeTask(task.id, 'failed', result?.error || 'Failed to initialize repository.')
+        }
         return result
     } catch (err: any) {
         log.error('Failed to init git repo:', err)
+        completeTask(task.id, 'failed', err?.message || 'Failed to initialize repository.')
         return { success: false, error: err.message }
     }
 }
@@ -297,11 +351,23 @@ export async function handleCreateInitialCommit(_event: Electron.IpcMainInvokeEv
 }
 
 export async function handleAddRemoteOrigin(_event: Electron.IpcMainInvokeEvent, projectPath: string, remoteUrl: string) {
+    const task = createTask({
+        type: 'git.remote',
+        title: 'Add remote origin',
+        projectPath,
+        initialLog: `Adding remote origin: ${remoteUrl}`
+    })
     try {
         const result = await addRemoteOrigin(projectPath, remoteUrl)
+        if (result?.success) {
+            completeTask(task.id, 'success', 'Remote origin added.')
+        } else {
+            completeTask(task.id, 'failed', result?.error || 'Failed to add remote origin.')
+        }
         return result
     } catch (err: any) {
         log.error('Failed to add remote origin:', err)
+        completeTask(task.id, 'failed', err?.message || 'Failed to add remote origin.')
         return { success: false, error: err.message }
     }
 }

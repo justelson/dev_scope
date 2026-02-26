@@ -16,6 +16,7 @@ export type AssistantProvider = 'codex'
 export type AssistantApprovalMode = 'safe' | 'yolo'
 export type AssistantProfile = 'safe-dev' | 'review' | 'yolo-fast' | 'custom'
 export type FilePreviewDefaultMode = 'preview' | 'edit'
+export type FilePreviewPythonRunMode = 'terminal' | 'output'
 
 export interface AccentColor {
     name: string
@@ -73,6 +74,11 @@ export interface Settings {
     filePreviewFullscreenShowLeftPanel: boolean
     filePreviewFullscreenShowRightPanel: boolean
     filePreviewDefaultMode: FilePreviewDefaultMode
+    filePreviewPythonRunMode: FilePreviewPythonRunMode
+    filePreviewTerminalPanelHeight: number
+    projectDetailsShowTaskManagerTab: boolean
+    tasksPageEnabled: boolean
+    tasksRunningAppsEnabled: boolean
 
     // Projects
     projectsFolder: string
@@ -153,6 +159,11 @@ const DEFAULT_SETTINGS: Settings = {
     filePreviewFullscreenShowLeftPanel: true,
     filePreviewFullscreenShowRightPanel: false,
     filePreviewDefaultMode: 'preview',
+    filePreviewPythonRunMode: 'terminal',
+    filePreviewTerminalPanelHeight: 220,
+    projectDetailsShowTaskManagerTab: true,
+    tasksPageEnabled: true,
+    tasksRunningAppsEnabled: false,
     projectsFolder: '',
     additionalFolders: [],
     enableFolderIndexing: true,
@@ -201,6 +212,13 @@ function loadSettings(): Settings {
                 filePreviewFullscreenShowLeftPanel: candidate.filePreviewFullscreenShowLeftPanel !== false,
                 filePreviewFullscreenShowRightPanel: !!candidate.filePreviewFullscreenShowRightPanel,
                 filePreviewDefaultMode: candidate.filePreviewDefaultMode === 'edit' ? 'edit' : 'preview',
+                filePreviewPythonRunMode: candidate.filePreviewPythonRunMode === 'output' ? 'output' : 'terminal',
+                filePreviewTerminalPanelHeight: Number.isFinite(Number(candidate.filePreviewTerminalPanelHeight))
+                    ? Math.max(140, Math.min(720, Math.round(Number(candidate.filePreviewTerminalPanelHeight))))
+                    : 220,
+                projectDetailsShowTaskManagerTab: candidate.projectDetailsShowTaskManagerTab !== false,
+                tasksPageEnabled: candidate.tasksPageEnabled !== false,
+                tasksRunningAppsEnabled: candidate.tasksRunningAppsEnabled !== false,
                 projectsFolder: candidate.projectsFolder,
                 additionalFolders: candidate.additionalFolders,
                 enableFolderIndexing: candidate.enableFolderIndexing,

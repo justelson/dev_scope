@@ -75,7 +75,7 @@ async function isPortInUse(port: number): Promise<boolean> {
 /**
  * Get active ports from common dev server ports
  */
-async function getActivePorts(): Promise<number[]> {
+export async function getActivePorts(): Promise<number[]> {
     const activePorts: number[] = []
 
     // Check ports in parallel (batched to avoid too many simultaneous connections)

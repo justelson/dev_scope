@@ -1,4 +1,4 @@
-import { Check, Code, Copy, Edit3, Expand, ExternalLink, Eye, FileJson, FileText, FileType, Film, Image as ImageIcon, Minimize, PanelLeft, PanelRight, Play, Save, Square, Table, Terminal, Trash2, Undo2, X } from 'lucide-react'
+import { Check, ChevronDown, Code, Copy, Edit3, Expand, ExternalLink, Eye, FileJson, FileText, FileType, Film, Image as ImageIcon, Minimize, PanelLeft, PanelRight, Play, Save, Square, Table, Terminal, Trash2, Undo2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { GitDiffSummary } from './gitDiff'
@@ -38,9 +38,11 @@ interface PreviewModalHeaderProps {
     canRunPython?: boolean
     pythonRunState?: 'idle' | 'running' | 'success' | 'failed' | 'stopped'
     pythonHasOutput?: boolean
+    pythonRunMode?: 'terminal' | 'output'
     onRunPython?: () => void
     onStopPython?: () => void
     onClearPythonOutput?: () => void
+    onPythonRunModeChange?: (mode: 'terminal' | 'output') => void
     canUseTerminal?: boolean
     terminalVisible?: boolean
     onToggleTerminal?: () => void
@@ -87,9 +89,11 @@ export default function PreviewModalHeader({
     canRunPython = false,
     pythonRunState = 'idle',
     pythonHasOutput = false,
+    pythonRunMode = 'terminal',
     onRunPython,
     onStopPython,
     onClearPythonOutput,
+    onPythonRunModeChange,
     canUseTerminal = false,
     terminalVisible = false,
     onToggleTerminal
@@ -98,8 +102,10 @@ export default function PreviewModalHeader({
     const isCsv = file.type === 'csv'
     const presetConfig = VIEWPORT_PRESETS[viewport]
     const containerRef = useRef<HTMLDivElement | null>(null)
+    const pythonRunModeMenuRef = useRef<HTMLDivElement | null>(null)
     const [headerWidth, setHeaderWidth] = useState(1280)
     const [copied, setCopied] = useState(false)
+    const [pythonRunModeMenuOpen, setPythonRunModeMenuOpen] = useState(false)
 
     const handleCopyPath = () => {
         navigator.clipboard.writeText(file.path)
@@ -124,6 +130,18 @@ export default function PreviewModalHeader({
 
         return () => observer.disconnect()
     }, [])
+
+    useEffect(() => {
+        if (!pythonRunModeMenuOpen) return
+        const handlePointerDown = (event: MouseEvent) => {
+            const target = event.target as Node | null
+            if (!pythonRunModeMenuRef.current?.contains(target)) {
+                setPythonRunModeMenuOpen(false)
+            }
+        }
+        window.addEventListener('mousedown', handlePointerDown)
+        return () => window.removeEventListener('mousedown', handlePointerDown)
+    }, [pythonRunModeMenuOpen])
 
     const isCompactHtmlHeader = isHtml && headerWidth < 1024
     const isVeryCompactHtmlHeader = isHtml && headerWidth < 820
@@ -248,35 +266,82 @@ export default function PreviewModalHeader({
                         </button>
                     )}
                     {canRunPython && (
-                        <>
+                        <div ref={pythonRunModeMenuRef} className="relative inline-flex items-center rounded-lg border border-white/20">
                             <button
                                 type="button"
                                 onClick={isPythonRunning ? onStopPython : onRunPython}
                                 className={cn(
-                                    'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors',
+                                    'inline-flex h-8 w-8 items-center justify-center transition-colors',
                                     isPythonRunning
-                                        ? 'border-amber-400/35 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
-                                        : 'border-emerald-400/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+                                        ? 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                                        : 'bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
                                 )}
-                                title={isPythonRunning ? 'Stop Python run' : 'Run Python script'}
+                                title={isPythonRunning ? 'Stop Python run' : `Run Python (${pythonRunMode === 'terminal' ? 'terminal' : 'output'})`}
                             >
                                 {isPythonRunning ? <Square size={13} /> : <Play size={13} />}
                             </button>
                             <button
                                 type="button"
-                                onClick={onClearPythonOutput}
-                                disabled={!pythonHasOutput && !isPythonRunning}
-                                className={cn(
-                                    'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors',
-                                    (pythonHasOutput || isPythonRunning)
-                                        ? 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
-                                        : 'border-white/10 text-white/30 cursor-not-allowed'
-                                )}
-                                title="Clear run output"
+                                onClick={() => setPythonRunModeMenuOpen((current) => !current)}
+                                className="inline-flex h-8 w-6 items-center justify-center border-l border-white/15 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                                title="Choose run mode"
+                                aria-expanded={pythonRunModeMenuOpen}
                             >
-                                <Trash2 size={13} />
+                                <ChevronDown size={12} />
                             </button>
-                        </>
+                            {pythonRunModeMenuOpen && (
+                                <div className="absolute right-0 top-9 z-40 w-44 rounded-lg border border-sparkle-border bg-sparkle-card p-1.5 shadow-2xl">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            onPythonRunModeChange?.('terminal')
+                                            setPythonRunModeMenuOpen(false)
+                                        }}
+                                        className={cn(
+                                            'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
+                                            pythonRunMode === 'terminal'
+                                                ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
+                                                : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                        )}
+                                    >
+                                        <span>Run in Terminal</span>
+                                        {pythonRunMode === 'terminal' && <Check size={12} />}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            onPythonRunModeChange?.('output')
+                                            setPythonRunModeMenuOpen(false)
+                                        }}
+                                        className={cn(
+                                            'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
+                                            pythonRunMode === 'output'
+                                                ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
+                                                : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                        )}
+                                    >
+                                        <span>Run in Output</span>
+                                        {pythonRunMode === 'output' && <Check size={12} />}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {canRunPython && (
+                        <button
+                            type="button"
+                            onClick={onClearPythonOutput}
+                            disabled={!pythonHasOutput && !isPythonRunning}
+                            className={cn(
+                                'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors',
+                                (pythonHasOutput || isPythonRunning)
+                                    ? 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
+                                    : 'border-white/10 text-white/30 cursor-not-allowed'
+                            )}
+                            title="Clear run output"
+                        >
+                            <Trash2 size={13} />
+                        </button>
                     )}
                     <button
                         onClick={onToggleExpanded}

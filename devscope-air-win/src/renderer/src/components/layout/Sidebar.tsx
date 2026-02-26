@@ -3,7 +3,7 @@
  */
 
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Bot } from 'lucide-react'
+import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Bot, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createContext, useCallback, useEffect, useContext, type ReactNode } from 'react'
 import { useSettings } from '@/lib/settings'
@@ -49,6 +49,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
     { id: 'home', label: 'Home', path: '/home', icon: House },
     { id: 'projects', label: 'Projects', path: '/projects', icon: FolderOpen },
+    { id: 'tasks', label: 'Tasks', path: '/tasks', icon: Activity },
     { id: 'assistant', label: 'Assistant', path: '/assistant', icon: Bot },
     { id: 'settings', label: 'Settings', path: '/settings', icon: Settings }
 ]
@@ -77,6 +78,10 @@ export default function Sidebar() {
     const location = useLocation()
     const navigate = useNavigate()
     const { isCollapsed, setIsCollapsed } = useSidebar()
+    const { settings } = useSettings()
+    const visibleNavItems = settings.tasksPageEnabled
+        ? NAV_ITEMS
+        : NAV_ITEMS.filter((item) => item.id !== 'tasks')
 
     useEffect(() => {
         if (!isProjectsAreaPath(location.pathname)) return
@@ -101,7 +106,7 @@ export default function Sidebar() {
             isCollapsed ? "w-16" : "w-64"
         )}>
             <div className="flex-1 flex flex-col gap-1 px-3">
-                {NAV_ITEMS.map((item) => {
+                {visibleNavItems.map((item) => {
                     const isActive = item.id === 'projects'
                         ? isProjectsAreaPath(location.pathname)
                         : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
