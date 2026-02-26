@@ -210,6 +210,16 @@ export type DevScopePythonPreviewEvent = {
     stopped?: boolean
 }
 
+export type DevScopePreviewTerminalEvent = {
+    sessionId: string
+    type: 'started' | 'output' | 'exit' | 'error'
+    data?: string
+    message?: string
+    shell?: string
+    cwd?: string
+    exitCode?: number
+}
+
 export interface DevScopeSystemApi {
     bootstrap: () => Promise<DevScopeResult<{ controlBuffer?: ArrayBuffer; metricsBuffer?: ArrayBuffer }>>
     subscribe: (options?: { intervalMs?: number }) => Promise<DevScopeResult>
@@ -379,6 +389,17 @@ export interface DevScopeApi {
         Promise<DevScopeResult<{ pid: number | null; interpreter: string; command: string }>>
     stopPythonPreview: (sessionId: string) => Promise<DevScopeResult<{ stopped: boolean }>>
     onPythonPreviewEvent: (callback: (event: DevScopePythonPreviewEvent) => void) => () => void
+    createPreviewTerminal: (input: {
+        sessionId: string
+        targetPath?: string
+        preferredShell?: 'powershell' | 'cmd'
+        cols?: number
+        rows?: number
+    }) => Promise<DevScopeResult<{ shell: string; cwd: string }>>
+    writePreviewTerminal: (input: { sessionId: string; data: string }) => Promise<DevScopeResult>
+    resizePreviewTerminal: (input: { sessionId: string; cols: number; rows: number }) => Promise<DevScopeResult>
+    closePreviewTerminal: (sessionId: string) => Promise<DevScopeResult<{ closed: boolean }>>
+    onPreviewTerminalEvent: (callback: (event: DevScopePreviewTerminalEvent) => void) => () => void
     openFile: (filePath: string) => Promise<DevScopeResult>
     openWith: (filePath: string) => Promise<DevScopeResult>
     renameFileSystemItem: (targetPath: string, nextName: string) => Promise<DevScopeResult<{ path: string; name: string }>>

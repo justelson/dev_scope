@@ -53,6 +53,12 @@ import {
     handleWriteTextFile
 } from './handlers/file-tree-handlers'
 import { handleOpenInTerminal } from './handlers/terminal-handlers'
+import {
+    handleClosePreviewTerminal,
+    handleCreatePreviewTerminal,
+    handleResizePreviewTerminal,
+    handleWritePreviewTerminal
+} from './handlers/preview-terminal-handlers'
 import { handleRunPythonPreview, handleStopPythonPreview } from './handlers/python-preview-handlers'
 import {
     handleCheckIsGitRepo,
@@ -202,6 +208,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
     ipcMain.handle('devscope:openInExplorer', handleOpenInExplorer)
     ipcMain.handle('devscope:openInTerminal', handleOpenInTerminal)
+    ipcMain.handle('devscope:previewTerminal:create', handleCreatePreviewTerminal)
+    ipcMain.handle('devscope:previewTerminal:write', handleWritePreviewTerminal)
+    ipcMain.handle('devscope:previewTerminal:resize', handleResizePreviewTerminal)
+    ipcMain.handle('devscope:previewTerminal:close', handleClosePreviewTerminal)
     ipcMain.handle('devscope:pythonPreview:run', handleRunPythonPreview)
     ipcMain.handle('devscope:pythonPreview:stop', handleStopPythonPreview)
     ipcMain.handle('devscope:copyToClipboard', handleCopyToClipboard)

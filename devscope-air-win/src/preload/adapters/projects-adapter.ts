@@ -1,8 +1,9 @@
 import { ipcRenderer } from 'electron'
-import type { DevScopePythonPreviewEvent } from '../../shared/contracts/devscope-api'
+import type { DevScopePreviewTerminalEvent, DevScopePythonPreviewEvent } from '../../shared/contracts/devscope-api'
 
 export function createProjectsAdapter() {
     const PYTHON_PREVIEW_EVENT_CHANNEL = 'devscope:pythonPreview:event'
+    const PREVIEW_TERMINAL_EVENT_CHANNEL = 'devscope:previewTerminal:event'
 
     return {
         selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),
@@ -85,6 +86,28 @@ export function createProjectsAdapter() {
             ipcRenderer.on(PYTHON_PREVIEW_EVENT_CHANNEL, listener)
             return () => {
                 ipcRenderer.removeListener(PYTHON_PREVIEW_EVENT_CHANNEL, listener)
+            }
+        },
+        createPreviewTerminal: (input: {
+            sessionId: string
+            targetPath?: string
+            preferredShell?: 'powershell' | 'cmd'
+            cols?: number
+            rows?: number
+        }) => ipcRenderer.invoke('devscope:previewTerminal:create', input),
+        writePreviewTerminal: (input: { sessionId: string; data: string }) =>
+            ipcRenderer.invoke('devscope:previewTerminal:write', input),
+        resizePreviewTerminal: (input: { sessionId: string; cols: number; rows: number }) =>
+            ipcRenderer.invoke('devscope:previewTerminal:resize', input),
+        closePreviewTerminal: (sessionId: string) =>
+            ipcRenderer.invoke('devscope:previewTerminal:close', sessionId),
+        onPreviewTerminalEvent: (callback: (event: DevScopePreviewTerminalEvent) => void) => {
+            const listener = (_event: Electron.IpcRendererEvent, payload: DevScopePreviewTerminalEvent) => {
+                callback(payload)
+            }
+            ipcRenderer.on(PREVIEW_TERMINAL_EVENT_CHANNEL, listener)
+            return () => {
+                ipcRenderer.removeListener(PREVIEW_TERMINAL_EVENT_CHANNEL, listener)
             }
         },
         openFile: (filePath: string) => ipcRenderer.invoke('devscope:openFile', filePath),

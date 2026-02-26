@@ -4,6 +4,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { Terminal as XtermTerminal } from 'xterm'
+import { FitAddon } from 'xterm-addon-fit'
+import 'xterm/css/xterm.css'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { summarizeGitDiff, type GitDiffSummary, type GitLineMarker } from './file-preview/gitDiff'
@@ -37,6 +40,7 @@ type PythonOutputEntry = {
     text: string
     at: number
 }
+type PreviewTerminalState = 'idle' | 'connecting' | 'active' | 'exited' | 'error'
 
 const LEFT_PANEL_MIN_WIDTH = 260
 const LEFT_PANEL_MAX_WIDTH = 460
@@ -44,6 +48,7 @@ const RIGHT_PANEL_MIN_WIDTH = 240
 const RIGHT_PANEL_MAX_WIDTH = 520
 const PYTHON_OUTPUT_MAX_CHARS = 200_000
 const PYTHON_OUTPUT_MIN_HEIGHT = 96
+const PREVIEW_TERMINAL_MIN_HEIGHT = 140
 
 function countLines(value: string): number {
     if (!value) return 0
@@ -52,6 +57,10 @@ function countLines(value: string): number {
 
 function createPythonPreviewSessionId(): string {
     return `py-prev-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function createPreviewTerminalSessionId(): string {
+    return `preview-term-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 function isEditableFileType(fileType: PreviewFile['type']): boolean {
@@ -170,6 +179,7 @@ export function FilePreviewModal({
             || /\.py$/i.test(file.path)
         )
     )
+    const canUsePreviewTerminal = Boolean(projectPath || file.path)
 
     const [viewport, setViewport] = useState<ViewportPreset>('responsive')
     const [htmlViewMode, setHtmlViewMode] = useState<'rendered' | 'code'>('rendered')
@@ -211,12 +221,23 @@ export function FilePreviewModal({
     const [pythonOutputHeight, setPythonOutputHeight] = useState(160)
     const [pythonShowTimestamps, setPythonShowTimestamps] = useState(false)
     const [isResizingPythonOutput, setIsResizingPythonOutput] = useState(false)
+    const [terminalVisible, setTerminalVisible] = useState(false)
+    const [terminalState, setTerminalState] = useState<PreviewTerminalState>('idle')
+    const [terminalSessionId, setTerminalSessionId] = useState(() => createPreviewTerminalSessionId())
+    const [terminalHeight, setTerminalHeight] = useState(220)
+    const [isResizingTerminal, setIsResizingTerminal] = useState(false)
+    const [terminalError, setTerminalError] = useState<string | null>(null)
     const panelResizeRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
     const outputResizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
+    const terminalResizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
     const previewSurfaceRef = useRef<HTMLDivElement | null>(null)
     const pythonOutputScrollRef = useRef<HTMLDivElement | null>(null)
+    const terminalHostRef = useRef<HTMLDivElement | null>(null)
+    const xtermRef = useRef<XtermTerminal | null>(null)
+    const fitAddonRef = useRef<FitAddon | null>(null)
     const pythonOutputSequenceRef = useRef(1)
     const pythonSessionIdRef = useRef(pythonSessionId)
+    const terminalSessionIdRef = useRef(terminalSessionId)
 
     const isDirty = draftContent !== sourceContent
     const totalFileLines = countLines(mode === 'edit' ? draftContent : sourceContent)
@@ -234,6 +255,10 @@ export function FilePreviewModal({
     useEffect(() => {
         pythonSessionIdRef.current = pythonSessionId
     }, [pythonSessionId])
+
+    useEffect(() => {
+        terminalSessionIdRef.current = terminalSessionId
+    }, [terminalSessionId])
 
     useEffect(() => {
         setViewport('responsive')
@@ -266,6 +291,12 @@ export function FilePreviewModal({
         setPythonOutputVisible(false)
         setPythonOutputHeight(160)
         setPythonShowTimestamps(false)
+        setTerminalVisible(false)
+        setTerminalState('idle')
+        setTerminalSessionId(createPreviewTerminalSessionId())
+        setTerminalHeight(220)
+        setIsResizingTerminal(false)
+        setTerminalError(null)
         pythonOutputSequenceRef.current = 1
     }, [
         content,
@@ -533,6 +564,188 @@ export function FilePreviewModal({
         }
     }, [pythonRunState])
 
+    const closePreviewTerminal = useCallback(async (sessionId?: string) => {
+        const targetSessionId = String(sessionId || terminalSessionIdRef.current || '').trim()
+        if (!targetSessionId) return
+        await window.devscope.closePreviewTerminal(targetSessionId).catch(() => undefined)
+    }, [])
+
+    const disposePreviewTerminal = useCallback(() => {
+        fitAddonRef.current = null
+        xtermRef.current?.dispose()
+        xtermRef.current = null
+    }, [])
+
+    useEffect(() => {
+        if (!terminalVisible) {
+            setTerminalState('idle')
+            setTerminalError(null)
+            void closePreviewTerminal()
+            disposePreviewTerminal()
+            return
+        }
+
+        if (!canUsePreviewTerminal) {
+            setTerminalState('error')
+            setTerminalError('No valid path available to open terminal.')
+            return
+        }
+
+        const host = terminalHostRef.current
+        if (!host) return
+
+        let terminal = xtermRef.current
+        let fitAddon = fitAddonRef.current
+        if (!terminal || !fitAddon) {
+            terminal = new XtermTerminal({
+                cursorBlink: true,
+                fontFamily: 'Consolas, "Cascadia Code", monospace',
+                fontSize: 12,
+                convertEol: true,
+                allowProposedApi: true,
+                theme: {
+                    background: '#0b1220',
+                    foreground: '#d6deeb',
+                    cursor: '#7dd3fc',
+                    selectionBackground: '#33415588',
+                    black: '#0f172a',
+                    brightBlack: '#475569',
+                    red: '#f87171',
+                    brightRed: '#fca5a5',
+                    green: '#4ade80',
+                    brightGreen: '#86efac',
+                    yellow: '#facc15',
+                    brightYellow: '#fde047',
+                    blue: '#60a5fa',
+                    brightBlue: '#93c5fd',
+                    magenta: '#c084fc',
+                    brightMagenta: '#d8b4fe',
+                    cyan: '#22d3ee',
+                    brightCyan: '#67e8f9',
+                    white: '#e2e8f0',
+                    brightWhite: '#f8fafc'
+                }
+            })
+            fitAddon = new FitAddon()
+            terminal.loadAddon(fitAddon)
+            terminal.open(host)
+            terminal.focus()
+            xtermRef.current = terminal
+            fitAddonRef.current = fitAddon
+
+            terminal.onData((data) => {
+                void window.devscope.writePreviewTerminal({
+                    sessionId: terminalSessionIdRef.current,
+                    data
+                }).catch(() => undefined)
+            })
+        }
+
+        const syncTerminalSize = () => {
+            const activeFitAddon = fitAddonRef.current
+            if (!activeFitAddon) return
+            activeFitAddon.fit()
+            const dimensions = activeFitAddon.proposeDimensions?.()
+            if (!dimensions) return
+            void window.devscope.resizePreviewTerminal({
+                sessionId: terminalSessionIdRef.current,
+                cols: dimensions.cols,
+                rows: dimensions.rows
+            }).catch(() => undefined)
+        }
+
+        const resizeObserver = new ResizeObserver(() => {
+            syncTerminalSize()
+        })
+        resizeObserver.observe(host)
+        window.addEventListener('resize', syncTerminalSize)
+        window.setTimeout(syncTerminalSize, 0)
+
+        return () => {
+            resizeObserver.disconnect()
+            window.removeEventListener('resize', syncTerminalSize)
+        }
+    }, [canUsePreviewTerminal, closePreviewTerminal, disposePreviewTerminal, terminalVisible])
+
+    useEffect(() => {
+        if (!terminalVisible || !canUsePreviewTerminal) return
+        let active = true
+        const nextSessionId = createPreviewTerminalSessionId()
+        terminalSessionIdRef.current = nextSessionId
+        setTerminalSessionId(nextSessionId)
+        setTerminalState('connecting')
+        setTerminalError(null)
+        xtermRef.current?.clear()
+        xtermRef.current?.writeln('\x1b[90m[DevScope] Connecting terminal...\x1b[0m')
+
+        const initialize = async () => {
+            const result = await window.devscope.createPreviewTerminal({
+                sessionId: nextSessionId,
+                targetPath: projectPath || file.path,
+                preferredShell: settings.defaultShell,
+                cols: 100,
+                rows: 28
+            })
+            if (!active) return
+            if (!result?.success) {
+                setTerminalState('error')
+                setTerminalError(result?.error || 'Failed to start terminal session.')
+                xtermRef.current?.writeln(`\r\n\x1b[31m${result?.error || 'Failed to start terminal session.'}\x1b[0m`)
+                return
+            }
+            setTerminalState('active')
+        }
+
+        void initialize()
+        return () => {
+            active = false
+            void closePreviewTerminal(nextSessionId)
+        }
+    }, [canUsePreviewTerminal, closePreviewTerminal, file.path, projectPath, settings.defaultShell, terminalVisible])
+
+    useEffect(() => {
+        if (!terminalVisible) return
+        const unsubscribe = window.devscope.onPreviewTerminalEvent((eventPayload) => {
+            if (!eventPayload || eventPayload.sessionId !== terminalSessionIdRef.current) return
+
+            if (eventPayload.type === 'started') {
+                setTerminalState('active')
+                setTerminalError(null)
+                const shellLabel = eventPayload.shell || 'shell'
+                const cwdLabel = eventPayload.cwd || projectPath || file.path
+                xtermRef.current?.writeln(`\x1b[90m[DevScope] ${shellLabel} @ ${cwdLabel}\x1b[0m`)
+                return
+            }
+
+            if (eventPayload.type === 'output') {
+                xtermRef.current?.write(String(eventPayload.data || ''))
+                return
+            }
+
+            if (eventPayload.type === 'error') {
+                const message = String(eventPayload.message || 'Terminal session error.')
+                setTerminalState('error')
+                setTerminalError(message)
+                xtermRef.current?.writeln(`\r\n\x1b[31m${message}\x1b[0m`)
+                return
+            }
+
+            if (eventPayload.type === 'exit') {
+                const exitCode = typeof eventPayload.exitCode === 'number' ? eventPayload.exitCode : 0
+                setTerminalState('exited')
+                xtermRef.current?.writeln(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m`)
+            }
+        })
+        return () => unsubscribe()
+    }, [file.path, projectPath, terminalVisible])
+
+    useEffect(() => {
+        return () => {
+            void closePreviewTerminal()
+            disposePreviewTerminal()
+        }
+    }, [closePreviewTerminal, disposePreviewTerminal])
+
     const requestIntent = useCallback((intent: PendingIntent) => {
         if (!isDirty) {
             if (intent === 'close') onClose()
@@ -691,6 +904,45 @@ export function FilePreviewModal({
         return stop
     }, [isResizingPythonOutput])
 
+    const startTerminalResize = useCallback((event: { preventDefault: () => void; clientY: number }) => {
+        event.preventDefault()
+        terminalResizeRef.current = {
+            startY: event.clientY,
+            startHeight: terminalHeight
+        }
+        setIsResizingTerminal(true)
+    }, [terminalHeight])
+
+    useEffect(() => {
+        if (!isResizingTerminal) return
+
+        const maxHeight = Math.max(220, Math.floor(window.innerHeight * 0.78))
+        const clamp = (value: number) => Math.min(maxHeight, Math.max(PREVIEW_TERMINAL_MIN_HEIGHT, value))
+
+        const onMove = (event: MouseEvent) => {
+            const resize = terminalResizeRef.current
+            if (!resize) return
+            const delta = resize.startY - event.clientY
+            setTerminalHeight(clamp(resize.startHeight + delta))
+        }
+
+        const stop = () => {
+            terminalResizeRef.current = null
+            setIsResizingTerminal(false)
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('mouseup', stop)
+        }
+
+        document.body.style.cursor = 'row-resize'
+        document.body.style.userSelect = 'none'
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('mouseup', stop)
+
+        return stop
+    }, [isResizingTerminal])
+
     useEffect(() => {
         if (!isExpanded) return
 
@@ -823,6 +1075,8 @@ export function FilePreviewModal({
 
     const activeContent = mode === 'edit' ? draftContent : sourceContent
     const showPythonOutputPanel = canRunPython && (pythonOutputVisible || pythonRunState !== 'idle')
+    const showTerminalPanel = canUsePreviewTerminal && terminalVisible
+    const hasBottomPanel = showPythonOutputPanel || showTerminalPanel
     const pythonOutputHeightPx = `${Math.max(PYTHON_OUTPUT_MIN_HEIGHT, pythonOutputHeight)}px`
     const pythonStatusClass = (
         pythonRunState === 'success'
@@ -854,7 +1108,7 @@ export function FilePreviewModal({
                     </div>
                     {(pythonInterpreter || pythonCommand) && (
                         <div className="text-[10px] text-sparkle-text-muted truncate">
-                            {pythonInterpreter ? `${pythonInterpreter} • ` : ''}{pythonCommand || file.name}
+                            {pythonInterpreter ? `${pythonInterpreter} | ` : ''}{pythonCommand || file.name}
                         </div>
                     )}
                 </div>
@@ -911,6 +1165,60 @@ export function FilePreviewModal({
                     </div>
                 )}
             </div>
+        </div>
+    ) : null
+    const terminalHeightPx = `${Math.max(PREVIEW_TERMINAL_MIN_HEIGHT, terminalHeight)}px`
+    const terminalStatusClass = (
+        terminalState === 'active'
+            ? 'text-emerald-300'
+            : terminalState === 'connecting'
+                ? 'text-sky-300'
+                : terminalState === 'error'
+                    ? 'text-red-300'
+                    : terminalState === 'exited'
+                        ? 'text-amber-300'
+                        : 'text-sparkle-text-secondary'
+    )
+    const terminalPanel = showTerminalPanel ? (
+        <div
+            className="border-t border-sparkle-border bg-sparkle-card/90 backdrop-blur-sm flex flex-col"
+            style={{ height: terminalHeightPx }}
+        >
+            <div
+                onMouseDown={startTerminalResize}
+                className="group relative h-2 cursor-row-resize bg-transparent hover:bg-[var(--accent-primary)]/12 transition-colors"
+                title="Resize terminal"
+            >
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sparkle-border-secondary/70 group-hover:bg-[var(--accent-primary)]/65 transition-colors" />
+            </div>
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-sparkle-border-secondary">
+                <div className="min-w-0">
+                    <div className={cn('text-xs font-medium', terminalStatusClass)}>
+                        Terminal: {terminalState}
+                    </div>
+                    <div className="text-[10px] text-sparkle-text-muted truncate">
+                        {projectPath || file.path}
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setTerminalVisible(false)}
+                    className="rounded-md border border-sparkle-border px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors"
+                >
+                    Hide
+                </button>
+            </div>
+            <div className="flex-1 min-h-0 p-2">
+                <div
+                    ref={terminalHostRef}
+                    className="h-full w-full overflow-hidden rounded-md border border-sparkle-border-secondary bg-[#0b1220]"
+                />
+            </div>
+            {terminalError && (
+                <div className="px-3 pb-2 text-[10px] text-red-300 truncate">
+                    {terminalError}
+                </div>
+            )}
         </div>
     ) : null
     const localDiffPreview = useMemo(() => {
@@ -1027,6 +1335,11 @@ export function FilePreviewModal({
                     onRunPython={() => { void runPythonPreview() }}
                     onStopPython={() => { void stopPythonRun() }}
                     onClearPythonOutput={clearPythonOutput}
+                    canUseTerminal={canUsePreviewTerminal}
+                    terminalVisible={showTerminalPanel}
+                    onToggleTerminal={() => {
+                        setTerminalVisible((current) => !current)
+                    }}
                 />
 
                 {saveError && (
@@ -1103,15 +1416,15 @@ export function FilePreviewModal({
                                 'flex-1 min-w-0 custom-scrollbar flex',
                                 isExpanded ? 'items-stretch justify-start' : mode === 'edit' ? 'items-stretch justify-center' : 'items-start justify-center',
                                 isExpanded ? 'p-0' : isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-4',
-                                mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || showPythonOutputPanel ? 'overflow-hidden' : 'overflow-auto'
+                                mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || hasBottomPanel ? 'overflow-hidden' : 'overflow-auto'
                             )}
                             style={{ overscrollBehavior: 'contain' }}
                         >
                             <div className="w-full h-full min-h-0 flex flex-col">
                                 <div className={cn(
                                     'min-h-0',
-                                    showPythonOutputPanel ? 'flex-1' : 'h-full',
-                                    showPythonOutputPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : ''
+                                    hasBottomPanel ? 'flex-1' : 'h-full',
+                                    hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : ''
                                 )}>
                                     <PreviewErrorBoundary resetKey={`${file.path}:${file.type}:${viewport}:${htmlViewMode}:${mode}`}>
                                         <PreviewBody
@@ -1147,6 +1460,7 @@ export function FilePreviewModal({
                                     </PreviewErrorBoundary>
                                 </div>
                                 {pythonOutputPanel}
+                                {terminalPanel}
                             </div>
                         </div>
                         <aside
@@ -1275,15 +1589,15 @@ export function FilePreviewModal({
                         className={cn(
                             'flex-1 custom-scrollbar flex items-stretch justify-center bg-sparkle-bg',
                             isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-4',
-                            mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || showPythonOutputPanel ? 'overflow-hidden' : 'overflow-auto'
+                            mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || hasBottomPanel ? 'overflow-hidden' : 'overflow-auto'
                         )}
                         style={{ overscrollBehavior: 'contain' }}
                     >
                         <div className="w-full h-full min-h-0 flex flex-col">
                             <div className={cn(
                                 'min-h-0',
-                                showPythonOutputPanel ? 'flex-1' : 'h-full',
-                                showPythonOutputPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : ''
+                                hasBottomPanel ? 'flex-1' : 'h-full',
+                                hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : ''
                             )}>
                                 <PreviewErrorBoundary resetKey={`${file.path}:${file.type}:${viewport}:${htmlViewMode}:${mode}`}>
                                     <PreviewBody
@@ -1319,6 +1633,7 @@ export function FilePreviewModal({
                                 </PreviewErrorBoundary>
                             </div>
                             {pythonOutputPanel}
+                            {terminalPanel}
                         </div>
                     </div>
                 )}

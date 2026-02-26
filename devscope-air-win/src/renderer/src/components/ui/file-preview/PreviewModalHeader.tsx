@@ -1,4 +1,4 @@
-import { Check, Code, Copy, Edit3, Expand, ExternalLink, Eye, FileJson, FileText, FileType, Film, Image as ImageIcon, Minimize, PanelLeft, PanelRight, Play, Save, Square, Table, Trash2, Undo2, X } from 'lucide-react'
+import { Check, Code, Copy, Edit3, Expand, ExternalLink, Eye, FileJson, FileText, FileType, Film, Image as ImageIcon, Minimize, PanelLeft, PanelRight, Play, Save, Square, Table, Terminal, Trash2, Undo2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { GitDiffSummary } from './gitDiff'
@@ -41,6 +41,9 @@ interface PreviewModalHeaderProps {
     onRunPython?: () => void
     onStopPython?: () => void
     onClearPythonOutput?: () => void
+    canUseTerminal?: boolean
+    terminalVisible?: boolean
+    onToggleTerminal?: () => void
 }
 
 function PreviewFileIcon({ type }: { type: PreviewFile['type'] }) {
@@ -86,7 +89,10 @@ export default function PreviewModalHeader({
     pythonHasOutput = false,
     onRunPython,
     onStopPython,
-    onClearPythonOutput
+    onClearPythonOutput,
+    canUseTerminal = false,
+    terminalVisible = false,
+    onToggleTerminal
 }: PreviewModalHeaderProps) {
     const isHtml = file.type === 'html'
     const isCsv = file.type === 'csv'
@@ -226,6 +232,21 @@ export default function PreviewModalHeader({
                     </button>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                    {canUseTerminal && (
+                        <button
+                            type="button"
+                            onClick={onToggleTerminal}
+                            className={cn(
+                                'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors',
+                                terminalVisible
+                                    ? 'border-sky-400/35 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25'
+                                    : 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
+                            )}
+                            title={terminalVisible ? 'Hide terminal panel' : 'Show terminal panel'}
+                        >
+                            <Terminal size={13} />
+                        </button>
+                    )}
                     {canRunPython && (
                         <>
                             <button
