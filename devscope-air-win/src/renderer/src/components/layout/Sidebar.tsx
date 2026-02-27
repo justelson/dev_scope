@@ -49,8 +49,8 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
     { id: 'home', label: 'Home', path: '/home', icon: House },
     { id: 'projects', label: 'Projects', path: '/projects', icon: FolderOpen },
-    { id: 'tasks', label: 'Tasks', path: '/tasks', icon: Activity },
     { id: 'assistant', label: 'Assistant', path: '/assistant', icon: Bot },
+    { id: 'tasks', label: 'Tasks', path: '/tasks', icon: Activity },
     { id: 'settings', label: 'Settings', path: '/settings', icon: Settings }
 ]
 
