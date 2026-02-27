@@ -133,6 +133,16 @@ export async function handleAssistantSend(
     return await devscopeCore.assistant.sendPrompt(event.sender.id, prompt, options)
 }
 
+export function handleAssistantRespondApproval(
+    event: Electron.IpcMainInvokeEvent,
+    requestId: number,
+    decision: 'decline' | 'acceptForSession'
+) {
+    subscribeSender(event)
+    log.info('IPC: assistant:respondApproval', { requestId, decision })
+    return devscopeCore.assistant.respondApproval(Number(requestId), decision)
+}
+
 export function handleAssistantCancelTurn(
     _event: Electron.IpcMainInvokeEvent,
     turnId?: string

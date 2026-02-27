@@ -160,7 +160,7 @@ export function CollapsiblePlainMessage({
     return (
         <div ref={sectionRef} className={cn('group max-w-full', isUser ? 'ml-auto w-auto' : 'w-full')}>
             <div className={cn(
-                'relative max-w-[78ch] rounded-2xl px-4 py-3 shadow-sm border whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] text-sparkle-text bg-sparkle-card border-sparkle-border',
+                'relative max-w-[78ch] rounded-lg border border-sparkle-border bg-sparkle-card px-4 py-3 whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] text-sparkle-text',
                 compact ? 'text-[12px] leading-5' : 'text-[15px] leading-6',
                 isUser && 'ml-auto'
             )}>
@@ -168,7 +168,7 @@ export function CollapsiblePlainMessage({
                     <button
                         type="button"
                         onClick={() => void handleCopy()}
-                        className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-sparkle-border bg-sparkle-bg/90 text-sparkle-text-secondary opacity-0 transition-all hover:bg-sparkle-card-hover hover:text-sparkle-text group-hover:opacity-100"
+                        className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary opacity-0 transition-all hover:bg-sparkle-card-hover hover:text-sparkle-text group-hover:opacity-100"
                         title={copied ? 'Copied' : 'Copy message'}
                     >
                         {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -237,7 +237,7 @@ export function CollapsiblePlainMessage({
                         <button
                             type="button"
                             onClick={() => setIsCollapsed(false)}
-                            className="absolute inset-x-0 bottom-0 flex h-40 cursor-pointer items-end justify-center rounded-b-2xl bg-gradient-to-t from-sparkle-card via-sparkle-card/80 to-transparent pb-8 text-sm font-medium text-[var(--accent-primary)] transition-colors hover:text-white"
+                            className="absolute inset-x-0 bottom-0 flex h-40 cursor-pointer items-end justify-center rounded-b-lg bg-gradient-to-t from-sparkle-card via-sparkle-card/80 to-transparent pb-8 text-sm font-medium text-[var(--accent-primary)] transition-colors hover:text-sparkle-text"
                             style={{ height: `${USER_COLLAPSED_FADE_HEIGHT_PX}px` }}
                         >
                             Read More
@@ -259,7 +259,7 @@ export function CollapsiblePlainMessage({
                     type="button"
                     onClick={handleCollapseToTop}
                     style={{ right: `${floatingRightPx}px`, bottom: `${USER_FLOATING_COLLAPSE_BOTTOM_PX}px` }}
-                    className="fixed z-40 inline-flex items-center gap-2 rounded-full border border-white/20 bg-black/65 px-4 py-2 text-sm text-white/90 shadow-lg backdrop-blur-md transition-colors hover:bg-black/80"
+                    className="fixed z-40 inline-flex items-center gap-2 rounded-full border border-sparkle-border bg-sparkle-card px-4 py-2 text-sm text-sparkle-text shadow-lg transition-colors hover:bg-sparkle-card-hover"
                 >
                     <ChevronUp size={14} />
                     Show Less

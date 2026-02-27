@@ -164,6 +164,31 @@ export type DevScopeAssistantStatus = {
     lastError: string | null
 }
 
+export type DevScopeAssistantApprovalDecision = 'decline' | 'acceptForSession'
+export type DevScopeAssistantTurnPartKind = 'text' | 'reasoning' | 'tool' | 'tool-result' | 'approval' | 'final' | 'error'
+export type DevScopeAssistantTurnPart = {
+    id: string
+    turnId: string
+    attemptGroupId: string
+    kind: DevScopeAssistantTurnPartKind
+    timestamp: number
+    text?: string
+    method?: string
+    summary?: string
+    decision?: DevScopeAssistantApprovalDecision
+    status?: 'pending' | 'decided'
+    payload?: Record<string, unknown>
+    provisional?: boolean
+}
+export type DevScopeAssistantPendingApproval = {
+    requestId: number
+    method: string
+    mode: 'safe' | 'yolo'
+    turnId: string | null
+    attemptGroupId: string | null
+    createdAt: number
+}
+
 export type DevScopeAssistantHistoryAttachment = {
     path: string
     name?: string
@@ -290,6 +315,7 @@ export interface DevScopeAssistantApi {
         contextDiff?: string
         promptTemplate?: string
     }) => Promise<DevScopeResult>
+    respondApproval: (requestId: number, decision: DevScopeAssistantApprovalDecision) => Promise<DevScopeResult<{ requestId: number; decision: DevScopeAssistantApprovalDecision }>>
     regenerate: (turnId: string, options?: {
         model?: string
         approvalMode?: 'safe' | 'yolo'
@@ -302,7 +328,11 @@ export interface DevScopeAssistantApi {
     cancelTurn: (turnId?: string) => Promise<DevScopeResult>
     setApprovalMode: (mode: 'safe' | 'yolo') => Promise<DevScopeResult<{ status: DevScopeAssistantStatus }>>
     getApprovalMode: () => Promise<DevScopeResult<{ mode: 'safe' | 'yolo' }>>
-    getHistory: (query?: { kind?: string; limit?: number; types?: string[]; search?: string }) => Promise<DevScopeResult<{ history: DevScopeAssistantHistoryMessage[] }>>
+    getHistory: (query?: { kind?: string; limit?: number; types?: string[]; search?: string }) => Promise<DevScopeResult<{
+        history: DevScopeAssistantHistoryMessage[]
+        partsByTurn?: Record<string, DevScopeAssistantTurnPart[]>
+        pendingApprovals?: DevScopeAssistantPendingApproval[]
+    }>>
     clearHistory: (request?: { kind?: string }) => Promise<DevScopeResult>
     getEvents: (query?: { limit?: number; types?: string[]; search?: string }) => Promise<DevScopeResult<{ events: DevScopeAssistantEvent[] }>>
     clearEvents: () => Promise<DevScopeResult>

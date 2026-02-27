@@ -134,6 +134,7 @@ import {
     handleAssistantRunWorkflowDraftCommit,
     handleAssistantRunWorkflowExplainDiff,
     handleAssistantRunWorkflowReviewStaged,
+    handleAssistantRespondApproval,
     handleAssistantSelectSession,
     handleAssistantSend,
     handleAssistantSetApprovalMode,
@@ -176,6 +177,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle(ASSISTANT_IPC.disconnect, handleAssistantDisconnect)
     ipcMain.handle(ASSISTANT_IPC.status, handleAssistantStatus)
     ipcMain.handle(ASSISTANT_IPC.send, handleAssistantSend)
+    ipcMain.handle(ASSISTANT_IPC.respondApproval, handleAssistantRespondApproval)
     ipcMain.handle(ASSISTANT_IPC.cancelTurn, handleAssistantCancelTurn)
     ipcMain.handle(ASSISTANT_IPC.setApprovalMode, handleAssistantSetApprovalMode)
     ipcMain.handle(ASSISTANT_IPC.getApprovalMode, handleAssistantGetApprovalMode)

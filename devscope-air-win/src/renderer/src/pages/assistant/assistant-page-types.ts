@@ -7,6 +7,7 @@ export type AssistantStatus = {
     approvalMode: 'safe' | 'yolo'
     provider: 'codex'
     model: string
+    profile?: string
     activeTurnId: string | null
     lastError: string | null
 }
@@ -69,6 +70,33 @@ export type AssistantApproval = {
     timestamp: number
     turnId?: string
     attemptGroupId?: string
+}
+
+export type AssistantTurnPartKind = 'text' | 'reasoning' | 'tool' | 'tool-result' | 'approval' | 'final' | 'error'
+
+export type AssistantTurnPart = {
+    id: string
+    turnId: string
+    attemptGroupId: string
+    kind: AssistantTurnPartKind
+    timestamp: number
+    text?: string
+    method?: string
+    summary?: string
+    decision?: ApprovalDecision
+    status?: 'pending' | 'decided'
+    payload?: Record<string, unknown>
+    provisional?: boolean
+}
+
+export type AssistantThreadTokenUsage = {
+    threadId?: string
+    model?: string
+    inputTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+    modelContextWindow?: number
+    at: number
 }
 
 export type AssistantSession = {
@@ -157,6 +185,62 @@ export function parseApprovalDecisionPayload(
     const decision = parseApprovalDecision(payload.decision)
     if (!Number.isFinite(requestId) || !decision) return null
     return { requestId, decision }
+}
+
+export function parseTurnPartKind(value: unknown): AssistantTurnPartKind | null {
+    const normalized = typeof value === 'string' ? value.trim() : ''
+    return (
+        normalized === 'text'
+        || normalized === 'reasoning'
+        || normalized === 'tool'
+        || normalized === 'tool-result'
+        || normalized === 'approval'
+        || normalized === 'final'
+        || normalized === 'error'
+    )
+        ? normalized
+        : null
+}
+
+export function parseTurnPartPayload(payload: Record<string, unknown>): AssistantTurnPart | null {
+    const container = (
+        payload.part && typeof payload.part === 'object' && !Array.isArray(payload.part)
+            ? payload.part as Record<string, unknown>
+            : payload
+    )
+    const id = typeof container.id === 'string' ? container.id.trim() : ''
+    const turnId = typeof container.turnId === 'string' ? container.turnId.trim() : ''
+    const attemptGroupId = typeof container.attemptGroupId === 'string' ? container.attemptGroupId.trim() : ''
+    const kind = parseTurnPartKind(container.kind)
+    const timestamp = Number(container.timestamp)
+    if (!id || !turnId || !attemptGroupId || !kind || !Number.isFinite(timestamp)) {
+        return null
+    }
+
+    const rawDecision = parseApprovalDecision(container.decision)
+    const rawStatus = container.status === 'pending' || container.status === 'decided'
+        ? container.status
+        : undefined
+    const rawPayload = (
+        container.payload && typeof container.payload === 'object' && !Array.isArray(container.payload)
+            ? container.payload as Record<string, unknown>
+            : undefined
+    )
+
+    return {
+        id,
+        turnId,
+        attemptGroupId,
+        kind,
+        timestamp,
+        text: typeof container.text === 'string' ? container.text : undefined,
+        method: typeof container.method === 'string' ? container.method : undefined,
+        summary: typeof container.summary === 'string' ? container.summary : undefined,
+        decision: rawDecision,
+        status: rawStatus,
+        payload: rawPayload,
+        provisional: Boolean(container.provisional)
+    }
 }
 
 export function buildSessionScope(

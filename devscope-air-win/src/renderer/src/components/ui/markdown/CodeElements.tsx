@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { useRef, useState, type ReactNode } from 'react'
+import { Check, ChevronUp, Copy } from 'lucide-react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { hasColorToken, renderColorAwareText } from './colorTokens'
@@ -27,8 +27,18 @@ function looksLikeFolderStructure(text: string): boolean {
     return TREE_GLYPH_REGEX.test(text)
 }
 
-export function CodeBlock({ language, children }: { language?: string; children: string }) {
+export function CodeBlock({
+    language,
+    children,
+    maxLines
+}: {
+    language?: string
+    children: string
+    maxLines?: number
+}) {
     const [copied, setCopied] = useState(false)
+    const [expanded, setExpanded] = useState(false)
+    const codeBlockRef = useRef<HTMLDivElement | null>(null)
 
     const handleCopy = async () => {
         await navigator.clipboard.writeText(children)
@@ -47,9 +57,29 @@ export function CodeBlock({ language, children }: { language?: string; children:
     const isFolderStructure = looksLikeFolderStructure(children)
     const displayLanguage = language || (isFolderStructure ? 'structure' : 'code')
     const hasColorPreviewTokens = hasColorToken(children)
+    const normalizedLines = children.split('\n')
+    const lineLimit = Number.isFinite(maxLines) && Number(maxLines) > 0 ? Math.floor(Number(maxLines)) : 0
+    const shouldCollapse = lineLimit > 0 && normalizedLines.length > lineLimit
+    const visibleLines = shouldCollapse && !expanded ? normalizedLines.slice(0, lineLimit) : normalizedLines
+    const visibleText = visibleLines.join('\n')
+    const hiddenLineCount = normalizedLines.length - lineLimit
+    const estimatedLineHeight = 26
+    const collapsedMaxHeight = lineLimit > 0 ? (lineLimit * estimatedLineHeight) + 36 : undefined
+    const expandedMaxHeight = shouldCollapse ? Math.max((normalizedLines.length * estimatedLineHeight) + 48, 320) : undefined
+
+    const handleExpand = () => {
+        setExpanded(true)
+    }
+
+    const handleCollapse = () => {
+        setExpanded(false)
+        requestAnimationFrame(() => {
+            codeBlockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
+    }
 
     return (
-        <div className="relative group rounded-lg overflow-hidden my-4 border border-sparkle-border">
+        <div ref={codeBlockRef} className="relative group rounded-lg overflow-hidden my-4 border border-sparkle-border">
             <div className="flex items-center justify-between px-4 py-2 bg-sparkle-accent border-b border-sparkle-border">
                 <span className="text-xs font-mono text-sparkle-text-secondary uppercase tracking-wide">
                     {displayLanguage}
@@ -72,61 +102,98 @@ export function CodeBlock({ language, children }: { language?: string; children:
                 </button>
             </div>
 
-            {isFolderStructure ? (
-                <pre className="p-4 bg-sparkle-card overflow-x-auto m-0">
-                    <code className="text-sm font-mono leading-6 whitespace-pre">
-                        {children.split('\n').map((line, index) => {
-                            const match = line.match(TREE_LINE_REGEX)
-                            if (!match) {
+            <div
+                className="relative overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                style={
+                    shouldCollapse
+                        ? { maxHeight: expanded ? expandedMaxHeight : collapsedMaxHeight }
+                        : undefined
+                }
+            >
+                {shouldCollapse && (
+                    <div
+                        className={`pointer-events-none absolute right-3 top-3 z-10 transition-all duration-250 ${
+                            expanded ? 'translate-y-0 opacity-100' : '-translate-y-1 opacity-0'
+                        }`}
+                    >
+                        <button
+                            type="button"
+                            onClick={handleCollapse}
+                            className="pointer-events-auto inline-flex items-center gap-1 rounded-md border border-[var(--accent-primary)]/50 bg-sparkle-bg/90 px-2 py-1 text-[11px] font-semibold text-[var(--accent-primary)] backdrop-blur-sm transition-colors hover:bg-[var(--accent-primary)]/15"
+                        >
+                            <ChevronUp size={12} />
+                            Show less
+                        </button>
+                    </div>
+                )}
+
+                {isFolderStructure ? (
+                    <pre className="p-4 bg-sparkle-card overflow-x-auto m-0">
+                        <code className="text-sm font-mono leading-6 whitespace-pre">
+                            {visibleLines.map((line, index) => {
+                                const match = line.match(TREE_LINE_REGEX)
+                                if (!match) {
+                                    return (
+                                        <div key={index} className="text-sparkle-text-dark">
+                                            {line}
+                                        </div>
+                                    )
+                                }
+
+                                const [, prefix, name] = match
+                                const trimmedName = name.trim()
+                                const isFolder =
+                                    trimmedName.endsWith('/') || (!trimmedName.includes('.') && trimmedName.length > 0)
+
                                 return (
-                                    <div key={index} className="text-sparkle-text-dark">
-                                        {line}
+                                    <div key={index} className="hover:bg-sparkle-border">
+                                        <span className="text-sparkle-text-muted">{prefix}</span>
+                                        <span className={isFolder ? 'text-blue-400' : 'text-emerald-400'}>{name}</span>
                                     </div>
                                 )
-                            }
-
-                            const [, prefix, name] = match
-                            const trimmedName = name.trim()
-                            const isFolder =
-                                trimmedName.endsWith('/') || (!trimmedName.includes('.') && trimmedName.length > 0)
-
-                            return (
-                                <div key={index} className="hover:bg-sparkle-border">
-                                    <span className="text-sparkle-text-muted">{prefix}</span>
-                                    <span className={isFolder ? 'text-blue-400' : 'text-emerald-400'}>{name}</span>
+                            })}
+                        </code>
+                    </pre>
+                ) : hasColorPreviewTokens ? (
+                    <pre className="p-4 bg-sparkle-card overflow-x-auto m-0">
+                        <code className="text-sm font-mono leading-6 whitespace-pre text-sparkle-text-dark">
+                            {visibleLines.map((line, index) => (
+                                <div key={index} className="hover:bg-sparkle-border -mx-4 px-4">
+                                    {line.length > 0 ? renderColorAwareText(line, `code-color-${index}`) : '\u00A0'}
                                 </div>
-                            )
-                        })}
-                    </code>
-                </pre>
-            ) : hasColorPreviewTokens ? (
-                <pre className="p-4 bg-sparkle-card overflow-x-auto m-0">
-                    <code className="text-sm font-mono leading-6 whitespace-pre text-sparkle-text-dark">
-                        {children.split('\n').map((line, index) => (
-                            <div key={index} className="hover:bg-sparkle-border -mx-4 px-4">
-                                {line.length > 0 ? renderColorAwareText(line, `code-color-${index}`) : '\u00A0'}
-                            </div>
-                        ))}
-                    </code>
-                </pre>
-            ) : (
-                <SyntaxHighlighter
-                    language={language || 'text'}
-                    style={flatCodeTheme as any}
-                    customStyle={{
-                        margin: 0,
-                        padding: '1rem',
-                        background: 'var(--color-card)',
-                        fontSize: '0.875rem',
-                        lineHeight: '1.6'
-                    }}
-                    showLineNumbers={children.split('\n').length > 3}
-                    lineNumberStyle={{ color: 'var(--color-text-muted)', paddingRight: '1rem' }}
-                    wrapLines
-                    lineProps={{ style: { background: 'transparent', display: 'block', width: '100%' } }}
-                >
-                    {children}
-                </SyntaxHighlighter>
+                            ))}
+                        </code>
+                    </pre>
+                ) : (
+                    <SyntaxHighlighter
+                        language={language || 'text'}
+                        style={flatCodeTheme as any}
+                        customStyle={{
+                            margin: 0,
+                            padding: '1rem',
+                            background: 'var(--color-card)',
+                            fontSize: '0.875rem',
+                            lineHeight: '1.6'
+                        }}
+                        showLineNumbers={visibleLines.length > 3}
+                        lineNumberStyle={{ color: 'var(--color-text-muted)', paddingRight: '1rem' }}
+                        wrapLines
+                        lineProps={{ style: { background: 'transparent', display: 'block', width: '100%' } }}
+                    >
+                        {visibleText}
+                    </SyntaxHighlighter>
+                )}
+            </div>
+            {shouldCollapse && !expanded && (
+                <div className="border-t border-sparkle-border bg-sparkle-bg px-4 py-2">
+                    <button
+                        type="button"
+                        onClick={handleExpand}
+                        className="text-xs font-medium text-[var(--accent-primary)] hover:text-sparkle-text transition-colors"
+                    >
+                        {`Read more (${hiddenLineCount} more lines)`}
+                    </button>
+                </div>
             )}
         </div>
     )

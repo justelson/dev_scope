@@ -225,6 +225,23 @@ export function createAssistantPageActions(ctx: ActionContext) {
         }
     }
 
+    const handleRespondApproval = async (
+        requestId: number,
+        decision: 'decline' | 'acceptForSession'
+    ): Promise<boolean> => {
+        try {
+            const result = await window.devscope.assistant.respondApproval(requestId, decision)
+            if (!result?.success) {
+                ctx.setErrorMessage(result?.error || 'Failed to send approval decision.')
+                return false
+            }
+            return true
+        } catch (error) {
+            ctx.setErrorMessage(error instanceof Error ? error.message : 'Failed to send approval decision.')
+            return false
+        }
+    }
+
     const handleEnableYoloMode = async () => {
         const result = await window.devscope.assistant.setApprovalMode('yolo')
         if (result?.success && result.status) {
@@ -437,8 +454,8 @@ export function createAssistantPageActions(ctx: ActionContext) {
         await ctx.loadSnapshot()
     }
 
-    const handleArchiveSession = async (sessionId: string) => {
-        await window.devscope.assistant.archiveSession(sessionId, true)
+    const handleArchiveSession = async (sessionId: string, archived: boolean = true) => {
+        await window.devscope.assistant.archiveSession(sessionId, archived)
         await ctx.loadSnapshot()
     }
 
@@ -465,6 +482,7 @@ export function createAssistantPageActions(ctx: ActionContext) {
         handleSend,
         handleRegenerate,
         handleCancelTurn,
+        handleRespondApproval,
         handleEnableYoloMode,
         handleEnableSafeMode,
         handleSelectChatProjectPath,

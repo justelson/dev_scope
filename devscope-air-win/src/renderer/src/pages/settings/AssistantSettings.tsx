@@ -370,7 +370,7 @@ export default function AssistantSettings() {
                                 assistantDefaultModel: 'default',
                                 assistantApprovalMode: 'safe',
                                 assistantShowThinking: true,
-                                assistantAutoConnectOnOpen: false,
+                                assistantAutoConnectOnOpen: true,
                                 assistantSidebarCollapsed: false,
                                 assistantSidebarWidth: 320,
                                 assistantAllowEventConsole: true,

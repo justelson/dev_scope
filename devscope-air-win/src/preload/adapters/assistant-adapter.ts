@@ -35,6 +35,8 @@ export function createAssistantAdapter() {
                 contextDiff?: string
                 promptTemplate?: string
             }) => ipcRenderer.invoke(ASSISTANT_IPC.send, prompt, options),
+            respondApproval: (requestId: number, decision: 'decline' | 'acceptForSession') =>
+                ipcRenderer.invoke(ASSISTANT_IPC.respondApproval, requestId, decision),
             regenerate: (turnId: string, options?: {
                 model?: string
                 approvalMode?: 'safe' | 'yolo'

@@ -58,6 +58,9 @@ type AssistantSnapshot = {
     activityEvents: number
     reasoningEvents: number
     approvalEvents: number
+    tokenUsageEvents: number
+    accountUpdateEvents: number
+    rateLimitUpdateEvents: number
     eventsStored: number
     telemetryMonotonic: boolean
     newestEventAt: number | null
@@ -96,6 +99,9 @@ const EMPTY_SNAPSHOT: AssistantSnapshot = {
     activityEvents: 0,
     reasoningEvents: 0,
     approvalEvents: 0,
+    tokenUsageEvents: 0,
+    accountUpdateEvents: 0,
+    rateLimitUpdateEvents: 0,
     eventsStored: 0,
     telemetryMonotonic: true,
     newestEventAt: null,
@@ -288,6 +294,9 @@ export default function AssistantAccountSettings({
             const activityEvents = events.filter((entry) => entry.type === 'assistant-activity').length
             const reasoningEvents = events.filter((entry) => entry.type === 'assistant-reasoning').length
             const approvalEvents = events.filter((entry) => String(entry.type || '').includes('approval')).length
+            const tokenUsageEvents = events.filter((entry) => entry.type === 'thread/tokenUsage/updated').length
+            const accountUpdateEvents = events.filter((entry) => entry.type === 'account/updated').length
+            const rateLimitUpdateEvents = events.filter((entry) => entry.type === 'account/rateLimits/updated').length
 
             const telemetry = integrityResult as {
                 eventsStored?: number
@@ -326,6 +335,9 @@ export default function AssistantAccountSettings({
                 activityEvents,
                 reasoningEvents,
                 approvalEvents,
+                tokenUsageEvents,
+                accountUpdateEvents,
+                rateLimitUpdateEvents,
                 eventsStored: Number(telemetry.eventsStored) || events.length,
                 telemetryMonotonic: telemetry.monotonicDescending !== false,
                 newestEventAt: telemetry.newestTimestamp ?? events[0]?.timestamp ?? null,
@@ -501,6 +513,17 @@ export default function AssistantAccountSettings({
                                     <StatCard title="Newest Event" value={formatSince(snapshot.newestEventAt)} hint={formatTime(snapshot.newestEventAt)} />
                                     <StatCard title="Oldest Event" value={formatSince(snapshot.oldestEventAt)} hint={formatTime(snapshot.oldestEventAt)} />
                                     <StatCard title="Approval Events" value={snapshot.approvalEvents} hint={snapshot.approvalMode.toUpperCase() === 'YOLO' ? 'YOLO mode active' : 'SAFE mode active'} tone={snapshot.approvalMode.toUpperCase() === 'YOLO' ? 'warn' : 'good'} />
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-sparkle-text-secondary">
+                                    <span className="inline-flex items-center gap-1 rounded border border-cyan-500/30 px-2 py-1">
+                                        Token usage updates {snapshot.tokenUsageEvents}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 rounded border border-violet-500/30 px-2 py-1">
+                                        Account updates {snapshot.accountUpdateEvents}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 rounded border border-amber-500/30 px-2 py-1">
+                                        Rate-limit updates {snapshot.rateLimitUpdateEvents}
+                                    </span>
                                 </div>
                                 <div className="mt-5 rounded-lg border border-sparkle-border bg-sparkle-bg p-3">
                                     <p className="mb-2 text-xs uppercase tracking-wide text-sparkle-text-muted">Event Mix</p>

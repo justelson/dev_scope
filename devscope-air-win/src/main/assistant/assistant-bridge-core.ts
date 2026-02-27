@@ -86,6 +86,13 @@ export function bridgeFinalizeTurn(
             model: bridge.status.model,
             provider: bridge.status.provider
         })
+        bridge.recordTurnPart({
+            turnId,
+            attemptGroupId,
+            kind: 'final',
+            text: finalText,
+            method: 'turn/completed'
+        })
         bridge.emitEvent('history', { history: [...bridge.history] })
     }
 
@@ -97,6 +104,14 @@ export function bridgeFinalizeTurn(
     if ((terminalReason === 'failed' || terminalReason === 'interrupted') && errorMessage) {
         bridge.status.lastError = errorMessage
         bridge.emitEvent('error', { message: errorMessage, turnId, outcome: terminalReason })
+        bridge.recordTurnPart({
+            turnId,
+            attemptGroupId,
+            kind: 'error',
+            text: errorMessage,
+            method: terminalReason,
+            payload: { outcome: terminalReason }
+        })
     } else {
         bridge.status.lastError = null
     }
@@ -111,6 +126,33 @@ export function bridgeFinalizeTurn(
     bridge.reasoningTextsByTurn.delete(turnId)
     bridge.lastReasoningDigestByTurn.delete(turnId)
     bridge.lastActivityDigestByTurn.delete(turnId)
+    for (const pending of Array.from(bridge.pendingApprovalRequests.values() as Iterable<any>)) {
+        if (pending.turnId !== turnId) continue
+        bridge.pendingApprovalRequests.delete(pending.requestId)
+        bridge.emitEvent('approval-decision', {
+            requestId: pending.requestId,
+            method: pending.method,
+            mode: pending.mode,
+            decision: 'decline',
+            turnId,
+            attemptGroupId,
+            reason: 'turn-finalized'
+        })
+        bridge.recordTurnPart({
+            turnId,
+            attemptGroupId,
+            kind: 'approval',
+            method: pending.method,
+            status: 'decided',
+            decision: 'decline',
+            payload: {
+                ...(pending.request || {}),
+                requestId: pending.requestId,
+                mode: pending.mode,
+                reason: 'turn-finalized'
+            }
+        })
+    }
     bridge.status.state = bridge.status.connected ? 'ready' : 'offline'
     const completionPayload: Record<string, unknown> = {
         turnId,
@@ -177,7 +219,7 @@ export async function bridgeEnsureThread(
     if (bridge.threadId) return bridge.threadId
 
     const threadStartParams: Record<string, unknown> = {
-        approvalPolicy: bridge.status.approvalMode === 'yolo' ? 'on-request' : 'never'
+        approvalPolicy: 'on-request'
     }
     if (model) {
         threadStartParams.model = model

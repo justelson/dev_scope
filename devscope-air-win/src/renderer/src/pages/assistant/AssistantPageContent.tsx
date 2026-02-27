@@ -39,6 +39,19 @@ function getUserMessageDisplayText(message: AssistantHistoryMessage): string {
     return rawText
 }
 
+function formatRelativeUpdate(value: number | null): string {
+    if (!value || !Number.isFinite(value)) return 'n/a'
+    const deltaMs = Math.max(0, Date.now() - value)
+    if (deltaMs < 1000) return 'now'
+    const seconds = Math.floor(deltaMs / 1000)
+    if (seconds < 60) return `${seconds}s ago`
+    const minutes = Math.floor(seconds / 60)
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    return `${Math.floor(hours / 24)}d ago`
+}
+
 export function AssistantPageContent({ controller, layoutMode = 'page' }: Props) {
     const location = useLocation()
     const {
@@ -56,6 +69,7 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
         availableProjectRoots,
         effectiveProjectPath,
         activeSessions,
+        sessions,
         activeSessionId,
         activeSessionTitle,
         displayHistoryGroups,
@@ -64,6 +78,9 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
         allReasoning,
         allActivities,
         allApprovals,
+        threadTokenUsage,
+        lastAccountUpdateAt,
+        lastRateLimitsUpdateAt,
         isEmptyChatState,
         isChatHydrating,
         activeModel,
@@ -85,6 +102,7 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
         handleRefreshModels,
         handleSend: baseHandleSend,
         handleRegenerate,
+        handleRespondApproval,
         handleCancelTurn,
         handleEnableYoloMode,
         handleSelectChatProjectPath,
@@ -117,13 +135,14 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
         [recentProjectPaths]
     )
     const hasMoreRecentProjectPaths = recentProjectPaths.length > recentProjectPathPreview.length
-    const sessionSidebarItems = useMemo(() => activeSessions.map((session) => ({
+    const sessionSidebarItems = useMemo(() => sessions.map((session) => ({
         id: session.id,
         title: session.title,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
+        archived: Boolean(session.archived),
         projectPath: session.projectPath
-    })), [activeSessions])
+    })), [sessions])
 
     const [showProjectDropdown, setShowProjectDropdown] = useState(false)
     const [showProjectSelectorModal, setShowProjectSelectorModal] = useState(false)
@@ -163,6 +182,16 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
     const isDockSessionsExpanded = isDockMode && !settings.assistantSidebarCollapsed
     const isDockEventConsoleExpanded = isDockMode && canUseEventConsole && showEventConsole
     const showDockOverlayBackdrop = isDockSessionsExpanded || isDockEventConsoleExpanded
+    const threadTokenCount = useMemo(() => {
+        if (!threadTokenUsage) return null
+        const total = Number(threadTokenUsage.totalTokens)
+        if (Number.isFinite(total) && total > 0) return Math.floor(total)
+        const input = Number(threadTokenUsage.inputTokens)
+        const output = Number(threadTokenUsage.outputTokens)
+        const fallback = (Number.isFinite(input) ? input : 0) + (Number.isFinite(output) ? output : 0)
+        if (!Number.isFinite(fallback) || fallback <= 0) return null
+        return Math.floor(fallback)
+    }, [threadTokenUsage])
 
     const normalizeComparablePath = (value: string): string => (
         String(value || '')
@@ -266,7 +295,7 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
     }, [])
 
     return (
-        <div className="h-full flex flex-col animate-fadeIn">
+        <div className="h-full flex flex-col animate-fadeIn [--accent-primary:var(--color-primary)] [--accent-secondary:var(--color-secondary)]">
             {settings.assistantEnabled && (errorMessage || connectionState === 'error' || connectionState === 'disconnected') && (
                 <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
                     <div className="flex items-center gap-2">
@@ -292,10 +321,10 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
             )}
 
             {!settings.assistantEnabled ? (
-                <div className="flex-1 rounded-2xl border border-dashed border-sparkle-border bg-sparkle-card/60 flex items-center justify-center p-8">
+                <div className="flex-1 rounded-xl border border-sparkle-border bg-sparkle-card flex items-center justify-center p-8">
                     <div className="max-w-xl text-center">
-                        <div className="mx-auto w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4">
-                            <PlugZap className="text-indigo-300" size={24} />
+                        <div className="mx-auto w-12 h-12 rounded-md bg-sparkle-bg border border-sparkle-border flex items-center justify-center mb-4">
+                            <PlugZap className="text-sparkle-text-secondary" size={24} />
                         </div>
                         <h2 className="text-xl font-semibold text-sparkle-text mb-2">Assistant is turned off</h2>
                         <p className="text-sm text-sparkle-text-secondary mb-5">
@@ -303,7 +332,7 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                         </p>
                         <Link
                             to="/settings/assistant"
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-primary)] text-white hover:bg-[var(--accent-primary)]/85 transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-sparkle-border bg-sparkle-bg text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
                         >
                             <Settings2 size={16} />
                             Open Assistant Settings
@@ -444,6 +473,33 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                                                         title={effectiveProjectPath || 'No chat path selected'}
                                                     >
                                                         Path <strong className={cn('inline-block truncate align-bottom', isDockMode ? 'max-w-[24ch]' : 'max-w-[42ch]')}>{effectiveProjectPath || 'not set'}</strong>
+                                                    </span>
+                                                    <span
+                                                        className={cn(
+                                                            'rounded-full border border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary',
+                                                            isDockMode ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]'
+                                                        )}
+                                                        title={threadTokenUsage?.model ? `Thread tokens for ${threadTokenUsage.model}` : 'Thread token usage'}
+                                                    >
+                                                        Tokens <strong>{threadTokenCount != null ? threadTokenCount.toLocaleString() : '--'}</strong>
+                                                    </span>
+                                                    <span
+                                                        className={cn(
+                                                            'rounded-full border border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary',
+                                                            isDockMode ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]'
+                                                        )}
+                                                        title="Last account update event"
+                                                    >
+                                                        Account <strong>{formatRelativeUpdate(lastAccountUpdateAt)}</strong>
+                                                    </span>
+                                                    <span
+                                                        className={cn(
+                                                            'rounded-full border border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary',
+                                                            isDockMode ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]'
+                                                        )}
+                                                        title="Last rate limit update event"
+                                                    >
+                                                        Limits <strong>{formatRelativeUpdate(lastRateLimitsUpdateAt)}</strong>
                                                     </span>
                                                 </div>
                                             )}
@@ -731,6 +787,8 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                                                                     reasoning={allReasoning}
                                                                     activities={allActivities}
                                                                     approvals={allApprovals}
+                                                                    showThinking={settings.assistantShowThinking}
+                                                                    onRespondApproval={handleRespondApproval}
                                                                 />
                                                             </div>
                                                         )
@@ -752,10 +810,9 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                                                 {isEmptyChatState && (
                                                     <div className="flex flex-col items-center animate-fadeIn">
                                                         <div className={cn(
-                                                            'flex items-center justify-center rounded-3xl bg-sparkle-card border border-sparkle-border shadow-2xl relative',
+                                                            'flex items-center justify-center rounded-lg bg-sparkle-card border border-sparkle-border relative',
                                                             isDockMode ? 'mb-5 h-14 w-14' : 'mb-8 h-20 w-20'
                                                         )}>
-                                                            <div className="absolute inset-0 bg-sparkle-primary/5 rounded-3xl blur-xl" />
                                                             <div className="relative flex flex-col items-center">
                                                                 <div className={cn(
                                                                     'rounded-lg border-[3px] border-sparkle-text-muted/20 flex items-center justify-center',
@@ -767,17 +824,17 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                                                         </div>
 
                                                         <h1 className={cn(
-                                                            'font-bold text-white tracking-tight',
-                                                            isDockMode ? 'mb-6 text-2xl' : 'mb-10 text-5xl'
+                                                            'font-semibold text-sparkle-text tracking-tight',
+                                                            isDockMode ? 'mb-6 text-xl' : 'mb-10 text-4xl'
                                                         )}>
-                                                            <span className="text-[var(--accent-primary)]">devs</span> don't use <span className="text-[var(--accent-primary)]">light mode</span>
+                                                            Start a conversation
                                                         </h1>
 
                                                         <div className={cn('relative mx-auto', isDockMode ? 'mb-8 w-64' : 'mb-12 w-80')} ref={projectDropdownRef}>
                                                             <button
                                                                 onClick={() => setShowProjectDropdown((prev) => !prev)}
                                                                 className={cn(
-                                                                    'group flex w-full items-center bg-sparkle-card border transition-all shadow-xl',
+                                                                    'group flex w-full items-center bg-sparkle-card border transition-colors',
                                                                     isDockMode ? 'gap-2 px-3.5 py-2' : 'gap-3 px-5 py-2.5',
                                                                     showProjectDropdown
                                                                         ? "rounded-t-2xl border-sparkle-border border-b-transparent bg-sparkle-card-hover"
@@ -908,7 +965,7 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                                             isDockMode ? 'text-[10px]' : 'text-[11px]'
                                         )}>
                                             <div className="flex items-center gap-4">
-                                                <span className="text-white font-bold opacity-100 cursor-default">Local</span>
+                                                <span className="text-sparkle-text font-bold opacity-100 cursor-default">Local</span>
                                             </div>
                                             <div className="flex items-center gap-1.5 opacity-40">
                                                 <GitBranch size={isDockMode ? 10 : 11} />

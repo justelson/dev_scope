@@ -14,10 +14,14 @@ interface MarkdownRendererProps {
     content: string
     className?: string
     filePath?: string
+    codeBlockMaxLines?: number
 }
 
-function MarkdownRenderer({ content, className, filePath }: MarkdownRendererProps) {
-    const components = useMemo(() => createMarkdownComponents(filePath), [filePath])
+function MarkdownRenderer({ content, className, filePath, codeBlockMaxLines }: MarkdownRendererProps) {
+    const components = useMemo(
+        () => createMarkdownComponents(filePath, { codeBlockMaxLines }),
+        [filePath, codeBlockMaxLines]
+    )
 
     return (
         <div className={cn('markdown-body break-words [overflow-wrap:anywhere] [word-break:break-word]', className)}>
@@ -33,5 +37,6 @@ export default memo(
     (previous, next) =>
         previous.content === next.content &&
         previous.className === next.className &&
-        previous.filePath === next.filePath
+        previous.filePath === next.filePath &&
+        previous.codeBlockMaxLines === next.codeBlockMaxLines
 )

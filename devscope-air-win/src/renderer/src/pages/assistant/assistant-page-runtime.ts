@@ -7,6 +7,8 @@ import type {
     AssistantReasoning,
     AssistantSession,
     AssistantStatus,
+    AssistantThreadTokenUsage,
+    AssistantTurnPart,
     WorkflowState
 } from './assistant-page-types'
 import type { MutableRefObject } from 'react'
@@ -15,7 +17,8 @@ import {
     buildSessionScope,
     isTelemetryEventInScope,
     parseApprovalDecisionPayload,
-    parseApprovalPayload
+    parseApprovalPayload,
+    parseTurnPartPayload
 } from './assistant-page-types'
 import { toDisplayText, toDisplayTextTrimmed } from './assistant-text-utils'
 
@@ -28,6 +31,9 @@ type RuntimeDeps = {
     setSessions: (updater: AssistantSession[] | ((prev: AssistantSession[]) => AssistantSession[])) => void
     setActiveSessionId: (value: string | null) => void
     setTelemetryIntegrity: (value: any) => void
+    setThreadTokenUsage: (value: AssistantThreadTokenUsage | null) => void
+    setLastAccountUpdateAt: (value: number | null) => void
+    setLastRateLimitsUpdateAt: (value: number | null) => void
     setReasoningByTurn: (value: any) => void
     setActivitiesByTurn: (value: any) => void
     setApprovalsByTurn: (value: any) => void
@@ -43,6 +49,7 @@ const LIVE_PREVIEW_REASONING_METHOD = 'assistant-live-preview'
 const MAX_REASONING_PER_ATTEMPT = 100
 const MAX_ACTIVITIES_PER_ATTEMPT = 120
 const ACTIVITY_MERGE_WINDOW_MS = 6_000
+const MAX_APPROVALS_PER_ATTEMPT = 120
 
 function normalizeRole(value: unknown): AssistantHistoryMessage['role'] {
     if (value === 'assistant' || value === 'user' || value === 'system') return value
@@ -183,6 +190,163 @@ function appendCappedReasoning(
     return next.slice(next.length - MAX_REASONING_PER_ATTEMPT)
 }
 
+function appendCappedApproval(
+    entries: AssistantApproval[],
+    nextEntry: AssistantApproval
+): AssistantApproval[] {
+    const existingIndex = entries.findIndex((entry) => entry.requestId === nextEntry.requestId)
+    if (existingIndex >= 0) {
+        const next = [...entries]
+        next[existingIndex] = { ...next[existingIndex], ...nextEntry }
+        return next
+    }
+    const next = [...entries, nextEntry]
+    if (next.length <= MAX_APPROVALS_PER_ATTEMPT) return next
+    return next.slice(next.length - MAX_APPROVALS_PER_ATTEMPT)
+}
+
+function parseHistoryTurnParts(
+    source: unknown
+): Record<string, AssistantTurnPart[]> {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return {}
+    const next: Record<string, AssistantTurnPart[]> = {}
+    for (const [turnIdRaw, listRaw] of Object.entries(source as Record<string, unknown>)) {
+        const turnId = toDisplayTextTrimmed(turnIdRaw)
+        if (!turnId || !Array.isArray(listRaw)) continue
+        const parsed = listRaw
+            .map((entry) => (
+                entry && typeof entry === 'object' && !Array.isArray(entry)
+                    ? parseTurnPartPayload(entry as Record<string, unknown>)
+                    : null
+            ))
+            .filter((entry): entry is AssistantTurnPart => Boolean(entry))
+            .sort((a, b) => a.timestamp - b.timestamp)
+        if (parsed.length > 0) next[turnId] = parsed
+    }
+    return next
+}
+
+function parsePendingApprovals(source: unknown): AssistantApproval[] {
+    if (!Array.isArray(source)) return []
+    return source
+        .map((entry) => {
+            if (!entry || typeof entry !== 'object') return null
+            const record = entry as Record<string, unknown>
+            const requestId = Number(record.requestId)
+            if (!Number.isFinite(requestId)) return null
+            const method = toDisplayTextTrimmed(record.method)
+            if (!method) return null
+            return {
+                requestId,
+                method,
+                mode: record.mode === 'yolo' ? 'yolo' : 'safe',
+                decision: undefined,
+                request: (record.request && typeof record.request === 'object' && !Array.isArray(record.request))
+                    ? record.request as Record<string, unknown>
+                    : undefined,
+                timestamp: Number(record.createdAt) || Date.now(),
+                turnId: toDisplayTextTrimmed(record.turnId) || undefined,
+                attemptGroupId: toDisplayTextTrimmed(record.attemptGroupId) || undefined
+            } as AssistantApproval
+        })
+        .filter((entry): entry is AssistantApproval => Boolean(entry))
+}
+
+function buildTelemetryFromTurnParts(
+    partsByTurn: Record<string, AssistantTurnPart[]>,
+    pendingApprovals: AssistantApproval[],
+    scope: { turnIds: Set<string>; attemptGroupIds: Set<string> }
+): {
+    reasoning: Record<string, AssistantReasoning[]>
+    activities: Record<string, AssistantActivity[]>
+    approvals: Record<string, AssistantApproval[]>
+} {
+    const nextReasoning: Record<string, AssistantReasoning[]> = {}
+    const nextActivities: Record<string, AssistantActivity[]> = {}
+    const nextApprovals: Record<string, AssistantApproval[]> = {}
+
+    for (const parts of Object.values(partsByTurn)) {
+        for (const part of parts) {
+            if (!isTelemetryEventInScope(part as unknown as Record<string, unknown>, scope)) continue
+            const attemptGroupId = part.attemptGroupId || part.turnId || 'unknown'
+            if (part.kind === 'reasoning') {
+                const text = toDisplayText(part.text)
+                if (!text.trim()) continue
+                const nextEntry: AssistantReasoning = {
+                    turnId: part.turnId,
+                    attemptGroupId,
+                    text,
+                    method: toDisplayTextTrimmed(part.method) || 'turn-part',
+                    timestamp: part.timestamp
+                }
+                const arr = nextReasoning[attemptGroupId] || []
+                nextReasoning[attemptGroupId] = appendCappedReasoning(arr, nextEntry)
+                continue
+            }
+
+            if (part.kind === 'tool' || part.kind === 'tool-result') {
+                const summary = toDisplayText(part.summary || part.text)
+                const nextEntry: AssistantActivity = {
+                    turnId: part.turnId,
+                    attemptGroupId,
+                    kind: part.kind === 'tool' ? 'tool' : 'result',
+                    summary,
+                    method: toDisplayTextTrimmed(part.method) || 'turn-part',
+                    payload: (part.payload && typeof part.payload === 'object' ? part.payload : {}),
+                    timestamp: part.timestamp
+                }
+                const arr = nextActivities[attemptGroupId] || []
+                nextActivities[attemptGroupId] = appendCappedActivity(arr, nextEntry)
+                continue
+            }
+
+            if (part.kind === 'approval') {
+                const payloadRequest = (
+                    part.payload && typeof part.payload === 'object' && !Array.isArray(part.payload)
+                        ? part.payload
+                        : undefined
+                )
+                const requestIdCandidate = Number(payloadRequest?.requestId)
+                const requestId = Number.isFinite(requestIdCandidate)
+                    ? requestIdCandidate
+                    : Math.round(part.timestamp)
+                const nextEntry: AssistantApproval = {
+                    requestId,
+                    method: toDisplayTextTrimmed(part.method) || 'approval',
+                    mode: payloadRequest?.mode === 'yolo' ? 'yolo' : 'safe',
+                    decision: part.decision,
+                    request: payloadRequest,
+                    timestamp: part.timestamp,
+                    turnId: part.turnId,
+                    attemptGroupId
+                }
+                const arr = nextApprovals[attemptGroupId] || []
+                nextApprovals[attemptGroupId] = appendCappedApproval(arr, nextEntry)
+            }
+        }
+    }
+
+    for (const pending of pendingApprovals) {
+        if (!isTelemetryEventInScope(pending as unknown as Record<string, unknown>, scope)) continue
+        const attemptGroupId = toDisplayTextTrimmed(pending.attemptGroupId) || toDisplayTextTrimmed(pending.turnId) || 'unknown'
+        const arr = nextApprovals[attemptGroupId] || []
+        nextApprovals[attemptGroupId] = appendCappedApproval(arr, {
+            ...pending,
+            attemptGroupId
+        })
+    }
+
+    for (const arr of Object.values(nextReasoning)) arr.sort((a, b) => a.timestamp - b.timestamp)
+    for (const arr of Object.values(nextActivities)) arr.sort((a, b) => a.timestamp - b.timestamp)
+    for (const arr of Object.values(nextApprovals)) arr.sort((a, b) => a.timestamp - b.timestamp)
+
+    return {
+        reasoning: nextReasoning,
+        activities: nextActivities,
+        approvals: nextApprovals
+    }
+}
+
 export function createLoadSnapshot(deps: RuntimeDeps) {
     return async (options?: { hydrateChat?: boolean }) => {
         const hydrateChat = options?.hydrateChat === true
@@ -192,7 +356,19 @@ export function createLoadSnapshot(deps: RuntimeDeps) {
             const [statusResult, historyResult, eventsResult, sessionsResult, telemetryResult] = await Promise.all([
                 window.devscope.assistant.status(),
                 window.devscope.assistant.getHistory(),
-                window.devscope.assistant.getEvents({ types: ['assistant-reasoning', 'assistant-activity', 'approval-request', 'approval-decision'], limit: 5000 }),
+                window.devscope.assistant.getEvents({
+                    types: [
+                        'turn-part',
+                        'assistant-reasoning',
+                        'assistant-activity',
+                        'approval-request',
+                        'approval-decision',
+                        'thread/tokenUsage/updated',
+                        'account/updated',
+                        'account/rateLimits/updated'
+                    ],
+                    limit: 5000
+                }),
                 window.devscope.assistant.listSessions(),
                 window.devscope.assistant.getTelemetryIntegrity()
             ])
@@ -212,6 +388,12 @@ export function createLoadSnapshot(deps: RuntimeDeps) {
                 deps.getStreamingTurnId()
             )
             deps.scopeRef.current = snapshotScope
+
+            const historyRecord = (historyResult && typeof historyResult === 'object')
+                ? historyResult as Record<string, unknown>
+                : {}
+            const partsByTurn = parseHistoryTurnParts(historyRecord.partsByTurn)
+            const pendingApprovals = parsePendingApprovals(historyRecord.pendingApprovals)
 
             if (sessionsResult?.success && Array.isArray(sessionsResult.sessions)) {
                 const normalizedSessions = sessionsResult.sessions.map((session: any) => ({
@@ -241,81 +423,107 @@ export function createLoadSnapshot(deps: RuntimeDeps) {
             }
 
             if (eventsResult?.success && Array.isArray(eventsResult.events)) {
-                const nextReasoning: Record<string, AssistantReasoning[]> = {}
-                const nextActivities: Record<string, AssistantActivity[]> = {}
-                const nextApprovals: Record<string, AssistantApproval[]> = {}
+                const partDrivenTelemetry = buildTelemetryFromTurnParts(partsByTurn, pendingApprovals, snapshotScope)
+                let nextReasoning = partDrivenTelemetry.reasoning
+                let nextActivities = partDrivenTelemetry.activities
+                let nextApprovals = partDrivenTelemetry.approvals
 
-                const reqMap = new Map<number, AssistantApproval>()
-                for (const ev of eventsResult.events) {
-                    if (ev.type === 'approval-request') {
-                        const parsed = parseApprovalPayload(ev.payload, ev.timestamp)
-                        if (!parsed) continue
-                        reqMap.set(parsed.requestId, parsed)
-                    } else if (ev.type === 'approval-decision') {
-                        const parsed = parseApprovalDecisionPayload(ev.payload)
-                        if (!parsed) continue
-                        const existing = reqMap.get(parsed.requestId)
-                        if (!existing) continue
-                        existing.decision = parsed.decision
-                    }
-                }
+                const hasPartTelemetry = Object.keys(nextReasoning).length > 0
+                    || Object.keys(nextActivities).length > 0
+                    || Object.keys(nextApprovals).length > 0
 
-                for (const ev of eventsResult.events) {
-                    if (ev.type === 'assistant-reasoning') {
-                        if (!isTelemetryEventInScope(ev.payload, snapshotScope)) continue
-                        const turnId = toDisplayTextTrimmed(ev.payload.turnId)
-                        const attemptGroupId = toDisplayTextTrimmed(ev.payload.attemptGroupId) || turnId || 'unknown'
-                        const r = {
-                            turnId,
-                            attemptGroupId,
-                            text: toDisplayText(ev.payload.text),
-                            method: toDisplayTextTrimmed(ev.payload.method),
-                            timestamp: ev.timestamp
+                if (!hasPartTelemetry) {
+                    const reqMap = new Map<number, AssistantApproval>()
+                    for (const ev of eventsResult.events) {
+                        if (ev.type === 'approval-request') {
+                            const parsed = parseApprovalPayload(ev.payload, ev.timestamp)
+                            if (!parsed) continue
+                            reqMap.set(parsed.requestId, parsed)
+                        } else if (ev.type === 'approval-decision') {
+                            const parsed = parseApprovalDecisionPayload(ev.payload)
+                            if (!parsed) continue
+                            const existing = reqMap.get(parsed.requestId)
+                            if (!existing) continue
+                            existing.decision = parsed.decision
                         }
-                        if (!nextReasoning[r.attemptGroupId]) nextReasoning[r.attemptGroupId] = []
-                        nextReasoning[r.attemptGroupId].push(r)
-                    } else if (ev.type === 'assistant-activity') {
-                        if (!isTelemetryEventInScope(ev.payload, snapshotScope)) continue
-                        const turnId = toDisplayTextTrimmed(ev.payload.turnId)
-                        const attemptGroupId = toDisplayTextTrimmed(ev.payload.attemptGroupId) || turnId || 'unknown'
-                        const a = {
-                            turnId,
-                            attemptGroupId,
-                            kind: toDisplayTextTrimmed(ev.payload.kind) || 'event',
-                            summary: toDisplayText(ev.payload.summary),
-                            method: toDisplayTextTrimmed(ev.payload.method) || 'runtime',
-                            payload: (ev.payload.payload || {}) as Record<string, unknown>,
-                            timestamp: ev.timestamp
+                    }
+
+                    const fallbackReasoning: Record<string, AssistantReasoning[]> = {}
+                    const fallbackActivities: Record<string, AssistantActivity[]> = {}
+                    const fallbackApprovals: Record<string, AssistantApproval[]> = {}
+                    for (const ev of eventsResult.events) {
+                        if (ev.type === 'assistant-reasoning') {
+                            if (!isTelemetryEventInScope(ev.payload, snapshotScope)) continue
+                            const turnId = toDisplayTextTrimmed(ev.payload.turnId)
+                            const attemptGroupId = toDisplayTextTrimmed(ev.payload.attemptGroupId) || turnId || 'unknown'
+                            const r = {
+                                turnId,
+                                attemptGroupId,
+                                text: toDisplayText(ev.payload.text),
+                                method: toDisplayTextTrimmed(ev.payload.method),
+                                timestamp: ev.timestamp
+                            }
+                            if (!fallbackReasoning[r.attemptGroupId]) fallbackReasoning[r.attemptGroupId] = []
+                            fallbackReasoning[r.attemptGroupId].push(r)
+                        } else if (ev.type === 'assistant-activity') {
+                            if (!isTelemetryEventInScope(ev.payload, snapshotScope)) continue
+                            const turnId = toDisplayTextTrimmed(ev.payload.turnId)
+                            const attemptGroupId = toDisplayTextTrimmed(ev.payload.attemptGroupId) || turnId || 'unknown'
+                            const a = {
+                                turnId,
+                                attemptGroupId,
+                                kind: toDisplayTextTrimmed(ev.payload.kind) || 'event',
+                                summary: toDisplayText(ev.payload.summary),
+                                method: toDisplayTextTrimmed(ev.payload.method) || 'runtime',
+                                payload: (ev.payload.payload || {}) as Record<string, unknown>,
+                                timestamp: ev.timestamp
+                            }
+                            if (!fallbackActivities[a.attemptGroupId]) fallbackActivities[a.attemptGroupId] = []
+                            fallbackActivities[a.attemptGroupId].push(a)
                         }
-                        if (!nextActivities[a.attemptGroupId]) nextActivities[a.attemptGroupId] = []
-                        nextActivities[a.attemptGroupId].push(a)
                     }
-                }
-
-                for (const approval of reqMap.values()) {
-                    if (!isTelemetryEventInScope(approval as unknown as Record<string, unknown>, snapshotScope)) continue
-                    const groupId = approval.attemptGroupId || 'unknown'
-                    if (!nextApprovals[groupId]) nextApprovals[groupId] = []
-                    nextApprovals[groupId].push(approval)
-                }
-
-                for (const [attemptGroupId, arr] of Object.entries(nextReasoning)) {
-                    arr.sort((a, b) => a.timestamp - b.timestamp)
-                    if (arr.length > MAX_REASONING_PER_ATTEMPT) {
-                        nextReasoning[attemptGroupId] = arr.slice(arr.length - MAX_REASONING_PER_ATTEMPT)
+                    for (const approval of reqMap.values()) {
+                        if (!isTelemetryEventInScope(approval as unknown as Record<string, unknown>, snapshotScope)) continue
+                        const groupId = approval.attemptGroupId || 'unknown'
+                        if (!fallbackApprovals[groupId]) fallbackApprovals[groupId] = []
+                        fallbackApprovals[groupId].push(approval)
                     }
+                    nextReasoning = fallbackReasoning
+                    nextActivities = fallbackActivities
+                    nextApprovals = fallbackApprovals
                 }
-                for (const [attemptGroupId, arr] of Object.entries(nextActivities)) {
-                    arr.sort((a, b) => a.timestamp - b.timestamp)
-                    if (arr.length > MAX_ACTIVITIES_PER_ATTEMPT) {
-                        nextActivities[attemptGroupId] = arr.slice(arr.length - MAX_ACTIVITIES_PER_ATTEMPT)
-                    }
-                }
-                for (const arr of Object.values(nextApprovals)) arr.sort((a, b) => a.timestamp - b.timestamp)
 
                 deps.setReasoningByTurn(nextReasoning)
                 deps.setActivitiesByTurn(nextActivities)
                 deps.setApprovalsByTurn(nextApprovals)
+
+                const latestTokenUsageEvent = [...eventsResult.events]
+                    .filter((event) => event.type === 'thread/tokenUsage/updated')
+                    .sort((a, b) => b.timestamp - a.timestamp)[0]
+                if (latestTokenUsageEvent) {
+                    const payload = latestTokenUsageEvent.payload || {}
+                    deps.setThreadTokenUsage({
+                        threadId: toDisplayTextTrimmed((payload as Record<string, unknown>).threadId),
+                        model: toDisplayTextTrimmed((payload as Record<string, unknown>).model),
+                        inputTokens: Number((payload as Record<string, unknown>).inputTokens) || undefined,
+                        outputTokens: Number((payload as Record<string, unknown>).outputTokens) || undefined,
+                        totalTokens: Number((payload as Record<string, unknown>).totalTokens) || undefined,
+                        modelContextWindow: Number((payload as Record<string, unknown>).modelContextWindow) || undefined,
+                        at: latestTokenUsageEvent.timestamp
+                    })
+                } else {
+                    deps.setThreadTokenUsage(null)
+                }
+
+                const latestAccountUpdate = [...eventsResult.events]
+                    .filter((event) => event.type === 'account/updated')
+                    .sort((a, b) => b.timestamp - a.timestamp)[0]
+                deps.setLastAccountUpdateAt(latestAccountUpdate ? latestAccountUpdate.timestamp : null)
+
+                const latestRateLimitsUpdate = [...eventsResult.events]
+                    .filter((event) => event.type === 'account/rateLimits/updated')
+                    .sort((a, b) => b.timestamp - a.timestamp)[0]
+                deps.setLastRateLimitsUpdateAt(latestRateLimitsUpdate ? latestRateLimitsUpdate.timestamp : null)
             }
         } finally {
             if (hydrateChat) deps.setIsChatHydrating(false)
@@ -324,6 +532,7 @@ export function createLoadSnapshot(deps: RuntimeDeps) {
 }
 
 export function createAssistantEventHandler(deps: RuntimeDeps) {
+    let hasTurnPartStream = false
     return (event: AssistantEvent) => {
         deps.setEventLog((prev) => [event, ...prev].slice(0, 200))
 
@@ -351,6 +560,97 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
                 deps.setSessions(normalizedSessions)
                 deps.setActiveSessionId(sessionsResult.activeSessionId ? String(sessionsResult.activeSessionId) : null)
             }).catch(() => undefined)
+            return
+        }
+        if (event.type === 'turn-part') {
+            hasTurnPartStream = true
+            const part = parseTurnPartPayload(event.payload)
+            if (!part) return
+            if (!isTelemetryEventInScope(part as unknown as Record<string, unknown>, deps.scopeRef.current)) return
+
+            if (part.kind === 'reasoning') {
+                const text = toDisplayText(part.text)
+                if (text.trim()) {
+                    deps.setReasoningByTurn((prev: Record<string, AssistantReasoning[]>) => {
+                        const arr = prev[part.attemptGroupId] || []
+                        return {
+                            ...prev,
+                            [part.attemptGroupId]: appendCappedReasoning(arr, {
+                                turnId: part.turnId,
+                                attemptGroupId: part.attemptGroupId,
+                                text,
+                                method: toDisplayTextTrimmed(part.method) || 'turn-part',
+                                timestamp: part.timestamp
+                            })
+                        }
+                    })
+                }
+                return
+            }
+
+            if (part.kind === 'tool' || part.kind === 'tool-result') {
+                deps.setActivitiesByTurn((prev: Record<string, AssistantActivity[]>) => {
+                    const arr = prev[part.attemptGroupId] || []
+                    return {
+                        ...prev,
+                        [part.attemptGroupId]: appendCappedActivity(arr, {
+                            turnId: part.turnId,
+                            attemptGroupId: part.attemptGroupId,
+                            kind: part.kind === 'tool' ? 'tool' : 'result',
+                            summary: toDisplayText(part.summary || part.text),
+                            method: toDisplayTextTrimmed(part.method) || 'turn-part',
+                            payload: (part.payload && typeof part.payload === 'object' ? part.payload : {}),
+                            timestamp: part.timestamp
+                        })
+                    }
+                })
+                return
+            }
+
+            if (part.kind === 'approval') {
+                const payload = (part.payload && typeof part.payload === 'object') ? part.payload : {}
+                const requestIdCandidate = Number((payload as Record<string, unknown>).requestId)
+                const requestId = Number.isFinite(requestIdCandidate) ? requestIdCandidate : Math.round(part.timestamp)
+                const nextApproval: AssistantApproval = {
+                    requestId,
+                    method: toDisplayTextTrimmed(part.method) || 'approval',
+                    mode: (payload as Record<string, unknown>).mode === 'yolo' ? 'yolo' : 'safe',
+                    decision: part.decision,
+                    request: payload,
+                    timestamp: part.timestamp,
+                    turnId: part.turnId,
+                    attemptGroupId: part.attemptGroupId
+                }
+                deps.setApprovalsByTurn((prev: Record<string, AssistantApproval[]>) => {
+                    const arr = prev[part.attemptGroupId] || []
+                    return {
+                        ...prev,
+                        [part.attemptGroupId]: appendCappedApproval(arr, nextApproval)
+                    }
+                })
+                return
+            }
+
+            if (part.kind === 'text') {
+                deps.setStreamingTurnId(part.turnId)
+                if (part.provisional) {
+                    deps.setStreamingText('')
+                    return
+                }
+                deps.setStreamingText(toDisplayText(part.text))
+                return
+            }
+
+            if (part.kind === 'final') {
+                deps.setStreamingTurnId(part.turnId)
+                deps.setStreamingText(toDisplayText(part.text))
+                return
+            }
+
+            if (part.kind === 'error') {
+                const message = toDisplayTextTrimmed(part.text || part.summary) || 'Assistant request failed.'
+                deps.setErrorMessage(message)
+            }
             return
         }
         if (event.type === 'assistant-delta') {
@@ -420,6 +720,27 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
             }
             return
         }
+        if (event.type === 'thread/tokenUsage/updated') {
+            const payload = event.payload || {}
+            deps.setThreadTokenUsage({
+                threadId: toDisplayTextTrimmed((payload as Record<string, unknown>).threadId),
+                model: toDisplayTextTrimmed((payload as Record<string, unknown>).model),
+                inputTokens: Number((payload as Record<string, unknown>).inputTokens) || undefined,
+                outputTokens: Number((payload as Record<string, unknown>).outputTokens) || undefined,
+                totalTokens: Number((payload as Record<string, unknown>).totalTokens) || undefined,
+                modelContextWindow: Number((payload as Record<string, unknown>).modelContextWindow) || undefined,
+                at: event.timestamp
+            })
+            return
+        }
+        if (event.type === 'account/updated') {
+            deps.setLastAccountUpdateAt(event.timestamp)
+            return
+        }
+        if (event.type === 'account/rateLimits/updated') {
+            deps.setLastRateLimitsUpdateAt(event.timestamp)
+            return
+        }
         if (event.type === 'error') {
             const message = toDisplayTextTrimmed(event.payload.message) || 'Assistant request failed.'
             deps.setErrorMessage(message)
@@ -427,6 +748,7 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
         }
 
         if (event.type === 'assistant-reasoning') {
+            if (hasTurnPartStream) return
             if (!isTelemetryEventInScope(event.payload, deps.scopeRef.current)) return
             const turnId = toDisplayTextTrimmed(event.payload.turnId)
             const attemptGroupId = toDisplayTextTrimmed(event.payload.attemptGroupId) || turnId || 'unknown'
@@ -447,6 +769,7 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
         }
 
         if (event.type === 'assistant-activity') {
+            if (hasTurnPartStream) return
             if (!isTelemetryEventInScope(event.payload, deps.scopeRef.current)) return
             const turnId = toDisplayTextTrimmed(event.payload.turnId)
             const attemptGroupId = toDisplayTextTrimmed(event.payload.attemptGroupId) || turnId || 'unknown'
@@ -469,6 +792,7 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
         }
 
         if (event.type === 'approval-request') {
+            if (hasTurnPartStream) return
             if (!isTelemetryEventInScope(event.payload, deps.scopeRef.current)) return
             const parsed = parseApprovalPayload(event.payload, event.timestamp)
             if (!parsed) return
@@ -487,6 +811,7 @@ export function createAssistantEventHandler(deps: RuntimeDeps) {
         }
 
         if (event.type === 'approval-decision') {
+            if (hasTurnPartStream) return
             const parsed = parseApprovalDecisionPayload(event.payload)
             if (!parsed) return
             deps.setApprovalsByTurn((prev: Record<string, AssistantApproval[]>) => {

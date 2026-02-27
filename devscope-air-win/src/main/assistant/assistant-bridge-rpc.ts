@@ -18,6 +18,7 @@ import {
     readRecord,
     readString
 } from './assistant-bridge-helpers'
+import type { AssistantApprovalDecision } from './types'
 
 const REQUEST_TIMEOUT_MS = 120000
 const DEFAULT_CODEX_BIN = process.platform === 'win32' ? 'codex.cmd' : 'codex'
@@ -32,6 +33,12 @@ type JsonRpcNotification = {
 }
 
 type TurnEventSource = 'modern' | 'legacy'
+
+function normalizeApprovalDecision(value: unknown): AssistantApprovalDecision | null {
+    return value === 'acceptForSession' || value === 'decline'
+        ? value
+        : null
+}
 
 function resolveCodexBinary(): string {
     const candidate = CODEX_BIN_ENV || DEFAULT_CODEX_BIN
@@ -79,10 +86,13 @@ export async function bridgeStartProcess(bridge: BridgeRpcContext): Promise<void
         return
     }
     const codexBin = resolveCodexBinary()
+    const useWindowsShell = process.platform === 'win32'
 
     const proc = spawn(codexBin, ['app-server'], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        shell: false,
+        // On Windows the Codex launcher is typically a .cmd shim and can fail with EINVAL when
+        // spawned directly. Running via shell avoids that failure mode for auto-connect.
+        shell: useWindowsShell,
         windowsHide: true
     }) as BridgeProcess
     bridge.proc = proc
@@ -95,9 +105,12 @@ export async function bridgeStartProcess(bridge: BridgeRpcContext): Promise<void
 
     proc.on('error', (error) => {
         const shouldAttemptReconnect = bridge.status.connected
-        const message = (error as NodeJS.ErrnoException).code === 'ENOENT'
+        const code = (error as NodeJS.ErrnoException).code
+        const message = code === 'ENOENT'
             ? `Could not find ${codexBin} in PATH`
-            : (error instanceof Error ? error.message : 'Assistant bridge process failed.')
+            : code === 'EINVAL'
+                ? `Failed to launch ${codexBin} (spawn EINVAL). Verify CODEX_BIN points to a valid Codex executable.`
+                : (error instanceof Error ? error.message : 'Assistant bridge process failed.')
         bridge.failPending(new Error(message))
         bridge.threadId = null
         bridge.activeTurnId = null
@@ -110,6 +123,7 @@ export async function bridgeStartProcess(bridge: BridgeRpcContext): Promise<void
         bridge.finalizedTurns.clear()
         bridge.cancelledTurns.clear()
         bridge.cachedModels = []
+        bridge.pendingApprovalRequests.clear()
         bridge.status.connected = false
         bridge.status.state = 'error'
         bridge.status.lastError = message
@@ -146,6 +160,7 @@ export async function bridgeStartProcess(bridge: BridgeRpcContext): Promise<void
         bridge.finalizedTurns.clear()
         bridge.cancelledTurns.clear()
         bridge.cachedModels = []
+        bridge.pendingApprovalRequests.clear()
         bridge.status.connected = false
         bridge.status.state = 'offline'
         bridge.status.activeTurnId = null
@@ -213,6 +228,7 @@ export function bridgeStopProcess(bridge: BridgeRpcContext): void {
     bridge.finalizedTurns.clear()
     bridge.cancelledTurns.clear()
     bridge.cachedModels = []
+    bridge.pendingApprovalRequests.clear()
     bridge.status.activeTurnId = null
     const activeSession = bridge.getActiveSession()
     if (activeSession) {
@@ -290,6 +306,36 @@ export function bridgeFailPending(
         entry.reject(error)
     }
     bridge.pending.clear()
+    if (bridge.pendingApprovalRequests.size > 0) {
+        for (const pending of bridge.pendingApprovalRequests.values()) {
+            bridge.emitEvent('approval-decision', {
+                requestId: pending.requestId,
+                method: pending.method,
+                mode: pending.mode,
+                decision: 'decline',
+                turnId: pending.turnId,
+                attemptGroupId: pending.attemptGroupId,
+                reason: 'bridge-stopped'
+            })
+            if (pending.turnId) {
+                bridge.recordTurnPart({
+                    turnId: pending.turnId,
+                    attemptGroupId: pending.attemptGroupId || undefined,
+                    kind: 'approval',
+                    method: pending.method,
+                    status: 'decided',
+                    decision: 'decline',
+                    payload: {
+                        ...(pending.request || {}),
+                        requestId: pending.requestId,
+                        mode: pending.mode,
+                        reason: 'bridge-stopped'
+                    }
+                })
+            }
+        }
+        bridge.pendingApprovalRequests.clear()
+    }
 }
 
 export function bridgeHandleServerRequest(
@@ -301,22 +347,44 @@ export function bridgeHandleServerRequest(
     if (!Number.isFinite(id)) return
 
     if (method === 'item/commandExecution/requestApproval' || method === 'item/fileChange/requestApproval') {
-        const decision = bridge.status.approvalMode === 'yolo' ? 'acceptForSession' : 'decline'
         const requestPayload = readRecord(message.params) || {}
+        const turnId = extractTurnIdFromParams(requestPayload) || bridge.activeTurnId || null
+        const attemptGroupId = turnId
+            ? (bridge.turnContexts.get(turnId)?.attemptGroupId
+                || bridge.turnAttemptGroupByTurnId.get(turnId)
+                || turnId)
+            : null
+        bridge.pendingApprovalRequests.set(id, {
+            requestId: id,
+            method,
+            request: requestPayload,
+            mode: bridge.status.approvalMode,
+            turnId,
+            attemptGroupId,
+            createdAt: now()
+        })
         bridge.emitEvent('approval-request', {
             requestId: id,
             method,
             mode: bridge.status.approvalMode,
-            decision,
-            request: requestPayload
+            request: requestPayload,
+            turnId,
+            attemptGroupId
         })
-        bridge.send({ id, result: { decision } })
-        bridge.emitEvent('approval-decision', {
-            requestId: id,
-            method,
-            mode: bridge.status.approvalMode,
-            decision
-        })
+        if (turnId) {
+            bridge.recordTurnPart({
+                turnId,
+                attemptGroupId: attemptGroupId || undefined,
+                kind: 'approval',
+                method,
+                status: 'pending',
+                payload: {
+                    ...requestPayload,
+                    requestId: id,
+                    mode: bridge.status.approvalMode
+                }
+            })
+        }
         return
     }
 
@@ -327,6 +395,57 @@ export function bridgeHandleServerRequest(
             message: `Unsupported server request method: ${method}`
         }
     })
+}
+
+export function bridgeRespondToApproval(
+    bridge: BridgeRpcContext,
+    requestIdRaw: number,
+    decisionRaw?: AssistantApprovalDecision
+): { success: boolean; requestId?: number; decision?: AssistantApprovalDecision; error?: string } {
+    const requestId = Number(requestIdRaw)
+    if (!Number.isFinite(requestId)) {
+        return { success: false, error: 'requestId must be a number.' }
+    }
+
+    const pending = bridge.pendingApprovalRequests.get(requestId)
+    if (!pending) {
+        return { success: false, error: `No pending approval request found: ${requestId}` }
+    }
+
+    const decision = normalizeApprovalDecision(decisionRaw)
+    if (!decision) {
+        return { success: false, error: 'decision must be either "decline" or "acceptForSession".' }
+    }
+    if (!bridge.proc || !bridge.proc.stdin?.writable) {
+        return { success: false, error: 'Assistant bridge is not connected.' }
+    }
+
+    bridge.pendingApprovalRequests.delete(requestId)
+    bridge.send({ id: requestId, result: { decision } })
+    bridge.emitEvent('approval-decision', {
+        requestId,
+        method: pending.method,
+        mode: pending.mode,
+        decision,
+        turnId: pending.turnId,
+        attemptGroupId: pending.attemptGroupId
+    })
+    if (pending.turnId) {
+        bridge.recordTurnPart({
+            turnId: pending.turnId,
+            attemptGroupId: pending.attemptGroupId || undefined,
+            kind: 'approval',
+            method: pending.method,
+            status: 'decided',
+            decision,
+            payload: {
+                ...(pending.request || {}),
+                requestId,
+                mode: pending.mode
+            }
+        })
+    }
+    return { success: true, requestId, decision }
 }
 
 export function bridgeHandleNotification(
@@ -368,6 +487,14 @@ export function bridgeHandleNotification(
                 streamKind: 'provisional',
                 draftKind: 'provisional'
             })
+            bridge.recordTurnPart({
+                turnId,
+                attemptGroupId,
+                kind: 'text',
+                text: buffer.draft,
+                method,
+                provisional: true
+            })
             return
         }
 
@@ -393,6 +520,14 @@ export function bridgeHandleNotification(
                 streamKind: buffer.draftKind === 'provisional' ? 'provisional' : 'final',
                 draftKind: buffer.draftKind || undefined
             })
+            bridge.recordTurnPart({
+                turnId,
+                attemptGroupId,
+                kind: 'text',
+                text: buffer.draft,
+                method,
+                provisional: buffer.draftKind === 'provisional'
+            })
             return
         }
 
@@ -404,6 +539,14 @@ export function bridgeHandleNotification(
             text: buffer.draft,
             streamKind: buffer.draftKind === 'provisional' ? 'provisional' : 'final',
             draftKind: buffer.draftKind || undefined
+        })
+        bridge.recordTurnPart({
+            turnId,
+            attemptGroupId,
+            kind: 'text',
+            text: buffer.draft,
+            method,
+            provisional: buffer.draftKind === 'provisional'
         })
         return
     }
@@ -511,6 +654,14 @@ export function bridgeHandleLegacyNotification(
             text: buffer.draft,
             streamKind: 'provisional',
             draftKind: 'provisional'
+        })
+        bridge.recordTurnPart({
+            turnId,
+            attemptGroupId,
+            kind: 'text',
+            text: buffer.draft,
+            method,
+            provisional: true
         })
         return
     }

@@ -5,6 +5,7 @@ export const ASSISTANT_IPC = {
     disconnect: 'devscope:assistant:disconnect',
     status: 'devscope:assistant:status',
     send: 'devscope:assistant:send',
+    respondApproval: 'devscope:assistant:respondApproval',
     cancelTurn: 'devscope:assistant:cancelTurn',
     setApprovalMode: 'devscope:assistant:setApprovalMode',
     getApprovalMode: 'devscope:assistant:getApprovalMode',

@@ -183,6 +183,13 @@ export function bridgeEmitReasoning(
         text,
         method
     })
+    bridge.recordTurnPart({
+        turnId,
+        attemptGroupId,
+        kind: 'reasoning',
+        text,
+        method
+    })
 }
 
 export function bridgeHandleActivityNotification(
@@ -298,6 +305,17 @@ export function bridgeEmitActivity(
         summary: normalizedSummary,
         method,
         payload
+    })
+    bridge.recordTurnPart({
+        turnId,
+        attemptGroupId,
+        kind: kind === 'command' || kind === 'tool' ? 'tool' : 'tool-result',
+        method,
+        summary: normalizedSummary,
+        payload: {
+            kind,
+            ...payload
+        }
     })
 }
 

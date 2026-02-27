@@ -8,6 +8,7 @@ import {
     type AssistantReasoning,
     type AssistantSession,
     type AssistantStatus,
+    type AssistantThreadTokenUsage,
     type TelemetryIntegrity,
     type WorkflowKind,
     type WorkflowState,
@@ -70,6 +71,9 @@ export function useAssistantPageController() {
     const [workflowRunningKind, setWorkflowRunningKind] = useState<WorkflowKind | null>(null)
     const [workflowState, setWorkflowState] = useState<WorkflowState | null>(null)
     const [telemetryIntegrity, setTelemetryIntegrity] = useState<TelemetryIntegrity | null>(null)
+    const [threadTokenUsage, setThreadTokenUsage] = useState<AssistantThreadTokenUsage | null>(null)
+    const [lastAccountUpdateAt, setLastAccountUpdateAt] = useState<number | null>(null)
+    const [lastRateLimitsUpdateAt, setLastRateLimitsUpdateAt] = useState<number | null>(null)
     const [isChatHydrating, setIsChatHydrating] = useState(true)
     const [reasoningByTurn, setReasoningByTurn] = useState<Record<string, AssistantReasoning[]>>({})
     const [activitiesByTurn, setActivitiesByTurn] = useState<Record<string, AssistantActivity[]>>({})
@@ -300,6 +304,9 @@ export function useAssistantPageController() {
         setSessions: setSessions as any,
         setActiveSessionId,
         setTelemetryIntegrity,
+        setThreadTokenUsage,
+        setLastAccountUpdateAt,
+        setLastRateLimitsUpdateAt,
         setReasoningByTurn: setReasoningByTurn as any,
         setActivitiesByTurn: setActivitiesByTurn as any,
         setApprovalsByTurn: setApprovalsByTurn as any,
@@ -394,6 +401,11 @@ export function useAssistantPageController() {
     useEffect(() => {
         void loadModels()
     }, [loadModels])
+
+    useEffect(() => {
+        if (!status.connected) return
+        void loadModels()
+    }, [status.connected, loadModels])
 
     useEffect(() => {
         return () => {
@@ -522,6 +534,9 @@ export function useAssistantPageController() {
         setApprovalsByTurn({})
         setWorkflowState(null)
         setWorkflowRunningKind(null)
+        setThreadTokenUsage(null)
+        setLastAccountUpdateAt(null)
+        setLastRateLimitsUpdateAt(null)
         scopeRef.current = buildSessionScope([], null, null)
     }, [activeSessionId])
 
@@ -568,6 +583,9 @@ export function useAssistantPageController() {
         workflowRunningKind,
         workflowState,
         telemetryIntegrity,
+        threadTokenUsage,
+        lastAccountUpdateAt,
+        lastRateLimitsUpdateAt,
         isChatHydrating,
         sessions,
         activeSessionId,

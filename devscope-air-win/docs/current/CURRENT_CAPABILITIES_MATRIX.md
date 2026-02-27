@@ -37,6 +37,8 @@ This matrix reflects the currently exposed DevScope Air capabilities from the sh
 - Connect/disconnect/status/send/cancel: `Implemented`
 - Streaming events subscription: `Implemented`
 - Sessions and thread lifecycle: `Implemented`
+- Typed per-turn part stream (`text`/`reasoning`/`tool`/`tool-result`/`approval`/`final`/`error`): `Implemented`
+- Explicit approval response control (`respondApproval`) with pending approval tracking: `Implemented`
 - Profile/model/project-default controls: `Implemented`
 - Token estimate + workflow helpers (explain diff/review staged/draft commit): `Implemented`
 - Account/rate-limit/telemetry integrity reads: `Implemented`

@@ -384,19 +384,19 @@ export function AssistantComposer({
         <div className={cn('relative flex flex-col', compact ? 'gap-1.5' : 'gap-2')}>
             {showSlashMenu && (
                 <div className={cn(
-                    'absolute bottom-full left-0 z-10 mb-2 overflow-hidden rounded-xl border border-sparkle-border bg-sparkle-card shadow-lg',
+                    'absolute bottom-full left-0 z-20 mb-2 overflow-hidden rounded-lg border border-sparkle-border bg-sparkle-card shadow-lg',
                     compact ? 'w-56' : 'w-64'
                 )}>
                     <div className="flex items-center gap-2 border-b border-sparkle-border bg-sparkle-bg px-3 py-2">
-                        <Command size={14} className="text-sparkle-text-muted" />
-                        <span className="text-xs font-medium text-sparkle-text-secondary">Slash Commands</span>
+                        <Command size={13} className="text-sparkle-text-muted" />
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-sparkle-text-secondary">Slash Commands</span>
                     </div>
                     <div className="max-h-48 overflow-y-auto p-1">
                         {SLASH_COMMANDS.map((command) => (
                             <button
                                 key={command.command}
                                 onClick={() => handleCommandSelect(command.command)}
-                                className="group w-full rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)]"
+                                className="group w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-sparkle-bg"
                             >
                                 <span className="text-sm font-medium text-sparkle-text transition-colors group-hover:text-[var(--accent-primary)]">
                                     {command.command}
@@ -409,7 +409,7 @@ export function AssistantComposer({
             )}
 
             <AnimatedHeight isOpen={contextFiles.length > 0} duration={300}>
-                <div className={cn('flex flex-wrap px-1', compact ? 'gap-1.5 pb-1.5' : 'gap-2 pb-2')}>
+                <div className={cn('flex flex-wrap items-center', compact ? 'gap-1.5 pb-1.5' : 'gap-2 pb-2')}>
                     {contextFiles.map((file) => {
                         const meta = getContextFileMeta(file)
                         const contentType = getContentTypeTag(file)
@@ -419,8 +419,8 @@ export function AssistantComposer({
                             <article
                                 key={file.id}
                                 className={cn(
-                                    'group relative overflow-hidden rounded-xl border border-sparkle-border bg-sparkle-card/85 p-1.5 shadow-sm transition-colors hover:border-[var(--accent-primary)]/35 hover:bg-sparkle-card',
-                                    compact ? 'h-20 w-20' : 'h-24 w-24'
+                                    'group relative overflow-hidden rounded-md border border-sparkle-border bg-sparkle-card px-2 py-1.5 transition-colors hover:bg-sparkle-bg',
+                                    compact ? 'w-[220px]' : 'w-[280px]'
                                 )}
                                 style={{
                                     transition: 'transform 190ms ease, opacity 190ms ease, filter 190ms ease',
@@ -432,12 +432,11 @@ export function AssistantComposer({
                                     opacity: isRemoving || isEntering ? 0 : 1,
                                     filter: isRemoving ? 'blur(1px)' : 'blur(0)'
                                 }}
-                            >
-                                <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-[var(--accent-primary)]/70 via-[var(--accent-primary)]/25 to-transparent opacity-80" />
+                                >
                                 <button
                                     type="button"
                                     onClick={() => setPreviewAttachment(file)}
-                                    className="relative h-full w-full overflow-hidden rounded-lg"
+                                    className="relative flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md"
                                     disabled={isRemoving}
                                     title="Open preview"
                                 >
@@ -445,11 +444,11 @@ export function AssistantComposer({
                                         <img
                                             src={file.previewDataUrl}
                                             alt={meta.name}
-                                            className="h-full w-full rounded-lg object-cover"
+                                            className="h-7 w-7 rounded object-cover"
                                         />
                                     ) : (
                                         <div className={cn(
-                                            'flex h-full w-full items-center justify-center rounded-lg border',
+                                            'flex h-7 w-7 shrink-0 items-center justify-center rounded border',
                                             meta.category === 'image'
                                                 ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-300'
                                                 : meta.category === 'code'
@@ -465,9 +464,9 @@ export function AssistantComposer({
                                             )}
                                         </div>
                                     )}
-                                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/55 via-black/25 to-transparent" />
-                                    <span className="pointer-events-none absolute bottom-1 right-1 inline-flex items-center rounded border border-white/15 bg-black/70 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-white/95">
-                                        {contentType}
+                                    <span className="min-w-0 flex-1 text-left">
+                                        <span className="block truncate text-[11px] font-medium text-sparkle-text">{meta.name}</span>
+                                        <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-sparkle-text-muted">{contentType}</span>
                                     </span>
                                 </button>
                                 <button
@@ -476,7 +475,7 @@ export function AssistantComposer({
                                         event.stopPropagation()
                                         removeAttachment(file.id)
                                     }}
-                                    className="absolute right-1.5 top-1.5 rounded-md border border-white/10 bg-black/55 p-1 text-sparkle-text-muted transition-colors hover:bg-rose-500/20 hover:text-rose-300"
+                                    className="ml-1 shrink-0 rounded p-1 text-sparkle-text-muted transition-colors hover:bg-rose-500/10 hover:text-rose-300"
                                     disabled={isRemoving}
                                     title="Remove attachment"
                                 >
@@ -489,8 +488,8 @@ export function AssistantComposer({
             </AnimatedHeight>
 
             <div className={cn(
-                'group relative flex flex-col border border-sparkle-border bg-sparkle-card/50 transition-all focus-within:bg-sparkle-card focus-within:shadow-2xl',
-                compact ? 'gap-1.5 rounded-[18px] p-2' : 'gap-2 rounded-[22px] p-2.5'
+                'group relative z-10 flex flex-col rounded-xl border border-sparkle-border bg-sparkle-card/90 shadow-sm transition-colors focus-within:bg-sparkle-card',
+                compact ? 'gap-1.5 px-2 py-1.5' : 'gap-2 px-2.5 py-2'
             )}>
                 <div className={cn('flex items-end', compact ? 'gap-2 px-1 py-0.5' : 'gap-2.5 px-1.5 py-1')}>
                     <input
@@ -509,12 +508,12 @@ export function AssistantComposer({
                         onClick={() => filePickerRef.current?.click()}
                         disabled={disabled}
                         className={cn(
-                            'mb-1 rounded-xl border border-sparkle-border bg-sparkle-card text-sparkle-text-secondary transition-all hover:scale-105 hover:border-[var(--accent-primary)]/40 hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)] active:scale-95',
-                            compact ? 'p-2' : 'p-2.5'
+                            'mb-1 rounded-md border border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text',
+                            compact ? 'p-1.5' : 'p-2'
                         )}
                         title="Attach files"
                     >
-                        <Plus size={compact ? 16 : 18} />
+                        <Plus size={compact ? 14 : 16} />
                     </button>
 
                     <div className="flex-1">
@@ -531,10 +530,10 @@ export function AssistantComposer({
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
                             className={cn(
-                                'w-full resize-none overflow-y-auto bg-transparent px-1 py-1 leading-relaxed text-sparkle-text outline-none placeholder:text-sparkle-text-muted/60',
+                                'w-full resize-none overflow-y-auto bg-transparent px-1 py-1 leading-relaxed text-sparkle-text outline-none placeholder:text-sparkle-text-muted/70',
                                 compact ? 'h-8 min-h-8 max-h-8 text-[13px]' : 'h-9 min-h-9 max-h-9 text-sm'
                             )}
-                            placeholder={isConnected ? (compact ? 'Ask assistant...' : 'How can I help you build today?') : 'Connect assistant to start chatting...'}
+                            placeholder={isConnected ? (compact ? 'Ask assistant...' : 'Ask, edit, or run commands...') : 'Connect assistant to start chatting...'}
                             disabled={disabled || !isConnected}
                         />
                     </div>
@@ -544,24 +543,24 @@ export function AssistantComposer({
                         disabled={disabled || !isConnected || isThinking || (!text.trim() && contextFiles.length === 0)}
                         onClick={() => void handleSend()}
                         className={cn(
-                            'mb-1 inline-flex items-center justify-center rounded-xl transition-all active:scale-95',
+                            'mb-1 inline-flex items-center justify-center rounded-md border transition-colors',
                             compact ? 'h-8 w-8' : 'h-9 w-9',
                             disabled || !isConnected || isThinking || (!text.trim() && contextFiles.length === 0)
-                                ? 'bg-sparkle-border/40 text-sparkle-text-muted cursor-not-allowed opacity-40'
-                                : 'bg-[var(--accent-primary)] text-white hover:bg-[var(--accent-primary)]/90 hover:shadow-lg hover:shadow-[var(--accent-primary)]/20'
+                                ? 'cursor-not-allowed border-sparkle-border bg-sparkle-bg text-sparkle-text-muted/70'
+                                : 'border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/15 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/25'
                         )}
                     >
                         {isThinking ? (
-                            <Loader2 size={compact ? 16 : 18} className="animate-spin" />
+                            <Loader2 size={compact ? 15 : 16} className="animate-spin" />
                         ) : (
-                            <SendHorizontal size={compact ? 16 : 18} />
+                            <SendHorizontal size={compact ? 15 : 16} />
                         )}
                     </button>
                 </div>
 
                 <div className={cn(
-                    'mt-1 flex items-center justify-between font-medium tracking-tight',
-                    compact ? 'px-2 pb-1.5 text-[9px]' : 'px-3 pb-2 text-[10px]'
+                    'relative z-0 -mx-2.5 -mb-2 -mt-0.5 flex items-center justify-between rounded-b-xl border border-sparkle-border bg-sparkle-bg px-2.5 pb-2 pt-4 font-medium tracking-tight',
+                    compact ? 'text-[9px]' : 'text-[10px]'
                 )}>
                     <div className={cn('relative flex flex-col', compact ? 'w-60' : 'w-80')} ref={modelDropdownRef}>
                         <div
@@ -571,13 +570,13 @@ export function AssistantComposer({
                             )}
                         >
                             <AnimatedHeight isOpen={showModelDropdown} duration={300}>
-                                <div className="p-2 space-y-1 bg-sparkle-card border border-sparkle-border border-b-transparent rounded-t-xl shadow-2xl shadow-black/80">
-                                    <div className="flex items-center justify-between px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-sparkle-text-muted/40">
-                                        <span>Model Selection</span>
+                                <div className="space-y-1 rounded-lg border border-sparkle-border bg-sparkle-card p-2 shadow-lg">
+                                    <div className="flex items-center justify-between px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-sparkle-text-muted">
+                                        <span>Models</span>
                                         <button
                                             type="button"
                                             onClick={() => onRefreshModels?.()}
-                                            className="inline-flex items-center rounded border border-transparent px-1.5 py-0.5 text-sparkle-text-muted hover:border-sparkle-border hover:bg-sparkle-card-hover hover:text-sparkle-text transition-all"
+                                            className="inline-flex items-center rounded border border-transparent px-1 py-0.5 text-sparkle-text-muted transition-colors hover:border-sparkle-border hover:text-sparkle-text"
                                             title="Refresh models"
                                         >
                                             <Loader2 size={10} className={cn(modelsLoading && 'animate-spin')} />
@@ -596,20 +595,13 @@ export function AssistantComposer({
                                                         setShowModelDropdown(false)
                                                     }}
                                                     className={cn(
-                                                        'group relative flex w-full items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-200 backdrop-blur-[2px]',
+                                                        'flex w-full items-center rounded-md border px-2.5 py-1.5 text-left transition-colors',
                                                         isActive
-                                                            ? 'border-white/10 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] shadow-[0_2px_10px_rgba(0,0,0,0.05)]'
-                                                            : 'border-white/5 bg-sparkle-bg/40 text-sparkle-text-secondary hover:border-sparkle-border hover:bg-sparkle-card-hover/60 hover:text-sparkle-text'
+                                                            ? 'border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/12 text-[var(--accent-primary)]'
+                                                            : 'border-transparent text-sparkle-text-secondary hover:border-sparkle-border hover:bg-sparkle-bg hover:text-sparkle-text'
                                                     )}
                                                 >
-                                                    <div className="min-w-0 flex-1 overflow-hidden">
-                                                        <div className={cn(
-                                                            "truncate text-[13px] leading-tight transition-colors text-left",
-                                                            isActive ? "font-bold" : "font-medium"
-                                                        )}>
-                                                            {model.label || model.id}
-                                                        </div>
-                                                    </div>
+                                                    <span className="truncate text-[12px]">{model.label || model.id}</span>
                                                 </button>
                                             )
                                         })}
@@ -637,17 +629,17 @@ export function AssistantComposer({
                             }}
                             title={modelsError || 'Select model for this chat path'}
                             className={cn(
-                                'flex w-full items-center gap-2 px-3 py-1.5 transition-all outline-none border shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]/30 focus-visible:border-[var(--accent-primary)]/50',
+                                'flex w-full items-center gap-2 rounded-md border border-sparkle-border bg-sparkle-card px-2.5 py-1.5 transition-colors hover:bg-sparkle-card-hover',
                                 showModelDropdown
-                                    ? 'rounded-b-xl border-sparkle-border border-t-transparent bg-sparkle-card-hover'
-                                    : 'rounded-xl border-sparkle-border bg-sparkle-card hover:bg-sparkle-card-hover hover:border-[var(--accent-primary)]/40'
+                                    ? 'bg-sparkle-card-hover'
+                                    : ''
                             )}
                         >
-                            <Command size={compact ? 10 : 11} className={cn("transition-colors", showModelDropdown ? "text-[var(--accent-primary)]" : "text-sparkle-text-muted/40")} />
+                            <Command size={compact ? 10 : 11} className="text-sparkle-text-muted" />
                             <span className={cn(
                                 'flex-1 truncate text-left',
-                                compact ? 'text-[11px]' : '',
-                                showModelDropdown ? "text-[var(--accent-primary)] font-semibold" : "text-sparkle-text/90 font-medium"
+                                compact ? 'text-[11px]' : 'text-xs',
+                                'text-sparkle-text'
                             )}>
                                 {selectedModelLabel}
                             </span>
@@ -655,8 +647,7 @@ export function AssistantComposer({
                                 size={compact ? 11 : 12}
                                 className={cn(
                                     'shrink-0 text-sparkle-text-muted transition-transform duration-300',
-                                    showModelDropdown && 'rotate-180 text-[var(--accent-primary)]',
-                                    modelsLoading && 'animate-pulse'
+                                    showModelDropdown && 'rotate-180'
                                 )}
                             />
                         </button>
@@ -665,12 +656,12 @@ export function AssistantComposer({
                     <div className="flex items-center gap-1.5">
                         <div className={cn(
                             'h-1 w-1 rounded-full',
-                            activeProfile === 'yolo-fast' ? "bg-[var(--accent-primary)] animate-pulse shadow-[0_0_8px_var(--accent-primary)]" : "bg-emerald-500"
+                            activeProfile === 'yolo-fast' ? 'bg-amber-300' : 'bg-emerald-400'
                         )} />
                         <span className={cn(
-                            'font-bold uppercase tracking-widest',
-                            compact ? 'text-[9px]' : '',
-                            activeProfile === 'yolo-fast' ? "text-[var(--accent-primary)]" : "text-emerald-400"
+                            'font-mono uppercase tracking-[0.12em]',
+                            compact ? 'text-[9px]' : 'text-[10px]',
+                            'text-sparkle-text-secondary'
                         )}>
                             {activeProfile || 'safe-dev'}
                         </span>

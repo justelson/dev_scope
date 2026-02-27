@@ -4,6 +4,8 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import {
+    Archive,
+    ArchiveRestore,
     ChevronRight,
     Edit2,
     Folder,
@@ -19,6 +21,7 @@ export type AssistantSessionSidebarItem = {
     title: string
     createdAt: number
     updatedAt: number
+    archived?: boolean
     projectPath?: string
 }
 
@@ -33,7 +36,7 @@ type AssistantSessionsSidebarProps = {
     onCreateSession: (projectPath?: string) => Promise<void>
     onSelectSession: (sessionId: string) => Promise<void>
     onRenameSession: (sessionId: string, nextTitle: string) => Promise<void>
-    onArchiveSession: (sessionId: string) => Promise<void>
+    onArchiveSession: (sessionId: string, archived?: boolean) => Promise<void>
     onDeleteSession: (sessionId: string) => Promise<void>
 }
 
@@ -82,6 +85,7 @@ export function AssistantSessionsSidebar({
     const [renameDraft, setRenameDraft] = useState('')
     const [sessionToDelete, setSessionToDelete] = useState<AssistantSessionSidebarItem | null>(null)
     const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(new Set())
+    const [showArchivedSessions, setShowArchivedSessions] = useState(false)
     const isSkillsView = location.pathname === '/assistant/skills'
 
     const getDisplayTitle = (title: string): string => {
@@ -89,9 +93,20 @@ export function AssistantSessionsSidebar({
         return trimmed || 'Untitled Session'
     }
 
+    const activeSessions = useMemo(
+        () => sessions.filter((session) => !session.archived),
+        [sessions]
+    )
+    const archivedSessions = useMemo(
+        () => sessions
+            .filter((session) => session.archived)
+            .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)),
+        [sessions]
+    )
+
     const groupedSessions = useMemo<SessionDirectoryGroup[]>(() => {
         const byKey = new Map<string, SessionDirectoryGroup>()
-        for (const session of sessions) {
+        for (const session of activeSessions) {
             const normalizedPath = normalizeDirectoryPath(session.projectPath)
             const key = getDirectoryKey(normalizedPath)
             const existing = byKey.get(key)
@@ -122,7 +137,14 @@ export function AssistantSessionsSidebar({
             })
             // Sort groups by their newest project creation time
             .sort((a, b) => b.createdAt - a.createdAt)
-    }, [sessions, activeSessionId])
+    }, [activeSessions, activeSessionId])
+
+    useEffect(() => {
+        if (!activeSessionId) return
+        if (archivedSessions.some((session) => session.id === activeSessionId)) {
+            setShowArchivedSessions(true)
+        }
+    }, [activeSessionId, archivedSessions])
 
     useEffect(() => {
         setExpandedGroupKeys((prev) => {
@@ -235,26 +257,18 @@ export function AssistantSessionsSidebar({
     return (
         <aside
             className={cn(
-                'relative h-full shrink-0 overflow-x-hidden border-r border-sparkle-border bg-sparkle-bg transition-[width] duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]',
+                'relative h-full shrink-0 overflow-x-hidden border-r border-sparkle-border bg-sparkle-card transition-[width] duration-300',
                 collapsed ? (compact ? 'w-14' : 'w-16') : (compact ? 'w-64' : 'w-72')
             )}
             style={!collapsed ? { width: resolvedWidth } : undefined}
         >
-            {/* Decorative top gradient bar */}
-            <div
-                className="pointer-events-none absolute left-0 right-0 top-0 h-32 opacity-40 transition-opacity duration-500"
-                style={{
-                    background: `linear-gradient(180deg, color-mix(in srgb, var(--accent-primary), transparent 55%) 0%, transparent 100%)`
-                }}
-            />
-
             {!collapsed && (
                 <div
                     role="separator"
                     aria-orientation="vertical"
                     onMouseDown={handleResizeStart}
                     className={cn(
-                        'absolute right-0 top-0 z-30 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--accent-primary)]/18'
+                        'absolute right-0 top-0 z-30 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-sparkle-border'
                     )}
                     title="Resize assistant sidebar"
                 />
@@ -276,7 +290,7 @@ export function AssistantSessionsSidebar({
                         type="button"
                         onClick={() => { void handleCreateSessionFromSidebar() }}
                         className={cn(
-                            'group relative flex items-center justify-center rounded-lg text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text',
+                            'group relative flex items-center justify-center rounded-md border border-transparent text-sparkle-text-secondary transition-colors hover:border-sparkle-border hover:bg-sparkle-bg hover:text-sparkle-text',
                             compact ? 'h-8 w-8' : 'h-9 w-9'
                         )}
                         title="New chat"
@@ -284,9 +298,8 @@ export function AssistantSessionsSidebar({
                         <MessageSquarePlus size={compact ? 16 : 18} />
                     </button>
 
-                    {/* Accent divider */}
                     <div className={cn('my-1 flex flex-col items-center gap-1.5', compact ? 'w-7' : 'w-8')}>
-                        <div className="h-px w-full bg-white/5" />
+                        <div className="h-px w-full bg-sparkle-border" />
                     </div>
 
 
@@ -302,11 +315,11 @@ export function AssistantSessionsSidebar({
                                     onClick={() => void onSelectSession(primarySession.id)}
                                     title={group.path || 'No directory'}
                                     className={cn(
-                                        'relative flex items-center justify-center rounded-lg text-[10px] font-bold transition-all duration-200 focus:outline-none',
+                                        'relative flex items-center justify-center rounded-md border text-[10px] font-bold transition-all duration-200 focus:outline-none',
                                         compact ? 'h-7 w-7' : 'h-8 w-8',
                                         hasActive
-                                            ? 'bg-[var(--accent-primary)] text-white ring-1 ring-[var(--accent-primary)]/40 shadow-sm'
-                                            : 'bg-sparkle-card/50 text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                            ? 'border-2 border-[var(--accent-primary)] bg-[var(--accent-primary)]/22 text-[var(--accent-primary)] ring-1 ring-[var(--accent-primary)]/35'
+                                            : 'border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
                                     )}
                                 >
                                     {group.label.charAt(0).toUpperCase() || 'D'}
@@ -345,7 +358,7 @@ export function AssistantSessionsSidebar({
                             type="button"
                             onClick={() => { void handleCreateSessionFromSidebar() }}
                             className={cn(
-                                'flex items-center rounded-lg px-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text',
+                                'flex items-center rounded-md border border-transparent px-2 text-sparkle-text-secondary transition-colors hover:border-sparkle-border hover:bg-sparkle-bg hover:text-sparkle-text',
                                 compact ? 'gap-2 py-1.5' : 'gap-3 py-2'
                             )}
                         >
@@ -373,7 +386,7 @@ export function AssistantSessionsSidebar({
 
                                 <Link
                                     to="/assistant/skills"
-                                    className="flex items-center gap-3 rounded-lg px-2 py-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                                    className="flex items-center gap-3 rounded-md border border-transparent px-2 py-2 text-sparkle-text-secondary transition-colors hover:border-sparkle-border hover:bg-sparkle-bg hover:text-sparkle-text"
                                 >
                                     <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.29 7 12 12 20.71 7" /><line x1="12" y1="22" x2="12" y2="12" /></svg>
                                     <span className="text-sm font-medium">Skills</span>
@@ -384,14 +397,16 @@ export function AssistantSessionsSidebar({
 
                     {/* ── Projects Section Label (Divider style) ── */}
                     <div className={cn('flex items-center gap-3 px-1', compact ? 'mb-3' : 'mb-4')}>
-                        <div className="h-px flex-1 bg-white/5" />
-                        <h3 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-sparkle-text-muted/40">Projects</h3>
-                        <div className="h-px flex-1 bg-white/5" />
+                        <div className="h-px flex-1 bg-sparkle-border" />
+                        <h3 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-sparkle-text-muted">Projects</h3>
+                        <div className="h-px flex-1 bg-sparkle-border" />
                     </div>
 
                     {/* ── Session list ── */}
-                    <div className={cn('flex-1 overflow-y-auto no-scrollbar', compact ? 'space-y-3' : 'space-y-4')}>
-                        {groupedSessions.map((group) => {
+                    <div className="flex-1 overflow-y-auto no-scrollbar">
+                        <div className={cn('flex min-h-full flex-col', compact ? 'gap-3' : 'gap-4')}>
+                            <div className={cn(compact ? 'space-y-3' : 'space-y-4')}>
+                                {groupedSessions.map((group) => {
                             const isExpanded = expandedGroupKeys.has(group.key)
                             const groupHasActiveSession = group.sessions.some((session) => session.id === activeSessionId)
                             const visibleSessions = group.sessions
@@ -407,7 +422,7 @@ export function AssistantSessionsSidebar({
                                         <div className="relative h-4 w-4 shrink-0 transition-transform duration-300">
                                             <Folder
                                                 size={16}
-                                                className={cn(
+                                                    className={cn(
                                                     'absolute inset-0 transition-all duration-300',
                                                     isExpanded ? 'scale-0 opacity-0 -rotate-12' : 'scale-100 opacity-100 rotate-0',
                                                     groupHasActiveSession ? 'text-[var(--accent-primary)]' : 'text-sparkle-text-muted/70'
@@ -441,7 +456,7 @@ export function AssistantSessionsSidebar({
                                     </button>
 
                                     <AnimatedHeight isOpen={isExpanded} duration={500}>
-                                        <div className={cn('ml-4 space-y-0.5 border-l border-white/5 pb-2 pt-1', compact ? 'pl-1.5' : 'pl-2')}>
+                                        <div className={cn('ml-4 space-y-0.5 border-l border-sparkle-border pb-2 pt-1', compact ? 'pl-1.5' : 'pl-2')}>
                                             {visibleSessions.map((session) => {
                                                 const isActive = session.id === activeSessionId
                                                 const timeAgo = Math.floor((Date.now() - (session.createdAt || session.updatedAt)) / 3600000)
@@ -451,13 +466,16 @@ export function AssistantSessionsSidebar({
                                                     <div
                                                         key={session.id}
                                                         className={cn(
-                                                            'group relative flex items-center rounded-lg border transition-all duration-200 backdrop-blur-[2px]',
+                                                            'group relative flex items-center rounded-md border transition-colors',
                                                             compact ? 'gap-2 px-2 py-2' : 'gap-3 px-3 py-2.5',
                                                             isActive
-                                                                ? 'border-white/10 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] shadow-[0_2px_10px_rgba(0,0,0,0.05)]'
-                                                                : 'border-white/5 bg-sparkle-bg/40 text-sparkle-text-secondary hover:border-sparkle-border hover:bg-sparkle-card-hover/60 hover:text-sparkle-text'
+                                                                ? 'border-2 border-[var(--accent-primary)] bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] ring-1 ring-[var(--accent-primary)]/30'
+                                                                : 'border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
                                                         )}
                                                     >
+                                                        {isActive && (
+                                                            <span className="absolute left-0 top-1/2 h-[68%] w-[2px] -translate-y-1/2 rounded-r bg-[var(--accent-primary)]" />
+                                                        )}
                                                         <button
                                                             className={cn('flex-1 truncate text-left font-medium outline-none', compact ? 'text-[12px]' : 'text-[13px]')}
                                                             onClick={() => {
@@ -469,17 +487,28 @@ export function AssistantSessionsSidebar({
                                                             {getDisplayTitle(session.title)}
                                                         </button>
 
-                                                        <span className="shrink-0 rounded-[4px] border border-white/5 bg-sparkle-bg/50 px-1.5 py-0.5 font-mono text-[9px] font-bold text-sparkle-text-muted/60 tabular-nums uppercase tracking-wide transition-colors group-hover:text-sparkle-text-muted">
+                                                        <span className="shrink-0 rounded-[4px] border border-sparkle-border bg-sparkle-card px-1.5 py-0.5 font-mono text-[9px] font-bold text-sparkle-text-muted tabular-nums uppercase tracking-wide transition-colors group-hover:text-sparkle-text-secondary">
                                                             {timeLabel}
                                                         </span>
 
                                                         {/* Hover actions */}
-                                                        <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md border border-white/10 bg-sparkle-card p-0.5 shadow-sm group-hover:flex">
+                                                        <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md border border-sparkle-border bg-sparkle-bg p-0.5 shadow-sm group-hover:flex">
                                                             <button
                                                                 onClick={(e) => { e.stopPropagation(); openRenameModal(session); }}
                                                                 className="rounded p-1 text-sparkle-text-muted hover:bg-sparkle-bg hover:text-sparkle-text"
                                                             >
                                                                 <Edit2 size={10} />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    void onArchiveSession(session.id, true)
+                                                                }}
+                                                                className="rounded p-1 text-sparkle-text-secondary/50 transition-colors hover:bg-amber-500/10 hover:text-amber-300"
+                                                                title="Archive session"
+                                                            >
+                                                                <Archive size={12} />
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -501,14 +530,88 @@ export function AssistantSessionsSidebar({
                                     </AnimatedHeight>
                                 </section>
                             )
-                        })}
+                                })}
 
-                        {groupedSessions.length === 0 && (
-                            <div className={cn('flex flex-col items-center gap-2 px-4 text-center', compact ? 'py-6' : 'py-8')}>
-                                <MessageSquarePlus size={compact ? 20 : 24} className="text-sparkle-text-muted/30" />
-                                <p className="text-xs text-sparkle-text-muted">No projects yet</p>
+                                {groupedSessions.length === 0 && (
+                                    <div className={cn('flex flex-col items-center gap-2 px-4 text-center', compact ? 'py-6' : 'py-8')}>
+                                        <MessageSquarePlus size={compact ? 20 : 24} className="text-sparkle-text-muted/30" />
+                                        <p className="text-xs text-sparkle-text-muted">No projects yet</p>
+                                    </div>
+                                )}
                             </div>
-                        )}
+
+                            {archivedSessions.length > 0 && (
+                                <section className={cn('mt-auto border-t border-sparkle-border pt-2', compact ? 'space-y-0.5' : 'space-y-1')}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowArchivedSessions((prev) => !prev)}
+                                        className="group flex w-full items-center gap-2 px-1 py-1.5 text-left transition-colors"
+                                    >
+                                        <Archive size={14} className="text-sparkle-text-muted/70" />
+                                        <span className={cn('truncate font-semibold transition-colors flex-1 text-sparkle-text-secondary group-hover:text-sparkle-text', compact ? 'text-[12px]' : 'text-[13px]')}>
+                                            Archived
+                                        </span>
+                                        <span className={cn('rounded-[4px] border border-sparkle-border bg-sparkle-card px-1.5 py-0.5 font-mono text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[9px]')}>
+                                            {archivedSessions.length}
+                                        </span>
+                                        <ChevronRight
+                                            size={14}
+                                            className={cn(
+                                                'text-sparkle-text-muted/70 transition-transform duration-300',
+                                                showArchivedSessions && 'rotate-90'
+                                            )}
+                                        />
+                                    </button>
+
+                                    <AnimatedHeight isOpen={showArchivedSessions} duration={350}>
+                                        <div className={cn('ml-4 space-y-0.5 border-l border-sparkle-border pb-2 pt-1', compact ? 'pl-1.5' : 'pl-2')}>
+                                            {archivedSessions.map((session) => {
+                                                const timeAgo = Math.floor((Date.now() - (session.updatedAt || session.createdAt)) / 3600000)
+                                                const timeLabel = timeAgo < 1 ? 'now' : timeAgo < 24 ? `${timeAgo}h` : `${Math.floor(timeAgo / 24)}d`
+                                                return (
+                                                    <div
+                                                        key={`archived-${session.id}`}
+                                                        className={cn(
+                                                            'group relative flex items-center rounded-md border transition-colors',
+                                                            compact ? 'gap-2 px-2 py-2' : 'gap-3 px-3 py-2.5',
+                                                            'border-sparkle-border bg-sparkle-bg text-sparkle-text-muted hover:bg-sparkle-card-hover'
+                                                        )}
+                                                    >
+                                                        <span
+                                                            className={cn('flex-1 truncate text-left font-medium', compact ? 'text-[12px]' : 'text-[13px]')}
+                                                            title={getDisplayTitle(session.title)}
+                                                        >
+                                                            {getDisplayTitle(session.title)}
+                                                        </span>
+                                                        <span className="shrink-0 rounded-[4px] border border-sparkle-border bg-sparkle-card px-1.5 py-0.5 font-mono text-[9px] font-bold text-sparkle-text-muted tabular-nums uppercase tracking-wide">
+                                                            {timeLabel}
+                                                        </span>
+                                                        <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md border border-sparkle-border bg-sparkle-bg p-0.5 shadow-sm group-hover:flex">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => void onArchiveSession(session.id, false)}
+                                                                className="rounded p-1 text-sparkle-text-secondary/60 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300"
+                                                                title="Unarchive session"
+                                                            >
+                                                                <ArchiveRestore size={12} />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteClick(session)}
+                                                                className="rounded p-1 text-sparkle-text-secondary/50 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                                                                title="Delete session"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </AnimatedHeight>
+                                </section>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

@@ -154,6 +154,17 @@ export async function bridgeEnsurePersistenceLoaded(bridge: BridgeStateContext):
                 }
             })
 
+        const allArchived = bridge.sessions.length > 0 && bridge.sessions.every((session: any) => session.archived)
+        if (allArchived) {
+            const restoredAt = now()
+            bridge.sessions = bridge.sessions.map((session: any) => ({
+                ...session,
+                archived: false,
+                updatedAt: Math.max(Number(session.updatedAt) || restoredAt, restoredAt)
+            }))
+            log.info('[AssistantBridge] Restored archived-only state by unarchiving persisted sessions')
+        }
+
         bridge.activeSessionId = readString(parsed.activeSessionId).trim() || null
         const restoredProfile = readString(parsed.activeProfile).trim()
         if (restoredProfile) {
@@ -174,6 +185,9 @@ export async function bridgeEnsurePersistenceLoaded(bridge: BridgeStateContext):
         if (active) {
             bridge.history = [...active.history]
             bridge.threadId = active.threadId
+        }
+        if (allArchived) {
+            bridge.persistStateSoon()
         }
     } catch {
         bridge.ensureActiveSession()

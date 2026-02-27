@@ -1,5 +1,5 @@
 import { getWorkingChangesForAI, getWorkingDiff } from '../inspectors/git/read'
-import { createId, deriveSessionTitleFromPrompt, isAutoSessionTitle, now, parseModelList, readString } from './assistant-bridge-helpers'
+import { createId, deriveSessionTitleFromPrompt, isAutoSessionTitle, now, parseModelList, readRecord, readString } from './assistant-bridge-helpers'
 import type { AssistantHistoryAttachment, AssistantHistoryMessage, AssistantModelInfo, AssistantSendOptions } from './types'
 import { materializeContextFilesForSend } from './context-file-materializer'
 
@@ -72,6 +72,44 @@ function buildUserMessageDisplayText(prompt: string, options: AssistantSendOptio
     if (trimmedPrompt) return trimmedPrompt
     if (normalizedFiles.length > 0) return 'Attached files for this request.'
     return ''
+}
+
+const MODEL_LIST_MAX_PAGES = 8
+
+function mergeUniqueModels(
+    base: AssistantModelInfo[],
+    incoming: AssistantModelInfo[]
+): AssistantModelInfo[] {
+    if (!Array.isArray(incoming) || incoming.length === 0) {
+        return [...base]
+    }
+
+    const merged = [...base]
+    const seen = new Set(
+        merged
+            .map((entry) => String(entry?.id || '').trim().toLowerCase())
+            .filter(Boolean)
+    )
+
+    for (const entry of incoming) {
+        const id = String(entry?.id || '').trim()
+        if (!id) continue
+        const normalizedId = id.toLowerCase()
+        if (seen.has(normalizedId)) continue
+        merged.push(entry)
+        seen.add(normalizedId)
+    }
+
+    return merged
+}
+
+function readNextCursor(result: unknown): string {
+    const root = readRecord(result)
+    const nestedResult = readRecord(root?.result)
+    return [
+        readString(root?.nextCursor).trim(),
+        readString(nestedResult?.nextCursor).trim()
+    ].find(Boolean) || ''
 }
 
 export async function bridgeRunWorkflow(
@@ -172,8 +210,8 @@ export async function bridgeListModels(
 
     try {
         await this.ensureInitialized()
-        const attempts: Array<{ method: string; params: Record<string, unknown> }> = [
-            { method: 'model/list', params: { limit: 200, includeHidden: false } },
+        const attempts: Array<{ method: string; params: Record<string, unknown>; preferred?: boolean }> = [
+            { method: 'model/list', params: { limit: 200, includeHidden: false }, preferred: true },
             { method: 'model/list', params: { limit: 200, includeHidden: true } },
             { method: 'model/list', params: {} },
             { method: 'models/list', params: { limit: 200, includeHidden: true } },
@@ -185,14 +223,31 @@ export async function bridgeListModels(
 
         for (const attempt of attempts) {
             try {
-                const result = await this.requestWithRetry(attempt.method, attempt.params, { retries: 1 })
-                const parsed = parseModelList(result)
+                let merged: AssistantModelInfo[] = []
+                let cursor = ''
+                for (let page = 0; page < MODEL_LIST_MAX_PAGES; page += 1) {
+                    const params = cursor
+                        ? { ...attempt.params, cursor }
+                        : { ...attempt.params }
+                    const result = await this.requestWithRetry(attempt.method, params, { retries: 1 })
+                    const parsed = parseModelList(result)
+                    merged = mergeUniqueModels(merged, parsed)
+
+                    const nextCursor = readNextCursor(result)
+                    if (!nextCursor || nextCursor === cursor) {
+                        break
+                    }
+                    cursor = nextCursor
+                }
+
+                const parsed = merged
                 if (parsed.length > bestModels.length) {
                     bestModels = parsed
                 }
-                if (bestModels.length >= 2) {
+                if (attempt.preferred && parsed.length > 0) {
                     break
                 }
+                if (bestModels.length >= 2) break
             } catch (error) {
                 lastError = error
             }
@@ -217,9 +272,21 @@ export async function bridgeListModels(
         this.cachedModels = fallback
         return { success: true, models: [...fallback] }
     } catch (error) {
+        if (this.cachedModels.length > 0) {
+            return { success: true, models: [...this.cachedModels] }
+        }
+        const fallbackModel = this.status.model && this.status.model !== 'default'
+            ? this.status.model
+            : 'default'
+        const fallback: AssistantModelInfo[] = [{
+            id: fallbackModel,
+            label: fallbackModel,
+            isDefault: true
+        }]
+        this.cachedModels = fallback
         return {
-            success: false,
-            models: [],
+            success: true,
+            models: [...fallback],
             error: error instanceof Error ? error.message : 'Failed to list models.'
         }
     }
@@ -298,6 +365,12 @@ export async function bridgeSendPrompt(
         return { success: false, error: 'Prompt is required.' }
     }
 
+    const requestedProfile = readString(options.profile).trim()
+    if (requestedProfile) {
+        this.setProfile(requestedProfile)
+    } else if (!readString(this.status.profile).trim() && readString(this.activeProfile).trim()) {
+        this.setProfile(this.activeProfile)
+    }
     if (options.approvalMode) {
         this.status.approvalMode = options.approvalMode
     }
@@ -414,7 +487,7 @@ export async function bridgeSendPrompt(
         const turnStartParams: Record<string, unknown> = {
             threadId,
             input: [{ type: 'text', text: effectivePrompt }],
-            approvalPolicy: this.status.approvalMode === 'yolo' ? 'on-request' : 'never'
+            approvalPolicy: 'on-request'
         }
         if (selectedProjectPath) {
             turnStartParams.projectPath = selectedProjectPath
@@ -479,7 +552,14 @@ export async function bridgeSendPrompt(
         this.turnAttemptGroupByTurnId.set(turnId, attemptGroupId)
         this.finalizedTurns.delete(turnId)
         this.cancelledTurns.delete(turnId)
-        this.emitEvent('turn-start', { turnId })
+        this.emitEvent('turn-start', {
+            turnId,
+            attemptGroupId,
+            model: this.status.model,
+            profile: this.status.profile || this.activeProfile,
+            approvalMode: this.status.approvalMode,
+            projectPath: selectedProjectPath || undefined
+        })
         this.emitEvent('status', { status: this.getStatus() })
         this.syncActiveSessionFromRuntime()
         this.persistStateSoon()

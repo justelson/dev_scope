@@ -8,7 +8,10 @@ import { resolveImageSrc } from './paths'
 
 type DivProps = HTMLAttributes<HTMLDivElement> & { align?: string }
 
-export function createMarkdownComponents(filePath?: string): Components {
+export function createMarkdownComponents(
+    filePath?: string,
+    options?: { codeBlockMaxLines?: number }
+): Components {
     return {
         h1: ({ children }) => (
             <h1 className="text-2xl font-bold text-sparkle-text pb-2 mb-4 border-b border-sparkle-border first:mt-0 mt-8">
@@ -64,7 +67,14 @@ export function createMarkdownComponents(filePath?: string): Components {
                 return <InlineCode>{children}</InlineCode>
             }
 
-            return <CodeBlock language={match?.[1]}>{String(children).replace(/\n$/, '')}</CodeBlock>
+            return (
+                <CodeBlock
+                    language={match?.[1]}
+                    maxLines={options?.codeBlockMaxLines}
+                >
+                    {String(children).replace(/\n$/, '')}
+                </CodeBlock>
+            )
         },
         pre: ({ children, ...props }) => (
             <pre className="whitespace-pre overflow-x-auto font-mono text-sm leading-none" {...props}>

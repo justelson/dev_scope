@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import { now } from './assistant-bridge-helpers'
+import { createId, now } from './assistant-bridge-helpers'
 import {
     bridgeArchiveSession,
     bridgeClearEvents,
@@ -38,6 +38,7 @@ import {
     bridgeHandleServerRequest,
     bridgeNotify,
     bridgeRequest,
+    bridgeRespondToApproval,
     bridgeResolvePending,
     bridgeSend,
     bridgeStartProcess,
@@ -78,13 +79,15 @@ import {
     bridgeNormalizeActivity
 } from './assistant-bridge-events'
 import type {
+    AssistantApprovalDecision,
     AssistantApprovalMode,
     AssistantConnectOptions,
     AssistantEventPayload,
     AssistantHistoryMessage,
     AssistantModelInfo,
     AssistantSendOptions,
-    AssistantStatus
+    AssistantStatus,
+    AssistantTurnPart
 } from './types'
 type PendingRpcEntry = {
     resolve: (value: any) => void
@@ -103,6 +106,15 @@ type TurnBuffer = {
 }
 type TurnContext = {
     attemptGroupId: string
+}
+type PendingApprovalRequest = {
+    requestId: number
+    method: string
+    request: Record<string, unknown>
+    mode: AssistantApprovalMode
+    turnId: string | null
+    attemptGroupId: string | null
+    createdAt: number
 }
 type ActivityKind = 'command' | 'file' | 'search' | 'tool' | 'other'
 type AssistantSessionSnapshot = {
@@ -171,6 +183,8 @@ export class AssistantBridge extends EventEmitter {
     private finalizedTurns = new Set<string>()
     private cancelledTurns = new Set<string>()
     private cachedModels: AssistantModelInfo[] = []
+    private turnPartsByTurnId = new Map<string, AssistantTurnPart[]>()
+    private pendingApprovalRequests = new Map<number, PendingApprovalRequest>()
     private eventStore: AssistantEventPayload[] = []
     private sessions: AssistantSessionSnapshot[] = []
     private activeSessionId: string | null = null
@@ -285,6 +299,7 @@ export class AssistantBridge extends EventEmitter {
         this.finalizedTurns.clear()
         this.cancelledTurns.clear()
         this.cachedModels = []
+        this.pendingApprovalRequests.clear()
         this.persistStateSoon()
         this.emitEvent('status', { status: this.getStatus() })
         return { success: true, status: this.getStatus() }
@@ -299,6 +314,9 @@ export class AssistantBridge extends EventEmitter {
     }
     public getApprovalMode() {
         return { success: true, mode: this.status.approvalMode }
+    }
+    public respondToApproval(requestId: number, decision?: AssistantApprovalDecision) {
+        return bridgeRespondToApproval(this, requestId, decision)
     }
     public getHistory() {
         return bridgeGetHistory(this)
@@ -543,5 +561,37 @@ export class AssistantBridge extends EventEmitter {
     }
     private emitEvent(type: AssistantEventPayload['type'], payload: Record<string, unknown>) {
         bridgeEmitEvent(this, type, payload)
+    }
+    private resolveAttemptGroupId(turnId: string): string {
+        return this.turnContexts.get(turnId)?.attemptGroupId
+            || this.turnAttemptGroupByTurnId.get(turnId)
+            || turnId
+    }
+    private recordTurnPart(
+        input: Omit<AssistantTurnPart, 'id' | 'timestamp' | 'attemptGroupId'> & {
+            timestamp?: number
+            attemptGroupId?: string
+        }
+    ): AssistantTurnPart {
+        const timestamp = Number.isFinite(Number(input.timestamp))
+            ? Number(input.timestamp)
+            : now()
+        const turnId = String(input.turnId || '').trim()
+        const attemptGroupId = String(input.attemptGroupId || '').trim() || this.resolveAttemptGroupId(turnId)
+        const nextPart: AssistantTurnPart = {
+            ...input,
+            id: createId('part'),
+            turnId,
+            attemptGroupId,
+            timestamp
+        }
+        const list = this.turnPartsByTurnId.get(turnId) || []
+        list.push(nextPart)
+        if (list.length > 600) {
+            list.splice(0, list.length - 600)
+        }
+        this.turnPartsByTurnId.set(turnId, list)
+        this.emitEvent('turn-part', { part: nextPart })
+        return nextPart
     }
 }

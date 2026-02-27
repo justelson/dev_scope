@@ -1,6 +1,8 @@
 export type AssistantApprovalMode = 'safe' | 'yolo'
 export type AssistantProvider = 'codex'
 export type AssistantState = 'offline' | 'connecting' | 'ready' | 'error'
+export type AssistantApprovalDecision = 'decline' | 'acceptForSession'
+export type AssistantTurnPartKind = 'text' | 'reasoning' | 'tool' | 'tool-result' | 'approval' | 'final' | 'error'
 
 export interface AssistantStatus {
     connected: boolean
@@ -72,6 +74,21 @@ export interface AssistantModelInfo {
     capabilities?: string[]
 }
 
+export interface AssistantTurnPart {
+    id: string
+    turnId: string
+    attemptGroupId: string
+    kind: AssistantTurnPartKind
+    timestamp: number
+    text?: string
+    method?: string
+    summary?: string
+    decision?: AssistantApprovalDecision
+    status?: 'pending' | 'decided'
+    payload?: Record<string, unknown>
+    provisional?: boolean
+}
+
 export interface AssistantEventPayload {
     type:
     | 'status'
@@ -89,6 +106,7 @@ export interface AssistantEventPayload {
     | 'turn-complete'
     | 'turn-cancelled'
     | 'workflow-status'
+    | 'turn-part'
     | 'error'
     timestamp: number
     payload: Record<string, unknown>

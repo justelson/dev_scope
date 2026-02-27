@@ -1,4 +1,4 @@
-import { FileText, Search, Terminal, Wrench } from 'lucide-react'
+import { Brain, FileText, Search, Terminal, Wrench } from 'lucide-react'
 import type { AssistantReasoning } from './assistant-page-types'
 import { toDisplayText } from './assistant-text-utils'
 
@@ -105,6 +105,8 @@ export function mergeReasoningEntries(
 
 export function ActivityIcon({ kind }: { kind: string }) {
     switch (kind) {
+        case 'reasoning':
+            return <Brain size={14} className="text-indigo-300" />
         case 'command':
             return <Terminal size={14} className="text-sky-300" />
         case 'file':

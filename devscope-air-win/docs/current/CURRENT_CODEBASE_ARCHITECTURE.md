@@ -61,6 +61,7 @@ Current positive state:
 
 - Project scanning and folder indexing already route through `devscopeCore.projects`.
 - Assistant lifecycle/actions route through `devscopeCore.assistant`.
+- Assistant approval decisions route through explicit `respondApproval` IPC/core bridge flow (no renderer-side auto-approve behavior).
 
 Current gap:
 
@@ -72,6 +73,13 @@ Current gap:
 - Renderer settings store in `src/renderer/src/lib/settings.tsx`.
 - Persisted in localStorage key: `devscope-settings`.
 - Includes appearance, behavior, projects, AI provider keys, and assistant settings.
+
+## Assistant Telemetry Model (Current)
+
+- Main process bridge emits backward-compatible legacy events and normalized `turn-part` events.
+- Renderer hydrates chat state from history + `partsByTurn` + `pendingApprovals` when available, with legacy-event fallback.
+- Assistant chat UI renders per-attempt tool/reasoning/approval traces and uses explicit approval decision actions.
+- Session metadata surfaces `thread/tokenUsage/updated`, `account/updated`, and `account/rateLimits/updated` timestamps.
 
 ## Caching / Performance Notes (Current)
 

@@ -1,4 +1,4 @@
-import type { AssistantApprovalMode, AssistantEventPayload, AssistantHistoryMessage } from './types'
+import type { AssistantApprovalMode, AssistantEventPayload, AssistantHistoryMessage, AssistantTurnPart } from './types'
 import { createId, isAutoSessionTitle, now } from './assistant-bridge-helpers'
 type BridgeSessionContext = any
 export function bridgeGetHistory(bridge: BridgeSessionContext): {
@@ -25,6 +25,15 @@ export function bridgeGetHistory(bridge: BridgeSessionContext): {
             createdAt: number
             isActive: boolean
         }>
+    }>
+    partsByTurn: Record<string, AssistantTurnPart[]>
+    pendingApprovals: Array<{
+        requestId: number
+        method: string
+        mode: AssistantApprovalMode
+        turnId: string | null
+        attemptGroupId: string | null
+        createdAt: number
     }>
 } {
     bridge.ensureActiveSession()
@@ -71,7 +80,20 @@ export function bridgeGetHistory(bridge: BridgeSessionContext): {
             messageCount: session.history.length,
             projectPath: session.projectPath || ''
         })),
-        attempts
+        attempts,
+        partsByTurn: Object.fromEntries(
+            Array.from<[string, AssistantTurnPart[]]>(
+                bridge.turnPartsByTurnId.entries() as Iterable<[string, AssistantTurnPart[]]>
+            ).map(([turnId, parts]) => [turnId, [...parts]] as [string, AssistantTurnPart[]])
+        ),
+        pendingApprovals: Array.from(bridge.pendingApprovalRequests.values()).map((entry: any) => ({
+            requestId: Number(entry.requestId),
+            method: String(entry.method || ''),
+            mode: entry.mode === 'yolo' ? 'yolo' : 'safe',
+            turnId: entry.turnId ? String(entry.turnId) : null,
+            attemptGroupId: entry.attemptGroupId ? String(entry.attemptGroupId) : null,
+            createdAt: Number(entry.createdAt) || now()
+        }))
     }
 }
 export function bridgeClearHistory(bridge: BridgeSessionContext): { success: boolean } {
@@ -83,6 +105,8 @@ export function bridgeClearHistory(bridge: BridgeSessionContext): { success: boo
     bridge.reasoningTextsByTurn.clear()
     bridge.lastReasoningDigestByTurn.clear()
     bridge.lastActivityDigestByTurn.clear()
+    bridge.turnPartsByTurnId.clear()
+    bridge.pendingApprovalRequests.clear()
     const activeSession = bridge.getActiveSession()
     if (activeSession) {
         activeSession.history = []
@@ -310,6 +334,8 @@ export function bridgeCreateSession(
     bridge.turnContexts.clear()
     bridge.turnAttemptGroupByTurnId.clear()
     bridge.reasoningTextsByTurn.clear()
+    bridge.turnPartsByTurnId.clear()
+    bridge.pendingApprovalRequests.clear()
     bridge.persistStateSoon()
     bridge.emitEvent('history', { history: [...bridge.history] })
     bridge.emitEvent('status', { status: bridge.getStatus() })
@@ -339,6 +365,8 @@ export function bridgeSelectSession(bridge: BridgeSessionContext, sessionId: str
     bridge.turnContexts.clear()
     bridge.turnAttemptGroupByTurnId.clear()
     bridge.reasoningTextsByTurn.clear()
+    bridge.turnPartsByTurnId.clear()
+    bridge.pendingApprovalRequests.clear()
     bridge.finalizedTurns.clear()
     bridge.cancelledTurns.clear()
     bridge.status.activeTurnId = null
@@ -443,6 +471,8 @@ export function bridgeNewThread(bridge: BridgeSessionContext): { success: boolea
     bridge.turnContexts.clear()
     bridge.turnAttemptGroupByTurnId.clear()
     bridge.reasoningTextsByTurn.clear()
+    bridge.turnPartsByTurnId.clear()
+    bridge.pendingApprovalRequests.clear()
     const activeSession = bridge.getActiveSession()
     if (activeSession) {
         activeSession.threadId = null

@@ -24,6 +24,8 @@ export const devscopeCore = {
             assistantBridge.subscribe(senderId)
             return await assistantBridge.sendPrompt(prompt, options)
         },
+        respondApproval: (requestId: number, decision: 'decline' | 'acceptForSession') =>
+            assistantBridge.respondToApproval(requestId, decision),
         cancelTurn: (turnId?: string) => assistantBridge.cancelTurn(turnId),
         setApprovalMode: (mode: 'safe' | 'yolo') => assistantBridge.setApprovalMode(mode),
         getApprovalMode: () => assistantBridge.getApprovalMode(),

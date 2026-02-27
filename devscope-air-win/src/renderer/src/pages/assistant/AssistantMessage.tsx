@@ -15,8 +15,8 @@ import { cn } from '@/lib/utils'
 import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
 import type { AssistantActivity, AssistantApproval, AssistantReasoning } from './assistant-page-types'
 import {
-    ActivityIcon,
-    formatStatTimestamp
+    formatStatTimestamp,
+    mergeReasoningEntries
 } from './assistant-message-utils'
 
 const MAX_VISIBLE_THOUGHTS = 80
@@ -43,6 +43,78 @@ type ModifiedFileEntry = {
 type FileDiffStats = {
     additions: number
     deletions: number
+}
+
+function getApprovalRequestSummary(request: Record<string, unknown> | undefined): string {
+    if (!request) return ''
+    const command = typeof request.command === 'string' ? request.command.trim() : ''
+    if (command) return command
+    const description = typeof request.description === 'string' ? request.description.trim() : ''
+    if (description) return description
+    const path = typeof request.path === 'string' ? request.path.trim() : ''
+    if (path) return path
+    const filePath = typeof request.filePath === 'string' ? request.filePath.trim() : ''
+    if (filePath) return filePath
+    return ''
+}
+
+function getApprovalDecisionLabel(decision: AssistantApproval['decision']): string {
+    if (decision === 'acceptForSession') return 'approved'
+    if (decision === 'decline') return 'declined'
+    return 'pending'
+}
+
+function getActivityDetail(activity: AssistantActivity): string {
+    const payload = (activity.payload || {}) as Record<string, unknown>
+    const command = typeof payload.command === 'string' ? payload.command.trim() : ''
+    if (command) return command
+    const description = typeof payload.description === 'string' ? payload.description.trim() : ''
+    if (description) return description
+    const filePath = typeof payload.filePath === 'string' ? payload.filePath.trim() : ''
+    if (filePath) return filePath
+    const path = typeof payload.path === 'string' ? payload.path.trim() : ''
+    if (path) return path
+    const tool = typeof payload.tool === 'string' ? payload.tool.trim() : ''
+    if (tool) return tool
+    return ''
+}
+
+function cleanThoughtText(value: string): string {
+    const text = String(value || '')
+        .replace(/\r/g, ' ')
+        .replace(/\n+/g, ' ')
+        .replace(/\*\*/g, '')
+        .replace(/`+/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+    return text.replace(/\b([A-Za-z]{3,})\1\b/g, '$1')
+}
+
+function looksLikeTelemetryLabel(value: string): boolean {
+    const text = cleanThoughtText(value)
+    if (!text) return false
+    if (!/^[a-z0-9_./-]+$/i.test(text)) return false
+    return text.includes('/') || text.includes('_')
+}
+
+function toThinkingDisplay(activity: AssistantActivity): { primary: string; secondary?: string } | null {
+    const method = normalizeThoughtKey(activity.method)
+    const summary = cleanThoughtText(activity.summary)
+    const detail = cleanThoughtText(getActivityDetail(activity))
+    const summaryIsTelemetry = looksLikeTelemetryLabel(summary)
+    const isMethodDelta = method.includes('summarytextdelta')
+    const isBeginEndEvent = method.includes('begin') || method.includes('start') || method.includes('end')
+
+    if (isMethodDelta && !detail && !summary) return null
+    if (isBeginEndEvent && !detail && (summaryIsTelemetry || !summary)) return null
+
+    const primary = (!summaryIsTelemetry && summary) || detail
+    if (!primary) return null
+
+    if (detail && normalizeThoughtKey(detail) !== normalizeThoughtKey(primary)) {
+        return { primary, secondary: detail }
+    }
+    return { primary }
 }
 
 function readDiffNumber(value: unknown): number {
@@ -299,6 +371,8 @@ interface AssistantMessageProps {
     reasoning?: AssistantReasoning[]
     activities?: AssistantActivity[]
     approvals?: AssistantApproval[]
+    showThinking?: boolean
+    onRespondApproval?: (requestId: number, decision: 'decline' | 'acceptForSession') => Promise<boolean> | boolean
 }
 
 export function AssistantMessage({
@@ -311,7 +385,11 @@ export function AssistantMessage({
     streamingTurnId = null,
     streamingText = '',
     projectPath,
+    reasoning = [],
     activities = [],
+    approvals = [],
+    showThinking = true,
+    onRespondApproval,
 }: AssistantMessageProps) {
     const activeIndex = attempts.findIndex((attempt) => attempt.isActiveAttempt)
     const initialIndex = activeIndex >= 0 ? activeIndex : Math.max(0, attempts.length - 1)
@@ -324,6 +402,7 @@ export function AssistantMessage({
     const [isAttemptPinned, setIsAttemptPinned] = useState(false)
     const [elapsedNowMs, setElapsedNowMs] = useState(() => Date.now())
     const [diffStatsByPath, setDiffStatsByPath] = useState<Record<string, FileDiffStats>>({})
+    const [approvalPendingById, setApprovalPendingById] = useState<Record<number, boolean>>({})
     const diffStatsCacheRef = useRef<Map<string, FileDiffStats>>(new Map())
     const thoughtsBodyRef = useRef<HTMLDivElement | null>(null)
 
@@ -354,12 +433,43 @@ export function AssistantMessage({
     )
     const displayedText = isStreamingCurrentAttempt ? streamingText : currentAttempt.text
 
+    const turnReasoning = mergeReasoningEntries(reasoning.filter((entry) => {
+        const sameTurn = Boolean(currentAttempt.turnId) && entry.turnId === currentAttempt.turnId
+        const sameGroup = Boolean(currentAttempt.attemptGroupId) && entry.attemptGroupId === currentAttempt.attemptGroupId
+        return sameTurn || sameGroup
+    }))
+
     const turnActivities = activities.filter((entry) => {
         const sameTurn = Boolean(currentAttempt.turnId) && entry.turnId === currentAttempt.turnId
         const sameGroup = Boolean(currentAttempt.attemptGroupId) && entry.attemptGroupId === currentAttempt.attemptGroupId
         return sameTurn || sameGroup
     })
-    const commandActivities = turnActivities.filter((entry) => String(entry.kind || '').toLowerCase() === 'command')
+
+    const rawTurnApprovals = approvals
+        .filter((entry) => {
+            const sameTurn = Boolean(currentAttempt.turnId) && entry.turnId === currentAttempt.turnId
+            const sameGroup = Boolean(currentAttempt.attemptGroupId) && entry.attemptGroupId === currentAttempt.attemptGroupId
+            return sameTurn || sameGroup
+        })
+        .sort((a, b) => a.timestamp - b.timestamp)
+    const approvalsByRequestId = new Map<number, AssistantApproval>()
+    for (const entry of rawTurnApprovals) {
+        const existing = approvalsByRequestId.get(entry.requestId)
+        approvalsByRequestId.set(entry.requestId, existing ? { ...existing, ...entry } : entry)
+    }
+    const turnApprovals = Array.from(approvalsByRequestId.values()).sort((a, b) => a.timestamp - b.timestamp)
+    const pendingApprovalCount = turnApprovals.filter((entry) => !entry.decision).length
+    const reasoningThoughts = showThinking
+        ? turnReasoning.map((entry): AssistantActivity => ({
+            turnId: entry.turnId,
+            attemptGroupId: entry.attemptGroupId,
+            kind: 'reasoning',
+            summary: entry.text,
+            method: entry.method,
+            payload: {},
+            timestamp: entry.timestamp
+        }))
+        : []
     const modifiedFiles = buildModifiedFiles(turnActivities)
     const visibleModifiedFiles = modifiedFiles.slice(0, MAX_VISIBLE_MODIFIED_FILES)
     const visibleModifiedFilesKey = visibleModifiedFiles
@@ -367,11 +477,14 @@ export function AssistantMessage({
         .join('|')
     const hiddenModifiedFilesCount = Math.max(0, modifiedFiles.length - visibleModifiedFiles.length)
     const totalModifiedFileUpdates = modifiedFiles.reduce((sum, file) => sum + file.updateCount, 0)
-    const allThoughts = [...commandActivities].sort(
+    const allThoughts = [...turnActivities, ...reasoningThoughts].sort(
         (a, b) => a.timestamp - b.timestamp
     )
     const collapsedThoughts = collapseThoughts(allThoughts)
     const visibleThoughts = collapsedThoughts.slice(-MAX_VISIBLE_THOUGHTS)
+    const visibleThinkingItems = visibleThoughts
+        .map((item) => ({ item, display: toThinkingDisplay(item) }))
+        .filter((entry): entry is { item: CollapsedThought; display: { primary: string; secondary?: string } } => Boolean(entry.display))
     const firstThoughtAt = allThoughts.length > 0 ? allThoughts[0].timestamp : null
     const lastThoughtAt = allThoughts.length > 0 ? allThoughts[allThoughts.length - 1].timestamp : null
     const isLiveAttempt = isBusy && (isStreamingCurrentAttempt || Boolean(currentAttempt.isActiveAttempt))
@@ -404,12 +517,13 @@ export function AssistantMessage({
     }
 
     const hasMultipleAttempts = attempts.length > 1
-    const hasThoughts = allThoughts.length > 0
+    const hasThoughts = visibleThinkingItems.length > 0
     const outputChars = displayedText.trim().length
     const outputTokens = outputChars > 0 ? Math.max(1, Math.round(outputChars / 4)) : 0
     const thoughtSummaryCount = collapsedThoughts.length
-    const activityCount = commandActivities.length
-    const approvalCount = 0
+    const activityCount = turnActivities.length
+    const approvalCount = turnApprovals.length
+    const reasoningCount = turnReasoning.length
     const canRegenerate = Boolean(currentAttempt.turnId)
     const timestampLabel = formatStatTimestamp(currentAttempt.createdAt)
     const thoughtElapsedLabel = thoughtElapsedMs > 0
@@ -421,19 +535,35 @@ export function AssistantMessage({
         Boolean(currentAttempt.isActiveAttempt)
         || (Boolean(currentAttempt.turnId) && currentAttempt.turnId === streamingTurnId)
     )
-    const stats = [
+    const stats: Array<{ id: string; prefix: string; value: string; suffix: string }> = [
         { id: 'tok', prefix: '', value: String(outputTokens), suffix: 'tok' },
         { id: 'chars', prefix: '', value: String(outputChars), suffix: 'chars' },
-        { id: 'commands', prefix: '', value: String(thoughtSummaryCount), suffix: 'commands' },
-        { id: 'actions', prefix: '', value: String(activityCount), suffix: 'actions' },
+        { id: 'tools', prefix: '', value: String(activityCount), suffix: 'tools' },
+        { id: 'trace', prefix: '', value: String(thoughtSummaryCount), suffix: 'trace' },
         { id: 'approvals', prefix: '', value: String(approvalCount), suffix: 'approvals' },
         { id: 'time', prefix: 'at', value: timestampLabel, suffix: '' },
         { id: 'elapsed', prefix: 'elapsed', value: thoughtElapsedLabel, suffix: '' }
-    ] as const
-    const compactStats = [
-        { id: 'commands', prefix: '', value: String(thoughtSummaryCount), suffix: 'commands' },
+    ]
+    if (showThinking) {
+        stats.splice(3, 0, { id: 'reasoning', prefix: '', value: String(reasoningCount), suffix: 'reasoning' })
+    }
+    const compactStats: Array<{ id: string; prefix: string; value: string; suffix: string }> = [
+        { id: 'tools', prefix: '', value: String(activityCount), suffix: 'tools' },
         { id: 'elapsed', prefix: 'elapsed', value: thoughtElapsedLabel, suffix: '' }
-    ] as const
+    ]
+
+    const handleApprovalDecision = async (
+        requestId: number,
+        decision: 'decline' | 'acceptForSession'
+    ) => {
+        if (!onRespondApproval) return
+        setApprovalPendingById((prev) => ({ ...prev, [requestId]: true }))
+        try {
+            await Promise.resolve(onRespondApproval(requestId, decision))
+        } finally {
+            setApprovalPendingById((prev) => ({ ...prev, [requestId]: false }))
+        }
+    }
 
     useEffect(() => {
         const normalizedProjectPath = String(projectPath || '').trim()
@@ -514,35 +644,29 @@ export function AssistantMessage({
             top: el.scrollHeight,
             behavior: isBusy ? 'auto' : 'smooth'
         })
-    }, [isThoughtsOpen, allThoughts.length, isBusy])
+    }, [isThoughtsOpen, visibleThinkingItems.length, isBusy])
 
     return (
-        <div className="group w-full max-w-none space-y-2.5 animate-fadeIn">
+        <div className="group w-full space-y-2 animate-fadeIn">
             {hasThoughts && (
-                <div className="w-full rounded-xl border border-sparkle-border bg-sparkle-card/70 animate-fadeIn">
+                <div className="w-full animate-fadeIn">
                     <button
                         type="button"
                         onClick={() => setIsThoughtsOpen((prev) => !prev)}
                         className={cn(
-                            'flex w-full items-center justify-between px-3 py-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover',
+                            'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card',
                             compact ? 'text-[10px]' : 'text-xs'
                         )}
                     >
-                        <div className="flex items-center gap-2.5">
-                            <Brain size={13} className="text-indigo-300" />
-                            <span className={cn('font-mono uppercase tracking-wide text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>Commands Ran</span>
+                        <div className="flex items-center gap-2">
+                            <Brain size={13} className="text-sky-300" />
+                            <span className={cn('font-medium text-sparkle-text-secondary', compact ? 'text-[11px]' : 'text-xs')}>Thinking</span>
                             {isBusy && (
                                 <span className="inline-flex h-2 w-2 rounded-full bg-indigo-300 animate-pulse" />
                             )}
-                            <span className={cn('rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>
-                                {collapsedThoughts.length}
+                            <span className={cn('font-mono text-sparkle-text-muted', compact ? 'text-[9px]' : 'text-[10px]')}>
+                                {visibleThinkingItems.length}
                             </span>
-                            {allThoughts.length > collapsedThoughts.length && (
-                                <span className={cn('rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>
-                                    {allThoughts.length} updates
-                                </span>
-                            )}
-                            <span className={cn('rounded-[4px] border border-sparkle-border px-2 py-0.5 font-mono text-sparkle-text-muted', compact ? 'text-[8px]' : 'text-[10px]')}>for {thoughtElapsedLabel}</span>
                         </div>
                         <ChevronDown
                             size={13}
@@ -553,9 +677,9 @@ export function AssistantMessage({
                     <AnimatedHeight isOpen={isThoughtsOpen} duration={500}>
                         <div
                             ref={thoughtsBodyRef}
-                            className="max-h-[42vh] space-y-2 overflow-y-auto border-t border-sparkle-border p-3"
+                            className="max-h-[38vh] space-y-1 overflow-y-auto pl-7 pr-2"
                         >
-                            {visibleThoughts.map((item, index) => {
+                            {visibleThinkingItems.map((entry, index) => {
                                 const animationStyle = {
                                     animationDelay: `${Math.min(index, 10) * 45}ms`,
                                     animationFillMode: 'both' as const
@@ -564,28 +688,26 @@ export function AssistantMessage({
                                     <div
                                         key={`activity-${index}`}
                                         className={cn(
-                                            'flex items-start gap-2 rounded-md border border-sparkle-border bg-sparkle-bg px-3 py-2 animate-fadeIn',
+                                            'animate-fadeIn py-1',
                                             compact ? 'text-[10px]' : 'text-xs'
                                         )}
                                         style={animationStyle}
                                     >
-                                        <span className="mt-0.5">
-                                            <ActivityIcon kind={item.kind} />
-                                        </span>
                                         <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 text-sparkle-text">
-                                                <span className="rounded-full border border-sparkle-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-sparkle-text-muted">
-                                                    {item.kind}
-                                                </span>
-                                                <span className={cn('font-mono text-sparkle-text-secondary', compact ? 'text-[9px]' : 'text-[11px]')}>
-                                                    {item.method}
-                                                </span>
-                                            </div>
-                                            <p className={cn('mt-1 text-sparkle-text-secondary', compact && 'text-[10px]')}>
-                                                {item.updateCount > 1
-                                                    ? `${item.summary || 'Running command...'} (x${item.updateCount} updates)`
-                                                    : (item.summary || 'Running command...')}
+                                            <p className={cn('break-words text-sparkle-text-secondary [overflow-wrap:anywhere]', compact ? 'text-[10px]' : 'text-xs')}>
+                                                {entry.display.primary}
                                             </p>
+                                            {entry.display.secondary && (
+                                                <p
+                                                    className={cn(
+                                                        'mt-0.5 break-words font-mono text-sparkle-text-muted [overflow-wrap:anywhere]',
+                                                        compact ? 'text-[9px]' : 'text-[10px]'
+                                                    )}
+                                                    title={entry.display.secondary}
+                                                >
+                                                    {entry.display.secondary}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                 )
@@ -596,24 +718,23 @@ export function AssistantMessage({
             )}
 
             <div className={cn(
-                'w-full rounded-xl border border-transparent bg-sparkle-card/10 px-3 py-2 transition-all duration-200',
-                'hover:border-[var(--accent-primary)]/20 hover:bg-sparkle-card/30 hover:shadow-[0_0_0_1px_rgba(59,130,246,0.12)]',
-                'focus-within:border-[var(--accent-primary)]/20 focus-within:bg-sparkle-card/30',
+                'w-full rounded-lg border border-sparkle-border bg-sparkle-card px-3 py-2 transition-colors',
+                'hover:bg-sparkle-bg focus-within:bg-sparkle-bg',
                 (isRegenerating && isBusy) && 'border-amber-500/45 bg-amber-500/10'
             )}>
                 <div className="mb-1 flex w-full items-center gap-2">
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-sparkle-border bg-sparkle-card text-sparkle-text-secondary">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-md border border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary">
                         <Bot size={11} />
                     </span>
                     <span className="font-mono text-[10px] uppercase tracking-wide text-sparkle-text-muted">assistant</span>
                     {isStreamingCurrentAttempt && (
                         <span className="inline-flex h-2 w-2 rounded-full bg-indigo-300 animate-pulse" />
                     )}
-                    <div className="ml-auto mr-1 flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                    <div className="ml-auto mr-1 flex shrink-0 items-center gap-1 opacity-75 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                         <button
                             type="button"
                             onClick={() => void handleCopy()}
-                            className="group/copy rounded-md p-1.5 text-sparkle-text-muted transition-colors hover:bg-[var(--accent-primary)]/12 hover:text-sparkle-text"
+                            className="group/copy rounded-md p-1.5 text-sparkle-text-muted transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
                             title="Copy response"
                         >
                             {copied ? (
@@ -627,7 +748,7 @@ export function AssistantMessage({
                             onClick={() => void handleRegenerate()}
                             disabled={isBusy || !canRegenerate}
                             hidden={!canRegenerate}
-                            className="group/regen rounded-md p-1.5 text-sparkle-text-muted transition-colors hover:bg-[var(--accent-primary)]/12 hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-30"
+                            className="group/regen rounded-md p-1.5 text-sparkle-text-muted transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-30"
                             title="Regenerate response"
                         >
                             <RotateCcw
@@ -654,9 +775,8 @@ export function AssistantMessage({
                                     <div className="h-3 w-[75%] rounded bg-sparkle-border/40 animate-shimmer" />
                                 </>
                             ) : (
-                                <div className="flex items-center gap-2 py-1">
-                                    <div className="h-2 w-24 rounded bg-sparkle-border/40 animate-shimmer" />
-                                    <span className="text-[10px] uppercase tracking-widest text-sparkle-text-muted font-mono opacity-50">Thinking...</span>
+                                <div className="py-1">
+                                    <span className="text-[10px] uppercase tracking-widest text-sparkle-text-secondary font-mono opacity-95">Thinking...</span>
                                 </div>
                             )}
                         </div>
@@ -664,6 +784,7 @@ export function AssistantMessage({
                         <div className={cn("transition-opacity duration-500", !displayedText ? "opacity-0" : "opacity-100")}>
                             <MarkdownRenderer
                                 content={displayedText}
+                                codeBlockMaxLines={20}
                                 className="bg-transparent p-0 text-sparkle-text prose-invert break-words [overflow-wrap:anywhere] prose-p:break-words prose-p:[overflow-wrap:anywhere] prose-li:break-words prose-li:[overflow-wrap:anywhere] prose-td:break-words prose-td:[overflow-wrap:anywhere]"
                             />
                         </div>
@@ -671,7 +792,7 @@ export function AssistantMessage({
                 </div>
 
                 {modifiedFiles.length > 0 && (
-                    <div className="mt-3 rounded-lg border border-sparkle-border bg-sparkle-bg/80 px-2.5 py-2">
+                    <div className="mt-3 rounded-md border border-sparkle-border bg-sparkle-bg px-2.5 py-2">
                         <div className={cn('flex items-center gap-2 text-sparkle-text-secondary', compact ? 'text-[10px]' : 'text-xs')}>
                             <span className="font-mono uppercase tracking-wide text-sparkle-text-muted">Modified files</span>
                             <span className="rounded-[4px] border border-sparkle-border px-1.5 py-0.5 font-mono text-sparkle-text-muted">
@@ -695,7 +816,7 @@ export function AssistantMessage({
                                         key={file.path}
                                         title={file.path}
                                         className={cn(
-                                            'flex items-center justify-between rounded-md border border-sparkle-border bg-sparkle-card px-2 py-1.5',
+                                            'flex items-center justify-between rounded-md border border-sparkle-border bg-sparkle-card-hover px-2 py-1.5',
                                             compact ? 'text-[10px]' : 'text-[11px]'
                                         )}
                                     >
@@ -721,13 +842,101 @@ export function AssistantMessage({
                             {hiddenModifiedFilesCount > 0 && (
                                 <span
                                     className={cn(
-                                        'rounded-md border border-sparkle-border bg-sparkle-card px-2 py-1 font-mono text-sparkle-text-muted',
+                                        'rounded-md border border-sparkle-border bg-sparkle-card-hover px-2 py-1 font-mono text-sparkle-text-muted',
                                         compact ? 'text-[10px]' : 'text-[11px]'
                                     )}
                                 >
                                     +{hiddenModifiedFilesCount} more
                                 </span>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {turnApprovals.length > 0 && (
+                    <div className="mt-3 rounded-md border border-sparkle-border bg-sparkle-bg px-2.5 py-2">
+                        <div className={cn('flex items-center gap-2 text-sparkle-text-secondary', compact ? 'text-[10px]' : 'text-xs')}>
+                            <span className="font-mono uppercase tracking-wide text-sparkle-text-muted">Approvals</span>
+                            <span className="rounded-[4px] border border-sparkle-border px-1.5 py-0.5 font-mono text-sparkle-text-muted">
+                                {approvalCount}
+                            </span>
+                            {pendingApprovalCount > 0 && (
+                                <span className="rounded-[4px] border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-mono text-amber-200">
+                                    {pendingApprovalCount} pending
+                                </span>
+                            )}
+                        </div>
+                        <div className="mt-2 space-y-1.5">
+                            {turnApprovals.map((approval) => {
+                                const decisionLabel = getApprovalDecisionLabel(approval.decision)
+                                const requestSummary = getApprovalRequestSummary(approval.request)
+                                const isPendingDecision = !approval.decision
+                                const isDecisionInFlight = Boolean(approvalPendingById[approval.requestId])
+                                return (
+                                    <div
+                                        key={`approval-${approval.requestId}`}
+                                        className={cn(
+                                            'rounded-md border px-2 py-2',
+                                            isPendingDecision
+                                                ? 'border-amber-500/40 bg-amber-500/10'
+                                                : approval.decision === 'acceptForSession'
+                                                    ? 'border-emerald-500/35 bg-emerald-500/10'
+                                                    : 'border-rose-500/35 bg-rose-500/10'
+                                        )}
+                                    >
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <span className={cn('rounded-[4px] border border-sparkle-border px-1.5 py-0.5 font-mono text-sparkle-text-secondary', compact ? 'text-[9px]' : 'text-[10px]')}>
+                                                {approval.method}
+                                            </span>
+                                            <span className={cn('rounded-[4px] border border-sparkle-border px-1.5 py-0.5 font-mono text-sparkle-text-secondary', compact ? 'text-[9px]' : 'text-[10px]')}>
+                                                {approval.mode.toUpperCase()}
+                                            </span>
+                                            <span className={cn(
+                                                'rounded-[4px] border px-1.5 py-0.5 font-mono',
+                                                compact ? 'text-[9px]' : 'text-[10px]',
+                                                isPendingDecision
+                                                    ? 'border-amber-500/40 text-amber-200'
+                                                    : approval.decision === 'acceptForSession'
+                                                        ? 'border-emerald-500/40 text-emerald-200'
+                                                        : 'border-rose-500/40 text-rose-200'
+                                            )}>
+                                                {decisionLabel}
+                                            </span>
+                                        </div>
+                                        {requestSummary && (
+                                            <p className={cn('mt-1 font-mono text-sparkle-text-secondary break-words [overflow-wrap:anywhere]', compact ? 'text-[9px]' : 'text-[11px]')}>
+                                                {requestSummary}
+                                            </p>
+                                        )}
+                                        {isPendingDecision && onRespondApproval && (
+                                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleApprovalDecision(approval.requestId, 'acceptForSession')}
+                                                    disabled={isDecisionInFlight}
+                                                    className={cn(
+                                                        'rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2 py-1 text-[10px] font-medium text-emerald-100 transition-colors',
+                                                        isDecisionInFlight ? 'cursor-not-allowed opacity-60' : 'hover:bg-emerald-500/25'
+                                                    )}
+                                                >
+                                                    Approve
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleApprovalDecision(approval.requestId, 'decline')}
+                                                    disabled={isDecisionInFlight}
+                                                    className={cn(
+                                                        'rounded-md border border-rose-500/35 bg-rose-500/15 px-2 py-1 text-[10px] font-medium text-rose-100 transition-colors',
+                                                        isDecisionInFlight ? 'cursor-not-allowed opacity-60' : 'hover:bg-rose-500/25'
+                                                    )}
+                                                >
+                                                    Decline
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })}
                         </div>
                     </div>
                 )}
@@ -774,7 +983,7 @@ export function AssistantMessage({
                                 type="button"
                                 onClick={() => setIsMessageInfoOpen((prev) => !prev)}
                                 className={cn(
-                                    'rounded-[4px] border bg-sparkle-bg/85 px-2 py-0.5 font-mono tabular-nums transition-colors',
+                                    'rounded-[4px] border bg-sparkle-bg px-2 py-0.5 font-mono tabular-nums transition-colors',
                                     compact ? 'text-[9px]' : 'text-[10px]',
                                     isMessageInfoOpen
                                         ? 'border-[var(--accent-primary)]/45 text-[var(--accent-primary)]'
@@ -789,7 +998,7 @@ export function AssistantMessage({
                             <span
                                 key={stat.id}
                                 className={cn(
-                                    'rounded-[4px] border border-sparkle-border bg-sparkle-bg/85 px-2 py-0.5 font-mono text-sparkle-text-secondary tabular-nums',
+                                    'rounded-[4px] border border-sparkle-border bg-sparkle-bg px-2 py-0.5 font-mono text-sparkle-text-secondary tabular-nums',
                                     compact ? 'text-[9px]' : 'text-[10px]'
                                 )}
                             >
@@ -800,7 +1009,7 @@ export function AssistantMessage({
                         ))}
                     </div>
                     {hasMultipleAttempts && (
-                        <div className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-sparkle-border bg-sparkle-bg/80 px-1 py-0.5">
+                        <div className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-sparkle-border bg-sparkle-bg px-1 py-0.5">
                             <button
                                 type="button"
                                 disabled={viewIndex === 0}
