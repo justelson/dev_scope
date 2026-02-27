@@ -104,7 +104,7 @@ function MainContent() {
     const location = useLocation()
     const navigate = useNavigate()
     const isSettingsRoute = location.pathname.startsWith('/settings')
-    const isAssistantRoute = location.pathname === '/assistant'
+    const isAssistantRoute = location.pathname === '/assistant' || location.pathname.startsWith('/assistant/')
     const isProjectsAreaRoute = isProjectsAreaPath(location.pathname)
     const { isCollapsed } = useSidebar()
     const { settings } = useSettings()
@@ -166,6 +166,8 @@ function MainContent() {
                     <Route path="/projects/:projectPath" element={<ProjectDetails />} />
                     <Route path="/folder-browse/:folderPath" element={<FolderBrowse />} />
                     <Route path="/assistant" element={<Assistant />} />
+                    <Route path="/assistant/skills" element={<Assistant />} />
+                    <Route path="/skills" element={<Navigate to="/assistant/skills" replace />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/settings/appearance" element={<AppearanceSettings />} />
                     <Route path="/settings/behavior" element={<BehaviorSettings />} />

@@ -20,7 +20,8 @@ import {
 } from './assistant-bridge-helpers'
 
 const REQUEST_TIMEOUT_MS = 120000
-const CODEX_BIN = process.env.CODEX_BIN || 'codex'
+const DEFAULT_CODEX_BIN = process.platform === 'win32' ? 'codex.cmd' : 'codex'
+const CODEX_BIN_ENV = String(process.env.CODEX_BIN || '').trim()
 
 type BridgeRpcContext = any
 type BridgeProcess = ChildProcessByStdio<Writable, Readable, Readable>
@@ -31,6 +32,32 @@ type JsonRpcNotification = {
 }
 
 type TurnEventSource = 'modern' | 'legacy'
+
+function resolveCodexBinary(): string {
+    const candidate = CODEX_BIN_ENV || DEFAULT_CODEX_BIN
+    const normalized = String(candidate || '').trim()
+
+    if (!normalized) {
+        return DEFAULT_CODEX_BIN
+    }
+    if (normalized.length > 512) {
+        throw new Error('Configured CODEX_BIN path is too long.')
+    }
+    if (/[\0\r\n]/.test(normalized)) {
+        throw new Error('Configured CODEX_BIN contains invalid control characters.')
+    }
+    if (/["'`]/.test(normalized)) {
+        throw new Error('Configured CODEX_BIN must be an executable path only (no quotes).')
+    }
+    if (normalized.startsWith('-')) {
+        throw new Error('Configured CODEX_BIN must be an executable name/path, not flags.')
+    }
+    if (/\s/.test(normalized) && !/[\\/]/.test(normalized)) {
+        throw new Error('Configured CODEX_BIN must not include inline arguments.')
+    }
+
+    return normalized
+}
 
 export async function bridgeEnsureInitialized(bridge: BridgeRpcContext): Promise<void> {
     await bridge.startProcess()
@@ -51,10 +78,11 @@ export async function bridgeStartProcess(bridge: BridgeRpcContext): Promise<void
     if (bridge.proc && !bridge.proc.killed) {
         return
     }
+    const codexBin = resolveCodexBinary()
 
-    const proc = spawn(CODEX_BIN, ['app-server'], {
+    const proc = spawn(codexBin, ['app-server'], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        shell: process.platform === 'win32',
+        shell: false,
         windowsHide: true
     }) as BridgeProcess
     bridge.proc = proc
@@ -68,7 +96,7 @@ export async function bridgeStartProcess(bridge: BridgeRpcContext): Promise<void
     proc.on('error', (error) => {
         const shouldAttemptReconnect = bridge.status.connected
         const message = (error as NodeJS.ErrnoException).code === 'ENOENT'
-            ? `Could not find ${CODEX_BIN} in PATH`
+            ? `Could not find ${codexBin} in PATH`
             : (error instanceof Error ? error.message : 'Assistant bridge process failed.')
         bridge.failPending(new Error(message))
         bridge.threadId = null

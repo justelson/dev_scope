@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
     Download, Folder, FolderOpen, GitBranch, Loader2, MessageSquare,
     MessageSquarePlus, MoreHorizontal, PlugZap, Settings2, Shield,
@@ -40,6 +40,7 @@ function getUserMessageDisplayText(message: AssistantHistoryMessage): string {
 }
 
 export function AssistantPageContent({ controller, layoutMode = 'page' }: Props) {
+    const location = useLocation()
     const {
         settings,
         status,
@@ -152,6 +153,7 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
     }, [showProjectDropdown])
 
     const isDockMode = layoutMode === 'dock'
+    const isSkillsView = location.pathname === '/assistant/skills'
     const showCompactSidebarHeader = isDockMode && isSidebarHeaderMinimized
     const canUseEventConsole = settings.assistantAllowEventConsole
     const hasChatMessages = displayHistoryGroups.length > 0
@@ -396,6 +398,7 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                         <div className={cn('flex-1 flex min-w-0', isDockMode && 'relative')}>
                             <section className={cn(
                                 'flex min-w-0 flex-1 flex-col transition-all duration-300',
+                                isSkillsView && 'hidden',
                                 !isDockMode && canUseEventConsole && showEventConsole && 'border-r border-sparkle-border'
                             )}>
                                 {!isEmptyChatState && (
@@ -915,7 +918,62 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                                     )}
                                 </div>
                             </section>
-                            {canUseEventConsole && !isDockMode && (
+                            {isSkillsView && (
+                                <section className="flex min-w-0 flex-1 flex-col">
+                                    <div className={cn(
+                                        'flex items-center justify-between border-b border-sparkle-border bg-sparkle-card',
+                                        isDockMode ? 'gap-2 px-3 py-2' : 'gap-3 px-4 py-2.5'
+                                    )}>
+                                        <div className="min-w-0 flex-1">
+                                            <div className={cn('flex items-center', isDockMode ? 'gap-1.5' : 'gap-2')}>
+                                                <MessageSquare size={isDockMode ? 14 : 15} className="text-sparkle-text-secondary" />
+                                                <h2 className={cn('font-semibold text-sparkle-text', isDockMode ? 'text-xs' : 'text-sm')}>Skills</h2>
+                                            </div>
+                                            <p className={cn('mt-1 text-sparkle-text-secondary', isDockMode ? 'text-[10px]' : 'text-xs')}>
+                                                Assistant capabilities and runtime status.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className={cn('flex-1 overflow-y-auto bg-sparkle-bg', isDockMode ? 'px-3 py-3' : 'px-4 py-4')}>
+                                        <div className={cn('mx-auto w-full space-y-4 animate-fadeIn', isDockMode ? 'max-w-2xl' : 'max-w-3xl')}>
+                                            <div
+                                                className="animate-fadeIn rounded-2xl border border-orange-400/30 bg-gradient-to-r from-orange-500/15 via-orange-400/10 to-transparent p-5"
+                                                style={{ animationDelay: '30ms', animationFillMode: 'both' }}
+                                            >
+                                                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-orange-200">Hot pre-alpha</p>
+                                                <p className="mt-2 text-sm text-sparkle-text">
+                                                    All skills are currently in hot pre-alpha, so even the main dev cannot use them yet.
+                                                </p>
+                                            </div>
+
+                                            <div
+                                                className="animate-fadeIn rounded-2xl border border-sparkle-border bg-sparkle-card p-4"
+                                                style={{ animationDelay: '90ms', animationFillMode: 'both' }}
+                                            >
+                                                <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-sparkle-text-muted">Catalog</h3>
+                                                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                                    {['Frontend Design', 'PDF Tools', 'Remotion Workflows', 'Skill Installer', 'Sparkle Design', 'Code Review Packs'].map((name, index) => (
+                                                        <div
+                                                            key={name}
+                                                            className="animate-fadeIn rounded-xl border border-sparkle-border bg-sparkle-bg/70 px-3 py-2"
+                                                            style={{ animationDelay: `${120 + (index * 35)}ms`, animationFillMode: 'both' }}
+                                                        >
+                                                            <div className="flex items-center justify-between gap-3">
+                                                                <span className="text-sm font-medium text-sparkle-text">{name}</span>
+                                                                <span className="rounded-full border border-orange-400/30 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-200">
+                                                                    Locked
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+                            )}
+                            {!isSkillsView && canUseEventConsole && !isDockMode && (
                                 <aside
                                     aria-hidden={!showEventConsole}
                                     className={cn(
@@ -935,7 +993,7 @@ export function AssistantPageContent({ controller, layoutMode = 'page' }: Props)
                                     </div>
                                 </aside>
                             )}
-                            {canUseEventConsole && isDockMode && (
+                            {!isSkillsView && canUseEventConsole && isDockMode && (
                                 <aside
                                     aria-hidden={!showEventConsole}
                                     className={cn(

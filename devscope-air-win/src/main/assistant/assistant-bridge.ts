@@ -120,6 +120,27 @@ type JsonRpcNotification = {
     method?: string
     params?: Record<string, unknown>
 }
+const CONNECT_MAX_ATTEMPTS = 3
+const CONNECT_RETRY_DELAY_BASE_MS = 600
+
+function isRetryableConnectErrorMessage(message: string): boolean {
+    const normalized = String(message || '').toLowerCase()
+    if (!normalized) return false
+    if (
+        normalized.includes('could not find')
+        || normalized.includes('codex_bin')
+        || normalized.includes('must be an executable')
+        || normalized.includes('invalid control characters')
+    ) {
+        return false
+    }
+    return normalized.includes('timeout')
+        || normalized.includes('econnreset')
+        || normalized.includes('pipe')
+        || normalized.includes('bridge is not connected')
+        || normalized.includes('exited')
+        || normalized.includes('failed')
+}
 export class AssistantBridge extends EventEmitter {
     private subscribers = new Set<number>()
     private history: AssistantHistoryMessage[] = []
@@ -159,6 +180,7 @@ export class AssistantBridge extends EventEmitter {
     private activeProfile = 'safe-dev'
     private reconnectAttempts = 0
     private reconnectTimer: NodeJS.Timeout | null = null
+    private connectInFlight: Promise<{ success: boolean; status: AssistantStatus; error?: string }> | null = null
     public subscribe(webContentsId: number) {
         this.subscribers.add(webContentsId)
         return { success: true }
@@ -168,42 +190,73 @@ export class AssistantBridge extends EventEmitter {
         return { success: true }
     }
     public async connect(options: AssistantConnectOptions = {}) {
-        if (options.approvalMode) {
-            this.status.approvalMode = options.approvalMode
+        if (this.connectInFlight) {
+            return await this.connectInFlight
         }
-        if (options.profile?.trim()) {
-            this.setProfile(options.profile)
-        }
-        if (options.model?.trim()) {
-            this.status.model = options.model.trim()
-            if (options.projectPath?.trim()) {
-                this.projectModelDefaults.set(options.projectPath.trim(), options.model.trim())
+
+        this.connectInFlight = (async () => {
+            if (options.approvalMode) {
+                this.status.approvalMode = options.approvalMode
             }
-        }
-        if (this.status.connected && this.status.state === 'ready' && this.proc && !this.proc.killed) {
-            return { success: true, status: this.getStatus() }
-        }
-        this.status.state = 'connecting'
-        this.emitEvent('status', { status: this.getStatus() })
+            if (options.profile?.trim()) {
+                this.setProfile(options.profile)
+            }
+            if (options.model?.trim()) {
+                this.status.model = options.model.trim()
+                if (options.projectPath?.trim()) {
+                    this.projectModelDefaults.set(options.projectPath.trim(), options.model.trim())
+                }
+            }
+            if (this.status.connected && this.status.state === 'ready' && this.proc && !this.proc.killed) {
+                return { success: true, status: this.getStatus() }
+            }
+            this.status.state = 'connecting'
+            this.emitEvent('status', { status: this.getStatus() })
+            try {
+                await this.ensurePersistenceLoaded()
+                this.ensureActiveSession()
+                let initialized = false
+                let lastConnectError: unknown = null
+                for (let attempt = 1; attempt <= CONNECT_MAX_ATTEMPTS; attempt += 1) {
+                    try {
+                        await this.ensureInitialized()
+                        initialized = true
+                        break
+                    } catch (error) {
+                        lastConnectError = error
+                        const message = error instanceof Error ? error.message : 'Failed to connect assistant bridge.'
+                        const canRetry = attempt < CONNECT_MAX_ATTEMPTS && isRetryableConnectErrorMessage(message)
+                        if (!canRetry) {
+                            throw error
+                        }
+                        await new Promise((resolve) => setTimeout(resolve, CONNECT_RETRY_DELAY_BASE_MS * attempt))
+                    }
+                }
+                if (!initialized) {
+                    throw (lastConnectError instanceof Error ? lastConnectError : new Error('Failed to initialize assistant bridge.'))
+                }
+                this.clearReconnectTimer()
+                this.reconnectAttempts = 0
+                this.status.connected = true
+                this.status.state = 'ready'
+                this.status.lastError = null
+                this.emitEvent('status', { status: this.getStatus() })
+                return { success: true, status: this.getStatus() }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Failed to connect assistant bridge.'
+                this.status.connected = false
+                this.status.state = 'error'
+                this.status.lastError = message
+                this.emitEvent('error', { message })
+                this.emitEvent('status', { status: this.getStatus() })
+                return { success: false, status: this.getStatus(), error: message }
+            }
+        })()
+
         try {
-            await this.ensurePersistenceLoaded()
-            this.ensureActiveSession()
-            await this.ensureInitialized()
-            this.clearReconnectTimer()
-            this.reconnectAttempts = 0
-            this.status.connected = true
-            this.status.state = 'ready'
-            this.status.lastError = null
-            this.emitEvent('status', { status: this.getStatus() })
-            return { success: true, status: this.getStatus() }
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to connect assistant bridge.'
-            this.status.connected = false
-            this.status.state = 'error'
-            this.status.lastError = message
-            this.emitEvent('error', { message })
-            this.emitEvent('status', { status: this.getStatus() })
-            return { success: false, status: this.getStatus(), error: message }
+            return await this.connectInFlight
+        } finally {
+            this.connectInFlight = null
         }
     }
     public disconnect() {

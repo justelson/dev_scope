@@ -13,6 +13,7 @@ type ActionContext = {
     workflowProjectPath: string
     workflowFilePath: string
     workflowRunningKind: WorkflowKind | null
+    isConnecting: boolean
     isBusy: boolean
     isSending: boolean
     status: AssistantStatus
@@ -84,7 +85,8 @@ export function createAssistantPageActions(ctx: ActionContext) {
         return await persistActiveSessionProjectPath(normalizedPath)
     }
 
-    const handleConnect = async () => {
+    const handleConnect = async (): Promise<boolean> => {
+        if (ctx.isConnecting) return false
         ctx.setErrorMessage(null)
         ctx.setIsConnecting(true)
         try {
@@ -97,12 +99,16 @@ export function createAssistantPageActions(ctx: ActionContext) {
 
             if (!result?.success) {
                 ctx.setErrorMessage(result?.error || 'Failed to connect assistant.')
-                return
+                return false
             }
             if (result.status) {
                 ctx.setStatus(result.status as AssistantStatus)
             }
             await ctx.loadSnapshot()
+            return true
+        } catch (error) {
+            ctx.setErrorMessage(error instanceof Error ? error.message : 'Failed to connect assistant.')
+            return false
         } finally {
             ctx.setIsConnecting(false)
         }

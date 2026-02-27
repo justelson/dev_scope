@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import {
     ChevronRight,
@@ -76,10 +76,13 @@ export function AssistantSessionsSidebar({
     onArchiveSession,
     onDeleteSession
 }: AssistantSessionsSidebarProps) {
+    const location = useLocation()
+    const navigate = useNavigate()
     const [renameTarget, setRenameTarget] = useState<AssistantSessionSidebarItem | null>(null)
     const [renameDraft, setRenameDraft] = useState('')
     const [sessionToDelete, setSessionToDelete] = useState<AssistantSessionSidebarItem | null>(null)
     const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(new Set())
+    const isSkillsView = location.pathname === '/assistant/skills'
 
     const getDisplayTitle = (title: string): string => {
         const trimmed = String(title || '').trim()
@@ -117,7 +120,7 @@ export function AssistantSessionsSidebar({
                 })
                 return { ...group, sessions: sortedSessions }
             })
-            // Sort groups by their newest thread creation time
+            // Sort groups by their newest project creation time
             .sort((a, b) => b.createdAt - a.createdAt)
     }, [sessions, activeSessionId])
 
@@ -180,6 +183,14 @@ export function AssistantSessionsSidebar({
         if (compact && !collapsed) {
             onSetCollapsed(true)
         }
+    }
+
+    const handleCreateSessionFromSidebar = async () => {
+        await onCreateSession()
+        if (isSkillsView) {
+            navigate('/assistant')
+        }
+        autoMinimizeIfCompactExpanded()
     }
 
     const confirmDelete = async () => {
@@ -263,12 +274,12 @@ export function AssistantSessionsSidebar({
 
                     <button
                         type="button"
-                        onClick={() => void onCreateSession()}
+                        onClick={() => { void handleCreateSessionFromSidebar() }}
                         className={cn(
                             'group relative flex items-center justify-center rounded-lg text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text',
                             compact ? 'h-8 w-8' : 'h-9 w-9'
                         )}
-                        title="New thread"
+                        title="New chat"
                     >
                         <MessageSquarePlus size={compact ? 16 : 18} />
                     </button>
@@ -332,17 +343,14 @@ export function AssistantSessionsSidebar({
                     <div className={cn(compact ? 'mb-4 pt-8' : 'mb-6 pt-9', 'flex flex-col gap-1')}>
                         <button
                             type="button"
-                            onClick={() => {
-                                void onCreateSession()
-                                autoMinimizeIfCompactExpanded()
-                            }}
+                            onClick={() => { void handleCreateSessionFromSidebar() }}
                             className={cn(
                                 'flex items-center rounded-lg px-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text',
                                 compact ? 'gap-2 py-1.5' : 'gap-3 py-2'
                             )}
                         >
                             <MessageSquarePlus size={compact ? 16 : 18} />
-                            <span className={cn('font-medium', compact ? 'text-xs' : 'text-sm')}>New thread</span>
+                            <span className={cn('font-medium', compact ? 'text-xs' : 'text-sm')}>New chat</span>
                         </button>
 
                         {!compact && (
@@ -363,21 +371,21 @@ export function AssistantSessionsSidebar({
                                     </div>
                                 </div>
 
-                                <button
-                                    type="button"
+                                <Link
+                                    to="/assistant/skills"
                                     className="flex items-center gap-3 rounded-lg px-2 py-2 text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
                                 >
                                     <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.29 7 12 12 20.71 7" /><line x1="12" y1="22" x2="12" y2="12" /></svg>
                                     <span className="text-sm font-medium">Skills</span>
-                                </button>
+                                </Link>
                             </>
                         )}
                     </div>
 
-                    {/* ── Threads Section Label (Divider style) ── */}
+                    {/* ── Projects Section Label (Divider style) ── */}
                     <div className={cn('flex items-center gap-3 px-1', compact ? 'mb-3' : 'mb-4')}>
                         <div className="h-px flex-1 bg-white/5" />
-                        <h3 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-sparkle-text-muted/40">Threads</h3>
+                        <h3 className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-sparkle-text-muted/40">Projects</h3>
                         <div className="h-px flex-1 bg-white/5" />
                     </div>
 
@@ -498,7 +506,7 @@ export function AssistantSessionsSidebar({
                         {groupedSessions.length === 0 && (
                             <div className={cn('flex flex-col items-center gap-2 px-4 text-center', compact ? 'py-6' : 'py-8')}>
                                 <MessageSquarePlus size={compact ? 20 : 24} className="text-sparkle-text-muted/30" />
-                                <p className="text-xs text-sparkle-text-muted">No threads yet</p>
+                                <p className="text-xs text-sparkle-text-muted">No projects yet</p>
                             </div>
                         )}
                     </div>
@@ -518,7 +526,7 @@ export function AssistantSessionsSidebar({
                         <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[var(--accent-primary)]/40 via-[var(--accent-primary)]/10 to-transparent" />
 
                         <div className="p-6">
-                            <h3 className="text-lg font-bold tracking-tight text-white mb-1">Rename Thread</h3>
+                            <h3 className="text-lg font-bold tracking-tight text-white mb-1">Rename Project</h3>
                             <p className="text-sm text-sparkle-text-secondary mb-5">
                                 Enter a new descriptive title for this conversation.
                             </p>
@@ -574,7 +582,7 @@ export function AssistantSessionsSidebar({
 
             <ConfirmModal
                 isOpen={!!sessionToDelete}
-                title="Delete Thread?"
+                title="Delete Project?"
                 message={`Are you sure you want to delete "${sessionToDelete?.title || 'this session'}"? This action cannot be undone.`}
                 confirmLabel="Delete Session"
                 onConfirm={confirmDelete}

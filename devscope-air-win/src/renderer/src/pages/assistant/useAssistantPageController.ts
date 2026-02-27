@@ -22,6 +22,9 @@ type SessionScope = { turnIds: Set<string>; attemptGroupIds: Set<string> }
 type RuntimeModel = { id: string; label: string; isDefault: boolean }
 type ModelListResponse = { success?: boolean; models?: RuntimeModel[]; error?: string }
 const FALLBACK_MODEL_OPTIONS: RuntimeModel[] = [{ id: 'default', label: 'Default (server recommended)', isDefault: false }]
+const AUTO_CONNECT_MAX_ATTEMPTS = 4
+const AUTO_CONNECT_BASE_RETRY_MS = 1200
+const AUTO_CONNECT_MAX_RETRY_MS = 12000
 
 function normalizeRuntimeModels(payload: ModelListResponse | null | undefined): RuntimeModel[] {
     const list = Array.isArray(payload?.models) ? payload.models : []
@@ -76,8 +79,11 @@ export function useAssistantPageController() {
     const [runtimeModels, setRuntimeModels] = useState<RuntimeModel[]>([])
     const [modelsLoading, setModelsLoading] = useState(false)
     const [modelsError, setModelsError] = useState<string | null>(null)
+    const [autoConnectRetryTick, setAutoConnectRetryTick] = useState(0)
 
     const autoConnectAttemptedRef = useRef(false)
+    const autoConnectAttemptsRef = useRef(0)
+    const autoConnectRetryTimerRef = useRef<number | null>(null)
     const headerMenuRef = useRef<HTMLDivElement | null>(null)
     const chatScrollRef = useRef<HTMLDivElement | null>(null)
     const chatAutoScrollRef = useRef(true)
@@ -321,6 +327,7 @@ export function useAssistantPageController() {
         workflowProjectPath,
         workflowFilePath,
         workflowRunningKind,
+        isConnecting,
         isBusy,
         isSending,
         status,
@@ -389,12 +396,74 @@ export function useAssistantPageController() {
     }, [loadModels])
 
     useEffect(() => {
-        if (!settings.assistantEnabled || !settings.assistantAutoConnectOnOpen) return
-        if (autoConnectAttemptedRef.current) return
-        if (status.connected || status.state === 'connecting') return
-        autoConnectAttemptedRef.current = true
-        void actions.handleConnect().catch(() => undefined)
-    }, [settings.assistantEnabled, settings.assistantAutoConnectOnOpen, status.connected, status.state])
+        return () => {
+            if (autoConnectRetryTimerRef.current !== null) {
+                window.clearTimeout(autoConnectRetryTimerRef.current)
+                autoConnectRetryTimerRef.current = null
+            }
+        }
+    }, [])
+
+    useEffect(() => {
+        if (!settings.assistantEnabled || !settings.assistantAutoConnectOnOpen) {
+            autoConnectAttemptedRef.current = false
+            autoConnectAttemptsRef.current = 0
+            if (autoConnectRetryTimerRef.current !== null) {
+                window.clearTimeout(autoConnectRetryTimerRef.current)
+                autoConnectRetryTimerRef.current = null
+            }
+            return
+        }
+        if (status.connected) {
+            autoConnectAttemptedRef.current = true
+            autoConnectAttemptsRef.current = AUTO_CONNECT_MAX_ATTEMPTS
+            if (autoConnectRetryTimerRef.current !== null) {
+                window.clearTimeout(autoConnectRetryTimerRef.current)
+                autoConnectRetryTimerRef.current = null
+            }
+            return
+        }
+        if (status.state === 'connecting' || autoConnectRetryTimerRef.current !== null) {
+            return
+        }
+        if (!autoConnectAttemptedRef.current) {
+            autoConnectAttemptedRef.current = true
+            autoConnectAttemptsRef.current = 0
+        }
+        if (autoConnectAttemptsRef.current >= AUTO_CONNECT_MAX_ATTEMPTS) {
+            return
+        }
+
+        autoConnectAttemptsRef.current += 1
+        const attemptNumber = autoConnectAttemptsRef.current
+        void actions.handleConnect()
+            .then((success) => {
+                if (success) {
+                    autoConnectAttemptsRef.current = AUTO_CONNECT_MAX_ATTEMPTS
+                    return
+                }
+                if (attemptNumber >= AUTO_CONNECT_MAX_ATTEMPTS) return
+                const delay = Math.min(
+                    AUTO_CONNECT_MAX_RETRY_MS,
+                    AUTO_CONNECT_BASE_RETRY_MS * (2 ** Math.max(0, attemptNumber - 1))
+                )
+                autoConnectRetryTimerRef.current = window.setTimeout(() => {
+                    autoConnectRetryTimerRef.current = null
+                    setAutoConnectRetryTick((value) => value + 1)
+                }, delay)
+            })
+            .catch(() => {
+                if (attemptNumber >= AUTO_CONNECT_MAX_ATTEMPTS) return
+                const delay = Math.min(
+                    AUTO_CONNECT_MAX_RETRY_MS,
+                    AUTO_CONNECT_BASE_RETRY_MS * (2 ** Math.max(0, attemptNumber - 1))
+                )
+                autoConnectRetryTimerRef.current = window.setTimeout(() => {
+                    autoConnectRetryTimerRef.current = null
+                    setAutoConnectRetryTick((value) => value + 1)
+                }, delay)
+            })
+    }, [settings.assistantEnabled, settings.assistantAutoConnectOnOpen, status.connected, status.state, autoConnectRetryTick])
 
     useEffect(() => {
         setShowEventConsole(canUseEventConsole && settings.assistantShowEventPanel)

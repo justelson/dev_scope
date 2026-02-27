@@ -119,7 +119,7 @@ export function AssistantDock() {
     const location = useLocation()
     const dock = useAssistantDockState()
 
-    const isAssistantRoute = location.pathname === '/assistant'
+    const isAssistantRoute = location.pathname === '/assistant' || location.pathname.startsWith('/assistant/')
     const isProjectsAreaRoute = isProjectsAreaPath(location.pathname)
     const routeContextPath = useMemo(
         () => resolveContextPathFromRoute(location.pathname),
