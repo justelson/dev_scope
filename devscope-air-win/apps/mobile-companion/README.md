@@ -1,27 +1,47 @@
-# Devscope Mobile Companion (Web MVP)
+# Devscope Mobile Companion (Web)
 
-Mobile-first web controller for Devscope remote access.
+Deployable mobile web client for remote access pairing and relay validation.
 
-## What this app does now
-- Validates relay server (`/health`, `/.well-known/devscope`).
-- Claims pairing from desktop QR/deep-link payload.
-- Polls linked devices until desktop approval is visible.
-- Connects to relay websocket and shows incoming events.
-- Sends a test relay envelope to a desktop device.
+## Delivered scope
+- Relay validation (`/health`, `/.well-known/devscope`)
+- Pairing claim (`/v1/pairings/claim`)
+- Linked device polling (`/v1/devices/:ownerId`)
+- Relay websocket connectivity (`/v1/relay/ws`)
+- Test envelope publish (`/v1/relay/publish`)
+- Persistent device identity in local storage
 
-## Quick start
+## Local run
 1. `cd apps/mobile-companion`
 2. `npm install`
-3. `npm run dev`
-4. Open the printed local URL on phone browser (same network), or deploy to Vercel.
+3. Copy `.env.example` to `.env` and adjust values if needed
+4. `npm run dev`
 
-## Pairing format
-`devscope://pair?pairingId=<id>&token=<oneTimeToken>`
+## Vercel deploy
+1. Import this repository in Vercel.
+2. Set project **Root Directory** to `apps/mobile-companion`.
+3. Build settings:
+   - Build command: `npm run build`
+   - Output directory: `dist`
+4. Add environment variables:
+   - `VITE_DEVSCOPE_RELAY_URL` (required)
+   - `VITE_DEVSCOPE_RELAY_API_KEY` (optional)
+5. Deploy.
 
-## Current limits
-- This is a Beta MVP UI, not the final production mobile app.
-- Envelope payload is stubbed test data (no full message encryption yet).
-- Device revoke/rename controls are not implemented yet.
+## Connect phone workflow
+1. Open desktop app `Settings -> Remote Access`.
+2. Validate relay server and generate pairing.
+3. On mobile web app:
+   - paste pairing deep-link and click `Parse Link`, or
+   - paste `pairingId` + `oneTimeToken` directly.
+4. Enter desktop confirmation code and click `Claim Pairing`.
+5. Wait for desktop approval (device appears in linked devices).
+6. Connect websocket and publish a test envelope to verify live relay path.
 
-## Contract source of truth
-`src/shared/contracts/remote-access.ts`
+## Pairing URL support
+- `devscope://pair?pairingId=<id>&token=<token>`
+- Web query params:
+  - `https://<mobile-web-app>/?pairingId=<id>&token=<token>`
+
+## Notes
+- This is Beta and focused on connection validation and control flow.
+- Production E2EE message crypto integration remains a follow-up phase.

@@ -41,9 +41,17 @@ type DeviceIdentity = {
   label: string
 }
 
-const DEFAULT_RELAY_URL = 'https://devscope-production.up.railway.app'
-const DEVICE_ID_KEY = 'devscope.mobile.device.id.v1'
-const DEVICE_PUB_KEY = 'devscope.mobile.device.pub.v1'
+type WsStatus = 'idle' | 'connecting' | 'connected' | 'error'
+
+const STORAGE = {
+  relayUrl: 'devscope.mobile.relay.url.v1',
+  relayApiKey: 'devscope.mobile.relay.api-key.v1',
+  ownerId: 'devscope.mobile.owner-id.v1',
+  deviceId: 'devscope.mobile.device.id.v1',
+  devicePub: 'devscope.mobile.device.pub.v1'
+} as const
+
+const DEFAULT_RELAY_URL = (import.meta.env.VITE_DEVSCOPE_RELAY_URL as string | undefined) || 'https://devscope-production.up.railway.app'
 
 function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, '')
@@ -64,27 +72,46 @@ function createRandomToken(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 12)}`
 }
 
+function toBase64Utf8(input: string): string {
+  const bytes = new TextEncoder().encode(input)
+  let binary = ''
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+  return btoa(binary)
+}
+
 function createPublicKeyStub(): string {
   const bytes = new Uint8Array(24)
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes)
-  } else {
-    for (let i = 0; i < bytes.length; i += 1) {
-      bytes[i] = Math.floor(Math.random() * 256)
-    }
-  }
+  crypto.getRandomValues(bytes)
   let out = ''
   for (const byte of bytes) out += String.fromCharCode(byte)
   return btoa(out)
 }
 
+function readStorage(key: string, fallback = ''): string {
+  try {
+    return localStorage.getItem(key)?.trim() || fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writeStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // no-op
+  }
+}
+
 function getOrCreateIdentity(): DeviceIdentity {
-  const storedDeviceId = localStorage.getItem(DEVICE_ID_KEY)?.trim()
-  const storedPub = localStorage.getItem(DEVICE_PUB_KEY)?.trim()
+  const storedDeviceId = readStorage(STORAGE.deviceId)
+  const storedPub = readStorage(STORAGE.devicePub)
   const deviceId = storedDeviceId || createRandomToken('mobile')
   const publicKey = storedPub || createPublicKeyStub()
-  localStorage.setItem(DEVICE_ID_KEY, deviceId)
-  localStorage.setItem(DEVICE_PUB_KEY, publicKey)
+  writeStorage(STORAGE.deviceId, deviceId)
+  writeStorage(STORAGE.devicePub, publicKey)
   return {
     deviceId,
     publicKey,
@@ -98,7 +125,7 @@ async function fetchJson<T>(
   relayApiKey?: string
 ): Promise<T> {
   const headers = new Headers(init?.headers || {})
-  headers.set('content-type', 'application/json')
+  if (init?.body) headers.set('content-type', 'application/json')
   if (relayApiKey?.trim()) {
     headers.set('x-devscope-relay-key', relayApiKey.trim())
   }
@@ -111,36 +138,65 @@ async function fetchJson<T>(
   return payload as T
 }
 
+function formatAge(timestamp: number): string {
+  const delta = Math.max(0, Date.now() - timestamp)
+  const seconds = Math.floor(delta / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h`
+}
+
 export default function App() {
-  const [relayUrl, setRelayUrl] = useState(DEFAULT_RELAY_URL)
-  const [relayApiKey, setRelayApiKey] = useState('')
+  const [relayUrl, setRelayUrl] = useState(() => readStorage(STORAGE.relayUrl, DEFAULT_RELAY_URL))
+  const [relayApiKey, setRelayApiKey] = useState(() => readStorage(STORAGE.relayApiKey, import.meta.env.VITE_DEVSCOPE_RELAY_API_KEY || ''))
+  const [ownerId, setOwnerId] = useState(() => readStorage(STORAGE.ownerId, ''))
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle', message: '' })
   const [wellKnown, setWellKnown] = useState<WellKnownResponse | null>(null)
   const [pairingLink, setPairingLink] = useState('')
+  const [pairingIdInput, setPairingIdInput] = useState('')
+  const [pairingTokenInput, setPairingTokenInput] = useState('')
   const [confirmationCode, setConfirmationCode] = useState('')
-  const [ownerId, setOwnerId] = useState('')
   const [pairingStatus, setPairingStatus] = useState<'idle' | 'claiming' | 'claimed' | 'approved' | 'error'>('idle')
-  const [statusMessage, setStatusMessage] = useState('Not paired')
+  const [statusMessage, setStatusMessage] = useState('Ready to pair')
   const [devices, setDevices] = useState<ConnectedDevice[]>([])
-  const [events, setEvents] = useState<string[]>([])
   const [threadId, setThreadId] = useState('mobile-thread')
-  const identityRef = useRef<DeviceIdentity>(getOrCreateIdentity())
+  const [targetDeviceInput, setTargetDeviceInput] = useState('')
+  const [testPayload, setTestPayload] = useState('mobile-test')
+  const [events, setEvents] = useState<string[]>([])
+  const [wsStatus, setWsStatus] = useState<WsStatus>('idle')
   const wsRef = useRef<WebSocket | null>(null)
+  const identityRef = useRef<DeviceIdentity>(getOrCreateIdentity())
 
   const normalizedRelayUrl = useMemo(() => normalizeUrl(relayUrl), [relayUrl])
   const mobileDeviceId = identityRef.current.deviceId
   const mobilePublicKey = identityRef.current.publicKey
-  const targetDesktopDeviceId = useMemo(
+  const autoDesktopTargetId = useMemo(
     () => devices.find((item) => item.id !== mobileDeviceId && !item.revokedAt)?.id || '',
     [devices, mobileDeviceId]
   )
+  const targetDesktopDeviceId = targetDeviceInput.trim() || autoDesktopTargetId
 
   useEffect(() => {
     const parsed = parsePairingFromCurrentUrl(window.location.href)
-    if (parsed) {
-      setPairingLink(`devscope://pair?pairingId=${encodeURIComponent(parsed.pairingId)}&token=${encodeURIComponent(parsed.token)}`)
-    }
+    if (!parsed) return
+    setPairingIdInput(parsed.pairingId)
+    setPairingTokenInput(parsed.token)
+    setPairingLink(`devscope://pair?pairingId=${encodeURIComponent(parsed.pairingId)}&token=${encodeURIComponent(parsed.token)}`)
   }, [])
+
+  useEffect(() => {
+    writeStorage(STORAGE.relayUrl, relayUrl)
+  }, [relayUrl])
+
+  useEffect(() => {
+    writeStorage(STORAGE.relayApiKey, relayApiKey)
+  }, [relayApiKey])
+
+  useEffect(() => {
+    writeStorage(STORAGE.ownerId, ownerId)
+  }, [ownerId])
 
   useEffect(() => {
     return () => {
@@ -152,7 +208,18 @@ export default function App() {
   }, [])
 
   const pushEvent = (message: string) => {
-    setEvents((prev) => [`${new Date().toLocaleTimeString()}  ${message}`, ...prev].slice(0, 120))
+    setEvents((prev) => [`${new Date().toLocaleTimeString()}  ${message}`, ...prev].slice(0, 160))
+  }
+
+  const parsePairingInput = () => {
+    const parsed = parsePairingDeepLink(pairingLink.trim())
+    if (!parsed) {
+      pushEvent('Pairing link parse failed')
+      return
+    }
+    setPairingIdInput(parsed.pairingId)
+    setPairingTokenInput(parsed.token)
+    pushEvent(`Pairing parsed: ${parsed.pairingId}`)
   }
 
   const validateServer = async () => {
@@ -164,30 +231,55 @@ export default function App() {
     try {
       await fetchJson(`${normalizedRelayUrl}/health`)
       const wk = await fetchJson<WellKnownResponse>(`${normalizedRelayUrl}/.well-known/devscope`)
-      if (wk.service !== 'devscope-relay') {
-        throw new Error('Not a Devscope relay server.')
-      }
+      if (wk.service !== 'devscope-relay') throw new Error('Not a Devscope relay server.')
       setWellKnown(wk)
       setValidation({
         status: 'ok',
-        message: `Relay OK (${wk.relayKind}).`,
+        message: `Relay validated (${wk.relayKind}).`,
         fingerprint: wk.fingerprint
       })
-      pushEvent(`Validated relay ${normalizedRelayUrl}`)
+      pushEvent(`Relay validated: ${normalizedRelayUrl}`)
     } catch (error: any) {
-      setValidation({ status: 'error', message: error?.message || 'Validation failed.' })
-      pushEvent(`Validation error: ${error?.message || 'unknown error'}`)
+      setValidation({
+        status: 'error',
+        message: error?.message || 'Relay validation failed.'
+      })
+      pushEvent(`Relay validation failed: ${error?.message || 'unknown error'}`)
     }
   }
 
+  const refreshDevices = async (owner: string, checkApproval = true): Promise<ConnectedDevice[]> => {
+    if (!owner) return []
+    const response = await fetchJson<{ success: boolean; devices: ConnectedDevice[] }>(
+      `${normalizedRelayUrl}/v1/devices/${encodeURIComponent(owner)}`,
+      undefined,
+      relayApiKey
+    )
+    const nextDevices = Array.isArray(response.devices) ? response.devices : []
+    setDevices(nextDevices)
+
+    if (checkApproval) {
+      const self = nextDevices.find((item) => item.id === mobileDeviceId && !item.revokedAt)
+      if (self && pairingStatus !== 'approved') {
+        setPairingStatus('approved')
+        setStatusMessage('Approved and linked.')
+        pushEvent('Desktop approved this device.')
+      }
+    }
+
+    return nextDevices
+  }
+
   const claimPairing = async () => {
-    const parsed = parsePairingDeepLink(pairingLink.trim())
-    if (!parsed) {
+    const pairingId = pairingIdInput.trim()
+    const oneTimeToken = pairingTokenInput.trim()
+    const code = confirmationCode.trim()
+
+    if (!pairingId || !oneTimeToken) {
       setPairingStatus('error')
-      setStatusMessage('Invalid pairing deep-link payload.')
+      setStatusMessage('Provide pairingId and token (or parse link first).')
       return
     }
-    const code = confirmationCode.trim()
     if (code.length !== 6) {
       setPairingStatus('error')
       setStatusMessage('Enter the 6-digit confirmation code.')
@@ -196,15 +288,14 @@ export default function App() {
 
     setPairingStatus('claiming')
     setStatusMessage('Claiming pairing...')
-
     try {
       const response = await fetchJson<ClaimResult>(
         `${normalizedRelayUrl}/v1/pairings/claim`,
         {
           method: 'POST',
           body: JSON.stringify({
-            pairingId: parsed.pairingId,
-            oneTimeToken: parsed.token,
+            pairingId,
+            oneTimeToken,
             confirmationCode: code,
             mobileDeviceId,
             mobilePublicKey,
@@ -221,6 +312,7 @@ export default function App() {
       setPairingStatus('claimed')
       setStatusMessage('Claimed. Waiting for desktop approval...')
       pushEvent(`Pairing claimed for owner ${response.ownerId}`)
+      await refreshDevices(response.ownerId, true)
     } catch (error: any) {
       setPairingStatus('error')
       setStatusMessage(error?.message || 'Unable to claim pairing.')
@@ -228,70 +320,79 @@ export default function App() {
     }
   }
 
-  const fetchDevices = async (owner: string) => {
-    if (!owner) return
-    const response = await fetchJson<{ success: boolean; devices: ConnectedDevice[] }>(
-      `${normalizedRelayUrl}/v1/devices/${encodeURIComponent(owner)}`,
-      undefined,
-      relayApiKey
-    )
-    setDevices(Array.isArray(response.devices) ? response.devices : [])
-  }
-
   useEffect(() => {
     if (!ownerId || pairingStatus === 'error') return
-    let cancelled = false
-    const check = async () => {
+    let active = true
+    const tick = async () => {
       try {
-        await fetchDevices(ownerId)
-        if (cancelled) return
-        const self = devices.find((item) => item.id === mobileDeviceId && !item.revokedAt)
-        if (self && pairingStatus !== 'approved') {
-          setPairingStatus('approved')
-          setStatusMessage('Approved and linked.')
-          pushEvent('Desktop approved this mobile device.')
-        }
+        await refreshDevices(ownerId, true)
       } catch (error: any) {
-        pushEvent(`Device refresh error: ${error?.message || 'unknown error'}`)
+        if (active) {
+          pushEvent(`Device polling failed: ${error?.message || 'unknown error'}`)
+        }
       }
     }
 
-    void check()
+    void tick()
     const timer = window.setInterval(() => {
-      void check()
-    }, 4000)
+      void tick()
+    }, 5000)
 
     return () => {
-      cancelled = true
+      active = false
       window.clearInterval(timer)
     }
-  }, [ownerId, pairingStatus, mobileDeviceId, normalizedRelayUrl, relayApiKey, devices])
+  }, [ownerId, normalizedRelayUrl, relayApiKey, pairingStatus])
 
   const connectWebSocket = () => {
     if (!ownerId) {
-      pushEvent('Set ownerId first by claiming a pairing.')
+      pushEvent('Cannot connect socket: ownerId missing.')
       return
     }
     if (wsRef.current) {
       wsRef.current.close()
       wsRef.current = null
     }
-    const wsBase = toWsUrl(normalizedRelayUrl)
-    const wsUrl = `${wsBase}?ownerId=${encodeURIComponent(ownerId)}&deviceId=${encodeURIComponent(mobileDeviceId)}`
-    const ws = new WebSocket(wsUrl)
-    wsRef.current = ws
-    ws.onopen = () => pushEvent('Relay websocket connected.')
-    ws.onclose = () => pushEvent('Relay websocket disconnected.')
-    ws.onerror = () => pushEvent('Relay websocket error.')
-    ws.onmessage = (event) => {
-      const text = typeof event.data === 'string' ? event.data : '[binary]'
-      pushEvent(`WS <- ${text.slice(0, 220)}`)
+    try {
+      const wsBase = toWsUrl(normalizedRelayUrl)
+      const wsUrl = `${wsBase}?ownerId=${encodeURIComponent(ownerId)}&deviceId=${encodeURIComponent(mobileDeviceId)}`
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
+      setWsStatus('connecting')
+      ws.onopen = () => {
+        setWsStatus('connected')
+        pushEvent('Relay websocket connected')
+      }
+      ws.onclose = () => {
+        setWsStatus('idle')
+        pushEvent('Relay websocket closed')
+      }
+      ws.onerror = () => {
+        setWsStatus('error')
+        pushEvent('Relay websocket error')
+      }
+      ws.onmessage = (event) => {
+        const raw = typeof event.data === 'string' ? event.data : '[binary]'
+        pushEvent(`WS <- ${raw.slice(0, 220)}`)
+      }
+    } catch (error: any) {
+      setWsStatus('error')
+      pushEvent(`Websocket connect failed: ${error?.message || 'unknown error'}`)
     }
+  }
+
+  const disconnectWebSocket = () => {
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+    setWsStatus('idle')
+    pushEvent('Relay websocket manually disconnected')
   }
 
   const publishTestEnvelope = async () => {
     if (!ownerId || !targetDesktopDeviceId) {
-      pushEvent('No desktop target found to publish test envelope.')
+      pushEvent('Provide ownerId and a desktop target deviceId first.')
       return
     }
     try {
@@ -302,7 +403,7 @@ export default function App() {
         fromDeviceId: mobileDeviceId,
         toDeviceId: targetDesktopDeviceId,
         nonce: createRandomToken('nonce'),
-        ciphertext: btoa(`mobile-test:${Date.now()}`),
+        ciphertext: toBase64Utf8(testPayload || `mobile-test:${Date.now()}`),
         authTag: createRandomToken('tag'),
         sentAt: Date.now()
       }
@@ -314,99 +415,138 @@ export default function App() {
         },
         relayApiKey
       )
-      pushEvent(`Published envelope. delivered=${result.delivered}`)
+      pushEvent(`Envelope published. delivered=${result.delivered}`)
     } catch (error: any) {
-      pushEvent(`Publish error: ${error?.message || 'unknown error'}`)
+      pushEvent(`Publish failed: ${error?.message || 'unknown error'}`)
     }
   }
 
   return (
     <main className="page">
-      <header className="card">
-        <h1>Devscope Mobile Companion</h1>
-        <p className="muted">Mobile web controller for desktop Devscope sessions.</p>
+      <header className="card hero">
+        <h1>Devscope Remote Mobile</h1>
+        <p className="muted">Deployable web controller for pairing, approvals, and relay session checks.</p>
         <div className="pill-row">
           <span className="pill">Beta</span>
-          <span className="pill">Controller Only</span>
-          <span className="pill">E2EE Envelope</span>
+          <span className="pill">Vercel Ready</span>
+          <span className="pill">Owner: {ownerId || 'not-linked'}</span>
         </div>
       </header>
 
       <section className="card">
-        <h2>Relay Connection</h2>
+        <h2>1. Relay Setup</h2>
         <label>
           Relay URL
-          <input value={relayUrl} onChange={(e) => setRelayUrl(e.target.value)} placeholder="https://relay.example.com" />
+          <input value={relayUrl} onChange={(event) => setRelayUrl(event.target.value)} placeholder="https://relay.example.com" />
         </label>
         <label>
           Relay API key (optional)
-          <input value={relayApiKey} onChange={(e) => setRelayApiKey(e.target.value)} placeholder="x-devscope-relay-key" />
+          <input value={relayApiKey} onChange={(event) => setRelayApiKey(event.target.value)} placeholder="x-devscope-relay-key" />
         </label>
         <button onClick={() => void validateServer()} disabled={validation.status === 'loading'}>
           {validation.status === 'loading' ? 'Validating...' : 'Validate Relay'}
         </button>
         {validation.status !== 'idle' && (
-          <p className={`status ${validation.status}`}>{validation.message}{validation.fingerprint ? `  fingerprint=${validation.fingerprint}` : ''}</p>
+          <p className={`status ${validation.status}`}>
+            {validation.message}
+            {validation.fingerprint ? `  fingerprint=${validation.fingerprint}` : ''}
+          </p>
         )}
         {wellKnown && (
           <p className="muted small">
-            protocol={wellKnown.protocolVersion}  kind={wellKnown.relayKind}  capabilities={wellKnown.capabilities.join(', ')}
+            protocol={wellKnown.protocolVersion}  kind={wellKnown.relayKind}  e2ee={String(wellKnown.requiresE2EE)}
           </p>
         )}
       </section>
 
       <section className="card">
-        <h2>Pairing Claim</h2>
-        <p className="muted small">Paste desktop QR/deep-link payload and enter the same 6-digit code shown on desktop.</p>
+        <h2>2. Pairing Claim</h2>
+        <p className="muted small">Paste the desktop pairing link, parse it, then confirm with the same 6-digit code.</p>
         <label>
-          Pairing link
+          Pairing link (optional)
           <textarea
             rows={3}
             value={pairingLink}
-            onChange={(e) => setPairingLink(e.target.value)}
+            onChange={(event) => setPairingLink(event.target.value)}
             placeholder="devscope://pair?pairingId=...&token=..."
           />
+        </label>
+        <div className="row">
+          <button onClick={parsePairingInput} type="button">Parse Link</button>
+        </div>
+        <label>
+          Pairing ID
+          <input value={pairingIdInput} onChange={(event) => setPairingIdInput(event.target.value)} placeholder="pairingId" />
+        </label>
+        <label>
+          One-time token
+          <input value={pairingTokenInput} onChange={(event) => setPairingTokenInput(event.target.value)} placeholder="oneTimeToken" />
         </label>
         <label>
           Confirmation code
           <input
             value={confirmationCode}
-            onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onChange={(event) => setConfirmationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
             placeholder="123456"
           />
         </label>
         <button onClick={() => void claimPairing()} disabled={pairingStatus === 'claiming'}>
           {pairingStatus === 'claiming' ? 'Claiming...' : 'Claim Pairing'}
         </button>
-        <p className={`status ${pairingStatus === 'error' ? 'error' : pairingStatus === 'approved' ? 'ok' : 'loading'}`}>{statusMessage}</p>
+        <p className={`status ${pairingStatus === 'approved' ? 'ok' : pairingStatus === 'error' ? 'error' : 'loading'}`}>
+          {statusMessage}
+        </p>
         <p className="muted small">mobileDeviceId={mobileDeviceId}</p>
       </section>
 
       <section className="card">
-        <h2>Linked Devices</h2>
-        <div className="actions">
-          <input value={ownerId} onChange={(e) => setOwnerId(e.target.value.trim())} placeholder="ownerId" />
-          <button onClick={() => void fetchDevices(ownerId)} disabled={!ownerId}>Refresh</button>
+        <h2>3. Linked Devices</h2>
+        <div className="row">
+          <input value={ownerId} onChange={(event) => setOwnerId(event.target.value.trim())} placeholder="ownerId" />
+          <button onClick={() => void refreshDevices(ownerId, false)} disabled={!ownerId} type="button">Refresh</button>
         </div>
-        {devices.length === 0 && <p className="muted">No linked devices found.</p>}
+        <label>
+          Desktop target device ID (optional override)
+          <input
+            value={targetDeviceInput}
+            onChange={(event) => setTargetDeviceInput(event.target.value)}
+            placeholder={autoDesktopTargetId || 'auto-selected from linked devices'}
+          />
+        </label>
+        {devices.length === 0 && <p className="muted">No linked devices yet.</p>}
         {devices.map((device) => (
           <article key={device.id} className="device-item">
             <strong>{device.label || device.id}</strong>
             <span className="muted small">{device.platform}  {device.id}</span>
+            <span className="muted small">
+              linked {formatAge(device.linkedAt)} ago  seen {formatAge(device.lastSeenAt)} ago
+            </span>
             <span className="muted small">fingerprint={device.fingerprint}</span>
           </article>
         ))}
       </section>
 
       <section className="card">
-        <h2>Relay Stream</h2>
-        <div className="actions">
-          <button onClick={connectWebSocket} disabled={!ownerId}>Connect WebSocket</button>
-          <input value={threadId} onChange={(e) => setThreadId(e.target.value)} placeholder="threadId" />
-          <button onClick={() => void publishTestEnvelope()} disabled={!ownerId}>Publish Test Envelope</button>
+        <h2>4. Relay Stream Check</h2>
+        <div className="pill-row">
+          <span className="pill">ws={wsStatus}</span>
+          <span className="pill">target={targetDesktopDeviceId || 'none'}</span>
         </div>
+        <div className="row">
+          <button onClick={connectWebSocket} disabled={!ownerId || wsStatus === 'connecting'} type="button">Connect WS</button>
+          <button onClick={disconnectWebSocket} disabled={wsStatus === 'idle'} type="button">Disconnect WS</button>
+        </div>
+        <label>
+          Thread ID
+          <input value={threadId} onChange={(event) => setThreadId(event.target.value)} placeholder="threadId" />
+        </label>
+        <label>
+          Test payload
+          <input value={testPayload} onChange={(event) => setTestPayload(event.target.value)} placeholder="message body" />
+        </label>
+        <button onClick={() => void publishTestEnvelope()} disabled={!ownerId} type="button">Publish Test Envelope</button>
         <div className="events">
-          {events.length === 0 ? <p className="muted">No relay events yet.</p> : events.map((line, idx) => <p key={idx}>{line}</p>)}
+          {events.length === 0 ? <p className="muted">No relay events yet.</p> : events.map((line, index) => <p key={index}>{line}</p>)}
         </div>
       </section>
     </main>
