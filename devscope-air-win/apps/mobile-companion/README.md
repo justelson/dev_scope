@@ -1,27 +1,27 @@
-# Devscope Mobile Companion (Scaffold)
+# Devscope Mobile Companion (Web MVP)
 
-This folder documents the mobile client contract for remote access.
+Mobile-first web controller for Devscope remote access.
 
-## Required Capabilities
-- Scan QR pairing payload from desktop.
-- Enter/confirm short code before linking.
-- Show connected device state and revoke status.
-- Open relay websocket and exchange encrypted envelopes.
+## What this app does now
+- Validates relay server (`/health`, `/.well-known/devscope`).
+- Claims pairing from desktop QR/deep-link payload.
+- Polls linked devices until desktop approval is visible.
+- Connects to relay websocket and shows incoming events.
+- Sends a test relay envelope to a desktop device.
 
-## Deep Link Format
+## Quick start
+1. `cd apps/mobile-companion`
+2. `npm install`
+3. `npm run dev`
+4. Open the printed local URL on phone browser (same network), or deploy to Vercel.
+
+## Pairing format
 `devscope://pair?pairingId=<id>&token=<oneTimeToken>`
 
-## API Contract
-Use `src/shared/contracts/remote-access.ts` as the single source of truth.
+## Current limits
+- This is a Beta MVP UI, not the final production mobile app.
+- Envelope payload is stubbed test data (no full message encryption yet).
+- Device revoke/rename controls are not implemented yet.
 
-## Minimal Mobile Sequence
-1. Parse deep-link payload.
-2. Prompt user to confirm displayed 6-digit code.
-3. Call `POST /v1/pairings/claim`.
-4. Wait for desktop approval.
-5. Connect websocket: `/v1/relay/ws?ownerId=...&deviceId=...`.
-
-## Security Expectations
-- Generate device keypair locally on mobile.
-- Never send private keys to relay.
-- Encrypt session payloads before `relay/publish`.
+## Contract source of truth
+`src/shared/contracts/remote-access.ts`

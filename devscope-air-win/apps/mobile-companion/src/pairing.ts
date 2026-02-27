@@ -14,3 +14,15 @@ export function parsePairingDeepLink(link: string): ParsedPairingLink | null {
     return null
   }
 }
+
+export function parsePairingFromCurrentUrl(currentUrl: string): ParsedPairingLink | null {
+  try {
+    const url = new URL(currentUrl)
+    const pairingId = url.searchParams.get('pairingId')?.trim() || ''
+    const token = url.searchParams.get('token')?.trim() || ''
+    if (!pairingId || !token) return null
+    return { pairingId, token }
+  } catch {
+    return null
+  }
+}
