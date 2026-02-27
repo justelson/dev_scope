@@ -42,7 +42,7 @@ type RelayConnectedDevice = {
     verified?: boolean
 }
 
-const DEVSCOPE_CLOUD_URL = 'https://devscope-relay.up.railway.app'
+const DEVSCOPE_CLOUD_URL = 'https://devscope-production.up.railway.app'
 
 function normalizeUrl(raw: string): string {
     const trimmed = raw.trim()
@@ -254,7 +254,12 @@ export default function RemoteAccessSettings() {
                             <Smartphone className="text-cyan-300" size={24} />
                         </div>
                         <div>
-                            <h1 className="text-xl font-semibold text-sparkle-text">Remote Access</h1>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-xl font-semibold text-sparkle-text">Remote Access</h1>
+                                <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-200">
+                                    Beta
+                                </span>
+                            </div>
                             <p className="text-sm text-sparkle-text-secondary">Optional mobile control with cloud or self-hosted relay</p>
                         </div>
                     </div>
@@ -318,105 +323,120 @@ export default function RemoteAccessSettings() {
                     </div>
                 </section>
 
-                <section className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
-                    <h2 className="text-base font-semibold text-sparkle-text">Relay Server Validation</h2>
-                    <p className="mt-1 text-sm text-sparkle-text-secondary">
-                        Validate compatibility before connecting. Custom servers must expose `/.well-known/devscope`.
-                    </p>
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    <section className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
+                        <h2 className="text-base font-semibold text-sparkle-text">Relay Server Validation</h2>
+                        <p className="mt-1 text-sm text-sparkle-text-secondary">
+                            Validate compatibility before connecting. Custom servers must expose `/.well-known/devscope`.
+                        </p>
 
-                    <div className="mt-4 space-y-3">
-                        {settings.remoteAccessMode === 'self-hosted' ? (
+                        <div className="mt-4 grid grid-cols-1 gap-3">
+                            <div className="rounded-lg border border-sparkle-border bg-sparkle-bg p-3">
+                                {settings.remoteAccessMode === 'self-hosted' ? (
+                                    <label className="block">
+                                        <span className="text-xs text-sparkle-text-muted">Self-hosted relay URL</span>
+                                        <input
+                                            value={serverInput}
+                                            onChange={(event) => setServerInput(event.target.value)}
+                                            placeholder="https://relay.example.com"
+                                            className="mt-1 w-full rounded-lg border border-sparkle-border bg-sparkle-card px-3 py-2 text-sm text-sparkle-text outline-none transition-colors focus:border-[var(--accent-primary)]/40"
+                                        />
+                                    </label>
+                                ) : (
+                                    <div>
+                                        <p className="text-xs text-sparkle-text-muted">Devscope Cloud endpoint</p>
+                                        <p className="mt-1 break-all font-mono text-xs text-sparkle-text">{DEVSCOPE_CLOUD_URL}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="rounded-lg border border-sparkle-border bg-sparkle-bg p-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => void validateServer()}
+                                        disabled={validation.status === 'loading' || settings.remoteAccessMode === 'local-only'}
+                                        className={cn(
+                                            'inline-flex items-center gap-2 rounded-md border border-sparkle-border bg-sparkle-card px-3 py-1.5 text-xs transition-colors',
+                                            'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text disabled:opacity-60'
+                                        )}
+                                    >
+                                        <RefreshCw size={13} className={cn(validation.status === 'loading' && 'animate-spin')} />
+                                        Validate Server
+                                    </button>
+                                    {activeServerUrl && (
+                                        <span className="rounded border border-sparkle-border px-2 py-1 font-mono text-[11px] text-sparkle-text-muted">
+                                            Active
+                                        </span>
+                                    )}
+                                </div>
+                                {validation.status !== 'idle' && (
+                                    <div
+                                        className={cn(
+                                            'mt-2 rounded-lg border px-3 py-2 text-xs',
+                                            validation.status === 'success'
+                                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                                : validation.status === 'error'
+                                                    ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                                                    : 'border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary'
+                                        )}
+                                    >
+                                        <p>{validation.message}</p>
+                                        {validation.fingerprint && (
+                                            <p className="mt-1 font-mono text-[11px] text-sparkle-text-muted">
+                                                Fingerprint: {validation.fingerprint}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
+                        <h2 className="text-base font-semibold text-sparkle-text">Relay Identity</h2>
+                        <p className="mt-1 text-sm text-sparkle-text-secondary">
+                            These identifiers scope device lists and pairing sessions.
+                        </p>
+                        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                             <label className="block">
-                                <span className="text-xs text-sparkle-text-muted">Self-hosted relay URL</span>
+                                <span className="text-xs text-sparkle-text-muted">Owner ID</span>
                                 <input
-                                    value={serverInput}
-                                    onChange={(event) => setServerInput(event.target.value)}
-                                    placeholder="https://relay.example.com"
+                                    value={settings.remoteAccessOwnerId}
+                                    onChange={(event) => updateSettings({ remoteAccessOwnerId: event.target.value.trim() || 'local-owner' })}
                                     className="mt-1 w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm text-sparkle-text outline-none transition-colors focus:border-[var(--accent-primary)]/40"
                                 />
                             </label>
-                        ) : (
-                            <div className="rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm text-sparkle-text-secondary">
-                                Devscope Cloud endpoint: <span className="font-mono text-sparkle-text">{DEVSCOPE_CLOUD_URL}</span>
-                            </div>
-                        )}
-
-                        <div className="flex flex-wrap items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => void validateServer()}
-                                disabled={validation.status === 'loading' || settings.remoteAccessMode === 'local-only'}
-                                className={cn(
-                                    'inline-flex items-center gap-2 rounded-md border border-sparkle-border bg-sparkle-bg px-3 py-1.5 text-xs transition-colors',
-                                    'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text disabled:opacity-60'
-                                )}
-                            >
-                                <RefreshCw size={13} className={cn(validation.status === 'loading' && 'animate-spin')} />
-                                Validate Server
-                            </button>
-                            {activeServerUrl && (
-                                <span className="rounded border border-sparkle-border px-2 py-1 font-mono text-[11px] text-sparkle-text-muted">
-                                    {activeServerUrl}
-                                </span>
-                            )}
+                            <label className="block">
+                                <span className="text-xs text-sparkle-text-muted">Desktop Device ID</span>
+                                <input
+                                    value={settings.remoteAccessDesktopDeviceId}
+                                    onChange={(event) => updateSettings({ remoteAccessDesktopDeviceId: event.target.value.trim() || 'desktop-primary' })}
+                                    className="mt-1 w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm text-sparkle-text outline-none transition-colors focus:border-[var(--accent-primary)]/40"
+                                />
+                            </label>
+                            <label className="block">
+                                <span className="text-xs text-sparkle-text-muted">Relay API Key (optional)</span>
+                                <input
+                                    type="password"
+                                    value={settings.remoteAccessApiKey}
+                                    onChange={(event) => updateSettings({ remoteAccessApiKey: event.target.value })}
+                                    className="mt-1 w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm text-sparkle-text outline-none transition-colors focus:border-[var(--accent-primary)]/40"
+                                />
+                            </label>
+                            <label className="block">
+                                <span className="text-xs text-sparkle-text-muted">Effective Server URL</span>
+                                <input
+                                    value={activeServerUrl || 'local-only'}
+                                    readOnly
+                                    className="mt-1 w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm font-mono text-sparkle-text-muted outline-none"
+                                />
+                            </label>
                         </div>
+                    </section>
+                </div>
 
-                        {validation.status !== 'idle' && (
-                            <div
-                                className={cn(
-                                    'rounded-lg border px-3 py-2 text-xs',
-                                    validation.status === 'success'
-                                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-                                        : validation.status === 'error'
-                                            ? 'border-red-500/30 bg-red-500/10 text-red-200'
-                                            : 'border-sparkle-border bg-sparkle-bg text-sparkle-text-secondary'
-                                )}
-                            >
-                                <p>{validation.message}</p>
-                                {validation.fingerprint && (
-                                    <p className="mt-1 font-mono text-[11px] text-sparkle-text-muted">
-                                        Fingerprint: {validation.fingerprint}
-                                    </p>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </section>
-
-                <section className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
-                    <h2 className="text-base font-semibold text-sparkle-text">Relay Identity</h2>
-                    <p className="mt-1 text-sm text-sparkle-text-secondary">
-                        These identifiers scope device lists and pairing sessions.
-                    </p>
-                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <label className="block">
-                            <span className="text-xs text-sparkle-text-muted">Owner ID</span>
-                            <input
-                                value={settings.remoteAccessOwnerId}
-                                onChange={(event) => updateSettings({ remoteAccessOwnerId: event.target.value.trim() || 'local-owner' })}
-                                className="mt-1 w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm text-sparkle-text outline-none transition-colors focus:border-[var(--accent-primary)]/40"
-                            />
-                        </label>
-                        <label className="block">
-                            <span className="text-xs text-sparkle-text-muted">Desktop Device ID</span>
-                            <input
-                                value={settings.remoteAccessDesktopDeviceId}
-                                onChange={(event) => updateSettings({ remoteAccessDesktopDeviceId: event.target.value.trim() || 'desktop-primary' })}
-                                className="mt-1 w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm text-sparkle-text outline-none transition-colors focus:border-[var(--accent-primary)]/40"
-                            />
-                        </label>
-                        <label className="block md:col-span-2">
-                            <span className="text-xs text-sparkle-text-muted">Relay API Key (optional)</span>
-                            <input
-                                type="password"
-                                value={settings.remoteAccessApiKey}
-                                onChange={(event) => updateSettings({ remoteAccessApiKey: event.target.value })}
-                                className="mt-1 w-full rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 text-sm text-sparkle-text outline-none transition-colors focus:border-[var(--accent-primary)]/40"
-                            />
-                        </label>
-                    </div>
-                </section>
-
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 <section className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
                     <h2 className="text-base font-semibold text-sparkle-text">Desktop Pairing</h2>
                     <p className="mt-1 text-sm text-sparkle-text-secondary">
@@ -510,7 +530,7 @@ export default function RemoteAccessSettings() {
                     </div>
                 </section>
 
-                <section className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
+                <section className="rounded-xl border border-sparkle-border bg-sparkle-card p-5 xl:col-span-2">
                     <h2 className="text-base font-semibold text-sparkle-text">Mobile Pairing Flow</h2>
                     <p className="mt-1 text-sm text-sparkle-text-secondary">
                         Desktop shows QR + short code. Mobile scans QR, confirms code, then desktop approves device pairing.
@@ -521,6 +541,7 @@ export default function RemoteAccessSettings() {
                         <p className="inline-flex items-center gap-2"><Lock size={13} className="text-violet-300" />Use only trusted relays and verify server fingerprint.</p>
                     </div>
                 </section>
+                </div>
             </div>
 
             <ConfirmModal
