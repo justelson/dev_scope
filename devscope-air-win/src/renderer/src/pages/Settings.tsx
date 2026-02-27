@@ -5,7 +5,7 @@
 import { Link } from 'react-router-dom'
 import {
     Palette, RefreshCw, Download, Info,
-    ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal, Bug, Bot
+    ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal, Bot, Smartphone
 } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
@@ -103,6 +103,19 @@ export default function Settings() {
                 />
 
                 <SettingsCard
+                    to="/settings/remote-access"
+                    icon={<Smartphone className="text-cyan-300" size={24} />}
+                    iconBg="bg-cyan-500/10"
+                    title="Remote Access"
+                    description="Optional mobile control via Devscope Cloud or your own server"
+                    preview={
+                        settings.remoteAccessEnabled
+                            ? `${settings.remoteAccessMode === 'self-hosted' ? 'Self-hosted' : settings.remoteAccessMode === 'devscope-cloud' ? 'Devscope Cloud' : 'Local-only'} • ${settings.remoteAccessConnectedDevices.length} devices`
+                            : 'Local-only (disabled)'
+                    }
+                />
+
+                <SettingsCard
                     to="/settings/ai"
                     icon={<Sparkles className="text-violet-400" size={24} />}
                     iconBg="bg-violet-500/10"
@@ -118,15 +131,6 @@ export default function Settings() {
                     title="Terminal"
                     description="Set default terminal and shell behavior"
                     preview={settings.defaultShell === 'cmd' ? 'Default: CMD' : 'Default: PowerShell'}
-                />
-
-                <SettingsCard
-                    to="/settings/logs"
-                    icon={<Bug className="text-amber-400" size={24} />}
-                    iconBg="bg-amber-500/10"
-                    title="Logs"
-                    description="Inspect AI request/response logs"
-                    preview="Commit AI traces"
                 />
 
                 <SettingsCard

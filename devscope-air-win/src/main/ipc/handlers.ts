@@ -30,6 +30,16 @@ import {
     handleTestGroqConnection
 } from './handlers/settings-ai-handlers'
 import {
+    handleRemoteApprovePairing,
+    handleRemoteChallengeServer,
+    handleRemoteClaimPairing,
+    handleRemoteCreatePairing,
+    handleRemoteListDevices,
+    handleRemotePublishEnvelope,
+    handleRemoteRevokeDevice,
+    handleRemoteValidateServer
+} from './handlers/remote-access-handlers'
+import {
     handleCopyToClipboard,
     handleIndexAllFolders,
     handleOpenFile,
@@ -170,6 +180,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:generateCommitMessage', handleGenerateCommitMessage)
     ipcMain.handle('devscope:getAiDebugLogs', handleGetAiDebugLogs)
     ipcMain.handle('devscope:clearAiDebugLogs', handleClearAiDebugLogs)
+    ipcMain.handle('devscope:remote:validateServer', handleRemoteValidateServer)
+    ipcMain.handle('devscope:remote:challengeServer', handleRemoteChallengeServer)
+    ipcMain.handle('devscope:remote:createPairing', handleRemoteCreatePairing)
+    ipcMain.handle('devscope:remote:claimPairing', handleRemoteClaimPairing)
+    ipcMain.handle('devscope:remote:approvePairing', handleRemoteApprovePairing)
+    ipcMain.handle('devscope:remote:listDevices', handleRemoteListDevices)
+    ipcMain.handle('devscope:remote:revokeDevice', handleRemoteRevokeDevice)
+    ipcMain.handle('devscope:remote:publishEnvelope', handleRemotePublishEnvelope)
 
     ipcMain.handle(ASSISTANT_IPC.subscribe, handleAssistantSubscribe)
     ipcMain.handle(ASSISTANT_IPC.unsubscribe, handleAssistantUnsubscribe)

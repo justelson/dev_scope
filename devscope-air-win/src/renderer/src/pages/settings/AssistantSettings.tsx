@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Bot, RefreshCw, Shield, Sparkles, PanelLeft, PlugZap, SlidersHorizontal, Gauge, BarChart3 } from 'lucide-react'
+import { ArrowLeft, Bot, RefreshCw, Shield, Sparkles, PanelLeft, PlugZap, SlidersHorizontal, Gauge, BarChart3, Bug } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import AssistantAccountSettings from './AssistantAccountSettings'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import LogsSettings from './LogsSettings'
 
 type RuntimeModel = { id: string; label: string; isDefault: boolean }
 type ModelListResponse = { success?: boolean; models?: RuntimeModel[]; error?: string }
@@ -19,7 +20,7 @@ const ASSISTANT_PROFILE_OPTIONS = [
 
 export default function AssistantSettings() {
     const { settings, updateSettings } = useSettings()
-    const [activeTab, setActiveTab] = useState<'connection' | 'defaults' | 'behavior' | 'advanced' | 'account' | 'usage'>('connection')
+    const [activeTab, setActiveTab] = useState<'connection' | 'defaults' | 'behavior' | 'advanced' | 'account' | 'usage' | 'logs'>('connection')
     const [runtimeModels, setRuntimeModels] = useState<RuntimeModel[]>([])
     const [modelsLoading, setModelsLoading] = useState(false)
     const [modelsError, setModelsError] = useState<string | null>(null)
@@ -171,6 +172,12 @@ export default function AssistantSettings() {
                     icon={<BarChart3 size={14} />}
                     active={activeTab === 'usage'}
                     onClick={() => setActiveTab('usage')}
+                />
+                <TabButton
+                    title="Logs"
+                    icon={<Bug size={14} />}
+                    active={activeTab === 'logs'}
+                    onClick={() => setActiveTab('logs')}
                 />
             </div>
 
@@ -360,6 +367,10 @@ export default function AssistantSettings() {
 
                 {activeTab === 'usage' && (
                     <AssistantAccountSettings embedded forcedTab="usage" />
+                )}
+
+                {activeTab === 'logs' && (
+                    <LogsSettings embedded />
                 )}
 
                 <div className="pt-1">

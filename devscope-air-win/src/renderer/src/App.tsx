@@ -31,6 +31,7 @@ const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
 const AssistantSettings = lazy(() => import('./pages/settings/AssistantSettings'))
 const AssistantAccountSettings = lazy(() => import('./pages/settings/AssistantAccountSettings'))
+const RemoteAccessSettings = lazy(() => import('./pages/settings/RemoteAccessSettings'))
 const LAST_MAIN_TAB_KEY = 'devscope:last-main-tab:v1'
 
 // Terminal Context
@@ -180,6 +181,7 @@ function MainContent() {
                     <Route path="/settings/assistant" element={<AssistantSettings />} />
                     <Route path="/settings/account" element={<AssistantAccountSettings />} />
                     <Route path="/settings/usage" element={<AssistantAccountSettings />} />
+                    <Route path="/settings/remote-access" element={<RemoteAccessSettings />} />
                     <Route path="*" element={<LaunchRedirect />} />
                 </Routes>
             </Suspense>
