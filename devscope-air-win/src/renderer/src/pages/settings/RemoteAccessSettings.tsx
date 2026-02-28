@@ -69,6 +69,14 @@ export default function RemoteAccessSettings() {
     const [validation, setValidation] = useState<ValidationState>({ status: 'idle', message: '' })
     const [pairing, setPairing] = useState<RelayPairingState>(null)
     const [devicesLoading, setDevicesLoading] = useState(false)
+    const remoteAccessChecked = settings.remoteAccessEnabled && settings.remoteAccessMode !== 'local-only'
+
+    const normalizeRelayError = (message: string): string => {
+        if (/invalid relay api key/i.test(message)) {
+            return 'Relay API key was rejected. In Relay Identity, use the same key as server RELAY_API_KEY, or leave both empty.'
+        }
+        return message
+    }
 
     const activeServerUrl = useMemo(() => {
         if (settings.remoteAccessMode === 'devscope-cloud') return DEVSCOPE_CLOUD_URL
@@ -185,9 +193,9 @@ export default function RemoteAccessSettings() {
                 relayApiKey: settings.remoteAccessApiKey || undefined
             })
             if (!result?.success) {
-                setValidation({ status: 'error', message: result?.error || 'Failed to load connected devices.' })
-                return
-            }
+            setValidation({ status: 'error', message: normalizeRelayError(result?.error || 'Failed to load connected devices.') })
+            return
+        }
             const normalized = (Array.isArray(result.devices) ? result.devices : []).map((device: RelayConnectedDevice) => ({
                 id: String(device.id || ''),
                 name: String(device.label || device.name || 'Unknown device'),
@@ -213,7 +221,7 @@ export default function RemoteAccessSettings() {
             relayApiKey: settings.remoteAccessApiKey || undefined
         })
         if (!result?.success) {
-            setValidation({ status: 'error', message: result?.error || 'Failed to revoke device.' })
+            setValidation({ status: 'error', message: normalizeRelayError(result?.error || 'Failed to revoke device.') })
             return
         }
         await refreshDevices()
@@ -233,7 +241,7 @@ export default function RemoteAccessSettings() {
             deepLinkScheme: 'devscope'
         })
         if (!result?.success) {
-            setValidation({ status: 'error', message: result?.error || 'Failed to create pairing request.' })
+            setValidation({ status: 'error', message: normalizeRelayError(result?.error || 'Failed to create pairing request.') })
             return
         }
         setPairing({
@@ -282,10 +290,15 @@ export default function RemoteAccessSettings() {
                                 Local-only is default. Remote mode remains disabled until you explicitly opt in.
                             </p>
                         </div>
-                        <ToggleSwitch
-                            checked={settings.remoteAccessEnabled}
-                            onChange={handleRemoteAccessToggle}
-                        />
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-sparkle-text-muted">
+                                {remoteAccessChecked ? 'Enabled' : 'Disabled'}
+                            </span>
+                            <ToggleSwitch
+                                checked={remoteAccessChecked}
+                                onChange={handleRemoteAccessToggle}
+                            />
+                        </div>
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -602,15 +615,16 @@ function ToggleSwitch({
         <button
             type="button"
             onClick={() => onChange(!checked)}
+            aria-pressed={checked}
             className={cn(
-                'relative h-7 w-12 rounded-full transition-colors',
+                'relative inline-flex h-7 w-12 items-center rounded-full px-1 transition-colors',
                 checked ? 'bg-[var(--accent-primary)]' : 'bg-sparkle-border'
             )}
         >
             <span
                 className={cn(
-                    'absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform',
-                    checked ? 'translate-x-6' : 'translate-x-1'
+                    'h-5 w-5 rounded-full bg-white shadow transition-transform',
+                    checked ? 'translate-x-5' : 'translate-x-0'
                 )}
             />
         </button>

@@ -283,6 +283,9 @@ function loadSettings(): Settings {
             const candidate = { ...DEFAULT_SETTINGS, ...parsed }
 
             // Keep only active settings keys to drop obsolete/dead fields from older app versions.
+            const normalizedRemoteAccessMode = normalizeRemoteAccessMode(candidate.remoteAccessMode)
+            const normalizedRemoteAccessEnabled = Boolean(candidate.remoteAccessEnabled) && normalizedRemoteAccessMode !== 'local-only'
+
             return {
                 theme: candidate.theme,
                 accentColor: candidate.accentColor,
@@ -327,8 +330,8 @@ function loadSettings(): Settings {
                 assistantProfile: normalizeAssistantProfile(candidate.assistantProfile),
                 assistantProjectModels: normalizeStringRecord(candidate.assistantProjectModels),
                 assistantProjectProfiles: normalizeAssistantProjectProfiles(candidate.assistantProjectProfiles),
-                remoteAccessEnabled: Boolean(candidate.remoteAccessEnabled),
-                remoteAccessMode: normalizeRemoteAccessMode(candidate.remoteAccessMode),
+                remoteAccessEnabled: normalizedRemoteAccessEnabled,
+                remoteAccessMode: normalizedRemoteAccessMode,
                 remoteAccessConsentAccepted: Boolean(candidate.remoteAccessConsentAccepted),
                 remoteAccessConsentAcceptedAt: Number.isFinite(Number(candidate.remoteAccessConsentAcceptedAt))
                     ? Number(candidate.remoteAccessConsentAcceptedAt)
