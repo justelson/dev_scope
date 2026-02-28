@@ -211,6 +211,7 @@ export default function App() {
 
   const identityRef = useRef<DeviceIdentity>(getOrCreateIdentity())
   const wsRef = useRef<WebSocket | null>(null)
+  const manualSocketCloseRef = useRef(false)
 
   const normalizedRelayUrl = useMemo(() => normalizeUrl(relayUrl), [relayUrl])
   const mobileDeviceId = identityRef.current.deviceId
@@ -397,19 +398,30 @@ export default function App() {
       pushEvent('Set owner ID first.')
       return
     }
-    if (wsRef.current) wsRef.current.close()
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      pushEvent('Relay stream already connected')
+      return
+    }
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.CLOSING || wsRef.current.readyState === WebSocket.CLOSED)) {
+      wsRef.current = null
+    }
 
     const wsUrl = `${toWsUrl(normalizedRelayUrl)}?ownerId=${encodeURIComponent(ownerId)}&deviceId=${encodeURIComponent(mobileDeviceId)}`
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
+    manualSocketCloseRef.current = false
     setWsStatus('connecting')
     ws.onopen = () => {
       setWsStatus('connected')
       pushEvent('Relay stream connected')
     }
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       setWsStatus('idle')
-      pushEvent('Relay stream disconnected')
+      const message = manualSocketCloseRef.current
+        ? 'Relay stream disconnected'
+        : `Relay stream disconnected (${event.code})`
+      pushEvent(message)
+      manualSocketCloseRef.current = false
     }
     ws.onerror = () => {
       setWsStatus('error')
@@ -422,7 +434,10 @@ export default function App() {
   }
 
   const disconnectSocket = () => {
-    if (wsRef.current) wsRef.current.close()
+    if (wsRef.current) {
+      manualSocketCloseRef.current = true
+      wsRef.current.close()
+    }
     wsRef.current = null
     setWsStatus('idle')
   }

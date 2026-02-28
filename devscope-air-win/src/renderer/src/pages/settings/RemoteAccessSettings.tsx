@@ -323,6 +323,7 @@ export default function RemoteAccessSettings() {
 
         const pairingId = String(result.pairingId || '')
         if (!pairingId) return
+        const pairingStartedAt = Date.now()
 
         let attempts = 0
         let inFlight = false
@@ -359,6 +360,28 @@ export default function RemoteAccessSettings() {
                     ? ''
                     : normalizeRelayError(String(approval?.error || ''))
                 if (/pairing approval failed/i.test(errorMessage)) {
+                    // Another client (mobile) may have already approved this pairing.
+                    // Detect that by checking for a newly linked device after pairing start.
+                    const devicesResult = await window.devscope.remoteAccess.listDevices({
+                        serverUrl: target,
+                        ownerId: settings.remoteAccessOwnerId,
+                        relayApiKey: settings.remoteAccessApiKey || undefined
+                    })
+                    if (devicesResult?.success && Array.isArray(devicesResult.devices)) {
+                        const newlyLinked = devicesResult.devices.some((device: any) => {
+                            const linkedAt = Number(device?.linkedAt)
+                            return Number.isFinite(linkedAt) && linkedAt >= pairingStartedAt - 5000
+                        })
+                        if (newlyLinked) {
+                            stopAutoApprovePolling()
+                            setValidation({
+                                status: 'success',
+                                message: 'Mobile claim already approved. Device is now linked.'
+                            })
+                            await refreshDevices()
+                            return
+                        }
+                    }
                     if (attempts % 5 === 0) {
                         setValidation({
                             status: 'loading',
