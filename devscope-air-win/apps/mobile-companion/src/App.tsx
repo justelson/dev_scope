@@ -31,6 +31,12 @@ type ClaimResult = {
   error?: string
 }
 
+type ApproveResult = {
+  success: boolean
+  approved?: boolean
+  error?: string
+}
+
 type DeviceIdentity = {
   deviceId: string
   publicKey: string
@@ -348,9 +354,39 @@ export default function App() {
       }
 
       setOwnerId(result.ownerId)
-      setPairingStatus({ status: 'loading', message: 'Claimed. Waiting for desktop approval...' })
-      await refreshDevices(result.ownerId, true)
       pushEvent(`Pairing claimed for owner ${result.ownerId}`)
+
+      // Fast path: immediately request approval to avoid "waiting approval" dead-end.
+      try {
+        const approve = await fetchJson<ApproveResult>(
+          `${normalizedRelayUrl}/v1/pairings/approve`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              pairingId: pairingId.trim(),
+              ownerId: result.ownerId,
+              approved: true
+            })
+          },
+          relayApiKey
+        )
+        if (!approve.success || !approve.approved) {
+          setPairingStatus({
+            status: 'loading',
+            message: 'Claimed. Approval pending. Check Relay API key or refresh devices.'
+          })
+        } else {
+          setPairingStatus({ status: 'success', message: 'Claimed and approved.' })
+          pushEvent('Pairing auto-approved.')
+        }
+      } catch (approveError) {
+        setPairingStatus({
+          status: 'loading',
+          message: `Claimed. Approval pending: ${humanizeError(approveError)}`
+        })
+      }
+
+      await refreshDevices(result.ownerId, true)
     } catch (error) {
       setPairingStatus({ status: 'error', message: humanizeError(error) })
     }

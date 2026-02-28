@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
     ArrowLeft,
@@ -83,6 +83,7 @@ export default function RemoteAccessSettings() {
     const [validation, setValidation] = useState<ValidationState>({ status: 'idle', message: '' })
     const [pairing, setPairing] = useState<RelayPairingState>(null)
     const [devicesLoading, setDevicesLoading] = useState(false)
+    const autoApproveTimerRef = useRef<number | null>(null)
     const remoteAccessChecked = settings.remoteAccessEnabled && settings.remoteAccessMode !== 'local-only'
 
     const normalizeRelayError = (message: string): string => {
@@ -135,6 +136,19 @@ export default function RemoteAccessSettings() {
         }
     }
 
+    const stopAutoApprovePolling = () => {
+        if (autoApproveTimerRef.current != null) {
+            window.clearInterval(autoApproveTimerRef.current)
+            autoApproveTimerRef.current = null
+        }
+    }
+
+    useEffect(() => {
+        return () => {
+            stopAutoApprovePolling()
+        }
+    }, [])
+
     const handleRemoteAccessToggle = (enabled: boolean) => {
         if (!enabled) {
             updateSettings({ remoteAccessEnabled: false })
@@ -162,6 +176,9 @@ export default function RemoteAccessSettings() {
             setValidation({ status: 'idle', message: '' })
         }
         updateSettings(updates)
+        if (mode === 'local-only') {
+            stopAutoApprovePolling()
+        }
     }
 
     const resolveServerUrl = (): string => {
@@ -281,6 +298,7 @@ export default function RemoteAccessSettings() {
     const generatePairing = async () => {
         const target = resolveServerUrl()
         if (!target || settings.remoteAccessMode === 'local-only') return
+        stopAutoApprovePolling()
         const desktopPublicKey = btoa(`${settings.remoteAccessOwnerId}:${settings.remoteAccessDesktopDeviceId}:${Date.now()}`)
         const result = await window.devscope.remoteAccess.createPairing({
             serverUrl: target,
@@ -302,6 +320,75 @@ export default function RemoteAccessSettings() {
             qrPayload: result.qrPayload || '',
             expiresAt: Number(result.expiresAt) || Date.now()
         })
+
+        const pairingId = String(result.pairingId || '')
+        if (!pairingId) return
+
+        let attempts = 0
+        let inFlight = false
+        setValidation({
+            status: 'loading',
+            message: 'Pairing created. Waiting for mobile claim and auto-approving...'
+        })
+
+        autoApproveTimerRef.current = window.setInterval(async () => {
+            if (inFlight) return
+            inFlight = true
+            attempts += 1
+
+            try {
+                const approval = await window.devscope.remoteAccess.approvePairing({
+                    serverUrl: target,
+                    relayApiKey: settings.remoteAccessApiKey || undefined,
+                    pairingId,
+                    ownerId: settings.remoteAccessOwnerId,
+                    approved: true
+                })
+
+                if (approval?.success && approval?.approved) {
+                    stopAutoApprovePolling()
+                    setValidation({
+                        status: 'success',
+                        message: 'Mobile claim approved automatically. Device is now linked.'
+                    })
+                    await refreshDevices()
+                    return
+                }
+
+                const errorMessage = approval?.success
+                    ? ''
+                    : normalizeRelayError(String(approval?.error || ''))
+                if (/pairing approval failed/i.test(errorMessage)) {
+                    if (attempts % 5 === 0) {
+                        setValidation({
+                            status: 'loading',
+                            message: 'Still waiting for mobile to claim pairing...'
+                        })
+                    }
+                    return
+                }
+
+                stopAutoApprovePolling()
+                if (errorMessage) {
+                    setValidation({ status: 'error', message: errorMessage })
+                }
+            } catch (error: any) {
+                stopAutoApprovePolling()
+                setValidation({
+                    status: 'error',
+                    message: normalizeRelayError(error?.message || 'Failed to auto-approve pairing.')
+                })
+            } finally {
+                inFlight = false
+                if (attempts >= 120) {
+                    stopAutoApprovePolling()
+                    setValidation({
+                        status: 'error',
+                        message: 'Pairing timed out waiting for mobile claim. Generate a new pairing code.'
+                    })
+                }
+            }
+        }, 3000)
     }
 
     return (
