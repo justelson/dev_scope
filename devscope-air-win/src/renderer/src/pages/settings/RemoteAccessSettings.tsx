@@ -4,6 +4,7 @@ import {
     ArrowLeft,
     CheckCircle2,
     Cloud,
+    Copy,
     KeyRound,
     Lock,
     RefreshCw,
@@ -31,6 +32,18 @@ type RelayPairingState = {
     expiresAt: number
 } | null
 
+type CloudQuickConnectPayload = {
+    v: 1
+    kind: 'devscope-cloud-connect'
+    relayUrl: string
+    relayApiKey: string
+    ownerId: string
+    pairingId: string
+    oneTimeToken: string
+    confirmationCode: string
+    expiresAt: number
+}
+
 type RelayConnectedDevice = {
     id: string
     name?: string
@@ -43,6 +56,7 @@ type RelayConnectedDevice = {
 }
 
 const DEVSCOPE_CLOUD_URL = 'https://devscope-production.up.railway.app'
+const CLOUD_QUICK_CONNECT_PREFIX = 'DEVSCOPE_CLOUD_CONNECT:'
 
 function normalizeUrl(raw: string): string {
     const trimmed = raw.trim()
@@ -83,6 +97,43 @@ export default function RemoteAccessSettings() {
         if (settings.remoteAccessMode === 'self-hosted') return normalizeUrl(settings.remoteAccessServerUrl || serverInput)
         return ''
     }, [settings.remoteAccessMode, settings.remoteAccessServerUrl, serverInput])
+
+    const cloudQuickConnectCode = useMemo(() => {
+        if (!pairing || !activeServerUrl || settings.remoteAccessMode === 'local-only') return ''
+        const payload: CloudQuickConnectPayload = {
+            v: 1,
+            kind: 'devscope-cloud-connect',
+            relayUrl: activeServerUrl,
+            relayApiKey: settings.remoteAccessApiKey.trim(),
+            ownerId: settings.remoteAccessOwnerId,
+            pairingId: pairing.pairingId,
+            oneTimeToken: pairing.oneTimeToken,
+            confirmationCode: pairing.confirmationCode,
+            expiresAt: pairing.expiresAt
+        }
+        return `${CLOUD_QUICK_CONNECT_PREFIX}${btoa(JSON.stringify(payload))}`
+    }, [
+        pairing,
+        activeServerUrl,
+        settings.remoteAccessMode,
+        settings.remoteAccessApiKey,
+        settings.remoteAccessOwnerId
+    ])
+
+    const copyText = async (text: string, label: string) => {
+        try {
+            await navigator.clipboard.writeText(text)
+            setValidation({
+                status: 'success',
+                message: `Copied ${label}. Paste it into the mobile app quick connect box.`
+            })
+        } catch (error: any) {
+            setValidation({
+                status: 'error',
+                message: error?.message || 'Failed to copy to clipboard.'
+            })
+        }
+    }
 
     const handleRemoteAccessToggle = (enabled: boolean) => {
         if (!enabled) {
@@ -193,9 +244,9 @@ export default function RemoteAccessSettings() {
                 relayApiKey: settings.remoteAccessApiKey || undefined
             })
             if (!result?.success) {
-            setValidation({ status: 'error', message: normalizeRelayError(result?.error || 'Failed to load connected devices.') })
-            return
-        }
+                setValidation({ status: 'error', message: normalizeRelayError(result?.error || 'Failed to load connected devices.') })
+                return
+            }
             const normalized = (Array.isArray(result.devices) ? result.devices : []).map((device: RelayConnectedDevice) => ({
                 id: String(device.id || ''),
                 name: String(device.label || device.name || 'Unknown device'),
@@ -472,6 +523,35 @@ export default function RemoteAccessSettings() {
                             <p>Pairing ID: <span className="font-mono text-sparkle-text">{pairing.pairingId}</span></p>
                             <p>QR payload: <span className="font-mono text-sparkle-text">{pairing.qrPayload}</span></p>
                             <p>Expires: <span className="text-sparkle-text">{new Date(pairing.expiresAt).toLocaleTimeString()}</span></p>
+
+                            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                                <button
+                                    type="button"
+                                    onClick={() => void copyText(cloudQuickConnectCode, 'Cloud Quick Connect Code')}
+                                    disabled={!cloudQuickConnectCode}
+                                    className="inline-flex items-center justify-center gap-2 rounded-md border border-sparkle-border bg-sparkle-card px-3 py-2 text-xs text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text disabled:opacity-60"
+                                >
+                                    <Copy size={12} />
+                                    Copy Quick Connect
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void copyText(pairing.qrPayload, 'Pairing Link')}
+                                    className="inline-flex items-center justify-center gap-2 rounded-md border border-sparkle-border bg-sparkle-card px-3 py-2 text-xs text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                                >
+                                    <Copy size={12} />
+                                    Copy Pairing Link
+                                </button>
+                            </div>
+                            <div className="rounded-md border border-sparkle-border bg-sparkle-card p-2">
+                                <p className="mb-1 text-[11px] text-sparkle-text-muted">Cloud Quick Connect Code</p>
+                                <textarea
+                                    readOnly
+                                    value={cloudQuickConnectCode}
+                                    rows={3}
+                                    className="w-full resize-none rounded border border-sparkle-border bg-sparkle-bg px-2 py-1 font-mono text-[10px] text-sparkle-text-muted outline-none"
+                                />
+                            </div>
                         </div>
                     )}
                 </section>

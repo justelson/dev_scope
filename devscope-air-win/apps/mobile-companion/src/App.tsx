@@ -37,6 +37,18 @@ type DeviceIdentity = {
   label: string
 }
 
+type CloudQuickConnectPayload = {
+  v: 1
+  kind: 'devscope-cloud-connect'
+  relayUrl: string
+  relayApiKey?: string
+  ownerId: string
+  pairingId: string
+  oneTimeToken: string
+  confirmationCode?: string
+  expiresAt?: number
+}
+
 const STORAGE = {
   relayUrl: 'devscope.mobile.relay.url.v1',
   relayApiKey: 'devscope.mobile.relay.api-key.v1',
@@ -46,6 +58,7 @@ const STORAGE = {
 } as const
 
 const DEFAULT_RELAY_URL = (import.meta.env.VITE_DEVSCOPE_RELAY_URL as string | undefined) || 'https://devscope-production.up.railway.app'
+const CLOUD_QUICK_CONNECT_PREFIX = 'DEVSCOPE_CLOUD_CONNECT:'
 
 function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, '')
@@ -132,6 +145,47 @@ function humanizeError(error: unknown): string {
   return message
 }
 
+function parseCloudQuickConnectCode(raw: string): CloudQuickConnectPayload | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  let encoded = trimmed
+  if (trimmed.startsWith(CLOUD_QUICK_CONNECT_PREFIX)) {
+    encoded = trimmed.slice(CLOUD_QUICK_CONNECT_PREFIX.length)
+  }
+
+  const tryParsePayload = (input: string): CloudQuickConnectPayload | null => {
+    try {
+      const parsed = JSON.parse(input) as Partial<CloudQuickConnectPayload>
+      if (!parsed || parsed.kind !== 'devscope-cloud-connect') return null
+      if (!parsed.relayUrl || !parsed.ownerId || !parsed.pairingId || !parsed.oneTimeToken) return null
+      return {
+        v: 1,
+        kind: 'devscope-cloud-connect',
+        relayUrl: String(parsed.relayUrl),
+        relayApiKey: String(parsed.relayApiKey || ''),
+        ownerId: String(parsed.ownerId),
+        pairingId: String(parsed.pairingId),
+        oneTimeToken: String(parsed.oneTimeToken),
+        confirmationCode: String(parsed.confirmationCode || ''),
+        expiresAt: Number(parsed.expiresAt || 0)
+      }
+    } catch {
+      return null
+    }
+  }
+
+  const fromPlain = tryParsePayload(trimmed)
+  if (fromPlain) return fromPlain
+
+  try {
+    const decoded = atob(encoded)
+    return tryParsePayload(decoded)
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
   const [relayUrl, setRelayUrl] = useState(() => readStorage(STORAGE.relayUrl, DEFAULT_RELAY_URL))
   const [relayApiKey, setRelayApiKey] = useState(() => readStorage(STORAGE.relayApiKey, import.meta.env.VITE_DEVSCOPE_RELAY_API_KEY || ''))
@@ -140,6 +194,7 @@ export default function App() {
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle', message: '' })
   const [wellKnown, setWellKnown] = useState<WellKnownResponse | null>(null)
   const [pairingLink, setPairingLink] = useState('')
+  const [quickConnectCode, setQuickConnectCode] = useState('')
   const [pairingId, setPairingId] = useState('')
   const [pairingToken, setPairingToken] = useState('')
   const [confirmationCode, setConfirmationCode] = useState('')
@@ -200,6 +255,23 @@ export default function App() {
     setPairingId(parsed.pairingId)
     setPairingToken(parsed.token)
     setPairingStatus({ status: 'success', message: 'Pairing link parsed.' })
+  }
+
+  const applyQuickConnectCode = () => {
+    const payload = parseCloudQuickConnectCode(quickConnectCode)
+    if (!payload) {
+      setPairingStatus({ status: 'error', message: 'Invalid Quick Connect Code.' })
+      return
+    }
+
+    setRelayUrl(payload.relayUrl)
+    setRelayApiKey(payload.relayApiKey || '')
+    setOwnerId(payload.ownerId)
+    setPairingId(payload.pairingId)
+    setPairingToken(payload.oneTimeToken)
+    setConfirmationCode(payload.confirmationCode || '')
+    setPairingLink(`devscope://pair?pairingId=${encodeURIComponent(payload.pairingId)}&token=${encodeURIComponent(payload.oneTimeToken)}`)
+    setPairingStatus({ status: 'success', message: 'Quick Connect Code applied. Click Claim Pairing.' })
   }
 
   const validateRelay = async () => {
@@ -345,6 +417,17 @@ export default function App() {
 
       <section className="card">
         <h2>2. Pair</h2>
+        <label>
+          Quick Connect Code (from desktop)
+          <textarea
+            rows={3}
+            value={quickConnectCode}
+            onChange={(event) => setQuickConnectCode(event.target.value)}
+            placeholder="Paste DEVSCOPE_CLOUD_CONNECT:... here"
+          />
+        </label>
+        <button onClick={applyQuickConnectCode} type="button">Apply Quick Connect</button>
+        <p className="muted small">Or enter pairing fields manually below.</p>
         <label>
           Pairing Link (optional)
           <textarea rows={2} value={pairingLink} onChange={(event) => setPairingLink(event.target.value)} placeholder="devscope://pair?pairingId=...&token=..." />

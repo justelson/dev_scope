@@ -9,6 +9,7 @@ Deployable mobile web client for remote access pairing and relay validation.
 - Relay websocket connectivity (`/v1/relay/ws`)
 - Test envelope publish (`/v1/relay/publish`)
 - Persistent device identity in local storage
+- Quick Connect Code paste flow from desktop (`DEVSCOPE_CLOUD_CONNECT:...`)
 
 ## Local run
 1. `cd apps/mobile-companion`
@@ -31,6 +32,7 @@ Deployable mobile web client for remote access pairing and relay validation.
 1. Open desktop app `Settings -> Remote Access`.
 2. Validate relay server and generate pairing.
 3. On mobile web app:
+   - paste `Quick Connect Code` from desktop and click `Apply Quick Connect`, or
    - paste pairing deep-link and click `Parse Link`, or
    - paste `pairingId` + `oneTimeToken` directly.
 4. Enter desktop confirmation code and click `Claim Pairing`.
