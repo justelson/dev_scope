@@ -11,6 +11,7 @@ import CommandPalette from './components/CommandPalette'
 import LinkHoverStatus from './components/ui/LinkHoverStatus'
 import { AssistantDock } from './components/assistant/AssistantDock'
 import { useAssistantDockState } from './lib/assistantDockStore'
+import { REMOTE_ACCESS_ENABLED } from '@shared/feature-flags'
 
 const Settings = lazy(() => import('./pages/Settings'))
 const Home = lazy(() => import('./pages/Home'))
@@ -181,7 +182,10 @@ function MainContent() {
                     <Route path="/settings/assistant" element={<AssistantSettings />} />
                     <Route path="/settings/account" element={<AssistantAccountSettings />} />
                     <Route path="/settings/usage" element={<AssistantAccountSettings />} />
-                    <Route path="/settings/remote-access" element={<RemoteAccessSettings />} />
+                    <Route
+                        path="/settings/remote-access"
+                        element={REMOTE_ACCESS_ENABLED ? <RemoteAccessSettings /> : <Navigate to="/settings" replace />}
+                    />
                     <Route path="*" element={<LaunchRedirect />} />
                 </Routes>
             </Suspense>

@@ -155,6 +155,11 @@ import {
     handleAssistantSubscribe,
     handleAssistantUnsubscribe
 } from './handlers/assistant-handlers'
+import { REMOTE_ACCESS_DISABLED_MESSAGE, REMOTE_ACCESS_ENABLED } from '../../shared/feature-flags'
+
+async function handleRemoteAccessDisabled() {
+    return { success: false, error: REMOTE_ACCESS_DISABLED_MESSAGE }
+}
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     log.info('Registering IPC handlers...')
@@ -180,14 +185,25 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:generateCommitMessage', handleGenerateCommitMessage)
     ipcMain.handle('devscope:getAiDebugLogs', handleGetAiDebugLogs)
     ipcMain.handle('devscope:clearAiDebugLogs', handleClearAiDebugLogs)
-    ipcMain.handle('devscope:remote:validateServer', handleRemoteValidateServer)
-    ipcMain.handle('devscope:remote:challengeServer', handleRemoteChallengeServer)
-    ipcMain.handle('devscope:remote:createPairing', handleRemoteCreatePairing)
-    ipcMain.handle('devscope:remote:claimPairing', handleRemoteClaimPairing)
-    ipcMain.handle('devscope:remote:approvePairing', handleRemoteApprovePairing)
-    ipcMain.handle('devscope:remote:listDevices', handleRemoteListDevices)
-    ipcMain.handle('devscope:remote:revokeDevice', handleRemoteRevokeDevice)
-    ipcMain.handle('devscope:remote:publishEnvelope', handleRemotePublishEnvelope)
+    if (REMOTE_ACCESS_ENABLED) {
+        ipcMain.handle('devscope:remote:validateServer', handleRemoteValidateServer)
+        ipcMain.handle('devscope:remote:challengeServer', handleRemoteChallengeServer)
+        ipcMain.handle('devscope:remote:createPairing', handleRemoteCreatePairing)
+        ipcMain.handle('devscope:remote:claimPairing', handleRemoteClaimPairing)
+        ipcMain.handle('devscope:remote:approvePairing', handleRemoteApprovePairing)
+        ipcMain.handle('devscope:remote:listDevices', handleRemoteListDevices)
+        ipcMain.handle('devscope:remote:revokeDevice', handleRemoteRevokeDevice)
+        ipcMain.handle('devscope:remote:publishEnvelope', handleRemotePublishEnvelope)
+    } else {
+        ipcMain.handle('devscope:remote:validateServer', handleRemoteAccessDisabled)
+        ipcMain.handle('devscope:remote:challengeServer', handleRemoteAccessDisabled)
+        ipcMain.handle('devscope:remote:createPairing', handleRemoteAccessDisabled)
+        ipcMain.handle('devscope:remote:claimPairing', handleRemoteAccessDisabled)
+        ipcMain.handle('devscope:remote:approvePairing', handleRemoteAccessDisabled)
+        ipcMain.handle('devscope:remote:listDevices', handleRemoteAccessDisabled)
+        ipcMain.handle('devscope:remote:revokeDevice', handleRemoteAccessDisabled)
+        ipcMain.handle('devscope:remote:publishEnvelope', handleRemoteAccessDisabled)
+    }
 
     ipcMain.handle(ASSISTANT_IPC.subscribe, handleAssistantSubscribe)
     ipcMain.handle(ASSISTANT_IPC.unsubscribe, handleAssistantUnsubscribe)
