@@ -303,6 +303,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         <>
                             <GitGraph
                                 commits={gitHistory.slice((commitPage - 1) * COMMITS_PER_PAGE, commitPage * COMMITS_PER_PAGE)}
+                                laneSourceCommits={gitHistory}
                                 onCommitClick={handleCommitClick}
                             />
                             {gitHistory.length > COMMITS_PER_PAGE && (

@@ -14,16 +14,20 @@ const BRANCH_COLORS = [
 
 export function GitGraph({
     commits,
+    laneSourceCommits,
     onCommitClick
 }: {
     commits: GitCommit[]
+    laneSourceCommits?: GitCommit[]
     onCommitClick?: (commit: GitCommit) => void
 }) {
+    const graphSource = laneSourceCommits && laneSourceCommits.length > 0 ? laneSourceCommits : commits
+
     const lanes = useMemo(() => {
         const laneMap = new Map<string, number>()
         const activeLanes: (string | null)[] = []
 
-        commits.forEach((commit) => {
+        graphSource.forEach((commit) => {
             let assignedLane = -1
             for (let i = 0; i < activeLanes.length; i++) {
                 if (activeLanes[i] === commit.hash) {
@@ -58,9 +62,9 @@ export function GitGraph({
         })
 
         return laneMap
-    }, [commits])
+    }, [graphSource])
 
-    const maxLanes = Math.max(...Array.from(lanes.values())) + 1
+    const maxLanes = Math.max(1, ...Array.from(lanes.values(), (lane) => lane + 1))
     const laneWidth = 24
     const nodeSize = 10
     const rowHeight = 64
