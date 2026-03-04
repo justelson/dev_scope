@@ -1,4 +1,4 @@
-import { ChevronRight, Code, ExternalLink, File, FileCode, Folder, FolderTree, Github, FolderOpen, MoreVertical } from 'lucide-react'
+import { ChevronRight, Code, ExternalLink, File, FileCode, Folder, FolderTree, Github, FolderOpen, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ProjectIcon from '@/components/ui/ProjectIcon'
 import type { ContentLayout, FileItem, FolderItem, Project, ViewMode } from './projectsTypes'
@@ -18,6 +18,8 @@ interface ProjectsContentSectionsProps {
     getProjectThemeColor: (type: string) => string
     onFolderOpen: (path: string) => void
     onProjectOpen: (project: Project) => void
+    onProjectRename: (project: Project) => void | Promise<void>
+    onProjectDelete: (project: Project) => void | Promise<void>
     onFileParentOpen: (path: string) => void
     openInExplorer: (path: string) => void
     searchActive: boolean
@@ -41,6 +43,8 @@ export function ProjectsContentSections({
     getProjectThemeColor,
     onFolderOpen,
     onProjectOpen,
+    onProjectRename,
+    onProjectDelete,
     onFileParentOpen,
     openInExplorer,
     searchActive,
@@ -114,25 +118,67 @@ export function ProjectsContentSections({
                                                 getProjectThemeColor={getProjectThemeColor}
                                                 onProjectOpen={onProjectOpen}
                                                 openInExplorer={openInExplorer}
+                                                onProjectRename={onProjectRename}
+                                                onProjectDelete={onProjectDelete}
                                             />
                                         )
                                     }
 
                                     return (
-                                        <button
+                                        <div
                                             key={entry.id}
                                             onClick={() => onProjectOpen(project)}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault()
+                                                    onProjectOpen(project)
+                                                }
+                                            }}
                                             className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15"
                                         >
-                                            <div className="mb-2 flex items-center justify-between">
+                                            <div className="mb-2 flex items-center justify-between gap-2">
                                                 <div className="rounded-lg border border-white/5 bg-sparkle-bg p-2">
                                                     <ProjectIcon projectType={project.type} framework={project.frameworks?.[0]} size={20} />
                                                 </div>
-                                                <span className="text-[10px] text-white/30">{formatRelativeTime(project.lastModified)}</span>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[10px] text-white/30">{formatRelativeTime(project.lastModified)}</span>
+                                                    <FileActionsMenu
+                                                        buttonClassName="h-7 w-7 text-white/20 group-hover:text-white/40 hover:!text-white transition-all"
+                                                        items={[
+                                                            {
+                                                                id: 'open',
+                                                                label: 'Open',
+                                                                icon: <FolderOpen size={13} />,
+                                                                onSelect: () => onProjectOpen(project)
+                                                            },
+                                                            {
+                                                                id: 'explorer',
+                                                                label: 'Open in Explorer',
+                                                                icon: <ExternalLink size={13} />,
+                                                                onSelect: () => openInExplorer(project.path)
+                                                            },
+                                                            {
+                                                                id: 'rename',
+                                                                label: 'Rename Project',
+                                                                icon: <Pencil size={13} />,
+                                                                onSelect: () => onProjectRename(project)
+                                                            },
+                                                            {
+                                                                id: 'delete',
+                                                                label: 'Delete Project',
+                                                                icon: <Trash2 size={13} />,
+                                                                danger: true,
+                                                                onSelect: () => onProjectDelete(project)
+                                                            }
+                                                        ]}
+                                                    />
+                                                </div>
                                             </div>
                                             <p className={cn('text-sm font-semibold text-white/85 group-hover:text-white leading-5', WRAP_AND_CLAMP_2)} title={project.name}>{project.name}</p>
                                             <p className="truncate text-[10px] text-white/40" title={getProjectTypeLabel(project.type)}>{getProjectTypeLabel(project.type)}</p>
-                                        </button>
+                                        </div>
                                     )
                                 }
 
@@ -396,6 +442,8 @@ export function ProjectsContentSections({
                                 getProjectThemeColor={getProjectThemeColor}
                                 onProjectOpen={onProjectOpen}
                                 openInExplorer={openInExplorer}
+                                onProjectRename={onProjectRename}
+                                onProjectDelete={onProjectDelete}
                             />
                         ))}
                     </div>

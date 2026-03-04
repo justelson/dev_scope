@@ -82,6 +82,8 @@ For the current architecture and capability baseline, start in:
 For platform/client expansion guidance:
 
 - `devscope-air-win/docs/platform/README.md`
+- `DEVSCOPE_WIN_DEPRECATION_PLAN.md` (deprecation timeline for legacy full variant)
+- `LANDING_PAGE_AGENT_BRIEF.md` (handoff brief for building the public landing site)
 
 ## Notes
 

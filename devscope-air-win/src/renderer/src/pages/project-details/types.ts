@@ -34,6 +34,17 @@ export interface ProjectDetails {
     scripts?: Record<string, string>
     dependencies?: Record<string, string>
     devDependencies?: Record<string, string>
+    dependencyInstallStatus?: {
+        installed: boolean | null
+        checked: boolean
+        ecosystem: 'node' | 'unknown'
+        totalPackages: number
+        installedPackages: number
+        missingPackages: number
+        missingDependencies?: string[]
+        missingSample?: string[]
+        reason?: string
+    } | null
 }
 
 export interface FileTreeNode {

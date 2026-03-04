@@ -13,6 +13,85 @@ import {
 
 const execAsync = promisify(exec)
 
+type DependencyInstallStatus = {
+    installed: boolean | null
+    checked: boolean
+    ecosystem: 'node' | 'unknown'
+    totalPackages: number
+    installedPackages: number
+    missingPackages: number
+    missingDependencies?: string[]
+    missingSample?: string[]
+    reason?: string
+}
+
+async function pathExists(path: string): Promise<boolean> {
+    try {
+        await access(path)
+        return true
+    } catch {
+        return false
+    }
+}
+
+async function detectNodeDependencyInstallStatus(
+    projectPath: string,
+    packageJson: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> } | null
+): Promise<DependencyInstallStatus> {
+    const dependencyNames = Array.from(new Set([
+        ...Object.keys(packageJson?.dependencies || {}),
+        ...Object.keys(packageJson?.devDependencies || {})
+    ].filter((name) => name.trim().length > 0)))
+
+    if (dependencyNames.length === 0) {
+        return {
+            installed: true,
+            checked: true,
+            ecosystem: 'node',
+            totalPackages: 0,
+            installedPackages: 0,
+            missingPackages: 0
+        }
+    }
+
+    const nodeModulesPath = join(projectPath, 'node_modules')
+    if (!(await pathExists(nodeModulesPath))) {
+        return {
+            installed: false,
+            checked: true,
+            ecosystem: 'node',
+            totalPackages: dependencyNames.length,
+            installedPackages: 0,
+            missingPackages: dependencyNames.length,
+            missingDependencies: dependencyNames,
+            missingSample: dependencyNames.slice(0, 5),
+            reason: 'node_modules is missing'
+        }
+    }
+
+    const checks = await Promise.all(
+        dependencyNames.map(async (name) => {
+            const packagePath = join(nodeModulesPath, ...name.split('/'))
+            const exists = await pathExists(packagePath)
+            return { name, exists }
+        })
+    )
+
+    const missing = checks.filter((item) => !item.exists).map((item) => item.name)
+    const installedPackages = dependencyNames.length - missing.length
+
+    return {
+        installed: missing.length === 0,
+        checked: true,
+        ecosystem: 'node',
+        totalPackages: dependencyNames.length,
+        installedPackages,
+        missingPackages: missing.length,
+        missingDependencies: missing,
+        missingSample: missing.slice(0, 5)
+    }
+}
+
 function parseTasklistMemoryMb(raw: string): number {
     const normalized = String(raw || '').replace(/[\s,]/g, '').toUpperCase()
     const match = normalized.match(/^([0-9]+(?:\.[0-9]+)?)(K|M|G)?$/)
@@ -139,6 +218,7 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
         let readme: string | null = null
         let packageJson: any = null
         let frameworks: FrameworkDefinition[] = []
+        let dependencyInstallStatus: DependencyInstallStatus | null = null
 
         const readmeFile = entries.find((entry) =>
             entry.toLowerCase().startsWith('readme')
@@ -170,6 +250,7 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
                 const pkgContent = await readFile(join(projectPath, 'package.json'), 'utf-8')
                 packageJson = JSON.parse(pkgContent)
                 frameworks = detectFrameworksFromPackageJson(packageJson, entries)
+                dependencyInstallStatus = await detectNodeDependencyInstallStatus(projectPath, packageJson)
             } catch (err) {
                 log.warn('Could not parse package.json', err)
             }
@@ -195,7 +276,8 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
                 lastModified: stats.mtimeMs,
                 scripts: packageJson?.scripts || null,
                 dependencies: packageJson?.dependencies || null,
-                devDependencies: packageJson?.devDependencies || null
+                devDependencies: packageJson?.devDependencies || null,
+                dependencyInstallStatus
             }
         }
     } catch (err: any) {

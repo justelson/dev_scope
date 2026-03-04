@@ -1,4 +1,4 @@
-import { Clock, ExternalLink, FolderOpen } from 'lucide-react'
+import { Clock, ExternalLink, FolderOpen, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ProjectIcon, { FrameworkBadge } from '@/components/ui/ProjectIcon'
 import type { Project, ViewMode } from './projectsTypes'
@@ -13,6 +13,8 @@ interface ProjectsProjectCardProps {
     getProjectThemeColor: (type: string) => string
     onProjectOpen: (project: Project) => void
     openInExplorer: (path: string) => void
+    onProjectRename: (project: Project) => void | Promise<void>
+    onProjectDelete: (project: Project) => void | Promise<void>
 }
 
 export function ProjectsProjectCard({
@@ -22,7 +24,9 @@ export function ProjectsProjectCard({
     getProjectTypeLabel,
     getProjectThemeColor,
     onProjectOpen,
-    openInExplorer
+    openInExplorer,
+    onProjectRename,
+    onProjectDelete
 }: ProjectsProjectCardProps) {
     const themeColor = getProjectThemeColor(project.type)
     const frameworkDisplayLimit = 3
@@ -53,7 +57,9 @@ export function ProjectsProjectCard({
                             buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20"
                             items={[
                                 { id: 'open', label: 'Open', icon: <FolderOpen size={13} />, onSelect: () => onProjectOpen(project) },
-                                { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => openInExplorer(project.path) }
+                                { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => openInExplorer(project.path) },
+                                { id: 'rename', label: 'Rename Project', icon: <Pencil size={13} />, onSelect: () => onProjectRename(project) },
+                                { id: 'delete', label: 'Delete Project', icon: <Trash2 size={13} />, danger: true, onSelect: () => onProjectDelete(project) }
                             ]}
                         />
                     </div>
@@ -88,7 +94,9 @@ export function ProjectsProjectCard({
                                 buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                                 items={[
                                     { id: 'open', label: 'Open', icon: <FolderOpen size={13} />, onSelect: () => onProjectOpen(project) },
-                                    { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => openInExplorer(project.path) }
+                                    { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => openInExplorer(project.path) },
+                                    { id: 'rename', label: 'Rename Project', icon: <Pencil size={13} />, onSelect: () => onProjectRename(project) },
+                                    { id: 'delete', label: 'Delete Project', icon: <Trash2 size={13} />, danger: true, onSelect: () => onProjectDelete(project) }
                                 ]}
                             />
                         </div>

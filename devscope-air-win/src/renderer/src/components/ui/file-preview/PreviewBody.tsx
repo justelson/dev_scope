@@ -209,16 +209,16 @@ export default function PreviewBody({
             )}
             style={{
                 width: viewport === 'responsive' ? '100%' : `${presetConfig.width}px`,
-                height: useFullBleed ? '100%' : (viewport === 'responsive' ? '70vh' : `${presetConfig.height}px`),
+                height: useFullBleed ? '100%' : (viewport === 'responsive' ? '100%' : `${presetConfig.height}px`),
                 minHeight: useFullBleed ? '100%' : '400px',
                 maxHeight: '100%',
                 maxWidth: '100%'
             }}
         >
-            {/* @ts-ignore - webview is an Electron-specific tag */}
-            <webview
+            <iframe
                 src={getFileUrl(file.path)}
-                style={{ width: '100%', height: '100%', background: 'white' }}
+                title={`${file.name} preview`}
+                style={{ width: '100%', height: '100%', background: 'white', border: 'none' }}
             />
         </div>
     )

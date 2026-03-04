@@ -38,6 +38,8 @@ export function ProjectDetailsContent(props: ProjectDetailsContentProps) {
                 <ProjectDetailsSidebar
                     scripts={project.scripts}
                     dependencies={project.dependencies}
+                    devDependencies={project.devDependencies}
+                    dependencyInstallStatus={project.dependencyInstallStatus}
                     scriptPredictions={scriptPredictions}
                     scriptIntentContext={scriptIntentContext}
                     onRunScript={runScript}

@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { AlertCircle, ExternalLink, Package, Search, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CheckCircle2, ExternalLink, HelpCircle, Package, Search, X } from 'lucide-react'
 
 export function AuthorMismatchModal({
     gitUser,
@@ -81,18 +81,105 @@ export function AuthorMismatchModal({
     )
 }
 
-export function DependenciesModal({ dependencies, onClose }: { dependencies: Record<string, string>, onClose: () => void }) {
+type DependencyInstallStatus = {
+    installed: boolean | null
+    checked: boolean
+    ecosystem: 'node' | 'unknown'
+    totalPackages: number
+    installedPackages: number
+    missingPackages: number
+    missingDependencies?: string[]
+    missingSample?: string[]
+    reason?: string
+}
+
+export function DependenciesModal({
+    projectName,
+    projectPath,
+    dependencies,
+    devDependencies,
+    dependencyInstallStatus,
+    onClose
+}: {
+    projectName?: string
+    projectPath?: string
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+    dependencyInstallStatus?: DependencyInstallStatus | null
+    onClose: () => void
+}) {
     const [search, setSearch] = useState('')
     const deferredSearch = useDeferredValue(search)
     const searchValue = deferredSearch.toLowerCase()
-    const filtered = useMemo(() => Object.entries(dependencies).filter(([name]) =>
+    const allDependencies = useMemo(() => {
+        const runtime = Object.entries(dependencies || {}).map(([name, version]) => ({
+            name,
+            version,
+            scope: 'dependency' as const
+        }))
+        const dev = Object.entries(devDependencies || {}).map(([name, version]) => ({
+            name,
+            version,
+            scope: 'devDependency' as const
+        }))
+        return [...runtime, ...dev].sort((left, right) => left.name.localeCompare(right.name))
+    }, [dependencies, devDependencies])
+
+    const runtimeCount = Object.keys(dependencies || {}).length
+    const devCount = Object.keys(devDependencies || {}).length
+
+    const filtered = useMemo(() => allDependencies.filter(({ name }) =>
         name.toLowerCase().includes(searchValue)
-    ), [dependencies, searchValue])
+    ), [allDependencies, searchValue])
+
+    const missingDependencySet = useMemo(() => (
+        new Set((dependencyInstallStatus?.missingDependencies || []).map((name) => name.toLowerCase()))
+    ), [dependencyInstallStatus?.missingDependencies])
+
+    const installLabel = dependencyInstallStatus?.installed === true
+        ? 'All Installed'
+        : dependencyInstallStatus?.installed === false
+            ? 'Missing Packages'
+            : 'Status Unknown'
+
+    const installDetail = dependencyInstallStatus
+        ? dependencyInstallStatus.installed === true
+            ? `${dependencyInstallStatus.installedPackages}/${dependencyInstallStatus.totalPackages} packages found`
+            : dependencyInstallStatus.installed === false
+                ? `Missing ${dependencyInstallStatus.missingPackages} of ${dependencyInstallStatus.totalPackages}`
+                : (dependencyInstallStatus.reason || 'Install status could not be verified')
+        : 'Install status could not be verified'
+
+    const installIndicator = dependencyInstallStatus?.installed === true
+        ? <CheckCircle2 size={13} className="text-emerald-300" />
+        : dependencyInstallStatus?.installed === false
+            ? <AlertTriangle size={13} className="text-amber-300" />
+            : <HelpCircle size={13} className="text-white/50" />
+
+    const installBadgeClass = dependencyInstallStatus?.installed === true
+        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+        : dependencyInstallStatus?.installed === false
+            ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+            : 'border-white/10 bg-white/5 text-white/60'
+
+    const totalTracked = dependencyInstallStatus?.totalPackages ?? allDependencies.length
+    const installedTracked = dependencyInstallStatus?.installedPackages ?? (
+        dependencyInstallStatus?.installed === false
+            ? Math.max(0, allDependencies.length - (dependencyInstallStatus?.missingPackages || 0))
+            : allDependencies.length
+    )
+    const installPercent = totalTracked > 0 ? Math.round((installedTracked / totalTracked) * 100) : 100
+    const missingCount = dependencyInstallStatus?.missingPackages || 0
+    const progressTone = dependencyInstallStatus?.installed === true
+        ? 'bg-emerald-500'
+        : dependencyInstallStatus?.installed === false
+            ? 'bg-amber-500'
+            : 'bg-white/40'
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
             <div
-                className="bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-full max-w-xl max-h-[80vh] flex flex-col m-4 overflow-hidden"
+                className="bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-[min(1120px,96vw)] h-[min(78vh,760px)] flex flex-col m-4 overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between p-5 border-b border-white/5 bg-white/5">
@@ -100,58 +187,155 @@ export function DependenciesModal({ dependencies, onClose }: { dependencies: Rec
                         <Package size={20} className="text-[var(--accent-primary)]" />
                         Dependencies
                         <span className="px-2 py-0.5 rounded-full bg-white/10 text-xs font-normal text-white/60">
-                            {Object.keys(dependencies).length}
+                            {allDependencies.length}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border ${installBadgeClass}`}>
+                            {installIndicator}
+                            {installLabel}
                         </span>
                     </h3>
                     <button onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10">
                         <X size={20} />
                     </button>
                 </div>
+                <div className="grid h-full min-h-0 grid-cols-2">
+                    <aside className="h-full min-h-0 border-r border-white/10 bg-black/20 p-4 overflow-y-auto custom-scrollbar">
+                        <div className="rounded-xl border border-white/10 bg-gradient-to-br from-sky-500/10 via-white/[0.03] to-violet-500/10 p-3.5">
+                            <p className="text-[11px] uppercase tracking-wide text-white/45">Project Overview</p>
+                            <p className="mt-1.5 text-sm font-semibold text-white truncate" title={projectName || ''}>{projectName || 'Current Project'}</p>
+                            <p className="mt-1 text-[11px] text-white/45 truncate" title={projectPath || ''}>{projectPath || '-'}</p>
+                        </div>
 
-                <div className="p-4 border-b border-white/5 bg-black/20">
-                    <div className="relative">
-                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search packages..."
-                            autoFocus
-                            className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-[var(--accent-primary)]/50 focus:bg-white/10 transition-all"
-                        />
-                    </div>
-                </div>
+                        <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
+                            <p className="text-[11px] uppercase tracking-wide text-white/45 mb-2.5">Dependency Stats</p>
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2">
+                                    <p className="text-[10px] text-white/45 uppercase tracking-wide">Total</p>
+                                    <p className="mt-1 text-base font-semibold text-white">{allDependencies.length}</p>
+                                </div>
+                                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-2">
+                                    <p className="text-[10px] text-sky-200/70 uppercase tracking-wide">Runtime</p>
+                                    <p className="mt-1 text-base font-semibold text-sky-100">{runtimeCount}</p>
+                                </div>
+                                <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-2">
+                                    <p className="text-[10px] text-violet-200/70 uppercase tracking-wide">Dev</p>
+                                    <p className="mt-1 text-base font-semibold text-violet-100">{devCount}</p>
+                                </div>
+                            </div>
+                        </div>
 
-                <div className="overflow-y-auto p-2 custom-scrollbar flex-1 bg-black/10">
-                    {filtered.length > 0 ? (
-                        <div className="grid grid-cols-1 gap-1">
-                            {filtered.map(([name, version]) => (
-                                <div key={name} className="flex items-center justify-between p-3 hover:bg-white/5 rounded-xl group transition-all border border-transparent hover:border-white/5">
-                                    <span className="text-sm text-white/80 font-mono font-medium">{name}</span>
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xs text-white/40 font-mono px-2 py-1 rounded bg-black/30 border border-white/5">{version}</span>
-                                        <a
-                                            href={`https://www.npmjs.com/package/${name}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="opacity-0 group-hover:opacity-100 text-[var(--accent-primary)] hover:brightness-125 transition-all p-1.5 hover:bg-[var(--accent-primary)]/10 rounded-lg"
-                                            title="View on npm"
-                                        >
-                                            <ExternalLink size={14} />
-                                        </a>
+                        <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
+                            <p className="text-[11px] uppercase tracking-wide text-white/45 mb-2.5">Install Health</p>
+                            <div className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md border ${installBadgeClass}`}>
+                                {installIndicator}
+                                {installLabel}
+                            </div>
+                            <p className="mt-2.5 text-xs text-white/65 leading-relaxed">{installDetail}</p>
+                            <div className="mt-3">
+                                <div className="flex items-center justify-between text-[11px] text-white/55 mb-1.5">
+                                    <span>Matched packages</span>
+                                    <span>{installedTracked}/{totalTracked} ({installPercent}%)</span>
+                                </div>
+                                <div className="h-2 rounded-full bg-white/10 overflow-hidden border border-white/10">
+                                    <div
+                                        className={`h-full ${progressTone} transition-all`}
+                                        style={{ width: `${Math.max(0, Math.min(100, installPercent))}%` }}
+                                    />
+                                </div>
+                            </div>
+                            {dependencyInstallStatus?.checked && (
+                                <div className="mt-3 flex items-center justify-between text-xs">
+                                    <span className="text-white/55">Missing</span>
+                                    <span className={missingCount > 0 ? 'text-amber-200' : 'text-emerald-200'}>{missingCount}</span>
+                                </div>
+                            )}
+                            {dependencyInstallStatus?.missingSample && dependencyInstallStatus.missingSample.length > 0 && (
+                                <div className="mt-2.5">
+                                    <p className="text-[11px] text-amber-200/80 mb-1.5">Missing sample</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {dependencyInstallStatus.missingSample.slice(0, 4).map((dep) => (
+                                            <span key={dep} className="text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-200/90 max-w-full truncate" title={dep}>
+                                                {dep}
+                                            </span>
+                                        ))}
                                     </div>
                                 </div>
-                            ))}
+                            )}
                         </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center py-16 text-white/30">
-                            <Package size={48} className="mb-4 opacity-20" />
-                            <p className="text-sm">No packages found</p>
+                    </aside>
+
+                    <section className="min-w-0 h-full min-h-0 flex flex-col">
+                        <div className="p-4 border-b border-white/5 bg-black/15">
+                            <div className="relative">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search packages..."
+                                    autoFocus
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-[var(--accent-primary)]/50 focus:bg-white/10 transition-all"
+                                />
+                            </div>
+                            <p className="mt-2 text-xs text-white/45">{filtered.length}/{allDependencies.length} shown</p>
                         </div>
-                    )}
+
+                        <div className="min-h-0 overflow-y-auto p-2 custom-scrollbar flex-1 bg-black/10">
+                            {filtered.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-2">
+                                    {filtered.map(({ name, version, scope }) => {
+                                        const isMissing = missingDependencySet.has(name.toLowerCase())
+                                        const presenceTone = dependencyInstallStatus?.checked
+                                            ? isMissing ? 'missing' : 'installed'
+                                            : 'unknown'
+
+                                        return (
+                                            <div key={`${scope}:${name}`} className="flex items-center justify-between p-3 hover:bg-white/5 rounded-xl group transition-all border border-transparent hover:border-white/5">
+                                                <div className="min-w-0 flex-1">
+                                                    <span className="text-sm text-white/80 font-mono font-medium block truncate" title={name}>{name}</span>
+                                                    <div className="mt-1 flex items-center gap-1.5">
+                                                        <span className={`inline-flex text-[10px] px-1.5 py-0.5 rounded border ${scope === 'dependency'
+                                                            ? 'border-sky-500/30 bg-sky-500/10 text-sky-200'
+                                                            : 'border-violet-500/30 bg-violet-500/10 text-violet-200'
+                                                        }`}>
+                                                            {scope === 'dependency' ? 'runtime' : 'dev'}
+                                                        </span>
+                                                        <span className={`inline-flex text-[10px] px-1.5 py-0.5 rounded border ${presenceTone === 'installed'
+                                                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                                            : presenceTone === 'missing'
+                                                                ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                                                                : 'border-white/10 bg-white/5 text-white/60'
+                                                        }`}>
+                                                            {presenceTone === 'installed' ? 'installed' : presenceTone === 'missing' ? 'missing' : 'unknown'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs text-white/40 font-mono px-2 py-1 rounded bg-black/30 border border-white/5">{version}</span>
+                                                    <a
+                                                        href={`https://www.npmjs.com/package/${name}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="opacity-0 group-hover:opacity-100 text-[var(--accent-primary)] hover:brightness-125 transition-all p-1.5 hover:bg-[var(--accent-primary)]/10 rounded-lg"
+                                                        title="View on npm"
+                                                    >
+                                                        <ExternalLink size={14} />
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-16 text-white/30">
+                                    <Package size={48} className="mb-4 opacity-20" />
+                                    <p className="text-sm">No packages found</p>
+                                </div>
+                            )}
+                        </div>
+                    </section>
                 </div>
             </div>
         </div>
     )
 }
-

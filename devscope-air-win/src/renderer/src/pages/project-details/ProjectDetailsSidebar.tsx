@@ -1,4 +1,4 @@
-import { Command, Package, Play } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Command, HelpCircle, Package, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
     SCRIPT_INTENT_BADGE_CLASSES,
@@ -11,6 +11,8 @@ import {
 export function ProjectDetailsSidebar({
     scripts,
     dependencies,
+    devDependencies,
+    dependencyInstallStatus,
     scriptPredictions,
     scriptIntentContext,
     onRunScript,
@@ -18,11 +20,48 @@ export function ProjectDetailsSidebar({
 }: {
     scripts?: Record<string, string>
     dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+    dependencyInstallStatus?: {
+        installed: boolean | null
+        checked: boolean
+        ecosystem: 'node' | 'unknown'
+        totalPackages: number
+        installedPackages: number
+        missingPackages: number
+        missingDependencies?: string[]
+        missingSample?: string[]
+        reason?: string
+    } | null
     scriptPredictions: Record<string, ScriptIntentPrediction>
     scriptIntentContext: ScriptIntentContext
     onRunScript: (name: string, command: string) => void
     onShowDependencies: () => void
 }) {
+    const mergedDependencies = [
+        ...Object.entries(dependencies || {}).map(([name, version]) => ({ name, version, scope: 'runtime' as const })),
+        ...Object.entries(devDependencies || {}).map(([name, version]) => ({ name, version, scope: 'dev' as const }))
+    ]
+    const previewDependencies = mergedDependencies.slice(0, 5)
+    const totalDependencies = mergedDependencies.length
+
+    const installLabel = dependencyInstallStatus?.installed === true
+        ? 'All Installed'
+        : dependencyInstallStatus?.installed === false
+            ? 'Missing Packages'
+            : 'Status Unknown'
+
+    const installIndicator = dependencyInstallStatus?.installed === true
+        ? <CheckCircle2 size={13} className="text-emerald-300" />
+        : dependencyInstallStatus?.installed === false
+            ? <AlertTriangle size={13} className="text-amber-300" />
+            : <HelpCircle size={13} className="text-white/50" />
+
+    const installBadgeClass = dependencyInstallStatus?.installed === true
+        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+        : dependencyInstallStatus?.installed === false
+            ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+            : 'border-white/10 bg-white/5 text-white/60'
+
     return (
         <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
             {scripts && Object.keys(scripts).length > 0 && (
@@ -71,14 +110,18 @@ export function ProjectDetailsSidebar({
                 </div>
             )}
 
-            {dependencies && (
+            {totalDependencies > 0 && (
                 <div className="bg-sparkle-card border border-white/5 rounded-2xl overflow-hidden shadow-sm">
                     <div className="px-5 py-4 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-white/80 font-medium">
+                        <div className="flex items-center gap-2 text-white/80 font-medium min-w-0">
                             <Package size={18} className="text-purple-400" />
                             <span>Dependencies</span>
                             <span className="text-xs bg-white/5 text-white/40 px-2 py-1 rounded-md">
-                                {Object.keys(dependencies).length}
+                                {totalDependencies}
+                            </span>
+                            <span className={cn('inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border shrink-0', installBadgeClass)}>
+                                {installIndicator}
+                                {installLabel}
                             </span>
                         </div>
                         <button
@@ -89,10 +132,20 @@ export function ProjectDetailsSidebar({
                         </button>
                     </div>
                     <div className="p-2">
-                        {Object.entries(dependencies).slice(0, 5).map(([name, version]) => (
-                            <div key={name} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-white/5 transition-colors">
-                                <span className="text-sm text-white/70 truncate max-w-[150px]">{name}</span>
-                                <span className="text-xs font-mono text-white/30 bg-white/5 px-1.5 py-0.5 rounded">{version}</span>
+                        {previewDependencies.map(({ name, version, scope }) => (
+                            <div key={`${scope}:${name}`} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-white/5 transition-colors">
+                                <span className="text-sm text-white/70 truncate max-w-[150px]" title={name}>{name}</span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className={cn(
+                                        'text-[10px] px-1.5 py-0.5 rounded border',
+                                        scope === 'runtime'
+                                            ? 'border-sky-500/30 bg-sky-500/10 text-sky-200'
+                                            : 'border-violet-500/30 bg-violet-500/10 text-violet-200'
+                                    )}>
+                                        {scope}
+                                    </span>
+                                    <span className="text-xs font-mono text-white/30 bg-white/5 px-1.5 py-0.5 rounded">{version}</span>
+                                </div>
                             </div>
                         ))}
                     </div>

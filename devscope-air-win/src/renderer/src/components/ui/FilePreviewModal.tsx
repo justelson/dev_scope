@@ -41,6 +41,7 @@ type PythonOutputEntry = {
     at: number
 }
 type PreviewTerminalState = 'idle' | 'connecting' | 'active' | 'exited' | 'error'
+type TerminalPanelPhase = 'hidden' | 'entering' | 'visible' | 'exiting'
 
 const LEFT_PANEL_MIN_WIDTH = 260
 const LEFT_PANEL_MAX_WIDTH = 460
@@ -49,6 +50,7 @@ const RIGHT_PANEL_MAX_WIDTH = 520
 const PYTHON_OUTPUT_MAX_CHARS = 200_000
 const PYTHON_OUTPUT_MIN_HEIGHT = 96
 const PREVIEW_TERMINAL_MIN_HEIGHT = 140
+const TERMINAL_PANEL_ANIMATION_MS = 220
 
 function countLines(value: string): number {
     if (!value) return 0
@@ -230,6 +232,7 @@ export function FilePreviewModal({
     const [isResizingPythonOutput, setIsResizingPythonOutput] = useState(false)
     const [terminalVisible, setTerminalVisible] = useState(false)
     const [terminalState, setTerminalState] = useState<PreviewTerminalState>('idle')
+    const [terminalPanelPhase, setTerminalPanelPhase] = useState<TerminalPanelPhase>('hidden')
     const [terminalSessionId, setTerminalSessionId] = useState(() => createPreviewTerminalSessionId())
     const [terminalHeight, setTerminalHeight] = useState(() =>
         Math.max(PREVIEW_TERMINAL_MIN_HEIGHT, Math.min(720, Math.round(settings.filePreviewTerminalPanelHeight || 220)))
@@ -750,7 +753,6 @@ export function FilePreviewModal({
         setTerminalState('connecting')
         setTerminalError(null)
         xtermRef.current?.clear()
-        xtermRef.current?.writeln('\x1b[90m[DevScope] Connecting terminal...\x1b[0m')
 
         const initialize = async () => {
             const result = await window.devscope.createPreviewTerminal({
@@ -764,7 +766,6 @@ export function FilePreviewModal({
             if (!result?.success) {
                 setTerminalState('error')
                 setTerminalError(result?.error || 'Failed to start terminal session.')
-                xtermRef.current?.writeln(`\r\n\x1b[31m${result?.error || 'Failed to start terminal session.'}\x1b[0m`)
                 return
             }
             setTerminalState('active')
@@ -785,9 +786,6 @@ export function FilePreviewModal({
             if (eventPayload.type === 'started') {
                 setTerminalState('active')
                 setTerminalError(null)
-                const shellLabel = eventPayload.shell || 'shell'
-                const cwdLabel = eventPayload.cwd || projectPath || file.path
-                xtermRef.current?.writeln(`\x1b[90m[DevScope] ${shellLabel} @ ${cwdLabel}\x1b[0m`)
                 return
             }
 
@@ -800,18 +798,15 @@ export function FilePreviewModal({
                 const message = String(eventPayload.message || 'Terminal session error.')
                 setTerminalState('error')
                 setTerminalError(message)
-                xtermRef.current?.writeln(`\r\n\x1b[31m${message}\x1b[0m`)
                 return
             }
 
             if (eventPayload.type === 'exit') {
-                const exitCode = typeof eventPayload.exitCode === 'number' ? eventPayload.exitCode : 0
                 setTerminalState('exited')
-                xtermRef.current?.writeln(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m`)
             }
         })
         return () => unsubscribe()
-    }, [file.path, projectPath, terminalVisible])
+    }, [terminalVisible])
 
     useEffect(() => {
         if (!pendingTerminalCommand) return
@@ -1162,8 +1157,32 @@ export function FilePreviewModal({
 
     const activeContent = mode === 'edit' ? draftContent : sourceContent
     const showPythonOutputPanel = canRunPython && (pythonOutputVisible || pythonRunState !== 'idle')
-    const showTerminalPanel = canUsePreviewTerminal && terminalVisible
-    const hasBottomPanel = showPythonOutputPanel || showTerminalPanel
+    const shouldShowTerminalPanel = canUsePreviewTerminal && terminalVisible
+    const renderTerminalPanel = terminalPanelPhase !== 'hidden'
+    const hasBottomPanel = showPythonOutputPanel || renderTerminalPanel
+    const centerHtmlRenderedPreview = isHtml && htmlViewMode === 'rendered' && mode === 'preview' && !hasBottomPanel
+    const flushResponsiveHtmlPreview = isHtml && htmlViewMode === 'rendered' && viewport === 'responsive' && !isExpanded
+
+    useEffect(() => {
+        if (shouldShowTerminalPanel) {
+            setTerminalPanelPhase((current) => (current === 'visible' ? current : 'entering'))
+            const rafId = window.requestAnimationFrame(() => {
+                setTerminalPanelPhase((current) => (current === 'entering' ? 'visible' : current))
+            })
+            return () => window.cancelAnimationFrame(rafId)
+        }
+
+        setTerminalPanelPhase((current) => {
+            if (current === 'hidden') return current
+            return 'exiting'
+        })
+        const timeoutId = window.setTimeout(() => {
+            setTerminalPanelPhase((current) => (current === 'exiting' ? 'hidden' : current))
+        }, TERMINAL_PANEL_ANIMATION_MS)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [shouldShowTerminalPanel])
+
     const pythonOutputHeightPx = `${Math.max(PYTHON_OUTPUT_MIN_HEIGHT, pythonOutputHeight)}px`
     const pythonStatusClass = (
         pythonRunState === 'success'
@@ -1255,21 +1274,26 @@ export function FilePreviewModal({
         </div>
     ) : null
     const terminalHeightPx = `${Math.max(PREVIEW_TERMINAL_MIN_HEIGHT, terminalHeight)}px`
-    const terminalStatusClass = (
+    const terminalStatusDotClass = (
         terminalState === 'active'
-            ? 'text-emerald-300'
+            ? 'bg-emerald-300'
             : terminalState === 'connecting'
-                ? 'text-sky-300'
+                ? 'bg-sky-300'
                 : terminalState === 'error'
-                    ? 'text-red-300'
+                    ? 'bg-red-300'
                     : terminalState === 'exited'
-                        ? 'text-amber-300'
-                        : 'text-sparkle-text-secondary'
+                        ? 'bg-amber-300'
+                        : 'bg-sparkle-text-secondary'
     )
-    const terminalPanel = showTerminalPanel ? (
+    const terminalPanel = renderTerminalPanel ? (
         <div
-            className="border-t border-sparkle-border bg-sparkle-card/90 backdrop-blur-sm flex flex-col"
-            style={{ height: terminalHeightPx }}
+            className={cn(
+                'border-t border-sparkle-border bg-sparkle-card/90 backdrop-blur-sm flex flex-col transition-[opacity,transform] ease-out',
+                terminalPanelPhase === 'visible'
+                    ? 'opacity-100 translate-y-0'
+                    : 'opacity-0 translate-y-2 pointer-events-none'
+            )}
+            style={{ height: terminalHeightPx, transitionDuration: `${TERMINAL_PANEL_ANIMATION_MS}ms` }}
         >
             <div
                 onMouseDown={startTerminalResize}
@@ -1280,8 +1304,9 @@ export function FilePreviewModal({
             </div>
             <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-sparkle-border-secondary">
                 <div className="min-w-0">
-                    <div className={cn('text-xs font-medium', terminalStatusClass)}>
-                        Terminal: {terminalState}
+                    <div className="text-xs font-medium text-sparkle-text flex items-center gap-1.5">
+                        <span className={cn('inline-block h-2 w-2 rounded-full', terminalStatusDotClass)} />
+                        <span>Terminal</span>
                     </div>
                     <div className="text-[10px] text-sparkle-text-muted truncate">
                         {projectPath || file.path}
@@ -1426,7 +1451,7 @@ export function FilePreviewModal({
                     onClearPythonOutput={clearPythonOutput}
                     onPythonRunModeChange={setPythonRunMode}
                     canUseTerminal={canUsePreviewTerminal}
-                    terminalVisible={showTerminalPanel}
+                    terminalVisible={shouldShowTerminalPanel}
                     onToggleTerminal={() => {
                         setTerminalVisible((current) => !current)
                     }}
@@ -1504,7 +1529,11 @@ export function FilePreviewModal({
                             ref={previewSurfaceRef}
                             className={cn(
                                 'flex-1 min-w-0 custom-scrollbar flex',
-                                isExpanded ? 'items-stretch justify-start' : mode === 'edit' ? 'items-stretch justify-center' : 'items-start justify-center',
+                                isExpanded
+                                    ? (centerHtmlRenderedPreview ? 'items-center justify-center' : 'items-stretch justify-start')
+                                    : mode === 'edit'
+                                        ? 'items-stretch justify-center'
+                                        : (centerHtmlRenderedPreview ? 'items-center justify-center' : 'items-start justify-center'),
                                 isExpanded ? 'p-0' : isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-4',
                                 mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || hasBottomPanel ? 'overflow-hidden' : 'overflow-auto'
                             )}
@@ -1514,7 +1543,8 @@ export function FilePreviewModal({
                                 <div className={cn(
                                     'min-h-0',
                                     hasBottomPanel ? 'flex-1' : 'h-full',
-                                    hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : ''
+                                    hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : '',
+                                    centerHtmlRenderedPreview ? 'flex items-center justify-center' : ''
                                 )}>
                                     <PreviewErrorBoundary resetKey={`${file.path}:${file.type}:${viewport}:${htmlViewMode}:${mode}`}>
                                         <PreviewBody
@@ -1678,7 +1708,7 @@ export function FilePreviewModal({
                         ref={previewSurfaceRef}
                         className={cn(
                             'flex-1 custom-scrollbar flex items-stretch justify-center bg-sparkle-bg',
-                            isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-4',
+                            flushResponsiveHtmlPreview ? 'p-0' : (isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-4'),
                             mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || hasBottomPanel ? 'overflow-hidden' : 'overflow-auto'
                         )}
                         style={{ overscrollBehavior: 'contain' }}
@@ -1687,7 +1717,8 @@ export function FilePreviewModal({
                             <div className={cn(
                                 'min-h-0',
                                 hasBottomPanel ? 'flex-1' : 'h-full',
-                                hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : ''
+                                hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : '',
+                                centerHtmlRenderedPreview ? 'flex items-center justify-center' : ''
                             )}>
                                 <PreviewErrorBoundary resetKey={`${file.path}:${file.type}:${viewport}:${htmlViewMode}:${mode}`}>
                                     <PreviewBody

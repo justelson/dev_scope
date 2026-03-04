@@ -1,4 +1,4 @@
-import { ExternalLink, Search } from 'lucide-react'
+import { ExternalLink, Pencil, Search, Trash2 } from 'lucide-react'
 import ProjectIcon from '@/components/ui/ProjectIcon'
 
 export type StatsModalKey = 'projects' | 'frameworks' | 'types'
@@ -29,6 +29,8 @@ export function ProjectsStatsModal({
     modalTypes,
     onClose,
     onProjectClick,
+    onProjectRename,
+    onProjectDelete,
     getProjectTypeLabel,
     onOpenInExplorer
 }: {
@@ -42,6 +44,8 @@ export function ProjectsStatsModal({
     modalTypes: ModalCountItem[]
     onClose: () => void
     onProjectClick: (project: ModalProject) => void
+    onProjectRename: (project: ModalProject) => void
+    onProjectDelete: (project: ModalProject) => void
     getProjectTypeLabel: (type: string) => string
     onOpenInExplorer: (path: string) => void
 }) {
@@ -116,13 +120,31 @@ export function ProjectsStatsModal({
                                             <span className="text-[11px] text-sparkle-text-secondary truncate">
                                                 {project.frameworks?.length ? project.frameworks.join(', ') : 'No frameworks'}
                                             </span>
-                                            <button
-                                                onClick={() => onOpenInExplorer(project.path)}
-                                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-sparkle-border text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors shrink-0"
-                                            >
-                                                <ExternalLink size={11} />
-                                                Open
-                                            </button>
+                                            <div className="inline-flex items-center gap-1 shrink-0">
+                                                <button
+                                                    onClick={() => onProjectRename(project)}
+                                                    className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-sparkle-border text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
+                                                    title="Rename project"
+                                                >
+                                                    <Pencil size={11} />
+                                                    Rename
+                                                </button>
+                                                <button
+                                                    onClick={() => onProjectDelete(project)}
+                                                    className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-red-500/30 text-red-200 hover:bg-red-500/15 transition-colors"
+                                                    title="Delete project"
+                                                >
+                                                    <Trash2 size={11} />
+                                                    Delete
+                                                </button>
+                                                <button
+                                                    onClick={() => onOpenInExplorer(project.path)}
+                                                    className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-sparkle-border text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
+                                                >
+                                                    <ExternalLink size={11} />
+                                                    Open
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}

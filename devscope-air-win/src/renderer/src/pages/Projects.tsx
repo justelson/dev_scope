@@ -3,20 +3,102 @@
  * Refactored into controller + presentational sections.
  */
 
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FolderTree, Folder, Settings, AlertCircle, RefreshCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { PromptModal } from '@/components/ui/PromptModal'
 import { useSettings } from '@/lib/settings'
 import { ProjectsStatsModal, type StatsModalKey } from './projects/ProjectsStatsModal'
 import { ProjectsHeader } from './projects/ProjectsHeader'
 import { ProjectsToolbar } from './projects/ProjectsToolbar'
 import { ProjectsContentSections } from './projects/ProjectsContentSections'
 import { useProjectsController } from './projects/useProjectsController'
-import { getProjectTypeById, formatRelativeTime } from './projects/projectsTypes'
+import { getProjectTypeById, formatRelativeTime, type Project } from './projects/projectsTypes'
 
 export default function Projects() {
     const { settings, updateSettings } = useSettings()
     const navigate = useNavigate()
     const controller = useProjectsController(settings, updateSettings, navigate)
+    const [renameTarget, setRenameTarget] = useState<Project | null>(null)
+    const [renameDraft, setRenameDraft] = useState('')
+    const [renameErrorMessage, setRenameErrorMessage] = useState<string | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+    const [toast, setToast] = useState<{ message: string; visible: boolean; tone?: 'success' | 'error' } | null>(null)
+
+    const showToast = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
+        setToast({ message, visible: false, tone })
+        window.setTimeout(() => {
+            setToast((current) => current ? { ...current, visible: true } : current)
+        }, 8)
+    }, [])
+
+    useEffect(() => {
+        if (!toast?.visible) return
+        const hideTimer = window.setTimeout(() => {
+            setToast((current) => current ? { ...current, visible: false } : current)
+        }, 2200)
+        const removeTimer = window.setTimeout(() => {
+            setToast(null)
+        }, 2600)
+        return () => {
+            window.clearTimeout(hideTimer)
+            window.clearTimeout(removeTimer)
+        }
+    }, [toast?.visible])
+
+    const handleProjectRename = useCallback((project: Project) => {
+        setRenameTarget(project)
+        setRenameDraft(project.name)
+        setRenameErrorMessage(null)
+    }, [])
+
+    const submitProjectRename = useCallback(async () => {
+        if (!renameTarget) return
+        const normalizedNextName = renameDraft.trim()
+        if (!normalizedNextName) {
+            setRenameErrorMessage('Name cannot be empty.')
+            return
+        }
+        if (normalizedNextName === renameTarget.name) {
+            setRenameTarget(null)
+            setRenameDraft('')
+            setRenameErrorMessage(null)
+            return
+        }
+
+        const result = await window.devscope.renameFileSystemItem(renameTarget.path, normalizedNextName)
+        if (!result.success) {
+            setRenameErrorMessage(result.error || `Failed to rename "${renameTarget.name}"`)
+            return
+        }
+
+        setRenameTarget(null)
+        setRenameDraft('')
+        setRenameErrorMessage(null)
+        controller.clearSearch()
+        showToast(`Renamed project to ${normalizedNextName}`)
+        await controller.loadProjects()
+    }, [controller, renameDraft, renameTarget, showToast])
+
+    const handleProjectDelete = useCallback((project: Project) => {
+        setDeleteTarget(project)
+    }, [])
+
+    const confirmProjectDelete = useCallback(async () => {
+        if (!deleteTarget) return
+        const result = await window.devscope.deleteFileSystemItem(deleteTarget.path)
+        if (!result.success) {
+            showToast(result.error || `Failed to delete "${deleteTarget.name}"`, 'error')
+            return
+        }
+
+        setDeleteTarget(null)
+        controller.clearSearch()
+        showToast(`Deleted ${deleteTarget.name}`)
+        await controller.loadProjects()
+    }, [controller, deleteTarget, showToast])
 
     if (!controller.hasLoadedOnce && controller.showBlockingLoader) {
         return (
@@ -130,6 +212,8 @@ export default function Projects() {
                     getProjectThemeColor={(type) => getProjectTypeById(type)?.themeColor || '#525252'}
                     onFolderOpen={controller.handleFolderBrowse}
                     onProjectOpen={controller.handleProjectClick}
+                    onProjectRename={handleProjectRename}
+                    onProjectDelete={handleProjectDelete}
                     onFileParentOpen={controller.handleFolderBrowse}
                     openInExplorer={(path) => {
                         void window.devscope.openInExplorer?.(path)
@@ -150,9 +234,58 @@ export default function Projects() {
                 modalTypes={controller.modalTypes}
                 onClose={() => controller.setStatsModal(null)}
                 onProjectClick={controller.handleProjectClick}
+                onProjectRename={handleProjectRename}
+                onProjectDelete={handleProjectDelete}
                 getProjectTypeLabel={(type) => getProjectTypeById(type)?.displayName || type}
                 onOpenInExplorer={(path) => window.devscope.openInExplorer?.(path)}
             />
+
+            <PromptModal
+                isOpen={Boolean(renameTarget)}
+                title="Rename Project"
+                message={renameTarget ? `Rename "${renameTarget.name}"` : ''}
+                value={renameDraft}
+                onChange={(value) => {
+                    setRenameDraft(value)
+                    if (renameErrorMessage) setRenameErrorMessage(null)
+                }}
+                onConfirm={() => { void submitProjectRename() }}
+                onCancel={() => {
+                    setRenameTarget(null)
+                    setRenameDraft('')
+                    setRenameErrorMessage(null)
+                }}
+                confirmLabel="Rename"
+                placeholder="Enter new project name"
+                errorMessage={renameErrorMessage}
+            />
+
+            <ConfirmModal
+                isOpen={Boolean(deleteTarget)}
+                title="Delete Project?"
+                message={deleteTarget
+                    ? `Are you sure you want to delete "${deleteTarget.name}" from disk? This action cannot be undone.`
+                    : ''}
+                confirmLabel="Delete"
+                onConfirm={() => { void confirmProjectDelete() }}
+                onCancel={() => setDeleteTarget(null)}
+                variant="danger"
+                fullscreen
+            />
+
+            {toast && (
+                <div
+                    className={cn(
+                        'fixed bottom-4 right-4 z-[120] max-w-sm rounded-xl px-4 py-3 text-sm shadow-lg backdrop-blur-md transition-all duration-300',
+                        toast.tone === 'error'
+                            ? 'border border-red-500/30 bg-red-500/10 text-red-200'
+                            : 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+                        toast.visible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
+                    )}
+                >
+                    {toast.message}
+                </div>
+            )}
         </div>
     )
 }

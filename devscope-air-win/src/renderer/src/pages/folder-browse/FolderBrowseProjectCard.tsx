@@ -1,14 +1,17 @@
-import { Clock, ExternalLink } from 'lucide-react'
+import { Clock, ExternalLink, FolderOpen, Pencil, Trash2 } from 'lucide-react'
 import ProjectIcon, { FrameworkBadge } from '@/components/ui/ProjectIcon'
 import { cn } from '@/lib/utils'
 import { getProjectTypeById, type Project, type ViewMode } from './types'
 import { WRAP_AND_CLAMP_2 } from '../shared/BrowseSectionPrimitives'
+import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
 
 interface FolderBrowseProjectCardProps {
     project: Project
     viewMode: ViewMode
     onProjectClick: (project: Project) => void
     onOpenProjectInExplorer: (path: string) => void
+    onProjectRename: (project: Project) => void | Promise<void>
+    onProjectDelete: (project: Project) => void | Promise<void>
     formatRelativeTime: (timestamp?: number) => string
 }
 
@@ -17,6 +20,8 @@ export function FolderBrowseProjectCard({
     viewMode,
     onProjectClick,
     onOpenProjectInExplorer,
+    onProjectRename,
+    onProjectDelete,
     formatRelativeTime
 }: FolderBrowseProjectCardProps) {
     const typeInfo = getProjectTypeById(project.type)
@@ -43,6 +48,17 @@ export function FolderBrowseProjectCard({
 
             {viewMode === 'finder' ? (
                 <>
+                    <div className="absolute top-2 right-2 z-20">
+                        <FileActionsMenu
+                            buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20"
+                            items={[
+                                { id: 'open', label: 'Open', icon: <FolderOpen size={13} />, onSelect: () => onProjectClick(project) },
+                                { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => onOpenProjectInExplorer(project.path) },
+                                { id: 'rename', label: 'Rename Project', icon: <Pencil size={13} />, onSelect: () => onProjectRename(project) },
+                                { id: 'delete', label: 'Delete Project', icon: <Trash2 size={13} />, danger: true, onSelect: () => onProjectDelete(project) }
+                            ]}
+                        />
+                    </div>
                     <div className="relative mb-3 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/5 bg-sparkle-bg shadow-inner group-hover:border-white/20">
                         <ProjectIcon
                             projectType={project.type}
@@ -74,6 +90,15 @@ export function FolderBrowseProjectCard({
                             <Clock size={12} />
                             <span>{formatRelativeTime(project.lastModified)}</span>
                         </div>
+                        <FileActionsMenu
+                            buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                            items={[
+                                { id: 'open', label: 'Open', icon: <FolderOpen size={13} />, onSelect: () => onProjectClick(project) },
+                                { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => onOpenProjectInExplorer(project.path) },
+                                { id: 'rename', label: 'Rename Project', icon: <Pencil size={13} />, onSelect: () => onProjectRename(project) },
+                                { id: 'delete', label: 'Delete Project', icon: <Trash2 size={13} />, danger: true, onSelect: () => onProjectDelete(project) }
+                            ]}
+                        />
                     </div>
 
                     <div className="relative z-10 flex-1">

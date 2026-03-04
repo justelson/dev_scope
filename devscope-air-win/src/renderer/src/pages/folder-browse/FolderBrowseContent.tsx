@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { getProjectTypeById, type ContentLayout, type FileItem, type FolderItem, type Project, type ViewMode } from './types'
 import { FinderItem, SectionHeader, WRAP_AND_CLAMP_2 } from '../shared/BrowseSectionPrimitives'
 import { FolderBrowseProjectCard } from './FolderBrowseProjectCard'
+import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
 
 type EntryActionTarget = {
     path: string
@@ -39,6 +40,8 @@ interface FolderBrowseContentProps {
     error: string | null
     onFolderClick: (folder: FolderItem) => void
     onProjectClick: (project: Project) => void
+    onProjectRename: (project: Project) => void | Promise<void>
+    onProjectDelete: (project: Project) => void | Promise<void>
     onOpenFilePreview: (file: FileItem) => void
     onOpenProjectInExplorer: (path: string) => void
     onEntryOpen: (entry: EntryActionTarget) => void | Promise<void>
@@ -69,6 +72,8 @@ export function FolderBrowseContent({
     error,
     onFolderClick,
     onProjectClick,
+    onProjectRename,
+    onProjectDelete,
     onOpenFilePreview,
     onOpenProjectInExplorer,
     onEntryOpen,
@@ -296,6 +301,7 @@ export function FolderBrowseContent({
                             {explorerEntries.map((entry) => {
                                 if (entry.kind === 'project') {
                                     const project = entry.payload as Project
+                                    const entryTarget: EntryActionTarget = { path: project.path, name: project.name, type: 'directory' }
                                     if (isFinderMode) {
                                         return (
                                             <FolderBrowseProjectCard
@@ -304,6 +310,8 @@ export function FolderBrowseContent({
                                                 viewMode="finder"
                                                 onProjectClick={onProjectClick}
                                                 onOpenProjectInExplorer={onOpenProjectInExplorer}
+                                                onProjectRename={onProjectRename}
+                                                onProjectDelete={onProjectDelete}
                                                 formatRelativeTime={formatRelativeTime}
                                             />
                                         )
@@ -311,20 +319,61 @@ export function FolderBrowseContent({
 
                                     const typeInfo = getProjectTypeById(project.type)
                                     return (
-                                        <button
+                                        <div
                                             key={entry.id}
                                             onClick={() => onProjectClick(project)}
+                                            onContextMenu={(event) => openEntryContextMenu(event, entryTarget)}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault()
+                                                    onProjectClick(project)
+                                                }
+                                            }}
                                             className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15"
                                         >
-                                            <div className="mb-2 flex items-center justify-between">
+                                            <div className="mb-2 flex items-center justify-between gap-2">
                                                 <div className="rounded-lg border border-white/5 bg-sparkle-bg p-2">
                                                     <ProjectIcon projectType={project.type} framework={project.frameworks?.[0]} size={20} />
                                                 </div>
-                                                <span className="text-[10px] text-white/30">{formatRelativeTime(project.lastModified)}</span>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[10px] text-white/30">{formatRelativeTime(project.lastModified)}</span>
+                                                    <FileActionsMenu
+                                                        buttonClassName="h-7 w-7 text-white/20 group-hover:text-white/40 hover:!text-white transition-all"
+                                                        items={[
+                                                            {
+                                                                id: 'open',
+                                                                label: 'Open',
+                                                                icon: <FolderOpen size={13} />,
+                                                                onSelect: () => onProjectClick(project)
+                                                            },
+                                                            {
+                                                                id: 'explorer',
+                                                                label: 'Open in Explorer',
+                                                                icon: <ExternalLink size={13} />,
+                                                                onSelect: () => onOpenProjectInExplorer(project.path)
+                                                            },
+                                                            {
+                                                                id: 'rename',
+                                                                label: 'Rename Project',
+                                                                icon: <Pencil size={13} />,
+                                                                onSelect: () => onProjectRename(project)
+                                                            },
+                                                            {
+                                                                id: 'delete',
+                                                                label: 'Delete Project',
+                                                                icon: <Trash2 size={13} />,
+                                                                danger: true,
+                                                                onSelect: () => onProjectDelete(project)
+                                                            }
+                                                        ]}
+                                                    />
+                                                </div>
                                             </div>
                                             <p className={cn('text-sm font-semibold text-white/85 group-hover:text-white leading-5', WRAP_AND_CLAMP_2)} title={project.name}>{project.name}</p>
                                             <p className="truncate text-[10px] text-white/40" title={typeInfo?.displayName || project.type}>{typeInfo?.displayName || project.type}</p>
-                                        </button>
+                                        </div>
                                     )
                                 }
 
@@ -628,6 +677,8 @@ export function FolderBrowseContent({
                                 viewMode={viewMode}
                                 onProjectClick={onProjectClick}
                                 onOpenProjectInExplorer={onOpenProjectInExplorer}
+                                onProjectRename={onProjectRename}
+                                onProjectDelete={onProjectDelete}
                                 formatRelativeTime={formatRelativeTime}
                             />
                         ))}

@@ -229,9 +229,10 @@ export default function PreviewModalHeader({
                                 : 'text-white/50 hover:text-white/80 hover:bg-white/10'
                         )}
                         title="Preview mode"
+                        aria-label="Preview mode"
                     >
                         <Eye size={13} />
-                        <span>Preview</span>
+                        <span className="sr-only">Preview</span>
                     </button>
                     <button
                         onClick={() => onModeChange('edit')}
@@ -244,9 +245,10 @@ export default function PreviewModalHeader({
                             (!isEditable || !!loadingEditableContent) && 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-white/50'
                         )}
                         title={isEditable ? 'Edit mode' : 'This file type is preview-only'}
+                        aria-label={isEditable ? 'Edit mode' : 'This file type is preview-only'}
                     >
                         <Edit3 size={13} />
-                        <span>Edit</span>
+                        <span className="sr-only">Edit</span>
                     </button>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -409,30 +411,31 @@ export default function PreviewModalHeader({
                         isVeryCompactHtmlHeader ? 'justify-start' : isCompactHtmlHeader ? 'justify-between' : ''
                     )}
                 >
-                    <div className={cn('flex items-center gap-1 bg-white/5 rounded-lg p-1 flex-wrap', isUltraCompactHtmlHeader ? 'w-full justify-between' : '')}>
-                        {(Object.entries(VIEWPORT_PRESETS) as [ViewportPreset, typeof presetConfig][]).map(([key, preset]) => {
-                            const Icon = preset.icon
-                            return (
-                                <button
-                                    key={key}
-                                    onClick={() => onViewportChange(key)}
-                                    className={cn(
-                                        'flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all',
-                                        viewport === key
-                                            ? 'bg-white/15 text-white'
-                                            : 'text-white/40 hover:text-white/70 hover:bg-white/5',
-                                        isUltraCompactHtmlHeader ? 'px-2 min-w-[2rem] justify-center' : ''
-                                    )}
-                                    title={key === 'responsive' ? 'Full Width' : `${preset.width}x${preset.height}`}
-                                >
-                                    {Icon && <Icon size={14} />}
-                                    <span className={cn(isVeryCompactHtmlHeader ? 'hidden lg:inline' : isCompactHtmlHeader ? 'hidden md:inline' : 'hidden sm:inline')}>
-                                        {preset.label}
-                                    </span>
-                                </button>
-                            )
-                        })}
-                    </div>
+                    {htmlViewMode === 'rendered' && (
+                        <div className={cn('flex items-center gap-2 bg-white/5 rounded-lg p-1.5', isUltraCompactHtmlHeader ? 'w-full' : '')}>
+                            <span className="text-[11px] text-white/60 px-1">Viewport</span>
+                            <select
+                                value={viewport}
+                                onChange={(event) => {
+                                    const nextViewport = event.target.value
+                                    if (nextViewport in VIEWPORT_PRESETS) {
+                                        onViewportChange(nextViewport as ViewportPreset)
+                                        return
+                                    }
+                                    onViewportChange('responsive')
+                                }}
+                                className="h-7 rounded-md border border-white/15 bg-white/10 px-2 text-xs text-white outline-none transition-colors hover:bg-white/15 focus:border-white/30 focus:bg-white/15"
+                                title="Choose preview viewport size"
+                                aria-label="Choose preview viewport size"
+                            >
+                                {(Object.entries(VIEWPORT_PRESETS) as [ViewportPreset, typeof presetConfig][]).map(([key, preset]) => (
+                                    <option key={key} value={key} className="bg-slate-900 text-white">
+                                        {key === 'responsive' ? 'Full Width' : `${preset.label} (${preset.width}x${preset.height})`}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     <div className={cn('flex items-center gap-1 bg-white/5 rounded-lg p-1', isUltraCompactHtmlHeader ? 'w-full justify-center' : '')}>
                         <button
                             onClick={() => onHtmlViewModeChange('rendered')}
@@ -442,8 +445,11 @@ export default function PreviewModalHeader({
                                     ? 'bg-white/15 text-white'
                                     : 'text-white/40 hover:text-white/70 hover:bg-white/5'
                             )}
+                            title="Rendered HTML preview"
+                            aria-label="Rendered HTML preview"
                         >
-                            Preview
+                            <Eye size={13} />
+                            <span className="sr-only">Rendered</span>
                         </button>
                         <button
                             onClick={() => onHtmlViewModeChange('code')}
@@ -453,8 +459,11 @@ export default function PreviewModalHeader({
                                     ? 'bg-white/15 text-white'
                                     : 'text-white/40 hover:text-white/70 hover:bg-white/5'
                             )}
+                            title="HTML source preview"
+                            aria-label="HTML source preview"
                         >
-                            Code
+                            <Code size={13} />
+                            <span className="sr-only">Source</span>
                         </button>
                     </div>
                 </div>
@@ -543,9 +552,10 @@ export default function PreviewModalHeader({
                                 isCompactHtmlHeader ? 'px-2' : ''
                             )}
                             title="Open in Browser"
+                            aria-label="Open in browser"
                         >
                             <ExternalLink size={14} />
-                            {!isCompactHtmlHeader && <span>Open</span>}
+                            <span className="sr-only">Open</span>
                         </button>
                     )}
                     {isCsv && (

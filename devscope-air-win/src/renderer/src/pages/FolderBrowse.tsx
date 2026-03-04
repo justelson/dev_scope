@@ -433,6 +433,22 @@ export default function FolderBrowse() {
         setDeleteTarget(entry)
     }, [])
 
+    const handleProjectRename = useCallback(async (project: Project) => {
+        await handleEntryRename({
+            path: project.path,
+            name: project.name,
+            type: 'directory'
+        })
+    }, [handleEntryRename])
+
+    const handleProjectDelete = useCallback(async (project: Project) => {
+        await handleEntryDelete({
+            path: project.path,
+            name: project.name,
+            type: 'directory'
+        })
+    }, [handleEntryDelete])
+
     const handleEntryPaste = useCallback(async (entry: FileSystemClipboardItem) => {
         if (!fileClipboardItem) return
 
@@ -566,6 +582,8 @@ export default function FolderBrowse() {
                     error={error}
                     onFolderClick={handleFolderClick}
                     onProjectClick={handleProjectClick}
+                    onProjectRename={handleProjectRename}
+                    onProjectDelete={handleProjectDelete}
                     onOpenFilePreview={(file) => openPreview(file, file.extension)}
                     onOpenProjectInExplorer={(path) => window.devscope.openInExplorer?.(path)}
                     onEntryOpen={handleEntryOpen}

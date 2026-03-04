@@ -33,3 +33,6 @@ Thumbs.db
 
 #
 reference/
+
+# Local docs snapshots
+docs/current/FILE_TREE_SNAPSHOT.txt

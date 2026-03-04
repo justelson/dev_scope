@@ -56,8 +56,15 @@ export function ProjectDetailsOverlays(props: ProjectDetailsOverlaysProps) {
 
     return (
         <>
-            {showDependenciesModal && project.dependencies && (
-                <DependenciesModal dependencies={project.dependencies} onClose={() => setShowDependenciesModal(false)} />
+            {showDependenciesModal && (project.dependencies || project.devDependencies) && (
+                <DependenciesModal
+                    projectName={project.displayName || project.name}
+                    projectPath={project.path}
+                    dependencies={project.dependencies}
+                    devDependencies={project.devDependencies}
+                    dependencyInstallStatus={project.dependencyInstallStatus}
+                    onClose={() => setShowDependenciesModal(false)}
+                />
             )}
 
             {selectedCommit && (
