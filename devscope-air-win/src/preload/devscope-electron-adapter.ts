@@ -10,14 +10,15 @@ import { createRemoteAccessAdapter } from './adapters/remote-access-adapter'
 import { createSettingsAndAiAdapter } from './adapters/settings-ai-adapter'
 import { createSystemAdapter } from './adapters/system-adapter'
 import { createWindowAdapter } from './adapters/window-adapter'
+import { REMOTE_ACCESS_ENABLED } from '../shared/feature-flags'
 
 export function createDevScopeElectronAdapter(): DevScopeApi {
     const api: DevScopeApi = {
         ...createSystemAdapter(),
         ...createSettingsAndAiAdapter(),
         ...createProjectsAdapter(),
-        ...createRemoteAccessAdapter(),
         ...createDisabledAdapters(),
+        ...(REMOTE_ACCESS_ENABLED ? createRemoteAccessAdapter() : {}),
         ...createAssistantAdapter(),
         ...createWindowAdapter()
     } as DevScopeApi

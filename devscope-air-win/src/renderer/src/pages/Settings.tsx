@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
+import { REMOTE_ACCESS_ENABLED } from '@shared/feature-flags'
 
 interface SettingsCardProps {
     to: string
@@ -102,18 +103,20 @@ export default function Settings() {
                     preview={`${settings.assistantEnabled ? 'Enabled' : 'Disabled'} • ${settings.assistantApprovalMode.toUpperCase()}${settings.assistantAutoConnectOnOpen ? ' • Auto-connect' : ''}`}
                 />
 
-                <SettingsCard
-                    to="/settings/remote-access"
-                    icon={<Smartphone className="text-cyan-300" size={24} />}
-                    iconBg="bg-cyan-500/10"
-                    title="Remote Access (Beta)"
-                    description="Beta: optional mobile control via Devscope Cloud or your own server"
-                    preview={
-                        settings.remoteAccessEnabled
-                            ? `${settings.remoteAccessMode === 'self-hosted' ? 'Self-hosted' : settings.remoteAccessMode === 'devscope-cloud' ? 'Devscope Cloud' : 'Local-only'} • ${settings.remoteAccessConnectedDevices.length} devices`
-                            : 'Local-only (disabled)'
-                    }
-                />
+                {REMOTE_ACCESS_ENABLED && (
+                    <SettingsCard
+                        to="/settings/remote-access"
+                        icon={<Smartphone className="text-cyan-300" size={24} />}
+                        iconBg="bg-cyan-500/10"
+                        title="Remote Access (Beta)"
+                        description="Beta: optional mobile control via Devscope Cloud or your own server"
+                        preview={
+                            settings.remoteAccessEnabled
+                                ? `${settings.remoteAccessMode === 'self-hosted' ? 'Self-hosted' : settings.remoteAccessMode === 'devscope-cloud' ? 'Devscope Cloud' : 'Local-only'} • ${settings.remoteAccessConnectedDevices.length} devices`
+                                : 'Local-only (disabled)'
+                        }
+                    />
+                )}
 
                 <SettingsCard
                     to="/settings/ai"

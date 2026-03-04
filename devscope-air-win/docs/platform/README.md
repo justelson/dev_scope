@@ -17,6 +17,8 @@ Use with:
   - IDE extension model, integration points, and risk controls.
 - `docs/platform/ALT_UI_CLIENTS_ON_DEVSCOPE.md`
   - How to build additional UIs (web, TUI, lightweight desktop) on the same backend contract.
+- `apps/mobile-companion/README.md`
+  - Deployable mobile web companion (Vercel) for remote pairing and relay checks.
 
 ## Current Anchor Points In Codebase
 

@@ -260,8 +260,13 @@ export async function handleRemoteApprovePairing(
             device: payload.device || null
         }
     } catch (error) {
+        const message = asErrorMessage(error)
+        if (/pairing approval failed/i.test(message)) {
+            // Expected while waiting for mobile claim during desktop auto-approve polling.
+            return { success: false, error: 'Pairing pending mobile claim.' }
+        }
         log.warn('remote approvePairing failed', error)
-        return { success: false, error: asErrorMessage(error) }
+        return { success: false, error: message }
     }
 }
 

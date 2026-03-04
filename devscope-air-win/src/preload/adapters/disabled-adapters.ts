@@ -1,6 +1,13 @@
+import { REMOTE_ACCESS_DISABLED_MESSAGE } from '../../shared/feature-flags'
+
 const disabledFeature = (feature: string) => ({
     success: false,
     error: `${feature} is disabled in DevScope Air`
+})
+
+const disabledRemoteAccessFeature = () => ({
+    success: false,
+    error: REMOTE_ACCESS_DISABLED_MESSAGE
 })
 
 export function createDisabledAdapters() {
@@ -32,6 +39,16 @@ export function createDisabledAdapters() {
             onSessionClosed: () => () => { },
             onOutput: () => () => { },
             onStatusChange: () => () => { }
+        },
+        remoteAccess: {
+            validateServer: () => Promise.resolve(disabledRemoteAccessFeature()),
+            challengeServer: () => Promise.resolve(disabledRemoteAccessFeature()),
+            createPairing: () => Promise.resolve(disabledRemoteAccessFeature()),
+            claimPairing: () => Promise.resolve(disabledRemoteAccessFeature()),
+            approvePairing: () => Promise.resolve(disabledRemoteAccessFeature()),
+            listDevices: () => Promise.resolve(disabledRemoteAccessFeature()),
+            revokeDevice: () => Promise.resolve(disabledRemoteAccessFeature()),
+            publishEnvelope: () => Promise.resolve(disabledRemoteAccessFeature())
         },
         getAIRuntimeStatus: () => Promise.resolve(disabledFeature('AI Runtime')),
         getAIAgents: () => Promise.resolve({ success: true, agents: [] })

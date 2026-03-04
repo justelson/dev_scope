@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
     ArrowLeft,
     CheckCircle2,
     Cloud,
+    Copy,
     KeyRound,
     Lock,
     RefreshCw,
@@ -31,6 +32,18 @@ type RelayPairingState = {
     expiresAt: number
 } | null
 
+type CloudQuickConnectPayload = {
+    v: 1
+    kind: 'devscope-cloud-connect'
+    relayUrl: string
+    relayApiKey: string
+    ownerId: string
+    pairingId: string
+    oneTimeToken: string
+    confirmationCode: string
+    expiresAt: number
+}
+
 type RelayConnectedDevice = {
     id: string
     name?: string
@@ -43,6 +56,7 @@ type RelayConnectedDevice = {
 }
 
 const DEVSCOPE_CLOUD_URL = 'https://devscope-production.up.railway.app'
+const CLOUD_QUICK_CONNECT_PREFIX = 'DEVSCOPE_CLOUD_CONNECT:'
 
 function normalizeUrl(raw: string): string {
     const trimmed = raw.trim()
@@ -69,12 +83,71 @@ export default function RemoteAccessSettings() {
     const [validation, setValidation] = useState<ValidationState>({ status: 'idle', message: '' })
     const [pairing, setPairing] = useState<RelayPairingState>(null)
     const [devicesLoading, setDevicesLoading] = useState(false)
+    const autoApproveTimerRef = useRef<number | null>(null)
+    const remoteAccessChecked = settings.remoteAccessEnabled && settings.remoteAccessMode !== 'local-only'
+
+    const normalizeRelayError = (message: string): string => {
+        if (/invalid relay api key/i.test(message)) {
+            return 'Relay API key was rejected. In Relay Identity, use the same key as server RELAY_API_KEY, or leave both empty.'
+        }
+        return message
+    }
 
     const activeServerUrl = useMemo(() => {
         if (settings.remoteAccessMode === 'devscope-cloud') return DEVSCOPE_CLOUD_URL
         if (settings.remoteAccessMode === 'self-hosted') return normalizeUrl(settings.remoteAccessServerUrl || serverInput)
         return ''
     }, [settings.remoteAccessMode, settings.remoteAccessServerUrl, serverInput])
+
+    const cloudQuickConnectCode = useMemo(() => {
+        if (!pairing || !activeServerUrl || settings.remoteAccessMode === 'local-only') return ''
+        const payload: CloudQuickConnectPayload = {
+            v: 1,
+            kind: 'devscope-cloud-connect',
+            relayUrl: activeServerUrl,
+            relayApiKey: settings.remoteAccessApiKey.trim(),
+            ownerId: settings.remoteAccessOwnerId,
+            pairingId: pairing.pairingId,
+            oneTimeToken: pairing.oneTimeToken,
+            confirmationCode: pairing.confirmationCode,
+            expiresAt: pairing.expiresAt
+        }
+        return `${CLOUD_QUICK_CONNECT_PREFIX}${btoa(JSON.stringify(payload))}`
+    }, [
+        pairing,
+        activeServerUrl,
+        settings.remoteAccessMode,
+        settings.remoteAccessApiKey,
+        settings.remoteAccessOwnerId
+    ])
+
+    const copyText = async (text: string, label: string) => {
+        try {
+            await navigator.clipboard.writeText(text)
+            setValidation({
+                status: 'success',
+                message: `Copied ${label}. Paste it into the mobile app quick connect box.`
+            })
+        } catch (error: any) {
+            setValidation({
+                status: 'error',
+                message: error?.message || 'Failed to copy to clipboard.'
+            })
+        }
+    }
+
+    const stopAutoApprovePolling = () => {
+        if (autoApproveTimerRef.current != null) {
+            window.clearInterval(autoApproveTimerRef.current)
+            autoApproveTimerRef.current = null
+        }
+    }
+
+    useEffect(() => {
+        return () => {
+            stopAutoApprovePolling()
+        }
+    }, [])
 
     const handleRemoteAccessToggle = (enabled: boolean) => {
         if (!enabled) {
@@ -103,6 +176,9 @@ export default function RemoteAccessSettings() {
             setValidation({ status: 'idle', message: '' })
         }
         updateSettings(updates)
+        if (mode === 'local-only') {
+            stopAutoApprovePolling()
+        }
     }
 
     const resolveServerUrl = (): string => {
@@ -185,7 +261,7 @@ export default function RemoteAccessSettings() {
                 relayApiKey: settings.remoteAccessApiKey || undefined
             })
             if (!result?.success) {
-                setValidation({ status: 'error', message: result?.error || 'Failed to load connected devices.' })
+                setValidation({ status: 'error', message: normalizeRelayError(result?.error || 'Failed to load connected devices.') })
                 return
             }
             const normalized = (Array.isArray(result.devices) ? result.devices : []).map((device: RelayConnectedDevice) => ({
@@ -213,7 +289,7 @@ export default function RemoteAccessSettings() {
             relayApiKey: settings.remoteAccessApiKey || undefined
         })
         if (!result?.success) {
-            setValidation({ status: 'error', message: result?.error || 'Failed to revoke device.' })
+            setValidation({ status: 'error', message: normalizeRelayError(result?.error || 'Failed to revoke device.') })
             return
         }
         await refreshDevices()
@@ -222,6 +298,7 @@ export default function RemoteAccessSettings() {
     const generatePairing = async () => {
         const target = resolveServerUrl()
         if (!target || settings.remoteAccessMode === 'local-only') return
+        stopAutoApprovePolling()
         const desktopPublicKey = btoa(`${settings.remoteAccessOwnerId}:${settings.remoteAccessDesktopDeviceId}:${Date.now()}`)
         const result = await window.devscope.remoteAccess.createPairing({
             serverUrl: target,
@@ -233,7 +310,7 @@ export default function RemoteAccessSettings() {
             deepLinkScheme: 'devscope'
         })
         if (!result?.success) {
-            setValidation({ status: 'error', message: result?.error || 'Failed to create pairing request.' })
+            setValidation({ status: 'error', message: normalizeRelayError(result?.error || 'Failed to create pairing request.') })
             return
         }
         setPairing({
@@ -243,6 +320,98 @@ export default function RemoteAccessSettings() {
             qrPayload: result.qrPayload || '',
             expiresAt: Number(result.expiresAt) || Date.now()
         })
+
+        const pairingId = String(result.pairingId || '')
+        if (!pairingId) return
+        const pairingStartedAt = Date.now()
+
+        let attempts = 0
+        let inFlight = false
+        setValidation({
+            status: 'loading',
+            message: 'Pairing created. Waiting for mobile claim and auto-approving...'
+        })
+
+        autoApproveTimerRef.current = window.setInterval(async () => {
+            if (inFlight) return
+            inFlight = true
+            attempts += 1
+
+            try {
+                const approval = await window.devscope.remoteAccess.approvePairing({
+                    serverUrl: target,
+                    relayApiKey: settings.remoteAccessApiKey || undefined,
+                    pairingId,
+                    ownerId: settings.remoteAccessOwnerId,
+                    approved: true
+                })
+
+                if (approval?.success && approval?.approved) {
+                    stopAutoApprovePolling()
+                    setValidation({
+                        status: 'success',
+                        message: 'Mobile claim approved automatically. Device is now linked.'
+                    })
+                    await refreshDevices()
+                    return
+                }
+
+                const errorMessage = approval?.success
+                    ? ''
+                    : normalizeRelayError(String(approval?.error || ''))
+                if (/pairing approval failed/i.test(errorMessage)) {
+                    // Another client (mobile) may have already approved this pairing.
+                    // Detect that by checking for a newly linked device after pairing start.
+                    const devicesResult = await window.devscope.remoteAccess.listDevices({
+                        serverUrl: target,
+                        ownerId: settings.remoteAccessOwnerId,
+                        relayApiKey: settings.remoteAccessApiKey || undefined
+                    })
+                    if (devicesResult?.success && Array.isArray(devicesResult.devices)) {
+                        const newlyLinked = devicesResult.devices.some((device: any) => {
+                            const linkedAt = Number(device?.linkedAt)
+                            return Number.isFinite(linkedAt) && linkedAt >= pairingStartedAt - 5000
+                        })
+                        if (newlyLinked) {
+                            stopAutoApprovePolling()
+                            setValidation({
+                                status: 'success',
+                                message: 'Mobile claim already approved. Device is now linked.'
+                            })
+                            await refreshDevices()
+                            return
+                        }
+                    }
+                    if (attempts % 5 === 0) {
+                        setValidation({
+                            status: 'loading',
+                            message: 'Still waiting for mobile to claim pairing...'
+                        })
+                    }
+                    return
+                }
+
+                stopAutoApprovePolling()
+                if (errorMessage) {
+                    setValidation({ status: 'error', message: errorMessage })
+                }
+            } catch (error: any) {
+                stopAutoApprovePolling()
+                setValidation({
+                    status: 'error',
+                    message: normalizeRelayError(error?.message || 'Failed to auto-approve pairing.')
+                })
+            } finally {
+                inFlight = false
+                if (attempts >= 120) {
+                    stopAutoApprovePolling()
+                    setValidation({
+                        status: 'error',
+                        message: 'Pairing timed out waiting for mobile claim. Generate a new pairing code.'
+                    })
+                }
+            }
+        }, 3000)
     }
 
     return (
@@ -282,10 +451,15 @@ export default function RemoteAccessSettings() {
                                 Local-only is default. Remote mode remains disabled until you explicitly opt in.
                             </p>
                         </div>
-                        <ToggleSwitch
-                            checked={settings.remoteAccessEnabled}
-                            onChange={handleRemoteAccessToggle}
-                        />
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-sparkle-text-muted">
+                                {remoteAccessChecked ? 'Enabled' : 'Disabled'}
+                            </span>
+                            <ToggleSwitch
+                                checked={remoteAccessChecked}
+                                onChange={handleRemoteAccessToggle}
+                            />
+                        </div>
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -459,6 +633,35 @@ export default function RemoteAccessSettings() {
                             <p>Pairing ID: <span className="font-mono text-sparkle-text">{pairing.pairingId}</span></p>
                             <p>QR payload: <span className="font-mono text-sparkle-text">{pairing.qrPayload}</span></p>
                             <p>Expires: <span className="text-sparkle-text">{new Date(pairing.expiresAt).toLocaleTimeString()}</span></p>
+
+                            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                                <button
+                                    type="button"
+                                    onClick={() => void copyText(cloudQuickConnectCode, 'Cloud Quick Connect Code')}
+                                    disabled={!cloudQuickConnectCode}
+                                    className="inline-flex items-center justify-center gap-2 rounded-md border border-sparkle-border bg-sparkle-card px-3 py-2 text-xs text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text disabled:opacity-60"
+                                >
+                                    <Copy size={12} />
+                                    Copy Quick Connect
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void copyText(pairing.qrPayload, 'Pairing Link')}
+                                    className="inline-flex items-center justify-center gap-2 rounded-md border border-sparkle-border bg-sparkle-card px-3 py-2 text-xs text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                                >
+                                    <Copy size={12} />
+                                    Copy Pairing Link
+                                </button>
+                            </div>
+                            <div className="rounded-md border border-sparkle-border bg-sparkle-card p-2">
+                                <p className="mb-1 text-[11px] text-sparkle-text-muted">Cloud Quick Connect Code</p>
+                                <textarea
+                                    readOnly
+                                    value={cloudQuickConnectCode}
+                                    rows={3}
+                                    className="w-full resize-none rounded border border-sparkle-border bg-sparkle-bg px-2 py-1 font-mono text-[10px] text-sparkle-text-muted outline-none"
+                                />
+                            </div>
                         </div>
                     )}
                 </section>
@@ -602,15 +805,16 @@ function ToggleSwitch({
         <button
             type="button"
             onClick={() => onChange(!checked)}
+            aria-pressed={checked}
             className={cn(
-                'relative h-7 w-12 rounded-full transition-colors',
+                'relative inline-flex h-7 w-12 items-center rounded-full px-1 transition-colors',
                 checked ? 'bg-[var(--accent-primary)]' : 'bg-sparkle-border'
             )}
         >
             <span
                 className={cn(
-                    'absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform',
-                    checked ? 'translate-x-6' : 'translate-x-1'
+                    'h-5 w-5 rounded-full bg-white shadow transition-transform',
+                    checked ? 'translate-x-5' : 'translate-x-0'
                 )}
             />
         </button>

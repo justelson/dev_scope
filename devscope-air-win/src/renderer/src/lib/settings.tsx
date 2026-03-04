@@ -4,6 +4,7 @@
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { REMOTE_ACCESS_ENABLED } from '@shared/feature-flags'
 
 // Settings Types
 export type Theme = 'dark' | 'light' | 'purple' | 'green' | 'midnight' | 'ocean' | 'forest' | 'slate' | 'charcoal' | 'navy'
@@ -283,6 +284,13 @@ function loadSettings(): Settings {
             const candidate = { ...DEFAULT_SETTINGS, ...parsed }
 
             // Keep only active settings keys to drop obsolete/dead fields from older app versions.
+            const normalizedRemoteAccessMode = REMOTE_ACCESS_ENABLED
+                ? normalizeRemoteAccessMode(candidate.remoteAccessMode)
+                : 'local-only'
+            const normalizedRemoteAccessEnabled = REMOTE_ACCESS_ENABLED
+                && Boolean(candidate.remoteAccessEnabled)
+                && normalizedRemoteAccessMode !== 'local-only'
+
             return {
                 theme: candidate.theme,
                 accentColor: candidate.accentColor,
@@ -327,18 +335,20 @@ function loadSettings(): Settings {
                 assistantProfile: normalizeAssistantProfile(candidate.assistantProfile),
                 assistantProjectModels: normalizeStringRecord(candidate.assistantProjectModels),
                 assistantProjectProfiles: normalizeAssistantProjectProfiles(candidate.assistantProjectProfiles),
-                remoteAccessEnabled: Boolean(candidate.remoteAccessEnabled),
-                remoteAccessMode: normalizeRemoteAccessMode(candidate.remoteAccessMode),
-                remoteAccessConsentAccepted: Boolean(candidate.remoteAccessConsentAccepted),
-                remoteAccessConsentAcceptedAt: Number.isFinite(Number(candidate.remoteAccessConsentAcceptedAt))
+                remoteAccessEnabled: normalizedRemoteAccessEnabled,
+                remoteAccessMode: normalizedRemoteAccessMode,
+                remoteAccessConsentAccepted: REMOTE_ACCESS_ENABLED && Boolean(candidate.remoteAccessConsentAccepted),
+                remoteAccessConsentAcceptedAt: REMOTE_ACCESS_ENABLED && Number.isFinite(Number(candidate.remoteAccessConsentAcceptedAt))
                     ? Number(candidate.remoteAccessConsentAcceptedAt)
                     : null,
-                remoteAccessServerUrl: normalizeRemoteAccessServerUrl(candidate.remoteAccessServerUrl),
-                remoteAccessApiKey: typeof candidate.remoteAccessApiKey === 'string' ? candidate.remoteAccessApiKey : '',
+                remoteAccessServerUrl: REMOTE_ACCESS_ENABLED ? normalizeRemoteAccessServerUrl(candidate.remoteAccessServerUrl) : '',
+                remoteAccessApiKey: REMOTE_ACCESS_ENABLED && typeof candidate.remoteAccessApiKey === 'string' ? candidate.remoteAccessApiKey : '',
                 remoteAccessRequireE2EE: candidate.remoteAccessRequireE2EE !== false,
                 remoteAccessOwnerId: normalizeRemoteAccessIdentifier(candidate.remoteAccessOwnerId, 'local-owner'),
                 remoteAccessDesktopDeviceId: normalizeRemoteAccessIdentifier(candidate.remoteAccessDesktopDeviceId, 'desktop-primary'),
-                remoteAccessConnectedDevices: normalizeRemoteAccessConnectedDevices(candidate.remoteAccessConnectedDevices)
+                remoteAccessConnectedDevices: REMOTE_ACCESS_ENABLED
+                    ? normalizeRemoteAccessConnectedDevices(candidate.remoteAccessConnectedDevices)
+                    : []
             }
         }
     } catch (e) {
@@ -394,7 +404,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }, [settings])
 
     const updateSettings = (partial: Partial<Settings>) => {
-        setSettings(prev => ({ ...prev, ...partial }))
+        setSettings(prev => {
+            const next = { ...prev, ...partial }
+            if (!REMOTE_ACCESS_ENABLED) {
+                next.remoteAccessEnabled = false
+                next.remoteAccessMode = 'local-only'
+                next.remoteAccessConsentAccepted = false
+                next.remoteAccessConsentAcceptedAt = null
+                next.remoteAccessServerUrl = ''
+                next.remoteAccessApiKey = ''
+                next.remoteAccessConnectedDevices = []
+            }
+            return next
+        })
     }
 
     const resetSettings = () => {

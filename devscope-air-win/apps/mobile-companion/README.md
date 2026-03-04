@@ -1,27 +1,49 @@
-# Devscope Mobile Companion (Scaffold)
+# Devscope Mobile Companion (Web)
 
-This folder documents the mobile client contract for remote access.
+Deployable mobile web client for remote access pairing and relay validation.
 
-## Required Capabilities
-- Scan QR pairing payload from desktop.
-- Enter/confirm short code before linking.
-- Show connected device state and revoke status.
-- Open relay websocket and exchange encrypted envelopes.
+## Delivered scope
+- Relay validation (`/health`, `/.well-known/devscope`)
+- Pairing claim (`/v1/pairings/claim`)
+- Linked device polling (`/v1/devices/:ownerId`)
+- Relay websocket connectivity (`/v1/relay/ws`)
+- Test envelope publish (`/v1/relay/publish`)
+- Persistent device identity in local storage
+- Quick Connect Code paste flow from desktop (`DEVSCOPE_CLOUD_CONNECT:...`)
 
-## Deep Link Format
-`devscope://pair?pairingId=<id>&token=<oneTimeToken>`
+## Local run
+1. `cd apps/mobile-companion`
+2. `npm install`
+3. Copy `.env.example` to `.env` and adjust values if needed
+4. `npm run dev`
 
-## API Contract
-Use `src/shared/contracts/remote-access.ts` as the single source of truth.
+## Vercel deploy
+1. Import this repository in Vercel.
+2. Set project **Root Directory** to `apps/mobile-companion`.
+3. Build settings:
+   - Build command: `npm run build`
+   - Output directory: `dist`
+4. Add environment variables:
+   - `VITE_DEVSCOPE_RELAY_URL` (required)
+   - `VITE_DEVSCOPE_RELAY_API_KEY` (optional)
+5. Deploy.
 
-## Minimal Mobile Sequence
-1. Parse deep-link payload.
-2. Prompt user to confirm displayed 6-digit code.
-3. Call `POST /v1/pairings/claim`.
-4. Wait for desktop approval.
-5. Connect websocket: `/v1/relay/ws?ownerId=...&deviceId=...`.
+## Connect phone workflow
+1. Open desktop app `Settings -> Remote Access`.
+2. Validate relay server and generate pairing.
+3. On mobile web app:
+   - paste `Quick Connect Code` from desktop and click `Apply Quick Connect`, or
+   - paste pairing deep-link and click `Parse Link`, or
+   - paste `pairingId` + `oneTimeToken` directly.
+4. Enter desktop confirmation code and click `Claim Pairing`.
+5. Wait for desktop approval (device appears in linked devices).
+6. Connect websocket and publish a test envelope to verify live relay path.
 
-## Security Expectations
-- Generate device keypair locally on mobile.
-- Never send private keys to relay.
-- Encrypt session payloads before `relay/publish`.
+## Pairing URL support
+- `devscope://pair?pairingId=<id>&token=<token>`
+- Web query params:
+  - `https://<mobile-web-app>/?pairingId=<id>&token=<token>`
+
+## Notes
+- This is Beta and focused on connection validation and control flow.
+- Production E2EE message crypto integration remains a follow-up phase.
