@@ -17,11 +17,23 @@ export type AssistantApprovalMode = 'safe' | 'yolo'
 export type AssistantProfile = 'safe-dev' | 'review' | 'yolo-fast' | 'custom'
 export type FilePreviewDefaultMode = 'preview' | 'edit'
 export type FilePreviewPythonRunMode = 'terminal' | 'output'
+export type RemoteAccessMode = 'local-only' | 'devscope-cloud' | 'self-hosted'
+export type RemoteDevicePlatform = 'ios' | 'android' | 'web' | 'desktop' | 'unknown'
 
 export interface AccentColor {
     name: string
     primary: string
     secondary: string
+}
+
+export interface RemoteAccessConnectedDevice {
+    id: string
+    name: string
+    platform: RemoteDevicePlatform
+    linkedAt: number
+    lastSeenAt: number
+    fingerprint: string
+    verified: boolean
 }
 
 export const ACCENT_COLORS: AccentColor[] = [
@@ -105,9 +117,23 @@ export interface Settings {
     assistantProfile: AssistantProfile
     assistantProjectModels: Record<string, string>
     assistantProjectProfiles: Record<string, AssistantProfile>
+
+    // Remote Access
+    remoteAccessEnabled: boolean
+    remoteAccessMode: RemoteAccessMode
+    remoteAccessConsentAccepted: boolean
+    remoteAccessConsentAcceptedAt: number | null
+    remoteAccessServerUrl: string
+    remoteAccessApiKey: string
+    remoteAccessRequireE2EE: boolean
+    remoteAccessOwnerId: string
+    remoteAccessDesktopDeviceId: string
+    remoteAccessConnectedDevices: RemoteAccessConnectedDevice[]
 }
 
 const ASSISTANT_PROFILES: AssistantProfile[] = ['safe-dev', 'review', 'yolo-fast', 'custom']
+const REMOTE_ACCESS_MODES: RemoteAccessMode[] = ['local-only', 'devscope-cloud', 'self-hosted']
+const REMOTE_DEVICE_PLATFORMS: RemoteDevicePlatform[] = ['ios', 'android', 'web', 'desktop', 'unknown']
 
 function clampAssistantSidebarWidth(value: unknown): number {
     const numeric = Number(value)
@@ -141,6 +167,56 @@ function normalizeAssistantProjectProfiles(value: unknown): Record<string, Assis
         if (!normalizedKey) continue
         next[normalizedKey] = normalizeAssistantProfile(raw)
     }
+    return next
+}
+
+function normalizeRemoteAccessMode(value: unknown): RemoteAccessMode {
+    if (REMOTE_ACCESS_MODES.includes(value as RemoteAccessMode)) return value as RemoteAccessMode
+    return 'local-only'
+}
+
+function normalizeRemoteDevicePlatform(value: unknown): RemoteDevicePlatform {
+    if (REMOTE_DEVICE_PLATFORMS.includes(value as RemoteDevicePlatform)) return value as RemoteDevicePlatform
+    return 'unknown'
+}
+
+function normalizeRemoteAccessServerUrl(value: unknown): string {
+    if (typeof value !== 'string') return ''
+    return value.trim()
+}
+
+function normalizeRemoteAccessIdentifier(value: unknown, fallback: string): string {
+    if (typeof value !== 'string') return fallback
+    const normalized = value.trim()
+    return normalized || fallback
+}
+
+function normalizeRemoteAccessConnectedDevices(value: unknown): RemoteAccessConnectedDevice[] {
+    if (!Array.isArray(value)) return []
+    const seen = new Set<string>()
+    const next: RemoteAccessConnectedDevice[] = []
+
+    for (const raw of value) {
+        if (!raw || typeof raw !== 'object') continue
+        const entry = raw as Record<string, unknown>
+        const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+        if (!id || seen.has(id)) continue
+        seen.add(id)
+
+        const linkedAt = Number(entry.linkedAt)
+        const lastSeenAt = Number(entry.lastSeenAt)
+
+        next.push({
+            id,
+            name: typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : 'Unknown device',
+            platform: normalizeRemoteDevicePlatform(entry.platform),
+            linkedAt: Number.isFinite(linkedAt) ? linkedAt : Date.now(),
+            lastSeenAt: Number.isFinite(lastSeenAt) ? lastSeenAt : Date.now(),
+            fingerprint: typeof entry.fingerprint === 'string' ? entry.fingerprint.trim() : '',
+            verified: entry.verified !== false
+        })
+    }
+
     return next
 }
 
@@ -183,7 +259,17 @@ const DEFAULT_SETTINGS: Settings = {
     assistantShowEventPanel: false,
     assistantProfile: 'safe-dev',
     assistantProjectModels: {},
-    assistantProjectProfiles: {}
+    assistantProjectProfiles: {},
+    remoteAccessEnabled: false,
+    remoteAccessMode: 'local-only',
+    remoteAccessConsentAccepted: false,
+    remoteAccessConsentAcceptedAt: null,
+    remoteAccessServerUrl: '',
+    remoteAccessApiKey: '',
+    remoteAccessRequireE2EE: true,
+    remoteAccessOwnerId: 'local-owner',
+    remoteAccessDesktopDeviceId: 'desktop-primary',
+    remoteAccessConnectedDevices: []
 }
 
 const STORAGE_KEY = 'devscope-settings'
@@ -240,7 +326,19 @@ function loadSettings(): Settings {
                 assistantShowEventPanel: !!candidate.assistantShowEventPanel,
                 assistantProfile: normalizeAssistantProfile(candidate.assistantProfile),
                 assistantProjectModels: normalizeStringRecord(candidate.assistantProjectModels),
-                assistantProjectProfiles: normalizeAssistantProjectProfiles(candidate.assistantProjectProfiles)
+                assistantProjectProfiles: normalizeAssistantProjectProfiles(candidate.assistantProjectProfiles),
+                remoteAccessEnabled: Boolean(candidate.remoteAccessEnabled),
+                remoteAccessMode: normalizeRemoteAccessMode(candidate.remoteAccessMode),
+                remoteAccessConsentAccepted: Boolean(candidate.remoteAccessConsentAccepted),
+                remoteAccessConsentAcceptedAt: Number.isFinite(Number(candidate.remoteAccessConsentAcceptedAt))
+                    ? Number(candidate.remoteAccessConsentAcceptedAt)
+                    : null,
+                remoteAccessServerUrl: normalizeRemoteAccessServerUrl(candidate.remoteAccessServerUrl),
+                remoteAccessApiKey: typeof candidate.remoteAccessApiKey === 'string' ? candidate.remoteAccessApiKey : '',
+                remoteAccessRequireE2EE: candidate.remoteAccessRequireE2EE !== false,
+                remoteAccessOwnerId: normalizeRemoteAccessIdentifier(candidate.remoteAccessOwnerId, 'local-owner'),
+                remoteAccessDesktopDeviceId: normalizeRemoteAccessIdentifier(candidate.remoteAccessDesktopDeviceId, 'desktop-primary'),
+                remoteAccessConnectedDevices: normalizeRemoteAccessConnectedDevices(candidate.remoteAccessConnectedDevices)
             }
         }
     } catch (e) {

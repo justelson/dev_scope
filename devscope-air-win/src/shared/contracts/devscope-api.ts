@@ -1,5 +1,14 @@
 import type { SharedSystemMetrics } from '../system-metrics'
 import type { FullReport, ReadinessReport, SystemHealth, ToolingReport } from '../../main/inspectors/types'
+import type {
+    RemoteConnectedDevice,
+    RemoteE2EEEnvelopeV1,
+    RemotePairingApproveRequest,
+    RemotePairingClaimRequest,
+    RemotePairingCreateRequest,
+    RemotePairingCreateResponse,
+    RemoteWellKnownResponse
+} from './remote-access'
 
 export type DevScopeOk<T = Record<string, unknown>> = { success: true } & T
 export type DevScopeErr = { success: false; error: string }
@@ -291,6 +300,17 @@ export type DevScopeTaskEvent = {
     taskId?: string
 }
 
+export interface DevScopeRemoteAccessApi {
+    validateServer: (serverUrl: string) => Promise<DevScopeResult<{ wellKnown: RemoteWellKnownResponse }>>
+    challengeServer: (input: { serverUrl: string; nonce: string; relayApiKey?: string }) => Promise<DevScopeResult<{ signature: string; fingerprint: string; algorithm: string }>>
+    createPairing: (input: { serverUrl: string; relayApiKey?: string } & RemotePairingCreateRequest) => Promise<DevScopeResult<RemotePairingCreateResponse>>
+    claimPairing: (input: { serverUrl: string; relayApiKey?: string } & RemotePairingClaimRequest) => Promise<DevScopeResult<{ pairingId: string; claimedAt: number; ownerId: string }>>
+    approvePairing: (input: { serverUrl: string; relayApiKey?: string } & RemotePairingApproveRequest) => Promise<DevScopeResult<{ pairingId: string; approved: boolean; device?: RemoteConnectedDevice | null }>>
+    listDevices: (input: { serverUrl: string; ownerId: string; relayApiKey?: string }) => Promise<DevScopeResult<{ devices: RemoteConnectedDevice[] }>>
+    revokeDevice: (input: { serverUrl: string; ownerId: string; deviceId: string; relayApiKey?: string }) => Promise<DevScopeResult>
+    publishEnvelope: (input: { serverUrl: string; relayApiKey?: string; envelope: RemoteE2EEEnvelopeV1 }) => Promise<DevScopeResult<{ delivered: number }>>
+}
+
 export interface DevScopeSystemApi {
     bootstrap: () => Promise<DevScopeResult<{ controlBuffer?: ArrayBuffer; metricsBuffer?: ArrayBuffer }>>
     subscribe: (options?: { intervalMs?: number }) => Promise<DevScopeResult>
@@ -401,6 +421,7 @@ export interface DevScopeApi {
 
     // Assistant
     assistant: DevScopeAssistantApi
+    remoteAccess: DevScopeRemoteAccessApi
 
     // Projects + Git
     selectFolder: () => Promise<DevScopeResult<{ folderPath?: string; cancelled?: boolean }>>

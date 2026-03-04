@@ -58,7 +58,7 @@ function formatLogEntry(entry: AiDebugLogEntry): string {
     return parts.join('\n\n')
 }
 
-export default function LogsSettings() {
+export default function LogsSettings({ embedded = false }: { embedded?: boolean } = {}) {
     const [logs, setLogs] = useState<AiDebugLogEntry[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [isClearing, setIsClearing] = useState(false)
@@ -138,28 +138,30 @@ export default function LogsSettings() {
 
     return (
         <div className="animate-fadeIn">
-            <div className="mb-6">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-amber-500/10">
-                            <Bug className="text-amber-400" size={24} />
+            {!embedded && (
+                <div className="mb-6">
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-amber-500/10">
+                                <Bug className="text-amber-400" size={24} />
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-semibold text-sparkle-text">AI Logs</h1>
+                                <p className="text-sm text-sparkle-text-secondary">
+                                    Inspect raw AI responses and final commit messages
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h1 className="text-xl font-semibold text-sparkle-text">AI Logs</h1>
-                            <p className="text-sm text-sparkle-text-secondary">
-                                Inspect raw AI responses and final commit messages
-                            </p>
-                        </div>
+                        <Link
+                            to="/settings"
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm text-sparkle-text hover:text-[var(--accent-primary)] bg-sparkle-card hover:bg-sparkle-card-hover border border-sparkle-border rounded-lg transition-all shrink-0"
+                        >
+                            <ArrowLeft size={16} />
+                            Back to Settings
+                        </Link>
                     </div>
-                    <Link
-                        to="/settings"
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-sparkle-text hover:text-[var(--accent-primary)] bg-sparkle-card hover:bg-sparkle-card-hover border border-sparkle-border rounded-lg transition-all shrink-0"
-                    >
-                        <ArrowLeft size={16} />
-                        Back to Settings
-                    </Link>
                 </div>
-            </div>
+            )}
 
             <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-4 mb-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
