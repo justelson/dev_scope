@@ -1,5 +1,5 @@
 import { shell } from 'electron'
-import { access, cp, lstat, open as fsOpen, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promises'
+import { access, cp, lstat, mkdir, open as fsOpen, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join, parse, relative, resolve, sep } from 'path'
 import log from 'electron-log'
 import { getGitStatus, type GitFileStatus } from '../../inspectors/git'
@@ -332,6 +332,57 @@ export async function handleRenameFileSystemItem(
         return { success: true, path: destinationPath, name: normalizedNextName }
     } catch (err: any) {
         log.error('Failed to rename file system item:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleCreateFileSystemItem(
+    _event: Electron.IpcMainInvokeEvent,
+    destinationDirectory: string,
+    name: string,
+    type: 'file' | 'directory'
+) {
+    log.info('IPC: createFileSystemItem', destinationDirectory, name, type)
+
+    try {
+        const normalizedDestinationDirectory = String(destinationDirectory || '').trim()
+        const normalizedName = String(name || '').trim()
+        const normalizedType = type === 'file' || type === 'directory' ? type : null
+
+        if (!normalizedDestinationDirectory) return { success: false, error: 'Destination directory is required.' }
+        if (!normalizedName) return { success: false, error: 'Name is required.' }
+        if (!normalizedType) return { success: false, error: 'Type must be "file" or "directory".' }
+        if (normalizedName === '.' || normalizedName === '..') {
+            return { success: false, error: 'Name cannot be "." or "..".' }
+        }
+        if (normalizedName.includes('/') || normalizedName.includes('\\')) {
+            return { success: false, error: 'Name cannot include path separators.' }
+        }
+
+        await access(normalizedDestinationDirectory)
+        const destinationStat = await lstat(normalizedDestinationDirectory)
+        if (!destinationStat.isDirectory()) {
+            return { success: false, error: 'Destination must be a folder.' }
+        }
+
+        const targetPath = join(normalizedDestinationDirectory, normalizedName)
+        if (await pathExists(targetPath)) {
+            return { success: false, error: `A file or folder named "${normalizedName}" already exists.` }
+        }
+
+        if (normalizedType === 'file') {
+            const fileHandle = await fsOpen(targetPath, 'wx')
+            await fileHandle.close()
+        } else {
+            await mkdir(targetPath, { recursive: false })
+        }
+
+        invalidateScanProjectsCache(normalizedDestinationDirectory)
+        invalidateScanProjectsCache(targetPath, { includeParents: false })
+
+        return { success: true, path: targetPath, name: normalizedName, type: normalizedType }
+    } catch (err: any) {
+        log.error('Failed to create file system item:', err)
         return { success: false, error: err.message }
     }
 }

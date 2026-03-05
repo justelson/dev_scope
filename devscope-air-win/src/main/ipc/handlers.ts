@@ -57,6 +57,7 @@ import {
     handleGetProjectSessions
 } from './handlers/project-details-handlers'
 import {
+    handleCreateFileSystemItem,
     handleDeleteFileSystemItem,
     handleGetFileTree,
     handlePasteFileSystemItem,
@@ -264,6 +265,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:writeTextFile', handleWriteTextFile)
     ipcMain.handle('devscope:openFile', handleOpenFile)
     ipcMain.handle('devscope:openWith', handleOpenWith)
+    ipcMain.handle('devscope:createFileSystemItem', handleCreateFileSystemItem)
     ipcMain.handle('devscope:renameFileSystemItem', handleRenameFileSystemItem)
     ipcMain.handle('devscope:deleteFileSystemItem', handleDeleteFileSystemItem)
     ipcMain.handle('devscope:pasteFileSystemItem', handlePasteFileSystemItem)

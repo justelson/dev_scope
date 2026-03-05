@@ -142,6 +142,8 @@ export function createProjectsAdapter() {
         },
         openFile: (filePath: string) => ipcRenderer.invoke('devscope:openFile', filePath),
         openWith: (filePath: string) => ipcRenderer.invoke('devscope:openWith', filePath),
+        createFileSystemItem: (destinationDirectory: string, name: string, type: 'file' | 'directory') =>
+            ipcRenderer.invoke('devscope:createFileSystemItem', destinationDirectory, name, type),
         renameFileSystemItem: (targetPath: string, nextName: string) =>
             ipcRenderer.invoke('devscope:renameFileSystemItem', targetPath, nextName),
         deleteFileSystemItem: (targetPath: string) => ipcRenderer.invoke('devscope:deleteFileSystemItem', targetPath),

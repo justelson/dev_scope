@@ -1,5 +1,6 @@
-import { ArrowLeft, ArrowUp, Bot, Check, Code, Copy, ExternalLink, FolderOpen, RefreshCw, Terminal } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Bot, Check, Code, Copy, ExternalLink, FileJson, FilePlus, FileText, FolderOpen, FolderPlus, Plus, RefreshCw, Terminal } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
 
 interface FolderBrowseHeaderProps {
     folderName: string
@@ -17,6 +18,8 @@ interface FolderBrowseHeaderProps {
     copiedPath: boolean
     onOpenInExplorer: () => void
     onRefresh: () => void
+    onCreateFile: (presetExtension?: string) => void
+    onCreateFolder: () => void
 }
 
 export function FolderBrowseHeader({
@@ -34,7 +37,9 @@ export function FolderBrowseHeader({
     onCopyPath,
     copiedPath,
     onOpenInExplorer,
-    onRefresh
+    onRefresh,
+    onCreateFile,
+    onCreateFolder
 }: FolderBrowseHeaderProps) {
     return (
         <div className="mb-8 flex flex-col gap-5">
@@ -95,6 +100,49 @@ export function FolderBrowseHeader({
                         >
                             <ExternalLink size={16} />
                         </button>
+                        <FileActionsMenu
+                            title="Create"
+                            buttonClassName="!h-10 !w-10 !inline-flex !items-center !justify-center !rounded-xl !border-white/5 !text-white/40 hover:!text-white hover:!bg-white/5"
+                            triggerIcon={<Plus size={16} className="mx-auto" />}
+                            items={[
+                                {
+                                    id: 'new-file-type',
+                                    label: 'New File (Choose Type...)',
+                                    icon: <FilePlus size={13} />,
+                                    onSelect: () => onCreateFile()
+                                },
+                                {
+                                    id: 'new-md-file',
+                                    label: 'Markdown (.md)',
+                                    icon: <FileText size={13} />,
+                                    onSelect: () => onCreateFile('md')
+                                },
+                                {
+                                    id: 'new-json-file',
+                                    label: 'JSON (.json)',
+                                    icon: <FileJson size={13} />,
+                                    onSelect: () => onCreateFile('json')
+                                },
+                                {
+                                    id: 'new-ts-file',
+                                    label: 'TypeScript (.ts)',
+                                    icon: <Code size={13} />,
+                                    onSelect: () => onCreateFile('ts')
+                                },
+                                {
+                                    id: 'new-txt-file',
+                                    label: 'Text (.txt)',
+                                    icon: <FileText size={13} />,
+                                    onSelect: () => onCreateFile('txt')
+                                },
+                                {
+                                    id: 'new-folder',
+                                    label: 'New Folder',
+                                    icon: <FolderPlus size={13} />,
+                                    onSelect: onCreateFolder
+                                }
+                            ]}
+                        />
                     </div>
 
                     <div className="h-8 w-[1px] bg-white/10 mx-1 hidden sm:block" />

@@ -2,7 +2,7 @@ import { startTransition, useMemo } from 'react'
 import {
     Search, RefreshCw, ChevronsDownUp, ChevronsUpDown, Eye, EyeOff,
     ChevronUp, ChevronDown, ChevronRight, AppWindow, ClipboardPaste, Copy,
-    ExternalLink, FolderOpen, Pencil, Trash2
+    ExternalLink, FileJson, FilePlus, FileText, FolderOpen, FolderPlus, Plus, Pencil, Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatFileSize } from './fileTreeUtils'
@@ -128,6 +128,8 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
         onFileTreeRename,
         onFileTreeDelete,
         onFileTreePaste,
+        onFileTreeCreateFile,
+        onFileTreeCreateFolder,
         hasFileClipboardItem,
         loadingFiles,
         refreshFileTree
@@ -267,6 +269,49 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                 >
                     {showHidden ? <Eye size={16} /> : <EyeOff size={16} />}
                 </button>
+                <FileActionsMenu
+                    title="Create"
+                    buttonClassName="!h-auto !w-auto !rounded-lg !border-transparent !bg-transparent !p-2 text-white/40 hover:text-white hover:!bg-white/5"
+                    triggerIcon={<Plus size={16} className="mx-auto" />}
+                    items={[
+                        {
+                            id: 'new-file-type',
+                            label: 'New File (Choose Type...)',
+                            icon: <FilePlus size={13} />,
+                            onSelect: () => onFileTreeCreateFile()
+                        },
+                        {
+                            id: 'new-md-file',
+                            label: 'Markdown (.md)',
+                            icon: <FileText size={13} />,
+                            onSelect: () => onFileTreeCreateFile(undefined, 'md')
+                        },
+                        {
+                            id: 'new-json-file',
+                            label: 'JSON (.json)',
+                            icon: <FileJson size={13} />,
+                            onSelect: () => onFileTreeCreateFile(undefined, 'json')
+                        },
+                        {
+                            id: 'new-ts-file',
+                            label: 'TypeScript (.ts)',
+                            icon: <FilePlus size={13} />,
+                            onSelect: () => onFileTreeCreateFile(undefined, 'ts')
+                        },
+                        {
+                            id: 'new-txt-file',
+                            label: 'Text (.txt)',
+                            icon: <FileText size={13} />,
+                            onSelect: () => onFileTreeCreateFile(undefined, 'txt')
+                        },
+                        {
+                            id: 'new-folder',
+                            label: 'New Folder',
+                            icon: <FolderPlus size={13} />,
+                            onSelect: () => onFileTreeCreateFolder()
+                        }
+                    ]}
+                />
 
                 <span className="text-xs text-white/40 whitespace-nowrap">
                     {fileTree.length} items
@@ -454,6 +499,18 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                                     icon: <ClipboardPaste size={13} />,
                                                     disabled: !hasFileClipboardItem,
                                                     onSelect: () => onFileTreePaste(node)
+                                                },
+                                                {
+                                                    id: 'new-file',
+                                                    label: 'New File',
+                                                    icon: <FilePlus size={13} />,
+                                                    onSelect: () => onFileTreeCreateFile(node)
+                                                },
+                                                {
+                                                    id: 'new-folder',
+                                                    label: 'New Folder',
+                                                    icon: <FolderPlus size={13} />,
+                                                    onSelect: () => onFileTreeCreateFolder(node)
                                                 },
                                                 {
                                                     id: 'rename',

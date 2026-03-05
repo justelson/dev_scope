@@ -18,13 +18,15 @@ interface FileActionsMenuProps {
     buttonClassName?: string
     menuClassName?: string
     title?: string
+    triggerIcon?: React.ReactNode
 }
 
 export function FileActionsMenu({
     items,
     buttonClassName,
     menuClassName,
-    title = 'Actions'
+    title = 'Actions',
+    triggerIcon
 }: FileActionsMenuProps) {
     const [open, setOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement | null>(null)
@@ -88,13 +90,13 @@ export function FileActionsMenu({
                     setOpen((current) => !current)
                 }}
                 className={cn(
-                    'h-7 w-7 rounded-md border border-transparent text-white/40 transition-colors hover:border-white/10 hover:bg-white/10 hover:text-white',
+                    'h-7 w-7 inline-flex items-center justify-center rounded-md border border-transparent text-white/40 transition-colors hover:border-white/10 hover:bg-white/10 hover:text-white',
                     buttonClassName,
                     open && 'border-white/10 bg-white/10 text-white opacity-100'
                 )}
                 title={title}
             >
-                <MoreVertical size={15} className="mx-auto" />
+                {triggerIcon || <MoreVertical size={15} className="mx-auto" />}
             </button>
 
             {open && menuPosition && typeof document !== 'undefined' && createPortal(
@@ -112,7 +114,7 @@ export function FileActionsMenu({
                     onClick={(event) => event.stopPropagation()}
                 >
                     <AnimatedHeight isOpen={open} duration={220}>
-                        <div className="rounded-xl border border-white/10 bg-sparkle-card p-1 shadow-2xl shadow-black/60 animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150 origin-top-right">
+                        <div className="rounded-xl border border-white/10 bg-sparkle-card p-1 shadow-2xl shadow-black/60 origin-top-right animate-scaleIn">
                             {items.map((item) => (
                                 <button
                                     key={item.id}

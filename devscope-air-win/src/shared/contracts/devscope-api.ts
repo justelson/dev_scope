@@ -545,6 +545,11 @@ export interface DevScopeApi {
     onTaskEvent: (callback: (event: DevScopeTaskEvent) => void) => () => void
     openFile: (filePath: string) => Promise<DevScopeResult>
     openWith: (filePath: string) => Promise<DevScopeResult>
+    createFileSystemItem: (
+        destinationDirectory: string,
+        name: string,
+        type: 'file' | 'directory'
+    ) => Promise<DevScopeResult<{ path: string; name: string; type: 'file' | 'directory' }>>
     renameFileSystemItem: (targetPath: string, nextName: string) => Promise<DevScopeResult<{ path: string; name: string }>>
     deleteFileSystemItem: (targetPath: string) => Promise<DevScopeResult>
     pasteFileSystemItem: (sourcePath: string, destinationDirectory: string) => Promise<DevScopeResult<{ path: string; name: string }>>

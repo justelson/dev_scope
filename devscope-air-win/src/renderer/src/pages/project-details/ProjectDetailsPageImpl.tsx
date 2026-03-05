@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useTerminal } from '@/App'
 import { useFilePreview } from '@/components/ui/FilePreviewModal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { CreateFileTypeModal } from '@/components/ui/CreateFileTypeModal'
 import { PromptModal } from '@/components/ui/PromptModal'
 import { useSettings } from '@/lib/settings'
 import { trackRecentProject } from '@/lib/recentProjects'
@@ -30,6 +31,12 @@ type FileSystemClipboardItem = {
     path: string
     name: string
     type: 'file' | 'directory'
+}
+
+type CreateFileSystemTarget = {
+    destinationDirectory: string
+    type: 'file' | 'directory'
+    presetExtension?: string
 }
 
 const README_COLLAPSED_MAX_HEIGHT = 500
@@ -81,6 +88,20 @@ function splitFileNameForRename(name: string): { baseName: string; extensionSuff
         baseName: raw.slice(0, dotIndex),
         extensionSuffix: raw.slice(dotIndex)
     }
+}
+
+function getFileExtensionFromName(name: string): string {
+    const dotIndex = name.lastIndexOf('.')
+    if (dotIndex <= 0 || dotIndex === name.length - 1) return ''
+    return name.slice(dotIndex + 1).toLowerCase()
+}
+
+function validateCreateName(name: string): string | null {
+    const trimmed = String(name || '').trim()
+    if (!trimmed) return 'Name cannot be empty.'
+    if (trimmed === '.' || trimmed === '..') return 'Name cannot be "." or "..".'
+    if (trimmed.includes('/') || trimmed.includes('\\')) return 'Name cannot include path separators.'
+    return null
 }
 
 const PROJECT_ACTIVE_TAB_STORAGE_PREFIX = 'devscope:project-details:active-tab:'
@@ -203,6 +224,9 @@ export default function ProjectDetailsPage() {
     const [renameDraft, setRenameDraft] = useState('')
     const [renameExtensionSuffix, setRenameExtensionSuffix] = useState('')
     const [renameErrorMessage, setRenameErrorMessage] = useState<string | null>(null)
+    const [createTarget, setCreateTarget] = useState<CreateFileSystemTarget | null>(null)
+    const [createDraft, setCreateDraft] = useState('')
+    const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<FileTreeNode | null>(null)
     const currentBranch = useMemo(() => branches.find(branch => branch.current)?.name || '', [branches])
     const {
@@ -487,6 +511,75 @@ export default function ProjectDetailsPage() {
         await loadProjectDetails()
     }
 
+    const resolveCreateDestinationDirectory = (node?: FileTreeNode): string | null => {
+        if (!node) {
+            return project?.path || decodedPath || null
+        }
+        if (node.type === 'directory') return node.path
+        return getParentFolderPath(node.path)
+    }
+
+    const openCreatePrompt = (destinationDirectory: string, type: 'file' | 'directory', presetExtension?: string) => {
+        setCreateTarget({ destinationDirectory, type, presetExtension })
+        setCreateDraft('')
+        setCreateErrorMessage(null)
+    }
+
+    const handleFileTreeCreateFile = (node?: FileTreeNode, presetExtension?: string) => {
+        const destinationDirectory = resolveCreateDestinationDirectory(node)
+        if (!destinationDirectory) {
+            showToast('Unable to resolve destination folder.', undefined, undefined, 'error')
+            return
+        }
+        openCreatePrompt(destinationDirectory, 'file', presetExtension)
+    }
+
+    const handleFileTreeCreateFolder = (node?: FileTreeNode) => {
+        const destinationDirectory = resolveCreateDestinationDirectory(node)
+        if (!destinationDirectory) {
+            showToast('Unable to resolve destination folder.', undefined, undefined, 'error')
+            return
+        }
+        openCreatePrompt(destinationDirectory, 'directory')
+    }
+
+    const submitCreateTarget = async (nextName?: string) => {
+        if (!createTarget) return
+
+        const normalizedName = String(nextName ?? createDraft).trim()
+        const validationError = validateCreateName(normalizedName)
+        if (validationError) {
+            setCreateErrorMessage(validationError)
+            return
+        }
+
+        const result = await window.devscope.createFileSystemItem(
+            createTarget.destinationDirectory,
+            normalizedName,
+            createTarget.type
+        )
+        if (!result.success) {
+            setCreateErrorMessage(result.error || `Failed to create ${createTarget.type}.`)
+            return
+        }
+
+        const createdPath = result.path
+        const createdName = result.name
+        const createdType = result.type
+
+        setCreateTarget(null)
+        setCreateDraft('')
+        setCreateErrorMessage(null)
+
+        showToast(`Created ${createdType === 'file' ? 'file' : 'folder'}: ${createdName}`)
+        await refreshFileTree()
+
+        if (createdType === 'file') {
+            const ext = getFileExtensionFromName(createdName) || 'txt'
+            await openPreview({ name: createdName, path: createdPath }, ext)
+        }
+    }
+
     const submitRenameTarget = async () => {
         if (!renameTarget) return
         const normalizedBaseName = renameDraft.trim()
@@ -711,6 +804,8 @@ export default function ProjectDetailsPage() {
                 onFileTreeRename={handleFileTreeRename}
                 onFileTreeDelete={handleFileTreeDelete}
                 onFileTreePaste={handleFileTreePaste}
+                onFileTreeCreateFile={handleFileTreeCreateFile}
+                onFileTreeCreateFolder={handleFileTreeCreateFolder}
                 hasFileClipboardItem={Boolean(fileClipboardItem)}
                 gitUser={gitUser}
                 repoOwner={repoOwner}
@@ -793,6 +888,36 @@ export default function ProjectDetailsPage() {
                 toast={toast}
                 navigate={navigate}
                 setToast={setToast}
+            />
+            <CreateFileTypeModal
+                isOpen={Boolean(createTarget && createTarget.type === 'file')}
+                destinationDirectory={createTarget?.destinationDirectory || ''}
+                initialExtension={createTarget?.presetExtension}
+                errorMessage={createErrorMessage}
+                onCreate={async (fileName) => { await submitCreateTarget(fileName) }}
+                onCancel={() => {
+                    setCreateTarget(null)
+                    setCreateErrorMessage(null)
+                }}
+            />
+            <PromptModal
+                isOpen={Boolean(createTarget && createTarget.type === 'directory')}
+                title="Create New Folder"
+                message={createTarget ? `Create in: ${createTarget.destinationDirectory}` : ''}
+                value={createDraft}
+                onChange={(value) => {
+                    setCreateDraft(value)
+                    if (createErrorMessage) setCreateErrorMessage(null)
+                }}
+                onConfirm={() => { void submitCreateTarget() }}
+                onCancel={() => {
+                    setCreateTarget(null)
+                    setCreateDraft('')
+                    setCreateErrorMessage(null)
+                }}
+                confirmLabel="Create Folder"
+                placeholder="Enter folder name"
+                errorMessage={createErrorMessage}
             />
             <PromptModal
                 isOpen={Boolean(renameTarget)}

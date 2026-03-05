@@ -10,6 +10,7 @@ import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useTerminal } from '@/App'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { CreateFileTypeModal } from '@/components/ui/CreateFileTypeModal'
 import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
 import { PromptModal } from '@/components/ui/PromptModal'
 import { openAssistantDock } from '@/lib/assistantDockStore'
@@ -27,6 +28,12 @@ type FileSystemClipboardItem = {
     path: string
     name: string
     type: 'file' | 'directory'
+}
+
+type CreateFileSystemTarget = {
+    destinationDirectory: string
+    type: 'file' | 'directory'
+    presetExtension?: string
 }
 
 async function yieldToBrowserPaint(): Promise<void> {
@@ -69,6 +76,20 @@ function splitFileNameForRename(name: string): { baseName: string; extensionSuff
         baseName: raw.slice(0, dotIndex),
         extensionSuffix: raw.slice(dotIndex)
     }
+}
+
+function getFileExtensionFromName(name: string): string {
+    const dotIndex = name.lastIndexOf('.')
+    if (dotIndex <= 0 || dotIndex === name.length - 1) return ''
+    return name.slice(dotIndex + 1).toLowerCase()
+}
+
+function validateCreateName(name: string): string | null {
+    const trimmed = String(name || '').trim()
+    if (!trimmed) return 'Name cannot be empty.'
+    if (trimmed === '.' || trimmed === '..') return 'Name cannot be "." or "..".'
+    if (trimmed.includes('/') || trimmed.includes('\\')) return 'Name cannot include path separators.'
+    return null
 }
 
 function normalizePath(path: string): string {
@@ -162,6 +183,9 @@ export default function FolderBrowse() {
     const [renameDraft, setRenameDraft] = useState('')
     const [renameExtensionSuffix, setRenameExtensionSuffix] = useState('')
     const [renameErrorMessage, setRenameErrorMessage] = useState<string | null>(null)
+    const [createTarget, setCreateTarget] = useState<CreateFileSystemTarget | null>(null)
+    const [createDraft, setCreateDraft] = useState('')
+    const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<FileSystemClipboardItem | null>(null)
     const [toast, setToast] = useState<{ message: string; visible: boolean; tone?: 'success' | 'error' } | null>(null)
 
@@ -471,6 +495,78 @@ export default function FolderBrowse() {
         await loadContents(true)
     }, [fileClipboardItem, loadContents, showToast])
 
+    const resolveEntryDestinationDirectory = useCallback((entry: FileSystemClipboardItem): string | null => {
+        if (entry.type === 'directory') return entry.path
+        return getParentFolderPath(entry.path)
+    }, [])
+
+    const openCreatePrompt = useCallback((destinationDirectory: string, type: 'file' | 'directory', presetExtension?: string) => {
+        setCreateTarget({ destinationDirectory, type, presetExtension })
+        setCreateDraft('')
+        setCreateErrorMessage(null)
+        setError(null)
+    }, [])
+
+    const handleCreateInCurrentFolder = useCallback((type: 'file' | 'directory', presetExtension?: string) => {
+        if (!decodedPath) return
+        openCreatePrompt(decodedPath, type, presetExtension)
+    }, [decodedPath, openCreatePrompt])
+
+    const handleEntryCreateFile = useCallback((entry: FileSystemClipboardItem) => {
+        const destinationDirectory = resolveEntryDestinationDirectory(entry)
+        if (!destinationDirectory) {
+            setError('Unable to resolve destination folder.')
+            return
+        }
+        openCreatePrompt(destinationDirectory, 'file')
+    }, [openCreatePrompt, resolveEntryDestinationDirectory])
+
+    const handleEntryCreateFolder = useCallback((entry: FileSystemClipboardItem) => {
+        const destinationDirectory = resolveEntryDestinationDirectory(entry)
+        if (!destinationDirectory) {
+            setError('Unable to resolve destination folder.')
+            return
+        }
+        openCreatePrompt(destinationDirectory, 'directory')
+    }, [openCreatePrompt, resolveEntryDestinationDirectory])
+
+    const submitCreateTarget = useCallback(async (nextName?: string) => {
+        if (!createTarget) return
+
+        const normalizedName = String(nextName ?? createDraft).trim()
+        const validationError = validateCreateName(normalizedName)
+        if (validationError) {
+            setCreateErrorMessage(validationError)
+            return
+        }
+
+        const result = await window.devscope.createFileSystemItem(
+            createTarget.destinationDirectory,
+            normalizedName,
+            createTarget.type
+        )
+        if (!result.success) {
+            setCreateErrorMessage(result.error || `Failed to create ${createTarget.type}.`)
+            return
+        }
+
+        const createdPath = result.path
+        const createdName = result.name
+        const createdType = result.type
+
+        setCreateTarget(null)
+        setCreateDraft('')
+        setCreateErrorMessage(null)
+
+        showToast(`Created ${createdType === 'file' ? 'file' : 'folder'}: ${createdName}`)
+        await loadContents(true)
+
+        if (createdType === 'file') {
+            const ext = getFileExtensionFromName(createdName) || 'txt'
+            await openPreview({ name: createdName, path: createdPath }, ext)
+        }
+    }, [createDraft, createTarget, loadContents, openPreview, showToast])
+
     const submitRenameTarget = useCallback(async () => {
         if (!renameTarget) return
 
@@ -540,6 +636,8 @@ export default function FolderBrowse() {
                 copiedPath={copiedPath}
                 onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}
                 onRefresh={() => { void loadContents(true) }}
+                onCreateFile={(presetExtension) => handleCreateInCurrentFolder('file', presetExtension)}
+                onCreateFolder={() => handleCreateInCurrentFolder('directory')}
             />
 
             <FolderBrowseToolbar
@@ -594,6 +692,8 @@ export default function FolderBrowse() {
                     onEntryRename={handleEntryRename}
                     onEntryDelete={handleEntryDelete}
                     onEntryPaste={handleEntryPaste}
+                    onEntryCreateFile={handleEntryCreateFile}
+                    onEntryCreateFolder={handleEntryCreateFolder}
                     hasFileClipboardItem={Boolean(fileClipboardItem)}
                     formatFileSize={formatFileSize}
                     getFileColor={getFileColor}
@@ -618,6 +718,36 @@ export default function FolderBrowse() {
                 />
             )}
 
+            <CreateFileTypeModal
+                isOpen={Boolean(createTarget && createTarget.type === 'file')}
+                destinationDirectory={createTarget?.destinationDirectory || ''}
+                initialExtension={createTarget?.presetExtension}
+                errorMessage={createErrorMessage}
+                onCreate={async (fileName) => { await submitCreateTarget(fileName) }}
+                onCancel={() => {
+                    setCreateTarget(null)
+                    setCreateErrorMessage(null)
+                }}
+            />
+            <PromptModal
+                isOpen={Boolean(createTarget && createTarget.type === 'directory')}
+                title="Create New Folder"
+                message={createTarget ? `Create in: ${createTarget.destinationDirectory}` : ''}
+                value={createDraft}
+                onChange={(value) => {
+                    setCreateDraft(value)
+                    if (createErrorMessage) setCreateErrorMessage(null)
+                }}
+                onConfirm={() => { void submitCreateTarget() }}
+                onCancel={() => {
+                    setCreateTarget(null)
+                    setCreateDraft('')
+                    setCreateErrorMessage(null)
+                }}
+                confirmLabel="Create Folder"
+                placeholder="Enter folder name"
+                errorMessage={createErrorMessage}
+            />
             <PromptModal
                 isOpen={Boolean(renameTarget)}
                 title="Rename Item"

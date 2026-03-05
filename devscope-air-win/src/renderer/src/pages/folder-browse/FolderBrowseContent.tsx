@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import {
     AppWindow, ClipboardPaste, Copy, ExternalLink, ChevronRight, Code, File,
-    FileCode, FileText, Folder, FolderOpen, Github, Pencil, Trash2
+    FileCode, FilePlus, FileText, Folder, FolderOpen, FolderPlus, Github, Pencil, Trash2
 } from 'lucide-react'
 import ProjectIcon from '@/components/ui/ProjectIcon'
 import { cn } from '@/lib/utils'
@@ -52,6 +52,8 @@ interface FolderBrowseContentProps {
     onEntryRename: (entry: EntryActionTarget) => void | Promise<void>
     onEntryDelete: (entry: EntryActionTarget) => void | Promise<void>
     onEntryPaste: (entry: EntryActionTarget) => void | Promise<void>
+    onEntryCreateFile: (entry: EntryActionTarget) => void | Promise<void>
+    onEntryCreateFolder: (entry: EntryActionTarget) => void | Promise<void>
     hasFileClipboardItem: boolean
     formatFileSize: (bytes: number) => string
     getFileColor: (ext: string) => string
@@ -84,6 +86,8 @@ export function FolderBrowseContent({
     onEntryRename,
     onEntryDelete,
     onEntryPaste,
+    onEntryCreateFile,
+    onEntryCreateFolder,
     hasFileClipboardItem,
     formatFileSize,
     getFileColor,
@@ -135,6 +139,18 @@ export function FolderBrowseContent({
             icon: <ClipboardPaste size={13} />,
             disabled: !hasFileClipboardItem,
             onSelect: () => onEntryPaste(entry)
+        },
+        {
+            id: 'new-file',
+            label: 'New File',
+            icon: <FilePlus size={13} />,
+            onSelect: () => onEntryCreateFile(entry)
+        },
+        {
+            id: 'new-folder',
+            label: 'New Folder',
+            icon: <FolderPlus size={13} />,
+            onSelect: () => onEntryCreateFolder(entry)
         },
         {
             id: 'rename',
