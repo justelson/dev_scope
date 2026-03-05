@@ -471,12 +471,12 @@ export default function Tasks() {
                     <div className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
                         <div className="mb-3 flex items-center gap-2">
                             <Activity size={16} className="text-[var(--accent-primary)]" />
-                            <h2 className="text-sm font-semibold text-sparkle-text">Active Git Operations ({activeTasks.length})</h2>
+                            <h2 className="text-sm font-semibold text-sparkle-text">Active Operations ({activeTasks.length})</h2>
                         </div>
                         {initialLoading && activeTasks.length === 0 ? (
                             <p className="text-sm text-sparkle-text-secondary">Loading active tasks...</p>
                         ) : activeTasks.length === 0 ? (
-                            <p className="text-sm text-sparkle-text-secondary">No active Git operations.</p>
+                            <p className="text-sm text-sparkle-text-secondary">No active operations.</p>
                         ) : (
                             <div className="space-y-2">
                                 {activeTasks.map((task) => (

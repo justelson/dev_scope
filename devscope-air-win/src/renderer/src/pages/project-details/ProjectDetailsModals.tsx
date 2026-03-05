@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { AlertCircle, AlertTriangle, CheckCircle2, ExternalLink, HelpCircle, Package, Search, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CheckCircle2, ExternalLink, HelpCircle, Loader2, Package, Search, X } from 'lucide-react'
 
 export function AuthorMismatchModal({
     gitUser,
@@ -99,6 +99,7 @@ export function DependenciesModal({
     dependencies,
     devDependencies,
     dependencyInstallStatus,
+    onDependenciesUpdated,
     onClose
 }: {
     projectName?: string
@@ -106,9 +107,13 @@ export function DependenciesModal({
     dependencies?: Record<string, string>
     devDependencies?: Record<string, string>
     dependencyInstallStatus?: DependencyInstallStatus | null
+    onDependenciesUpdated?: () => Promise<void> | void
     onClose: () => void
 }) {
     const [search, setSearch] = useState('')
+    const [installing, setInstalling] = useState(false)
+    const [installFeedbackTone, setInstallFeedbackTone] = useState<'idle' | 'progress' | 'success' | 'error'>('idle')
+    const [installFeedbackMessage, setInstallFeedbackMessage] = useState<string>('')
     const deferredSearch = useDeferredValue(search)
     const searchValue = deferredSearch.toLowerCase()
     const allDependencies = useMemo(() => {
@@ -170,11 +175,52 @@ export function DependenciesModal({
     )
     const installPercent = totalTracked > 0 ? Math.round((installedTracked / totalTracked) * 100) : 100
     const missingCount = dependencyInstallStatus?.missingPackages || 0
+    const hasMissingDependencies = missingCount > 0
+    const canInstallDependencies = Boolean(projectPath && projectPath.trim().length > 0)
     const progressTone = dependencyInstallStatus?.installed === true
         ? 'bg-emerald-500'
         : dependencyInstallStatus?.installed === false
             ? 'bg-amber-500'
             : 'bg-white/40'
+
+    const runInstall = async (mode: 'missing' | 'all') => {
+        const targetPath = String(projectPath || '').trim()
+        if (!targetPath || installing) return
+
+        setInstalling(true)
+        setInstallFeedbackTone('progress')
+        setInstallFeedbackMessage(
+            mode === 'missing'
+                ? 'Installing missing packages in background...'
+                : 'Installing project dependencies in background...'
+        )
+
+        try {
+            const result = await window.devscope.installProjectDependencies(targetPath, { onlyMissing: mode === 'missing' })
+            if (!result?.success) {
+                setInstallFeedbackTone('error')
+                setInstallFeedbackMessage(result?.error || 'Dependency installation failed.')
+                if (onDependenciesUpdated) {
+                    await onDependenciesUpdated()
+                }
+                return
+            }
+
+            const manager = String(result.manager || '').trim()
+            const installedMessage = result.message || `Dependencies installed${manager ? ` via ${manager}` : ''}.`
+            setInstallFeedbackTone('success')
+            setInstallFeedbackMessage(installedMessage)
+
+            if (onDependenciesUpdated) {
+                await onDependenciesUpdated()
+            }
+        } catch (error: any) {
+            setInstallFeedbackTone('error')
+            setInstallFeedbackMessage(error?.message || 'Dependency installation failed.')
+        } finally {
+            setInstalling(false)
+        }
+    }
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
@@ -249,18 +295,49 @@ export function DependenciesModal({
                                     <span className={missingCount > 0 ? 'text-amber-200' : 'text-emerald-200'}>{missingCount}</span>
                                 </div>
                             )}
-                            {dependencyInstallStatus?.missingSample && dependencyInstallStatus.missingSample.length > 0 && (
-                                <div className="mt-2.5">
-                                    <p className="text-[11px] text-amber-200/80 mb-1.5">Missing sample</p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {dependencyInstallStatus.missingSample.slice(0, 4).map((dep) => (
-                                            <span key={dep} className="text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-200/90 max-w-full truncate" title={dep}>
-                                                {dep}
-                                            </span>
-                                        ))}
-                                    </div>
+                            <div className="mt-4 pt-3 border-t border-white/10">
+                                <p className="text-[11px] uppercase tracking-wide text-white/45 mb-2">Actions</p>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { void runInstall('missing') }}
+                                        disabled={!canInstallDependencies || !hasMissingDependencies || installing}
+                                        className="text-[11px] px-2.5 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                        title={hasMissingDependencies ? 'Install missing dependencies' : 'No missing dependencies'}
+                                    >
+                                        Install Missing
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { void runInstall('all') }}
+                                        disabled={!canInstallDependencies || installing}
+                                        className="text-[11px] px-2.5 py-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                        title="Install or repair all dependencies"
+                                    >
+                                        Install / Repair All
+                                    </button>
                                 </div>
-                            )}
+
+                                {(installFeedbackTone !== 'idle' || installing) && (
+                                    <div className={`mt-2.5 text-[11px] rounded-lg border px-2.5 py-2 flex items-center gap-1.5 ${installFeedbackTone === 'success'
+                                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                        : installFeedbackTone === 'error'
+                                            ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                                            : 'border-sky-500/30 bg-sky-500/10 text-sky-200'
+                                    }`}>
+                                        {installing ? (
+                                            <Loader2 size={12} className="animate-spin" />
+                                        ) : installFeedbackTone === 'success' ? (
+                                            <CheckCircle2 size={12} />
+                                        ) : installFeedbackTone === 'error' ? (
+                                            <AlertTriangle size={12} />
+                                        ) : (
+                                            <HelpCircle size={12} />
+                                        )}
+                                        <span className="leading-relaxed">{installFeedbackMessage}</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </aside>
 

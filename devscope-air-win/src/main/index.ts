@@ -4,8 +4,8 @@
  */
 
 import { app, BrowserWindow, shell, ipcMain, protocol } from 'electron'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { basename, extname, join } from 'path'
+import { existsSync, statSync } from 'fs'
 import { electronApp, is } from './utils'
 import log from 'electron-log'
 import { registerIpcHandlers } from './ipc'
@@ -19,7 +19,32 @@ console.error = log.error
 console.warn = log.warn
 
 let mainWindow: BrowserWindow | null = null
+let quickPreviewWindow: BrowserWindow | null = null
+let hasRegisteredIpcHandlers = false
 const FILE_PROTOCOL = 'devscope'
+const QUICK_PREVIEW_ROUTE = '/quick-open'
+const ASSOCIATED_CODE_EXTENSIONS = new Set([
+    '.md', '.markdown', '.mdx', '.txt', '.log',
+    '.js', '.jsx', '.mjs', '.cjs',
+    '.ts', '.tsx',
+    '.json', '.jsonc', '.json5',
+    '.css', '.scss', '.less',
+    '.html', '.htm', '.xml',
+    '.yml', '.yaml', '.toml', '.ini', '.conf',
+    '.sh', '.bash', '.zsh', '.ps1', '.bat', '.cmd',
+    '.py', '.rb', '.php', '.java', '.kt', '.kts',
+    '.c', '.h', '.cpp', '.cxx', '.hpp',
+    '.cs', '.go', '.rs', '.swift', '.dart', '.scala', '.sql',
+    '.vue', '.svelte', '.gradle'
+])
+const ASSOCIATED_DOTFILES = new Set([
+    '.gitignore',
+    '.gitattributes',
+    '.editorconfig',
+    '.npmrc',
+    '.eslintrc',
+    '.prettierrc'
+])
 
 protocol.registerSchemesAsPrivileged([
     {
@@ -53,9 +78,53 @@ function isDevToolsShortcut(input: Electron.Input): boolean {
     return input.type === 'keyDown' && !!input.control && !!input.shift && key === 'i'
 }
 
-function createWindow(): void {
+function shouldTreatAsAssociatedFile(arg: string): boolean {
+    const trimmed = String(arg || '').trim()
+    if (!trimmed || trimmed.startsWith('-')) return false
+    if (!existsSync(trimmed)) return false
+
+    try {
+        const stat = statSync(trimmed)
+        if (!stat.isFile()) return false
+    } catch {
+        return false
+    }
+
+    const fileName = basename(trimmed).toLowerCase()
+    const extension = extname(trimmed).toLowerCase()
+    return ASSOCIATED_CODE_EXTENSIONS.has(extension) || ASSOCIATED_DOTFILES.has(fileName)
+}
+
+function extractAssociatedFileFromArgv(argv: string[]): string | null {
+    const startIndex = app.isPackaged ? 1 : 2
+    for (let i = startIndex; i < argv.length; i += 1) {
+        const candidate = String(argv[i] || '').trim()
+        if (shouldTreatAsAssociatedFile(candidate)) {
+            return candidate
+        }
+    }
+    return null
+}
+
+function ensureIpcHandlersRegistered(targetWindow: BrowserWindow): void {
+    if (hasRegisteredIpcHandlers) return
+    registerIpcHandlers(targetWindow)
+    hasRegisteredIpcHandlers = true
+}
+
+function loadRendererRoute(window: BrowserWindow, routeWithSearch: string): void {
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+        const url = new URL(process.env['ELECTRON_RENDERER_URL'])
+        url.hash = routeWithSearch
+        void window.loadURL(url.toString())
+        return
+    }
+    void window.loadFile(join(__dirname, '../renderer/index.html'), { hash: routeWithSearch })
+}
+
+function createWindow(showOnReady = true): BrowserWindow {
     const iconPath = getAppIconPath()
-    mainWindow = new BrowserWindow({
+    const window = new BrowserWindow({
         width: 1200,
         height: 800,
         minWidth: 900,
@@ -74,33 +143,100 @@ function createWindow(): void {
         }
     })
 
-    mainWindow.on('ready-to-show', () => {
-        mainWindow?.show()
+    window.on('ready-to-show', () => {
+        if (showOnReady) window.show()
     })
 
-    mainWindow.webContents.setWindowOpenHandler((details) => {
+    window.webContents.setWindowOpenHandler((details) => {
         shell.openExternal(details.url)
         return { action: 'deny' }
     })
 
-    mainWindow.webContents.on('before-input-event', (event, input) => {
-        if (!mainWindow || !isDevToolsShortcut(input)) return
+    window.webContents.on('before-input-event', (event, input) => {
+        if (!isDevToolsShortcut(input)) return
 
         event.preventDefault()
-        if (mainWindow.webContents.isDevToolsOpened()) {
-            mainWindow.webContents.closeDevTools()
+        if (window.webContents.isDevToolsOpened()) {
+            window.webContents.closeDevTools()
         } else {
-            mainWindow.webContents.openDevTools({ mode: 'detach' })
+            window.webContents.openDevTools({ mode: 'detach' })
         }
     })
 
-    // Load the renderer
-    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-        mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    } else {
-        mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-    }
+    loadRendererRoute(window, '/')
+
+    return window
 }
+
+function createQuickPreviewWindow(filePath: string): BrowserWindow {
+    const iconPath = getAppIconPath()
+    const route = `${QUICK_PREVIEW_ROUTE}?file=${encodeURIComponent(filePath)}`
+
+    if (quickPreviewWindow && !quickPreviewWindow.isDestroyed()) {
+        loadRendererRoute(quickPreviewWindow, route)
+        if (quickPreviewWindow.isMinimized()) quickPreviewWindow.restore()
+        quickPreviewWindow.show()
+        quickPreviewWindow.focus()
+        return quickPreviewWindow
+    }
+
+    const window = new BrowserWindow({
+        width: 1160,
+        height: 860,
+        minWidth: 760,
+        minHeight: 520,
+        show: false,
+        backgroundColor: '#0c121f',
+        autoHideMenuBar: true,
+        ...(iconPath ? { icon: iconPath } : {}),
+        webPreferences: {
+            preload: getPreloadPath(),
+            sandbox: false,
+            contextIsolation: true,
+            nodeIntegration: false,
+            webviewTag: false,
+            devTools: true
+        }
+    })
+
+    window.on('ready-to-show', () => window.show())
+    window.on('closed', () => {
+        quickPreviewWindow = null
+    })
+    window.webContents.setWindowOpenHandler((details) => {
+        shell.openExternal(details.url)
+        return { action: 'deny' }
+    })
+
+    loadRendererRoute(window, route)
+    quickPreviewWindow = window
+    return window
+}
+
+const initialAssociatedFilePath = extractAssociatedFileFromArgv(process.argv)
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+    app.quit()
+}
+
+app.on('second-instance', (_event, argv) => {
+    const associatedFilePath = extractAssociatedFileFromArgv(argv)
+    if (associatedFilePath) {
+        createQuickPreviewWindow(associatedFilePath)
+        return
+    }
+
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        mainWindow = createWindow(true)
+        ensureIpcHandlersRegistered(mainWindow)
+        return
+    }
+
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+})
 
 app.whenReady().then(() => {
     // Set app user model id for Windows
@@ -130,16 +266,23 @@ app.whenReady().then(() => {
         }
     })
 
-    // Create window
-    createWindow()
+    // Keep the full app alive in background for quick-file preview launches.
+    const launchHidden = Boolean(initialAssociatedFilePath)
+    mainWindow = createWindow(!launchHidden)
+    ensureIpcHandlersRegistered(mainWindow)
 
-    // Register IPC handlers with mainWindow reference
-    if (mainWindow) {
-        registerIpcHandlers(mainWindow)
+    if (initialAssociatedFilePath) {
+        createQuickPreviewWindow(initialAssociatedFilePath)
     }
 
     app.on('activate', function () {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            mainWindow = createWindow(true)
+            ensureIpcHandlersRegistered(mainWindow)
+            return
+        }
+        if (!mainWindow.isVisible()) mainWindow.show()
+        mainWindow.focus()
     })
 
     app.on('render-process-gone', (_event, webContents, details) => {

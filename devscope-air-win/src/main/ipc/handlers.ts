@@ -51,6 +51,7 @@ import {
 import {
     handleGetActivePorts,
     handleGetProjectDetails,
+    handleInstallProjectDependencies,
     handleGetRunningApps,
     handleGetProjectProcesses,
     handleGetProjectSessions
@@ -256,6 +257,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:pythonPreview:stop', handleStopPythonPreview)
     ipcMain.handle('devscope:copyToClipboard', handleCopyToClipboard)
     ipcMain.handle('devscope:getProjectDetails', handleGetProjectDetails)
+    ipcMain.handle('devscope:installProjectDependencies', handleInstallProjectDependencies)
     ipcMain.handle('devscope:getFileTree', handleGetFileTree)
     ipcMain.handle('devscope:readFileContent', handleReadFileContent)
     ipcMain.handle('devscope:readTextFileFull', handleReadTextFileFull)

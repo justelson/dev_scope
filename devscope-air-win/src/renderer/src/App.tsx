@@ -20,6 +20,7 @@ const Tasks = lazy(() => import('./pages/Tasks'))
 const ProjectDetails = lazy(() => import('./pages/ProjectDetails'))
 const FolderBrowse = lazy(() => import('./pages/FolderBrowse'))
 const Assistant = lazy(() => import('./pages/Assistant'))
+const QuickOpen = lazy(() => import('./pages/QuickOpen'))
 
 // Settings sub-pages
 const AppearanceSettings = lazy(() => import('./pages/settings/AppearanceSettings'))
@@ -242,6 +243,7 @@ function App() {
 }
 
 function AppContent() {
+    const location = useLocation()
     const { settings } = useSettings()
     const foldersToIndex = useMemo(() => {
         return Array.from(new Set([
@@ -265,6 +267,14 @@ function AppContent() {
             window.clearTimeout(timer)
         }
     }, [settings.enableFolderIndexing, settings.autoIndexOnStartup, foldersToIndex])
+
+    if (location.pathname === '/quick-open') {
+        return (
+            <Suspense fallback={<PageLoader />}>
+                <QuickOpen />
+            </Suspense>
+        )
+    }
 
     return (
         <div className={`flex flex-col h-screen bg-sparkle-bg text-sparkle-text overflow-hidden ${settings.compactMode ? 'compact-mode' : ''}`}>

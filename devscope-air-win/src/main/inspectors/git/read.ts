@@ -203,10 +203,11 @@ export async function getWorkingDiff(
     mode: 'combined' | 'staged' | 'unstaged' = 'combined'
 ): Promise<string> {
     try {
-        const git = createGit(projectPath)
-        const repoContext = filePath ? await getRepoContext(git, projectPath) : null
+        const projectGit = createGit(projectPath)
+        const repoContext = await getRepoContext(projectGit, projectPath)
+        const git = createGit(repoContext.repoRoot)
         const pathSpec = filePath
-            ? ['--', await toPathSpec(git, projectPath, filePath, repoContext ?? undefined)]
+            ? ['--', await toPathSpec(git, projectPath, filePath, repoContext)]
             : []
         const staged = await git.raw(['diff', '--cached', ...pathSpec]).catch(() => '')
         const unstaged = await git.raw(['diff', ...pathSpec]).catch(() => '')

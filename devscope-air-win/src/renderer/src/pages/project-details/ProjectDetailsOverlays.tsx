@@ -11,6 +11,7 @@ export function ProjectDetailsOverlays(props: ProjectDetailsOverlaysProps) {
         project,
         showDependenciesModal,
         setShowDependenciesModal,
+        onDependenciesUpdated,
         selectedCommit,
         commitDiff,
         loadingDiff,
@@ -63,6 +64,7 @@ export function ProjectDetailsOverlays(props: ProjectDetailsOverlaysProps) {
                     dependencies={project.dependencies}
                     devDependencies={project.devDependencies}
                     dependencyInstallStatus={project.dependencyInstallStatus}
+                    onDependenciesUpdated={onDependenciesUpdated}
                     onClose={() => setShowDependenciesModal(false)}
                 />
             )}

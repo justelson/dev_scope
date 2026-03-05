@@ -1,7 +1,7 @@
 import { spawnSync } from 'child_process'
 import log from 'electron-log'
 import { stat, unlink } from 'fs/promises'
-import { dirname, delimiter, isAbsolute, join, relative } from 'path'
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from 'path'
 import { simpleGit, type SimpleGit } from 'simple-git'
 import { getAugmentedEnv } from '../safe-exec'
 import type { CompactPatchResult, GitCommit, GitStatusMap, RepoContext } from './types'
@@ -17,6 +17,20 @@ type GitRuntime = {
 }
 
 let cachedGitRuntime: GitRuntime | null = null
+
+function normalizeFsPath(input: string): string {
+    const trimmed = String(input || '').trim()
+    if (!trimmed) return trimmed
+    if (process.platform === 'win32') {
+        const msysDrivePath = trimmed.match(/^\/([a-zA-Z])\/(.*)$/)
+        if (msysDrivePath) {
+            const drive = msysDrivePath[1].toUpperCase()
+            const rest = msysDrivePath[2].replace(/\//g, '\\')
+            return `${drive}:\\${rest}`
+        }
+    }
+    return trimmed
+}
 
 function resolveGitRuntime(): GitRuntime {
     if (cachedGitRuntime) return cachedGitRuntime
@@ -127,10 +141,31 @@ function stripPrefixedPath(pathSpec: string, prefix: string): string {
     return sanitizePathSpec(current)
 }
 
+async function pathExists(path: string): Promise<boolean> {
+    try {
+        await stat(path)
+        return true
+    } catch {
+        return false
+    }
+}
+
+async function repoPathLikelyExists(repoRoot: string, candidate: string): Promise<boolean> {
+    const normalized = sanitizePathSpec(candidate)
+    if (!normalized || normalized === '.') return true
+
+    const filePath = join(repoRoot, ...normalized.split('/'))
+    if (await pathExists(filePath)) return true
+
+    const parent = dirname(filePath)
+    return await pathExists(parent)
+}
+
 export async function getRepoContext(git: SimpleGit, projectPath: string): Promise<RepoContext> {
     const repoRootRaw = await git.raw(['rev-parse', '--show-toplevel']).catch(() => projectPath)
-    const repoRoot = sanitizePathSpec(repoRootRaw.trim() || projectPath)
-    const relativeToRepoRaw = sanitizePathSpec(relative(repoRoot, projectPath))
+    const repoRoot = resolve(normalizeFsPath(repoRootRaw.trim() || projectPath))
+    const projectAbsolute = resolve(normalizeFsPath(projectPath))
+    const relativeToRepoRaw = sanitizePathSpec(relative(repoRoot, projectAbsolute))
     const projectRelativeToRepo = relativeToRepoRaw === '.' ? '' : relativeToRepoRaw
 
     return {
@@ -146,37 +181,55 @@ export async function toPathSpec(
     repoContext?: RepoContext
 ): Promise<string> {
     const context = repoContext ?? await getRepoContext(git, projectPath)
-    const normalizedInput = sanitizePathSpec(filePath)
+    const normalizedInput = sanitizePathSpec(String(filePath || '').trim())
+    if (!normalizedInput || normalizedInput === '.') return '.'
+    const projectAbsolute = resolve(normalizeFsPath(projectPath))
+    const normalizedAbsoluteInput = normalizeFsPath(filePath)
 
-    const directRelativeRaw = isAbsolute(filePath)
-        ? sanitizePathSpec(relative(projectPath, filePath))
-        : normalizedInput
+    const projectRelative = sanitizePathSpec(context.projectRelativeToRepo || '')
+    const repoRootName = sanitizePathSpec(basename(context.repoRoot || '') || '')
 
-    const directRelative = stripPrefixedPath(directRelativeRaw, context.projectRelativeToRepo)
-    if (
-        directRelative &&
-        directRelative !== '.' &&
-        !directRelative.startsWith('..') &&
-        !isWindowsLikePath(directRelative)
-    ) {
-        return directRelative
-    }
-
-    if (isAbsolute(filePath)) {
-        const repoRelativeRaw = sanitizePathSpec(relative(context.repoRoot, filePath))
-        const repoRelative = stripPrefixedPath(repoRelativeRaw, context.projectRelativeToRepo)
-        if (
-            repoRelative &&
-            repoRelative !== '.' &&
-            !repoRelative.startsWith('..') &&
-            !isWindowsLikePath(repoRelative)
-        ) {
-            return repoRelative
+    const candidates: string[] = []
+    const pushCandidate = (value: string) => {
+        const normalized = sanitizePathSpec(value)
+        if (!normalized) return
+        if (normalized !== '.' && (normalized.startsWith('..') || isWindowsLikePath(normalized))) return
+        if (!candidates.includes(normalized)) {
+            candidates.push(normalized)
         }
     }
 
-    const strippedInput = stripPrefixedPath(normalizedInput, context.projectRelativeToRepo)
-    return strippedInput || normalizedInput
+    if (isAbsolute(normalizedAbsoluteInput)) {
+        pushCandidate(sanitizePathSpec(relative(context.repoRoot, normalizedAbsoluteInput)))
+    } else {
+        const absoluteFromProject = resolve(projectAbsolute, filePath)
+        pushCandidate(sanitizePathSpec(relative(context.repoRoot, absoluteFromProject)))
+
+        if (repoRootName && normalizedInput === repoRootName) {
+            pushCandidate('.')
+        }
+        if (repoRootName && normalizedInput.startsWith(`${repoRootName}/`)) {
+            pushCandidate(normalizedInput.slice(repoRootName.length + 1))
+        }
+
+        pushCandidate(normalizedInput)
+
+        if (projectRelative) {
+            if (normalizedInput === projectRelative || normalizedInput.startsWith(`${projectRelative}/`)) {
+                pushCandidate(normalizedInput)
+            } else {
+                pushCandidate(`${projectRelative}/${normalizedInput}`)
+            }
+        }
+    }
+
+    for (const candidate of candidates) {
+        if (await repoPathLikelyExists(context.repoRoot, candidate)) {
+            return candidate
+        }
+    }
+
+    return candidates[0] || normalizedInput
 }
 
 export function toError(err: unknown, fallback: string): Error {

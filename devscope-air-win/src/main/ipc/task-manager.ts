@@ -12,6 +12,7 @@ export type DevScopeTaskType =
     | 'git.remote'
     | 'git.tag'
     | 'git.stash'
+    | 'project.dependencies.install'
 
 export type DevScopeTaskStatus = 'running' | 'success' | 'failed'
 

@@ -27,9 +27,14 @@ import {
 } from '../../inspectors/git'
 import { appendTaskLog, completeTask, createTask } from '../task-manager'
 
-export async function handleStageFiles(_event: Electron.IpcMainInvokeEvent, projectPath: string, files: string[]) {
+export async function handleStageFiles(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    files: string[],
+    options?: { scope?: 'project' | 'repo' }
+) {
     try {
-        await stageFiles(projectPath, files)
+        await stageFiles(projectPath, files, options)
         return { success: true }
     } catch (err: any) {
         log.error('Failed to stage files:', err)
@@ -37,9 +42,14 @@ export async function handleStageFiles(_event: Electron.IpcMainInvokeEvent, proj
     }
 }
 
-export async function handleUnstageFiles(_event: Electron.IpcMainInvokeEvent, projectPath: string, files: string[]) {
+export async function handleUnstageFiles(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    files: string[],
+    options?: { scope?: 'project' | 'repo' }
+) {
     try {
-        await unstageFiles(projectPath, files)
+        await unstageFiles(projectPath, files, options)
         return { success: true }
     } catch (err: any) {
         log.error('Failed to unstage files:', err)
@@ -47,9 +57,14 @@ export async function handleUnstageFiles(_event: Electron.IpcMainInvokeEvent, pr
     }
 }
 
-export async function handleDiscardChanges(_event: Electron.IpcMainInvokeEvent, projectPath: string, files: string[]) {
+export async function handleDiscardChanges(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    files: string[],
+    options?: { scope?: 'project' | 'repo' }
+) {
     try {
-        await discardChanges(projectPath, files)
+        await discardChanges(projectPath, files, options)
         return { success: true }
     } catch (err: any) {
         log.error('Failed to discard changes:', err)

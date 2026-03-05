@@ -283,6 +283,7 @@ export type DevScopeTaskType =
     | 'git.remote'
     | 'git.tag'
     | 'git.stash'
+    | 'project.dependencies.install'
 
 export type DevScopeTaskStatus = 'running' | 'success' | 'failed'
 
@@ -439,6 +440,26 @@ export interface DevScopeApi {
     scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) => Promise<DevScopeResult<{ projects: DevScopeProject[]; folders: DevScopeFolderItem[]; files: DevScopeFileItem[]; cached?: boolean; cachedAt?: number }>>
     openInExplorer: (path: string) => Promise<DevScopeResult>
     openInTerminal: (path: string, preferredShell?: 'powershell' | 'cmd', initialCommand?: string) => Promise<DevScopeResult>
+    installProjectDependencies: (
+        projectPath: string,
+        options?: { onlyMissing?: boolean }
+    ) => Promise<DevScopeResult<{
+        manager: 'npm' | 'pnpm' | 'yarn' | 'bun'
+        durationMs: number
+        message?: string
+        output?: string
+        installStatus?: {
+            installed: boolean | null
+            checked: boolean
+            ecosystem: 'node' | 'unknown'
+            totalPackages: number
+            installedPackages: number
+            missingPackages: number
+            missingDependencies?: string[]
+            missingSample?: string[]
+            reason?: string
+        } | null
+    }>>
     getProjectDetails: (projectPath: string) => Promise<DevScopeResult<{ project: DevScopeProjectDetails }>>
     getFileTree: (projectPath: string, options?: { showHidden?: boolean; maxDepth?: number }) => Promise<DevScopeResult<{ tree: DevScopeFileTreeNode[] }>>
     getGitHistory: (projectPath: string) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
@@ -456,9 +477,21 @@ export interface DevScopeApi {
     getRepoOwner: (projectPath: string) => Promise<DevScopeResult<{ owner: string | null }>>
     hasRemoteOrigin: (projectPath: string) => Promise<DevScopeResult<{ hasRemote: boolean }>>
     getProjectsGitOverview: (projectPaths: string[]) => Promise<DevScopeResult<{ items: DevScopeProjectGitOverviewItem[] }>>
-    stageFiles: (projectPath: string, files: string[]) => Promise<DevScopeResult>
-    unstageFiles: (projectPath: string, files: string[]) => Promise<DevScopeResult>
-    discardChanges: (projectPath: string, files: string[]) => Promise<DevScopeResult>
+    stageFiles: (
+        projectPath: string,
+        files: string[],
+        options?: { scope?: 'project' | 'repo' }
+    ) => Promise<DevScopeResult>
+    unstageFiles: (
+        projectPath: string,
+        files: string[],
+        options?: { scope?: 'project' | 'repo' }
+    ) => Promise<DevScopeResult>
+    discardChanges: (
+        projectPath: string,
+        files: string[],
+        options?: { scope?: 'project' | 'repo' }
+    ) => Promise<DevScopeResult>
     createCommit: (projectPath: string, message: string) => Promise<DevScopeResult>
     pushCommits: (projectPath: string) => Promise<DevScopeResult>
     fetchUpdates: (projectPath: string, remoteName?: string) => Promise<DevScopeResult>

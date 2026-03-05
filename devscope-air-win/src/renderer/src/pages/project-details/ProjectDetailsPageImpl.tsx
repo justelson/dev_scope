@@ -612,6 +612,9 @@ export default function ProjectDetailsPage() {
                 project={project}
                 showDependenciesModal={showDependenciesModal}
                 setShowDependenciesModal={setShowDependenciesModal}
+                onDependenciesUpdated={async () => {
+                    await loadProjectDetails()
+                }}
                 selectedCommit={selectedCommit}
                 commitDiff={commitDiff}
                 loadingDiff={loadingDiff}

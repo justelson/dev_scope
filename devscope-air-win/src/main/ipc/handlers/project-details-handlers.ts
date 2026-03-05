@@ -1,5 +1,5 @@
 import { access, readFile, readdir, stat } from 'fs/promises'
-import { exec } from 'child_process'
+import { exec, spawn } from 'child_process'
 import { join } from 'path'
 import { promisify } from 'util'
 import log from 'electron-log'
@@ -10,6 +10,7 @@ import {
     PROJECT_MARKERS,
     type FrameworkDefinition
 } from '../project-detection'
+import { appendTaskLog, completeTask, createTask } from '../task-manager'
 
 const execAsync = promisify(exec)
 
@@ -24,6 +25,8 @@ type DependencyInstallStatus = {
     missingSample?: string[]
     reason?: string
 }
+
+type DependencyInstallManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
 
 async function pathExists(path: string): Promise<boolean> {
     try {
@@ -90,6 +93,90 @@ async function detectNodeDependencyInstallStatus(
         missingDependencies: missing,
         missingSample: missing.slice(0, 5)
     }
+}
+
+type ProjectPackageJson = {
+    packageManager?: string
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+}
+
+async function detectDependencyInstallManager(
+    projectPath: string,
+    packageJson: ProjectPackageJson | null
+): Promise<DependencyInstallManager> {
+    const packageManagerField = String(packageJson?.packageManager || '').trim().toLowerCase()
+    if (packageManagerField.startsWith('pnpm')) return 'pnpm'
+    if (packageManagerField.startsWith('yarn')) return 'yarn'
+    if (packageManagerField.startsWith('bun')) return 'bun'
+    if (packageManagerField.startsWith('npm')) return 'npm'
+
+    if (await pathExists(join(projectPath, 'pnpm-lock.yaml'))) return 'pnpm'
+    if (await pathExists(join(projectPath, 'yarn.lock'))) return 'yarn'
+    if (await pathExists(join(projectPath, 'bun.lockb')) || await pathExists(join(projectPath, 'bun.lock'))) return 'bun'
+    return 'npm'
+}
+
+function installCommandForManager(manager: DependencyInstallManager): { command: string; args: string[] } {
+    if (manager === 'pnpm') return { command: 'pnpm', args: ['install'] }
+    if (manager === 'yarn') return { command: 'yarn', args: ['install'] }
+    if (manager === 'bun') return { command: 'bun', args: ['install'] }
+    return { command: 'npm', args: ['install'] }
+}
+
+async function runInstallProcess(
+    projectPath: string,
+    manager: DependencyInstallManager
+): Promise<{ success: boolean; output: string; error: string | null; code: number | null }> {
+    const { command, args } = installCommandForManager(manager)
+    return await new Promise((resolve) => {
+        const child = spawn(command, args, {
+            cwd: projectPath,
+            shell: process.platform === 'win32',
+            windowsHide: true,
+            env: process.env
+        })
+
+        const outputBuffer: string[] = []
+        const appendOutput = (chunk: Buffer | string) => {
+            outputBuffer.push(String(chunk || ''))
+            if (outputBuffer.length > 220) {
+                outputBuffer.splice(0, outputBuffer.length - 220)
+            }
+        }
+
+        child.stdout?.on('data', appendOutput)
+        child.stderr?.on('data', appendOutput)
+
+        child.on('error', (error: Error) => {
+            const message = error?.message || `Failed to start ${command}.`
+            resolve({
+                success: false,
+                output: outputBuffer.join(''),
+                error: message,
+                code: null
+            })
+        })
+
+        child.on('close', (code) => {
+            const mergedOutput = outputBuffer.join('')
+            if (code === 0) {
+                resolve({
+                    success: true,
+                    output: mergedOutput,
+                    error: null,
+                    code: 0
+                })
+                return
+            }
+            resolve({
+                success: false,
+                output: mergedOutput,
+                error: `${command} install failed with exit code ${code ?? 'unknown'}.`,
+                code: typeof code === 'number' ? code : null
+            })
+        })
+    })
 }
 
 function parseTasklistMemoryMb(raw: string): number {
@@ -283,6 +370,102 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
     } catch (err: any) {
         log.error('Failed to get project details:', err)
         return { success: false, error: err.message }
+    }
+}
+
+export async function handleInstallProjectDependencies(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    options?: { onlyMissing?: boolean }
+) {
+    log.info('IPC: installProjectDependencies', { projectPath, onlyMissing: Boolean(options?.onlyMissing) })
+    const mode = options?.onlyMissing ? 'missing' : 'all'
+    const task = createTask({
+        type: 'project.dependencies.install',
+        title: mode === 'missing' ? 'Install missing dependencies' : 'Install project dependencies',
+        projectPath,
+        initialLog: mode === 'missing'
+            ? 'Checking and installing missing dependencies'
+            : 'Installing project dependencies'
+    })
+
+    try {
+        await access(projectPath)
+        const packageJsonPath = join(projectPath, 'package.json')
+        if (!(await pathExists(packageJsonPath))) {
+            completeTask(task.id, 'failed', 'No package.json found in project.')
+            return { success: false, error: 'No package.json found in this project.' }
+        }
+
+        let packageJson: ProjectPackageJson | null = null
+        try {
+            const packageContent = await readFile(packageJsonPath, 'utf-8')
+            packageJson = JSON.parse(packageContent) as ProjectPackageJson
+        } catch (error: any) {
+            completeTask(task.id, 'failed', error?.message || 'Failed to read package.json.')
+            return { success: false, error: error?.message || 'Failed to read package.json.' }
+        }
+
+        const installStatusBefore = await detectNodeDependencyInstallStatus(projectPath, packageJson)
+        appendTaskLog(
+            task.id,
+            `Dependency status before install: ${installStatusBefore.installedPackages}/${installStatusBefore.totalPackages} installed`
+        )
+        if (options?.onlyMissing && installStatusBefore.missingPackages <= 0) {
+            completeTask(task.id, 'success', 'All dependencies are already installed.')
+            return {
+                success: true,
+                manager: await detectDependencyInstallManager(projectPath, packageJson),
+                durationMs: 0,
+                message: 'All dependencies are already installed.',
+                installStatus: installStatusBefore
+            }
+        }
+        const manager = await detectDependencyInstallManager(projectPath, packageJson)
+        appendTaskLog(task.id, `Using package manager: ${manager}`)
+        const startedAt = Date.now()
+        const installRun = await runInstallProcess(projectPath, manager)
+        const installStatusAfter = await detectNodeDependencyInstallStatus(projectPath, packageJson)
+        appendTaskLog(
+            task.id,
+            `Dependency status after install: ${installStatusAfter.installedPackages}/${installStatusAfter.totalPackages} installed`
+        )
+
+        if (!installRun.success) {
+            const outputTail = installRun.output
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .slice(-2)
+                .join(' | ')
+            if (outputTail) {
+                appendTaskLog(task.id, `Installer output: ${outputTail}`, 'error')
+            }
+            completeTask(task.id, 'failed', installRun.error || 'Dependency installation failed.')
+            return {
+                success: false,
+                error: installRun.error || 'Dependency installation failed.',
+                manager,
+                durationMs: Date.now() - startedAt,
+                output: installRun.output.slice(-8000),
+                installStatus: installStatusAfter
+            }
+        }
+
+        const label = options?.onlyMissing ? 'missing dependencies' : 'dependencies'
+        completeTask(task.id, 'success', `Installed ${label} using ${manager}.`)
+        return {
+            success: true,
+            manager,
+            durationMs: Date.now() - startedAt,
+            message: `Installed ${label} using ${manager}.`,
+            output: installRun.output.slice(-4000),
+            installStatus: installStatusAfter
+        }
+    } catch (err: any) {
+        log.error('Failed to install project dependencies:', err)
+        completeTask(task.id, 'failed', err?.message || 'Failed to install dependencies.')
+        return { success: false, error: err?.message || 'Failed to install dependencies.' }
     }
 }
 

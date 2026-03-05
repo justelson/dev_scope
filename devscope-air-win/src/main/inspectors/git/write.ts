@@ -17,6 +17,7 @@ import type { CheckoutBranchOptions, CheckoutBranchResult, GitBranchSummary, Git
 
 const INDEX_LOCK_MAX_ATTEMPTS = 8
 const INDEX_LOCK_RETRY_DELAY_MS = 350
+export type GitWriteScope = 'project' | 'repo'
 
 type GitAction<T> = (git: ReturnType<typeof createGit>) => Promise<T>
 const repoWriteQueues = new Map<string, Promise<void>>()
@@ -30,9 +31,32 @@ function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function normalizeWriteScope(scope?: GitWriteScope): GitWriteScope {
+    return scope === 'project' ? 'project' : 'repo'
+}
+
+function getScopedPathSpec(projectRelativeToRepo: string, scope: GitWriteScope): string {
+    if (scope === 'project') {
+        const normalized = String(projectRelativeToRepo || '').trim()
+        return normalized || '.'
+    }
+    return '.'
+}
+
 function getQueueKey(projectPath: string): string {
     const normalized = projectPath.trim()
     return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+async function resolveRepoQueuePath(projectPath: string): Promise<string> {
+    try {
+        const git = createGit(projectPath)
+        const root = (await git.raw(['rev-parse', '--show-toplevel'])).trim()
+        if (!root) return projectPath
+        return root
+    } catch {
+        return projectPath
+    }
 }
 
 function enqueueRepoWrite<T>(projectPath: string, actionLabel: string, task: () => Promise<T>): Promise<T> {
@@ -58,13 +82,18 @@ function enqueueRepoWrite<T>(projectPath: string, actionLabel: string, task: () 
 }
 
 async function withIndexLockRecovery<T>(projectPath: string, actionLabel: string, action: GitAction<T>): Promise<T> {
-    return enqueueRepoWrite(projectPath, actionLabel, async () => {
+    const queuePath = await resolveRepoQueuePath(projectPath)
+    return enqueueRepoWrite(queuePath, actionLabel, async () => {
         let lastError: unknown = null
 
         for (let attempt = 1; attempt <= INDEX_LOCK_MAX_ATTEMPTS; attempt += 1) {
-            const git = createGit(projectPath)
+            const projectGit = createGit(projectPath)
 
             try {
+                const repoContext = await getRepoContext(projectGit, projectPath).catch(() => null)
+                const git = repoContext?.repoRoot
+                    ? createGit(repoContext.repoRoot)
+                    : projectGit
                 return await action(git)
             } catch (err) {
                 lastError = err
@@ -107,17 +136,24 @@ async function withIndexLockRecovery<T>(projectPath: string, actionLabel: string
 /**
  * Stage files for commit
  */
-export async function stageFiles(projectPath: string, files: string[]): Promise<void> {
+export async function stageFiles(
+    projectPath: string,
+    files: string[],
+    options?: { scope?: GitWriteScope }
+): Promise<void> {
     try {
-        if (files.length === 0) return
+        if (files.length === 0 && !options?.scope) return
+        const scope = normalizeWriteScope(options?.scope)
 
         await withIndexLockRecovery(projectPath, 'stage files', async (git) => {
             const repoContext = await getRepoContext(git, projectPath)
-            const pathSpecs = Array.from(new Set(
-                (await Promise.all(files.map((file) => toPathSpec(git, projectPath, file, repoContext))))
-                    .filter((pathSpec) => pathSpec && pathSpec.trim().length > 0)
-            ))
-            if (pathSpecs.length === 0) return
+            const pathSpecs = files.length > 0
+                ? Array.from(new Set(
+                    (await Promise.all(files.map((file) => toPathSpec(git, projectPath, file, repoContext))))
+                        .filter((pathSpec) => pathSpec && pathSpec.trim().length > 0)
+                ))
+                : [getScopedPathSpec(repoContext.projectRelativeToRepo, scope)]
+            if (pathSpecs.length === 0 || pathSpecs.every((pathSpec) => !pathSpec.trim())) return
             await git.add(['-A', '--', ...pathSpecs])
         })
     } catch (err) {
@@ -228,16 +264,23 @@ export async function addRemoteOrigin(projectPath: string, remoteUrl: string): P
     }
 }
 
-export async function unstageFiles(projectPath: string, files: string[]): Promise<void> {
+export async function unstageFiles(
+    projectPath: string,
+    files: string[],
+    options?: { scope?: GitWriteScope }
+): Promise<void> {
     try {
-        if (files.length === 0) return
+        if (files.length === 0 && !options?.scope) return
+        const scope = normalizeWriteScope(options?.scope)
         await withIndexLockRecovery(projectPath, 'unstage files', async (git) => {
             const repoContext = await getRepoContext(git, projectPath)
-            const pathSpecs = Array.from(new Set(
-                (await Promise.all(files.map((file) => toPathSpec(git, projectPath, file, repoContext))))
-                    .filter((pathSpec) => pathSpec && pathSpec.trim().length > 0)
-            ))
-            if (pathSpecs.length === 0) return
+            const pathSpecs = files.length > 0
+                ? Array.from(new Set(
+                    (await Promise.all(files.map((file) => toPathSpec(git, projectPath, file, repoContext))))
+                        .filter((pathSpec) => pathSpec && pathSpec.trim().length > 0)
+                ))
+                : [getScopedPathSpec(repoContext.projectRelativeToRepo, scope)]
+            if (pathSpecs.length === 0 || pathSpecs.every((pathSpec) => !pathSpec.trim())) return
             await git.raw(['reset', 'HEAD', '--', ...pathSpecs])
         })
     } catch (err) {
@@ -246,16 +289,23 @@ export async function unstageFiles(projectPath: string, files: string[]): Promis
     }
 }
 
-export async function discardChanges(projectPath: string, files: string[]): Promise<void> {
+export async function discardChanges(
+    projectPath: string,
+    files: string[],
+    options?: { scope?: GitWriteScope }
+): Promise<void> {
     try {
-        if (files.length === 0) return
+        if (files.length === 0 && !options?.scope) return
+        const scope = normalizeWriteScope(options?.scope)
         await withIndexLockRecovery(projectPath, 'discard changes', async (git) => {
             const repoContext = await getRepoContext(git, projectPath)
-            const pathSpecs = Array.from(new Set(
-                (await Promise.all(files.map((file) => toPathSpec(git, projectPath, file, repoContext))))
-                    .filter((pathSpec) => pathSpec && pathSpec.trim().length > 0)
-            ))
-            if (pathSpecs.length === 0) return
+            const pathSpecs = files.length > 0
+                ? Array.from(new Set(
+                    (await Promise.all(files.map((file) => toPathSpec(git, projectPath, file, repoContext))))
+                        .filter((pathSpec) => pathSpec && pathSpec.trim().length > 0)
+                ))
+                : [getScopedPathSpec(repoContext.projectRelativeToRepo, scope)]
+            if (pathSpecs.length === 0 || pathSpecs.every((pathSpec) => !pathSpec.trim())) return
             await git.raw(['restore', '--staged', '--worktree', '--', ...pathSpecs]).catch(async () => {
                 await git.raw(['checkout', '--', ...pathSpecs])
             })
@@ -355,9 +405,14 @@ export async function checkoutBranch(
     branchName: string,
     options: CheckoutBranchOptions = {}
 ): Promise<CheckoutBranchResult> {
-    return enqueueRepoWrite(projectPath, 'checkout branch', async () => {
+    const queuePath = await resolveRepoQueuePath(projectPath)
+    return enqueueRepoWrite(queuePath, 'checkout branch', async () => {
         assertNonEmpty(branchName, 'Branch name')
-        const git = createGit(projectPath)
+        const projectGit = createGit(projectPath)
+        const repoContext = await getRepoContext(projectGit, projectPath).catch(() => null)
+        const git = repoContext?.repoRoot
+            ? createGit(repoContext.repoRoot)
+            : projectGit
         const targetBranch = branchName.trim()
         const shouldAutoStash = options.autoStash !== false
         const shouldAutoCleanupLock = options.autoCleanupLock !== false

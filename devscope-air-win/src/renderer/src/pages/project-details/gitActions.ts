@@ -261,10 +261,7 @@ export function createProjectGitActions(params: GitActionParams) {
         })
 
         try {
-            const result = await window.devscope.stageFiles(
-                params.decodedPath,
-                params.unstagedFiles.map((file) => file.path)
-            )
+            const result = await window.devscope.stageFiles(params.decodedPath, [], { scope: 'repo' })
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to stage all files')
             }
@@ -283,10 +280,7 @@ export function createProjectGitActions(params: GitActionParams) {
         })
 
         try {
-            const result = await window.devscope.unstageFiles(
-                params.decodedPath,
-                params.stagedFiles.map((file) => file.path)
-            )
+            const result = await window.devscope.unstageFiles(params.decodedPath, [], { scope: 'repo' })
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to unstage all files')
             }

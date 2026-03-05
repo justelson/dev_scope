@@ -104,7 +104,15 @@ function Section({
     onSetPendingActionPath: (path: string | null) => void
 }) {
     const [currentPage, setCurrentPage] = useState(1)
-
+    const sectionAdditions = useMemo(
+        () => files.reduce((sum, file) => sum + Math.max(0, Number(file.additions) || 0), 0),
+        [files]
+    )
+    const sectionDeletions = useMemo(
+        () => files.reduce((sum, file) => sum + Math.max(0, Number(file.deletions) || 0), 0),
+        [files]
+    )
+    const totalLineChanges = sectionAdditions + sectionDeletions
     const totalPages = Math.max(1, Math.ceil(files.length / PAGE_SIZE))
     const paginatedFiles = useMemo(() => {
         const start = (currentPage - 1) * PAGE_SIZE
@@ -127,15 +135,30 @@ function Section({
 
     return (
         <div className="space-y-2">
-            <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-white/80">{title} ({files.length})</h4>
-                <button
-                    onClick={() => { void onActionAll() }}
-                    disabled={files.length === 0 || pendingActionPath === '__all__'}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 text-white/70 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                >
-                    {pendingActionPath === '__all__' ? 'Working...' : `${actionLabel} All`}
-                </button>
+            <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-medium text-white/85">{title}</h4>
+                            <span className="rounded-md border border-white/15 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/65">
+                                {files.length} files
+                            </span>
+                        </div>
+                        <p className="text-[11px] text-white/45">
+                            Totals across all files: {totalLineChanges} lines changed
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                        <DiffStats additions={sectionAdditions} deletions={sectionDeletions} />
+                        <button
+                            onClick={() => { void onActionAll() }}
+                            disabled={files.length === 0 || pendingActionPath === '__all__'}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 text-white/70 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                            {pendingActionPath === '__all__' ? 'Working...' : `${actionLabel} All`}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {files.length === 0 ? (
@@ -146,7 +169,7 @@ function Section({
                 const isLoadingDiff = loadingDiffKeys.has(diffKey)
 
                 return (
-                    <div key={file.path} className="bg-black/30 rounded-xl border border-white/5 p-3">
+                    <div key={file.path} className="group bg-black/30 rounded-xl border border-white/5 hover:border-white/15 p-3 transition-all">
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex items-start gap-3 flex-1 min-w-0">
                                 <span className={cn('text-[10px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5', badge.className)}>
@@ -174,7 +197,7 @@ function Section({
                                 </button>
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center justify-end gap-2 shrink-0 min-w-[220px]">
                                 <DiffStats additions={file.additions} deletions={file.deletions} compact />
                                 <button
                                     onClick={() => { void onViewDiff(file, diffMode) }}
@@ -348,7 +371,7 @@ export function WorkingChangesView({
                 </div>
 
                 <Section
-                    title="Staged"
+                    title="Staged Changes"
                     files={stagedFiles}
                     copiedPath={copiedPath}
                     pendingActionPath={pendingActionPath}
@@ -368,7 +391,7 @@ export function WorkingChangesView({
                 />
 
                 <Section
-                    title="Unstaged"
+                    title="Unstaged Changes"
                     files={unstagedFiles}
                     copiedPath={copiedPath}
                     pendingActionPath={pendingActionPath}

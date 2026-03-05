@@ -17,6 +17,8 @@ export function createProjectsAdapter() {
         openInExplorer: (path: string) => ipcRenderer.invoke('devscope:openInExplorer', path),
         openInTerminal: (path: string, preferredShell: 'powershell' | 'cmd' = 'powershell', initialCommand?: string) =>
             ipcRenderer.invoke('devscope:openInTerminal', path, preferredShell, initialCommand),
+        installProjectDependencies: (projectPath: string, options?: { onlyMissing?: boolean }) =>
+            ipcRenderer.invoke('devscope:installProjectDependencies', projectPath, options),
         getProjectDetails: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectDetails', projectPath),
         getFileTree: (projectPath: string, options?: { showHidden?: boolean; maxDepth?: number }) =>
             ipcRenderer.invoke('devscope:getFileTree', projectPath, options),
@@ -35,9 +37,21 @@ export function createProjectsAdapter() {
         getRepoOwner: (projectPath: string) => ipcRenderer.invoke('devscope:getRepoOwner', projectPath),
         hasRemoteOrigin: (projectPath: string) => ipcRenderer.invoke('devscope:hasRemoteOrigin', projectPath),
         getProjectsGitOverview: (projectPaths: string[]) => ipcRenderer.invoke('devscope:getProjectsGitOverview', projectPaths),
-        stageFiles: (projectPath: string, files: string[]) => ipcRenderer.invoke('devscope:stageFiles', projectPath, files),
-        unstageFiles: (projectPath: string, files: string[]) => ipcRenderer.invoke('devscope:unstageFiles', projectPath, files),
-        discardChanges: (projectPath: string, files: string[]) => ipcRenderer.invoke('devscope:discardChanges', projectPath, files),
+        stageFiles: (
+            projectPath: string,
+            files: string[],
+            options?: { scope?: 'project' | 'repo' }
+        ) => ipcRenderer.invoke('devscope:stageFiles', projectPath, files, options),
+        unstageFiles: (
+            projectPath: string,
+            files: string[],
+            options?: { scope?: 'project' | 'repo' }
+        ) => ipcRenderer.invoke('devscope:unstageFiles', projectPath, files, options),
+        discardChanges: (
+            projectPath: string,
+            files: string[],
+            options?: { scope?: 'project' | 'repo' }
+        ) => ipcRenderer.invoke('devscope:discardChanges', projectPath, files, options),
         createCommit: (projectPath: string, message: string) => ipcRenderer.invoke('devscope:createCommit', projectPath, message),
         pushCommits: (projectPath: string) => ipcRenderer.invoke('devscope:pushCommits', projectPath),
         fetchUpdates: (projectPath: string, remoteName?: string) => ipcRenderer.invoke('devscope:fetchUpdates', projectPath, remoteName),
