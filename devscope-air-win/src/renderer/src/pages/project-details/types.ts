@@ -115,3 +115,10 @@ export interface GitStashSummary {
     hash: string
     message: string
 }
+
+export interface InstalledIde {
+    id: string
+    name: string
+    icon: string
+    color: string
+}

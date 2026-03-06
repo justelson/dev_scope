@@ -15,7 +15,6 @@ import { REMOTE_ACCESS_ENABLED } from '@shared/feature-flags'
 
 const Settings = lazy(() => import('./pages/Settings'))
 const Home = lazy(() => import('./pages/Home'))
-const Projects = lazy(() => import('./pages/Projects'))
 const Tasks = lazy(() => import('./pages/Tasks'))
 const ProjectDetails = lazy(() => import('./pages/ProjectDetails'))
 const FolderBrowse = lazy(() => import('./pages/FolderBrowse'))
@@ -161,7 +160,7 @@ function MainContent() {
                 <Routes>
                     <Route path="/" element={<LaunchRedirect />} />
                     <Route path="/home" element={<Home />} />
-                    <Route path="/projects" element={<Projects />} />
+                    <Route path="/projects" element={<FolderBrowse />} />
                     <Route
                         path="/tasks"
                         element={settings.tasksPageEnabled ? <Tasks /> : <Navigate to="/home" replace />}

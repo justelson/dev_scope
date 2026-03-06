@@ -3,6 +3,7 @@ import { spawn } from 'child_process'
 import { stat } from 'fs/promises'
 import log from 'electron-log'
 import { devscopeCore } from '../../core/devscope-core'
+import { getInstalledIdes, launchProjectInIde } from '../../inspectors/system/windows-ides'
 import type { ScanProjectsResult } from '../../services/project-discovery-service'
 
 export async function handleSelectFolder(event: Electron.IpcMainInvokeEvent) {
@@ -119,6 +120,29 @@ export async function handleOpenWith(_event: Electron.IpcMainInvokeEvent, filePa
     } catch (err: any) {
         log.error('Failed to open with:', err)
         return { success: false, error: err.message }
+    }
+}
+
+export async function handleListInstalledIdes() {
+    try {
+        const ides = await getInstalledIdes()
+        return { success: true, ides }
+    } catch (err: any) {
+        log.error('Failed to list installed IDEs:', err)
+        return { success: false, error: err?.message || 'Failed to list installed IDEs.', ides: [] }
+    }
+}
+
+export async function handleOpenProjectInIde(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    ideId: string
+) {
+    try {
+        return await launchProjectInIde(projectPath, ideId)
+    } catch (err: any) {
+        log.error('Failed to open project in IDE:', err)
+        return { success: false, error: err?.message || 'Failed to open project in IDE.' }
     }
 }
 

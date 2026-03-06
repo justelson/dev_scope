@@ -5,6 +5,7 @@ export interface PreviewFile {
     path: string
     type: PreviewFileType
     language?: string
+    startInEditMode?: boolean
 }
 
 export interface PreviewMeta {

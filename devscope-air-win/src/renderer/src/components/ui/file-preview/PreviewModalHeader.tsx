@@ -190,8 +190,12 @@ export default function PreviewModalHeader({
                     ? 'Run Stopped'
                     : pythonRunState === 'running'
                         ? 'Running'
-                        : 'Idle'
+                    : 'Idle'
     )
+    const controlGroupClass = 'flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1 shrink-0'
+    const iconButtonBaseClass = 'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all'
+    const ghostIconButtonClass = `${iconButtonBaseClass} border-transparent text-white/55 hover:bg-white/10 hover:text-white`
+    const activeIconButtonClass = `${iconButtonBaseClass} border-white/15 bg-white/10 text-white`
 
     return (
         <div
@@ -223,7 +227,7 @@ export default function PreviewModalHeader({
                     <button
                         onClick={() => onModeChange('preview')}
                         className={cn(
-                            'flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all',
+                            'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
                             !isEditMode
                                 ? 'bg-white/15 text-white'
                                 : 'text-white/50 hover:text-white/80 hover:bg-white/10'
@@ -238,7 +242,7 @@ export default function PreviewModalHeader({
                         onClick={() => onModeChange('edit')}
                         disabled={!isEditable || !!loadingEditableContent}
                         className={cn(
-                            'flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all',
+                            'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
                             isEditMode
                                 ? 'bg-white/15 text-white'
                                 : 'text-white/50 hover:text-white/80 hover:bg-white/10',
@@ -251,107 +255,111 @@ export default function PreviewModalHeader({
                         <span className="sr-only">Edit</span>
                     </button>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                    {canUseTerminal && (
-                        <button
-                            type="button"
-                            onClick={onToggleTerminal}
-                            className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors',
-                                terminalVisible
-                                    ? 'border-sky-400/35 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25'
-                                    : 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
-                            )}
-                            title={terminalVisible ? 'Hide terminal panel' : 'Show terminal panel'}
-                        >
-                            <Terminal size={13} />
-                        </button>
-                    )}
-                    {canRunPython && (
-                        <div ref={pythonRunModeMenuRef} className="relative inline-flex items-center rounded-lg border border-white/20">
+                {(canUseTerminal || canRunPython) && (
+                    <div className={controlGroupClass}>
+                        {canUseTerminal && (
                             <button
                                 type="button"
-                                onClick={isPythonRunning ? onStopPython : onRunPython}
+                                onClick={onToggleTerminal}
                                 className={cn(
-                                    'inline-flex h-8 w-8 items-center justify-center transition-colors',
-                                    isPythonRunning
-                                        ? 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
-                                        : 'bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+                                    iconButtonBaseClass,
+                                    terminalVisible
+                                        ? 'border-sky-400/35 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25'
+                                        : 'border-transparent text-white/60 hover:bg-white/10 hover:text-white'
                                 )}
-                                title={isPythonRunning ? 'Stop Python run' : `Run Python (${pythonRunMode === 'terminal' ? 'terminal' : 'output'})`}
+                                title={terminalVisible ? 'Hide terminal panel' : 'Show terminal panel'}
                             >
-                                {isPythonRunning ? <Square size={13} /> : <Play size={13} />}
+                                <Terminal size={13} />
                             </button>
+                        )}
+                        {canRunPython && (
+                            <div ref={pythonRunModeMenuRef} className="relative inline-flex items-center rounded-lg border border-white/10 bg-black/10">
+                                <button
+                                    type="button"
+                                    onClick={isPythonRunning ? onStopPython : onRunPython}
+                                    className={cn(
+                                        'inline-flex h-8 w-8 items-center justify-center transition-colors rounded-l-lg',
+                                        isPythonRunning
+                                            ? 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                                            : 'bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+                                    )}
+                                    title={isPythonRunning ? 'Stop Python run' : `Run Python (${pythonRunMode === 'terminal' ? 'terminal' : 'output'})`}
+                                >
+                                    {isPythonRunning ? <Square size={13} /> : <Play size={13} />}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPythonRunModeMenuOpen((current) => !current)}
+                                    className="inline-flex h-8 w-6 items-center justify-center border-l border-white/10 text-white/70 hover:bg-white/10 hover:text-white transition-colors rounded-r-lg"
+                                    title="Choose run mode"
+                                    aria-expanded={pythonRunModeMenuOpen}
+                                >
+                                    <ChevronDown size={12} />
+                                </button>
+                                {pythonRunModeMenuOpen && (
+                                    <div className="absolute right-0 top-9 z-40 w-44 rounded-lg border border-sparkle-border bg-sparkle-card p-1.5 shadow-2xl">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                onPythonRunModeChange?.('terminal')
+                                                setPythonRunModeMenuOpen(false)
+                                            }}
+                                            className={cn(
+                                                'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
+                                                pythonRunMode === 'terminal'
+                                                    ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
+                                                    : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                            )}
+                                        >
+                                            <span>Run in Terminal</span>
+                                            {pythonRunMode === 'terminal' && <Check size={12} />}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                onPythonRunModeChange?.('output')
+                                                setPythonRunModeMenuOpen(false)
+                                            }}
+                                            className={cn(
+                                                'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
+                                                pythonRunMode === 'output'
+                                                    ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
+                                                    : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                            )}
+                                        >
+                                            <span>Run in Output</span>
+                                            {pythonRunMode === 'output' && <Check size={12} />}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {canRunPython && (
                             <button
                                 type="button"
-                                onClick={() => setPythonRunModeMenuOpen((current) => !current)}
-                                className="inline-flex h-8 w-6 items-center justify-center border-l border-white/15 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
-                                title="Choose run mode"
-                                aria-expanded={pythonRunModeMenuOpen}
+                                onClick={onClearPythonOutput}
+                                disabled={!pythonHasOutput && !isPythonRunning}
+                                className={cn(
+                                    iconButtonBaseClass,
+                                    (pythonHasOutput || isPythonRunning)
+                                        ? 'border-transparent text-white/60 hover:bg-white/10 hover:text-white'
+                                        : 'border-transparent text-white/25 cursor-not-allowed'
+                                )}
+                                title="Clear run output"
                             >
-                                <ChevronDown size={12} />
+                                <Trash2 size={13} />
                             </button>
-                            {pythonRunModeMenuOpen && (
-                                <div className="absolute right-0 top-9 z-40 w-44 rounded-lg border border-sparkle-border bg-sparkle-card p-1.5 shadow-2xl">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            onPythonRunModeChange?.('terminal')
-                                            setPythonRunModeMenuOpen(false)
-                                        }}
-                                        className={cn(
-                                            'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
-                                            pythonRunMode === 'terminal'
-                                                ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
-                                                : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
-                                        )}
-                                    >
-                                        <span>Run in Terminal</span>
-                                        {pythonRunMode === 'terminal' && <Check size={12} />}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            onPythonRunModeChange?.('output')
-                                            setPythonRunModeMenuOpen(false)
-                                        }}
-                                        className={cn(
-                                            'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
-                                            pythonRunMode === 'output'
-                                                ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
-                                                : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
-                                        )}
-                                    >
-                                        <span>Run in Output</span>
-                                        {pythonRunMode === 'output' && <Check size={12} />}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    {canRunPython && (
-                        <button
-                            type="button"
-                            onClick={onClearPythonOutput}
-                            disabled={!pythonHasOutput && !isPythonRunning}
-                            className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors',
-                                (pythonHasOutput || isPythonRunning)
-                                    ? 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
-                                    : 'border-white/10 text-white/30 cursor-not-allowed'
-                            )}
-                            title="Clear run output"
-                        >
-                            <Trash2 size={13} />
-                        </button>
-                    )}
+                        )}
+                    </div>
+                )}
+                <div className={controlGroupClass}>
                     <button
                         onClick={onToggleExpanded}
                         className={cn(
-                            'group p-2 rounded-lg border transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                            iconButtonBaseClass,
                             isExpanded
                                 ? 'border-sky-400/30 bg-sky-500/12 text-sky-200'
-                                : 'border-transparent text-white/50 hover:text-white hover:bg-white/10'
+                                : 'border-transparent text-white/55 hover:bg-white/10 hover:text-white'
                         )}
                         title={isExpanded ? 'Collapse workspace' : 'Expand workspace'}
                     >
@@ -376,24 +384,14 @@ export default function PreviewModalHeader({
                         <>
                             <button
                                 onClick={onToggleLeftPanel}
-                                className={cn(
-                                    'p-2 rounded-lg transition-all',
-                                    leftPanelOpen
-                                        ? 'text-white bg-white/10'
-                                        : 'text-white/50 hover:text-white hover:bg-white/10'
-                                )}
+                                className={cn(leftPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
                                 title={leftPanelOpen ? 'Hide left panel' : 'Show left panel'}
                             >
                                 <PanelLeft size={16} />
                             </button>
                             <button
                                 onClick={onToggleRightPanel}
-                                className={cn(
-                                    'p-2 rounded-lg transition-all',
-                                    rightPanelOpen
-                                        ? 'text-white bg-white/10'
-                                        : 'text-white/50 hover:text-white hover:bg-white/10'
-                                )}
+                                className={cn(rightPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
                                 title={rightPanelOpen ? 'Hide right panel' : 'Show right panel'}
                             >
                                 <PanelRight size={16} />
@@ -440,7 +438,7 @@ export default function PreviewModalHeader({
                         <button
                             onClick={() => onHtmlViewModeChange('rendered')}
                             className={cn(
-                                'px-2.5 py-1.5 text-xs rounded-md transition-all',
+                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
                                 htmlViewMode === 'rendered'
                                     ? 'bg-white/15 text-white'
                                     : 'text-white/40 hover:text-white/70 hover:bg-white/5'
@@ -454,7 +452,7 @@ export default function PreviewModalHeader({
                         <button
                             onClick={() => onHtmlViewModeChange('code')}
                             className={cn(
-                                'px-2.5 py-1.5 text-xs rounded-md transition-all',
+                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
                                 htmlViewMode === 'code'
                                     ? 'bg-white/15 text-white'
                                     : 'text-white/40 hover:text-white/70 hover:bg-white/5'
@@ -475,15 +473,15 @@ export default function PreviewModalHeader({
                 isUltraCompactHtmlHeader ? 'w-full justify-end' : ''
             )}>
                 {isEditMode && (
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className={controlGroupClass}>
                         <button
                             onClick={onRevert}
                             disabled={!isDirty || isSaving}
                             className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all',
+                                iconButtonBaseClass,
                                 isDirty && !isSaving
-                                    ? 'border-white/20 text-white/80 hover:bg-white/10'
-                                    : 'border-white/10 text-white/35 cursor-not-allowed'
+                                    ? 'border-transparent text-white/80 hover:bg-white/10'
+                                    : 'border-transparent text-white/35 cursor-not-allowed'
                             )}
                             title="Revert local changes"
                             aria-label="Revert local changes"
@@ -494,12 +492,12 @@ export default function PreviewModalHeader({
                             onClick={onSave}
                             disabled={!isDirty || isSaving}
                             className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all',
+                                iconButtonBaseClass,
                                 isDirty && !isSaving
                                     ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
                                     : isSaving
                                         ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
-                                        : 'border-white/10 text-white/35 cursor-not-allowed'
+                                        : 'border-transparent text-white/35 cursor-not-allowed'
                             )}
                             title={isSaving ? 'Saving changes...' : 'Save changes (Ctrl/Cmd+S)'}
                             aria-label={isSaving ? 'Saving changes' : 'Save changes'}
@@ -548,8 +546,7 @@ export default function PreviewModalHeader({
                         <button
                             onClick={onOpenInBrowser}
                             className={cn(
-                                'flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-all',
-                                isCompactHtmlHeader ? 'px-2' : ''
+                                'inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs text-white/60 hover:text-white hover:bg-white/10 transition-all'
                             )}
                             title="Open in Browser"
                             aria-label="Open in browser"
@@ -588,7 +585,7 @@ export default function PreviewModalHeader({
 
                 <button
                     onClick={onClose}
-                    className="p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-lg transition-all shrink-0"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/40 hover:bg-white/10 hover:text-white transition-all shrink-0"
                     title="Close (Esc)"
                 >
                     <X size={18} />

@@ -78,6 +78,19 @@ function isDevToolsShortcut(input: Electron.Input): boolean {
     return input.type === 'keyDown' && !!input.control && !!input.shift && key === 'i'
 }
 
+function getZoomShortcutAction(input: Electron.Input): 'in' | 'out' | 'reset' | null {
+    if (input.type !== 'keyDown' || (!input.control && !input.meta)) return null
+
+    const key = input.key?.toLowerCase()
+    const code = String(input.code || '')
+
+    if (key === '-' || code === 'Minus' || code === 'NumpadSubtract') return 'out'
+    if (key === '+' || key === '=' || code === 'Equal' || code === 'NumpadAdd') return 'in'
+    if (key === '0' || code === 'Digit0' || code === 'Numpad0') return 'reset'
+
+    return null
+}
+
 function shouldTreatAsAssociatedFile(arg: string): boolean {
     const trimmed = String(arg || '').trim()
     if (!trimmed || trimmed.startsWith('-')) return false
@@ -153,6 +166,22 @@ function createWindow(showOnReady = true): BrowserWindow {
     })
 
     window.webContents.on('before-input-event', (event, input) => {
+        const zoomAction = getZoomShortcutAction(input)
+        if (zoomAction) {
+            event.preventDefault()
+            const currentZoomLevel = window.webContents.getZoomLevel()
+
+            if (zoomAction === 'reset') {
+                window.webContents.setZoomLevel(0)
+                return
+            }
+
+            const delta = zoomAction === 'in' ? 0.5 : -0.5
+            const nextZoomLevel = Math.max(-3, Math.min(3, currentZoomLevel + delta))
+            window.webContents.setZoomLevel(nextZoomLevel)
+            return
+        }
+
         if (!isDevToolsShortcut(input)) return
 
         event.preventDefault()

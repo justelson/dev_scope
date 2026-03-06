@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, ChevronLeft, ChevronRight, Clock3, Cpu, Gauge, HardDrive, RefreshCw } from 'lucide-react'
+import { Terminal as XtermTerminal } from 'xterm'
+import { FitAddon } from 'xterm-addon-fit'
+import { WebLinksAddon } from 'xterm-addon-web-links'
+import 'xterm/css/xterm.css'
+import { useLocation } from 'react-router-dom'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
+import type { DevScopePreviewTerminalSessionSummary } from '@shared/contracts/devscope-api'
 
 type TaskLogEntry = {
     at: number
@@ -44,10 +50,18 @@ type DeviceStats = {
     memoryTotalGb: number
     memoryUsedGb: number
 }
+type PreviewTerminalSessionGroup = {
+    groupKey: string
+    cwd: string
+    sessions: DevScopePreviewTerminalSessionSummary[]
+    lastActivityAt: number
+    latestStartedAt: number
+}
 
 const APPS_PAGE_SIZE = 10
 const RUNNING_APPS_FETCH_LIMIT = 2000
 const RUNNING_APPS_PREFS_KEY = 'devscope.tasks.runningApps.prefs.v1'
+const TASKS_TERMINAL_PANEL_ANIMATION_MS = 220
 
 type RunningAppsPreferences = {
     appScope: 'all' | 'app' | 'background'
@@ -77,6 +91,31 @@ function formatDeviceMemoryLabel(memoryGb: number, unit: MemoryUnit): string {
     return `${(memoryGb * 1024).toFixed(0)} MB`
 }
 
+function formatTerminalShellLabel(shell: string): string {
+    return String(shell || 'terminal')
+        .replace(/\.exe$/i, '')
+        .replace(/^pwsh$/i, 'PowerShell')
+        .replace(/^powershell$/i, 'PowerShell')
+        .replace(/^cmd$/i, 'CMD')
+}
+
+function getTerminalPreviewLine(session: DevScopePreviewTerminalSessionSummary): string {
+    const previewLine = String(session.recentOutput || '')
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(-1)[0]
+
+    return previewLine || session.cwd
+}
+
+function readCssVariable(name: string, fallback: string): string {
+    if (typeof window === 'undefined') return fallback
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+    return value || fallback
+}
+
 function readRunningAppsPreferences(): Partial<RunningAppsPreferences> {
     try {
         const raw = window.localStorage.getItem(RUNNING_APPS_PREFS_KEY)
@@ -88,16 +127,23 @@ function readRunningAppsPreferences(): Partial<RunningAppsPreferences> {
     }
 }
 
+function createPreviewTerminalSessionId(): string {
+    return `tasks-term-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export default function Tasks() {
     const { settings } = useSettings()
+    const location = useLocation()
     const savedPrefsRef = useRef<Partial<RunningAppsPreferences> | null>(null)
     if (savedPrefsRef.current === null) {
         savedPrefsRef.current = readRunningAppsPreferences()
     }
     const savedPrefs = savedPrefsRef.current
-    const [activeView, setActiveView] = useState<'operations' | 'runningApps'>('operations')
+    const [activeView, setActiveView] = useState<'operations' | 'terminals' | 'runningApps'>('operations')
     const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([])
     const [activePorts, setActivePorts] = useState<number[]>([])
+    const [terminalSessions, setTerminalSessions] = useState<DevScopePreviewTerminalSessionSummary[]>([])
+    const [selectedTerminalSessionId, setSelectedTerminalSessionId] = useState('')
     const [runningApps, setRunningApps] = useState<RunningApp[]>([])
     const [deviceStats, setDeviceStats] = useState<DeviceStats | null>(null)
     const [appScope, setAppScope] = useState<'all' | 'app' | 'background'>(
@@ -131,7 +177,99 @@ export default function Tasks() {
     const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
     const hasLoadedOnceRef = useRef(false)
     const refreshSequenceRef = useRef(0)
+    const tasksTerminalHostRef = useRef<HTMLDivElement | null>(null)
+    const tasksXtermRef = useRef<XtermTerminal | null>(null)
+    const tasksFitAddonRef = useRef<FitAddon | null>(null)
+    const tasksTerminalHydratedSessionIdRef = useRef('')
+    const selectedTerminalSessionIdRef = useRef(selectedTerminalSessionId)
+    const selectedTerminalSessionRef = useRef<DevScopePreviewTerminalSessionSummary | null>(null)
     const runningAppsEnabled = settings.tasksRunningAppsEnabled !== false
+    const terminalSessionGroups = useMemo<PreviewTerminalSessionGroup[]>(() => {
+        const groups = new Map<string, PreviewTerminalSessionGroup>()
+
+        for (const session of terminalSessions) {
+            const groupKey = String(session.groupKey || session.cwd || session.sessionId)
+            const existing = groups.get(groupKey)
+            if (existing) {
+                existing.sessions.push(session)
+                existing.lastActivityAt = Math.max(existing.lastActivityAt, session.lastActivityAt)
+                existing.latestStartedAt = Math.max(existing.latestStartedAt, session.startedAt)
+                continue
+            }
+
+            groups.set(groupKey, {
+                groupKey,
+                cwd: session.cwd,
+                sessions: [session],
+                lastActivityAt: session.lastActivityAt,
+                latestStartedAt: session.startedAt
+            })
+        }
+
+        return Array.from(groups.values())
+            .map((group) => ({
+                ...group,
+                sessions: [...group.sessions].sort((a, b) => {
+                    if (a.status === 'running' && b.status !== 'running') return -1
+                    if (a.status !== 'running' && b.status === 'running') return 1
+                    if (b.startedAt !== a.startedAt) return b.startedAt - a.startedAt
+                    return b.lastActivityAt - a.lastActivityAt
+                })
+            }))
+            .sort((a, b) => {
+                if (b.latestStartedAt !== a.latestStartedAt) return b.latestStartedAt - a.latestStartedAt
+                return b.lastActivityAt - a.lastActivityAt
+            })
+    }, [terminalSessions])
+    const runningTerminalCount = useMemo(
+        () => terminalSessions.filter((session) => session.status === 'running').length,
+        [terminalSessions]
+    )
+    const sortedTerminalSessions = useMemo(
+        () => [...terminalSessions].sort((a, b) => {
+            if (a.status === 'running' && b.status !== 'running') return -1
+            if (a.status !== 'running' && b.status === 'running') return 1
+            if (b.startedAt !== a.startedAt) return b.startedAt - a.startedAt
+            return b.lastActivityAt - a.lastActivityAt
+        }),
+        [terminalSessions]
+    )
+    const selectedTerminalSession = useMemo(
+        () => terminalSessions.find((session) => session.sessionId === selectedTerminalSessionId) || null,
+        [selectedTerminalSessionId, terminalSessions]
+    )
+    const tasksTerminalTheme = useMemo(() => {
+        const accent = readCssVariable('--accent-primary', settings.accentColor.primary || '#38bdf8')
+        const card = readCssVariable('--color-card', '#0b1220')
+        const bg = readCssVariable('--color-bg', '#020617')
+        const text = '#e5e7eb'
+        const textSecondary = '#94a3b8'
+        const borderSecondary = readCssVariable('--color-border-secondary', '#334155')
+
+        return {
+            background: card,
+            foreground: text,
+            cursor: accent,
+            cursorAccent: card,
+            selectionBackground: `${accent}33`,
+            black: bg,
+            brightBlack: borderSecondary,
+            red: '#f87171',
+            brightRed: '#fca5a5',
+            green: '#4ade80',
+            brightGreen: '#86efac',
+            yellow: '#facc15',
+            brightYellow: '#fde047',
+            blue: '#60a5fa',
+            brightBlue: '#93c5fd',
+            magenta: '#c084fc',
+            brightMagenta: '#e9d5ff',
+            cyan: '#22d3ee',
+            brightCyan: '#67e8f9',
+            white: textSecondary,
+            brightWhite: text
+        }
+    }, [settings.accentColor.primary, settings.theme])
 
     const runningAppTotals = useMemo(() => {
         const totalProcesses = runningApps.reduce((sum, app) => sum + app.processCount, 0)
@@ -253,6 +391,127 @@ export default function Tasks() {
         setDeviceStats((current) => (current ? null : current))
     }, [runningAppsEnabled, activeView])
 
+    useEffect(() => {
+        const requestedView = (location.state as { initialView?: string } | null)?.initialView
+        if (requestedView === 'terminals') {
+            setActiveView('terminals')
+        }
+    }, [location.state])
+
+    useEffect(() => {
+        selectedTerminalSessionIdRef.current = selectedTerminalSessionId
+    }, [selectedTerminalSessionId])
+
+    useEffect(() => {
+        selectedTerminalSessionRef.current = selectedTerminalSession
+    }, [selectedTerminalSession])
+
+    useEffect(() => {
+        const nextSessionId = (
+            terminalSessions.find((session) => session.sessionId === selectedTerminalSessionId)?.sessionId
+            || terminalSessions.find((session) => session.status === 'running')?.sessionId
+            || terminalSessions[0]?.sessionId
+            || ''
+        )
+
+        if (nextSessionId === selectedTerminalSessionId) return
+        selectedTerminalSessionIdRef.current = nextSessionId
+        setSelectedTerminalSessionId(nextSessionId)
+    }, [selectedTerminalSessionId, terminalSessions])
+
+    const disposeTasksTerminal = useCallback(() => {
+        tasksTerminalHydratedSessionIdRef.current = ''
+        tasksFitAddonRef.current = null
+        tasksXtermRef.current?.dispose()
+        tasksXtermRef.current = null
+    }, [])
+
+    useEffect(() => {
+        if (activeView !== 'terminals') {
+            disposeTasksTerminal()
+            return
+        }
+
+        const activeSession = selectedTerminalSessionRef.current
+        if (!activeSession) {
+            disposeTasksTerminal()
+            return
+        }
+
+        const host = tasksTerminalHostRef.current
+        if (!host) return
+
+        let terminal = tasksXtermRef.current
+        let fitAddon = tasksFitAddonRef.current
+        if (!terminal || !fitAddon) {
+            terminal = new XtermTerminal({
+                cursorBlink: true,
+                fontFamily: 'Consolas, "Cascadia Code", monospace',
+                fontSize: Math.max(11, Number.parseInt(readCssVariable('--terminal-font-size', '14'), 10) || 14),
+                convertEol: true,
+                scrollback: 5000,
+                allowProposedApi: true,
+                theme: tasksTerminalTheme
+            })
+            fitAddon = new FitAddon()
+            const webLinksAddon = new WebLinksAddon()
+            terminal.loadAddon(fitAddon)
+            terminal.loadAddon(webLinksAddon)
+            terminal.open(host)
+            terminal.focus()
+            tasksXtermRef.current = terminal
+            tasksFitAddonRef.current = fitAddon
+
+            terminal.onData((data) => {
+                void window.devscope.writePreviewTerminal({
+                    sessionId: selectedTerminalSessionIdRef.current,
+                    data
+                }).catch(() => undefined)
+            })
+        } else {
+            terminal.options.theme = tasksTerminalTheme
+        }
+
+        const syncTerminalSize = () => {
+            const activeFitAddon = tasksFitAddonRef.current
+            if (!activeFitAddon) return
+            activeFitAddon.fit()
+            const dimensions = activeFitAddon.proposeDimensions?.()
+            if (!dimensions) return
+            void window.devscope.resizePreviewTerminal({
+                sessionId: selectedTerminalSessionIdRef.current,
+                cols: dimensions.cols,
+                rows: dimensions.rows
+            }).catch(() => undefined)
+        }
+
+        const hydrateTerminalSnapshot = () => {
+            if (tasksTerminalHydratedSessionIdRef.current === activeSession.sessionId) return
+            syncTerminalSize()
+            terminal?.reset()
+            if (activeSession.recentOutput) {
+                terminal?.write(activeSession.recentOutput)
+            }
+            tasksTerminalHydratedSessionIdRef.current = activeSession.sessionId
+            window.setTimeout(() => tasksXtermRef.current?.focus(), 0)
+        }
+
+        const resizeObserver = new ResizeObserver(() => {
+            syncTerminalSize()
+        })
+        resizeObserver.observe(host)
+        window.addEventListener('resize', syncTerminalSize)
+        const initialSyncTimer = window.setTimeout(hydrateTerminalSnapshot, 0)
+        const settleSyncTimer = window.setTimeout(syncTerminalSize, TASKS_TERMINAL_PANEL_ANIMATION_MS + 40)
+
+        return () => {
+            resizeObserver.disconnect()
+            window.removeEventListener('resize', syncTerminalSize)
+            window.clearTimeout(initialSyncTimer)
+            window.clearTimeout(settleSyncTimer)
+        }
+    }, [activeView, disposeTasksTerminal, selectedTerminalSessionId, tasksTerminalTheme])
+
     const refresh = useCallback(async (options?: { quiet?: boolean }) => {
         const quiet = Boolean(options?.quiet)
         const requestSequence = ++refreshSequenceRef.current
@@ -262,9 +521,10 @@ export default function Tasks() {
         }
 
         try {
-            const [tasksResult, portsResult, appsResult, systemOverviewResult, systemDetailedResult] = await Promise.allSettled([
+            const [tasksResult, portsResult, terminalsResult, appsResult, systemOverviewResult, systemDetailedResult] = await Promise.allSettled([
                 window.devscope.listActiveTasks(),
                 window.devscope.getActivePorts(),
+                window.devscope.listPreviewTerminalSessions(),
                 shouldFetchRunningAppsData
                     ? window.devscope.getRunningApps(RUNNING_APPS_FETCH_LIMIT)
                     : Promise.resolve(null),
@@ -283,6 +543,7 @@ export default function Tasks() {
             const nextErrors: string[] = []
             let nextTasks: ActiveTask[] | null = null
             let nextPorts: number[] | null = null
+            let nextTerminalSessions: DevScopePreviewTerminalSessionSummary[] | null = null
             let nextApps: RunningApp[] | null = null
             let nextDeviceStats: DeviceStats | null = null
 
@@ -304,6 +565,16 @@ export default function Tasks() {
                 }
             } else {
                 nextErrors.push(portsResult.reason?.message || 'Failed to load active ports')
+            }
+
+            if (terminalsResult.status === 'fulfilled') {
+                if (terminalsResult.value.success) {
+                    nextTerminalSessions = [...(terminalsResult.value.sessions || [])] as DevScopePreviewTerminalSessionSummary[]
+                } else {
+                    nextErrors.push(terminalsResult.value.error || 'Failed to load terminal sessions')
+                }
+            } else {
+                nextErrors.push(terminalsResult.reason?.message || 'Failed to load terminal sessions')
             }
 
             if (shouldFetchRunningAppsData) {
@@ -345,6 +616,7 @@ export default function Tasks() {
 
             if (nextTasks !== null) setActiveTasks(nextTasks)
             if (nextPorts !== null) setActivePorts(nextPorts)
+            if (nextTerminalSessions !== null) setTerminalSessions(nextTerminalSessions)
             if (nextApps !== null) setRunningApps(nextApps)
             if (nextDeviceStats !== null) setDeviceStats(nextDeviceStats)
 
@@ -407,6 +679,83 @@ export default function Tasks() {
         }
     }, [])
 
+    useEffect(() => {
+        const unsubscribe = window.devscope.onPreviewTerminalEvent((event) => {
+            if (!event?.sessionId) return
+
+            if (event.type === 'output') {
+                const outputChunk = String(event.data || '')
+                setTerminalSessions((current) => current.map((session) => {
+                    if (session.sessionId !== event.sessionId) return session
+                    return {
+                        ...session,
+                        title: event.title || session.title,
+                        shell: event.shell || session.shell,
+                        cwd: event.cwd || session.cwd,
+                        groupKey: event.groupKey || session.groupKey,
+                        status: event.status || session.status,
+                        lastActivityAt: Date.now(),
+                        recentOutput: `${session.recentOutput || ''}${outputChunk}`.slice(-60_000)
+                    }
+                }))
+
+                if (activeView === 'terminals' && event.sessionId === selectedTerminalSessionIdRef.current) {
+                    tasksXtermRef.current?.write(outputChunk)
+                }
+                return
+            }
+
+            void refresh({ quiet: true })
+        })
+
+        return () => {
+            unsubscribe()
+        }
+    }, [activeView, refresh])
+
+    useEffect(() => {
+        return () => {
+            disposeTasksTerminal()
+        }
+    }, [disposeTasksTerminal])
+
+    const handleStopPreviewTerminal = useCallback(async (sessionId: string) => {
+        const targetSessionId = String(sessionId || '').trim()
+        if (!targetSessionId) return
+        await window.devscope.closePreviewTerminal(targetSessionId).catch(() => undefined)
+        void refresh({ quiet: true })
+    }, [refresh])
+
+    const handleCreateTerminalForPath = useCallback(async (targetPath: string) => {
+        const normalizedTargetPath = String(targetPath || '').trim()
+        if (!normalizedTargetPath) return
+
+        const sessionId = createPreviewTerminalSessionId()
+        const result = await window.devscope.createPreviewTerminal({
+            sessionId,
+            targetPath: normalizedTargetPath,
+            preferredShell: settings.defaultShell,
+            cols: 100,
+            rows: 28
+        })
+
+        if (!result?.success) {
+            setError(result?.error || 'Failed to create terminal session')
+            return
+        }
+
+        setSelectedTerminalSessionId(sessionId)
+        setActiveView('terminals')
+        void refresh({ quiet: true })
+    }, [refresh, settings.defaultShell])
+
+    const handleOpenTerminalSession = useCallback((sessionId: string) => {
+        const normalizedSessionId = String(sessionId || '').trim()
+        if (!normalizedSessionId) return
+        setSelectedTerminalSessionId(normalizedSessionId)
+        setActiveView('terminals')
+    }, [])
+
     return (
         <div className="max-w-[1400px] mx-auto pb-14 animate-fadeIn">
             <div className="flex items-start justify-between gap-4 mb-6">
@@ -450,6 +799,18 @@ export default function Tasks() {
                 >
                     Operations
                 </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveView('terminals')}
+                    className={cn(
+                        'rounded-lg px-3 py-1.5 text-xs transition-colors',
+                        activeView === 'terminals'
+                            ? 'bg-[var(--accent-primary)] text-white'
+                            : 'text-sparkle-text-secondary hover:bg-sparkle-bg hover:text-sparkle-text'
+                    )}
+                >
+                    Terminals
+                </button>
                 {runningAppsEnabled && (
                     <button
                         type="button"
@@ -467,52 +828,298 @@ export default function Tasks() {
             </div>
 
             {activeView === 'operations' ? (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    <div className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
-                        <div className="mb-3 flex items-center gap-2">
-                            <Activity size={16} className="text-[var(--accent-primary)]" />
-                            <h2 className="text-sm font-semibold text-sparkle-text">Active Operations ({activeTasks.length})</h2>
-                        </div>
-                        {initialLoading && activeTasks.length === 0 ? (
-                            <p className="text-sm text-sparkle-text-secondary">Loading active tasks...</p>
-                        ) : activeTasks.length === 0 ? (
-                            <p className="text-sm text-sparkle-text-secondary">No active operations.</p>
-                        ) : (
-                            <div className="space-y-2">
-                                {activeTasks.map((task) => (
-                                    <div key={task.id} className="rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="text-sm text-sparkle-text truncate">{task.title}</p>
-                                            <p className="text-xs text-sparkle-text-secondary truncate">{task.projectPath || 'Project scope not set'}</p>
-                                        </div>
-                                        <span className="inline-flex items-center gap-1 text-xs text-sparkle-text-secondary shrink-0">
-                                            <Clock3 size={12} />
-                                            {formatRelativeShort(task.startedAt)}
-                                        </span>
-                                    </div>
-                                ))}
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
+                            <div className="mb-3 flex items-center gap-2">
+                                <Activity size={16} className="text-[var(--accent-primary)]" />
+                                <h2 className="text-sm font-semibold text-sparkle-text">Active Operations ({activeTasks.length})</h2>
                             </div>
-                        )}
+                            {initialLoading && activeTasks.length === 0 ? (
+                                <p className="text-sm text-sparkle-text-secondary">Loading active tasks...</p>
+                            ) : activeTasks.length === 0 ? (
+                                <p className="text-sm text-sparkle-text-secondary">No active operations.</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {activeTasks.map((task) => (
+                                        <div key={task.id} className="rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-sm text-sparkle-text truncate">{task.title}</p>
+                                                <p className="text-xs text-sparkle-text-secondary truncate">{task.projectPath || 'Project scope not set'}</p>
+                                            </div>
+                                            <span className="inline-flex items-center gap-1 text-xs text-sparkle-text-secondary shrink-0">
+                                                <Clock3 size={12} />
+                                                {formatRelativeShort(task.startedAt)}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
+                            <h2 className="mb-3 text-sm font-semibold text-sparkle-text">Active Ports ({activePorts.length})</h2>
+                            {initialLoading && activePorts.length === 0 ? (
+                                <p className="text-sm text-sparkle-text-secondary">Loading active ports...</p>
+                            ) : activePorts.length === 0 ? (
+                                <p className="text-sm text-sparkle-text-secondary">No active ports right now.</p>
+                            ) : (
+                                <div className="flex flex-wrap gap-2">
+                                    {activePorts.map((port) => (
+                                        <span
+                                            key={port}
+                                            className="rounded-md border border-sky-400/35 bg-sky-500/10 px-2.5 py-1 text-xs font-mono text-sky-300"
+                                        >
+                                            :{port}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    <div className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
-                        <h2 className="mb-3 text-sm font-semibold text-sparkle-text">Active Ports ({activePorts.length})</h2>
-                        {initialLoading && activePorts.length === 0 ? (
-                            <p className="text-sm text-sparkle-text-secondary">Loading active ports...</p>
-                        ) : activePorts.length === 0 ? (
-                            <p className="text-sm text-sparkle-text-secondary">No active ports right now.</p>
-                        ) : (
-                            <div className="flex flex-wrap gap-2">
-                                {activePorts.map((port) => (
-                                    <span
-                                        key={port}
-                                        className="rounded-md border border-sky-400/35 bg-sky-500/10 px-2.5 py-1 text-xs font-mono text-sky-300"
-                                    >
-                                        :{port}
+                    <div className="rounded-xl border border-sparkle-border bg-sparkle-card overflow-hidden">
+                        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-sparkle-border px-5 py-4 bg-sparkle-bg/50">
+                            <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h2 className="text-sm font-semibold text-sparkle-text">
+                                        Terminal Sessions ({terminalSessions.length})
+                                    </h2>
+                                    <span className="rounded-md border border-amber-400/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-200">
+                                        Beta
                                     </span>
-                                ))}
+                                </div>
+                                <p className="mt-1 text-xs text-sparkle-text-secondary">
+                                    Grouped by working directory. Sessions keep running after preview windows close.
+                                </p>
                             </div>
-                        )}
+                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveView('terminals')}
+                                    className="rounded-md border border-sky-400/25 bg-sky-500/10 px-2.5 py-1 text-sky-200 transition-colors hover:bg-sky-500/15"
+                                >
+                                    Open Terminal Tab
+                                </button>
+                                <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-emerald-300">
+                                    {runningTerminalCount} running
+                                </span>
+                                <span className="rounded-full border border-sparkle-border bg-sparkle-card px-2.5 py-1 text-sparkle-text-secondary">
+                                    {terminalSessionGroups.length} group{terminalSessionGroups.length === 1 ? '' : 's'}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="p-4">
+                            {initialLoading && terminalSessions.length === 0 ? (
+                                <p className="text-sm text-sparkle-text-secondary">Loading terminal sessions...</p>
+                            ) : sortedTerminalSessions.length === 0 ? (
+                                <div className="rounded-xl border border-dashed border-sparkle-border bg-sparkle-bg/40 px-4 py-6 text-sm text-sparkle-text-secondary">
+                                    No preview terminal sessions are active yet.
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                    {sortedTerminalSessions.map((session) => {
+                                        const isRunning = session.status === 'running'
+                                        const statusClass = isRunning
+                                            ? 'bg-emerald-300'
+                                            : session.status === 'error'
+                                                ? 'bg-red-300'
+                                                : 'bg-amber-300'
+
+                                        return (
+                                            <button
+                                                key={session.sessionId}
+                                                type="button"
+                                                onClick={() => handleOpenTerminalSession(session.sessionId)}
+                                                className="rounded-xl border border-sparkle-border bg-sparkle-bg/35 p-3 text-left transition-colors hover:border-sky-400/35 hover:bg-sky-500/8"
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={cn('h-2 w-2 rounded-full shrink-0', statusClass)} />
+                                                            <p className="truncate text-[12px] font-medium text-sparkle-text">
+                                                                {session.title}
+                                                            </p>
+                                                        </div>
+                                                        <div className="mt-1 truncate text-[10px] text-sparkle-text-muted">
+                                                            {session.cwd}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(event) => {
+                                                            event.stopPropagation()
+                                                            void handleStopPreviewTerminal(session.sessionId)
+                                                        }}
+                                                        className="shrink-0 rounded-md border border-red-400/25 bg-red-500/8 px-2 py-1 text-[10px] text-red-300 transition-colors hover:bg-red-500/12 hover:text-red-200"
+                                                    >
+                                                        Stop
+                                                    </button>
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-sparkle-text-muted">
+                                                    <span>{formatTerminalShellLabel(session.shell)}</span>
+                                                    <span>{formatRelativeShort(session.lastActivityAt)}</span>
+                                                    {typeof session.exitCode === 'number' && session.status !== 'running' && (
+                                                        <span>exit {session.exitCode}</span>
+                                                    )}
+                                                </div>
+                                                <div className="mt-2 truncate rounded-lg border border-sparkle-border-secondary bg-black/15 px-2.5 py-2 font-mono text-[10px] text-sparkle-text-secondary/90">
+                                                    {getTerminalPreviewLine(session)}
+                                                </div>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            ) : activeView === 'terminals' ? (
+                <div className="grid h-[calc(100vh-320px)] min-h-[480px] max-h-[calc(100vh-320px)] grid-cols-1 gap-3 overflow-hidden xl:grid-cols-[240px_minmax(0,1fr)]">
+                    <div className="flex min-h-0 flex-col rounded-xl border border-sparkle-border bg-sparkle-card overflow-hidden">
+                        <div className="border-b border-sparkle-border px-4 py-3 bg-sparkle-bg/60">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h2 className="text-sm font-semibold text-sparkle-text">
+                                    Terminal Browser ({terminalSessions.length})
+                                </h2>
+                                <span className="rounded-md border border-amber-400/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-200">
+                                    Beta
+                                </span>
+                            </div>
+                            <p className="mt-1 text-xs text-sparkle-text-secondary">
+                                Click any live session to open it in the right-hand terminal pane.
+                            </p>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-2 custom-scrollbar">
+                            {terminalSessionGroups.length === 0 ? (
+                                <div className="rounded-xl border border-dashed border-sparkle-border bg-sparkle-bg/40 px-4 py-6 text-sm text-sparkle-text-secondary">
+                                    No preview terminal sessions are active yet.
+                                </div>
+                            ) : (
+                                terminalSessionGroups.map((group) => (
+                                    <section
+                                        key={group.groupKey}
+                                        className="rounded-xl border border-sparkle-border bg-sparkle-bg/45 overflow-hidden"
+                                    >
+                                        <div className="flex items-start justify-between gap-2 border-b border-sparkle-border-secondary px-3 py-2">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="truncate text-[10px] font-medium text-sparkle-text">
+                                                    {group.cwd}
+                                                </div>
+                                                <div className="mt-0.5 text-[10px] text-sparkle-text-muted">
+                                                    {group.sessions.length} session{group.sessions.length === 1 ? '' : 's'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => { void handleCreateTerminalForPath(group.cwd) }}
+                                                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-sparkle-border bg-sparkle-card text-[13px] font-semibold text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                                                title={`New terminal in ${group.cwd}`}
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                        <div className="p-1.5 space-y-1.5">
+                                            {group.sessions.map((session) => {
+                                                const isSelected = session.sessionId === selectedTerminalSessionId
+                                                const statusClass = session.status === 'running'
+                                                    ? 'bg-emerald-300'
+                                                    : session.status === 'error'
+                                                        ? 'bg-red-300'
+                                                        : 'bg-amber-300'
+
+                                                return (
+                                                    <button
+                                                        key={session.sessionId}
+                                                        type="button"
+                                                        onClick={() => setSelectedTerminalSessionId(session.sessionId)}
+                                                        className={cn(
+                                                            'w-full rounded-lg border px-2 py-1.5 text-left transition-colors',
+                                                            isSelected
+                                                                ? 'border-sky-400/35 bg-sky-500/12'
+                                                                : 'border-sparkle-border bg-sparkle-card/70 hover:border-sparkle-border-secondary hover:bg-sparkle-card-hover/60'
+                                                        )}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={cn('h-2 w-2 rounded-full shrink-0', statusClass)} />
+                                                            <span className="truncate text-[11px] font-medium text-sparkle-text">
+                                                                {session.title}
+                                                            </span>
+                                                        </div>
+                                                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-sparkle-text-muted">
+                                                            <span>{formatTerminalShellLabel(session.shell)}</span>
+                                                            <span>{formatRelativeShort(session.lastActivityAt)}</span>
+                                                            {typeof session.exitCode === 'number' && session.status !== 'running' && (
+                                                                <span>exit {session.exitCode}</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="mt-0.5 truncate font-mono text-[10px] text-sparkle-text-secondary/90">
+                                                            {getTerminalPreviewLine(session)}
+                                                        </div>
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    </section>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex min-h-0 flex-col rounded-xl border border-sparkle-border bg-sparkle-card overflow-hidden">
+                        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-sparkle-border px-4 py-3 bg-sparkle-bg/50">
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h2 className="text-sm font-semibold text-sparkle-text">
+                                        {selectedTerminalSession?.title || 'No terminal selected'}
+                                    </h2>
+                                    {selectedTerminalSession && (
+                                        <span className="rounded-md border border-sparkle-border bg-sparkle-card px-1.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-sparkle-text-muted">
+                                            {formatTerminalShellLabel(selectedTerminalSession.shell)}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="mt-1 truncate text-xs text-sparkle-text-secondary">
+                                    {selectedTerminalSession?.cwd || 'Select a session from the left to open it here.'}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {selectedTerminalSession && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { void handleStopPreviewTerminal(selectedTerminalSession.sessionId) }}
+                                        className="rounded-md border border-red-400/25 bg-red-500/8 px-3 py-1.5 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-500/12 hover:text-red-200"
+                                    >
+                                        Stop
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => { void refresh() }}
+                                    className="rounded-md border border-sparkle-border px-3 py-1.5 text-[11px] font-medium text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                                >
+                                    Refresh Sessions
+                                </button>
+                            </div>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-hidden p-3">
+                            {selectedTerminalSession ? (
+                                <div
+                                    ref={tasksTerminalHostRef}
+                                    className="h-full w-full overflow-hidden rounded-xl border border-sparkle-border-secondary focus-within:border-[var(--accent-primary)]/60 focus-within:shadow-[0_0_0_1px_rgba(56,189,248,0.2)]"
+                                    style={{ backgroundColor: tasksTerminalTheme.background }}
+                                />
+                            ) : (
+                                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-sparkle-border-secondary bg-sparkle-bg/35 px-6 text-center">
+                                    <div className="max-w-md space-y-3">
+                                        <div className="text-base font-medium text-sparkle-text">No terminal selected</div>
+                                        <div className="text-sm leading-relaxed text-sparkle-text-secondary">
+                                            Pick a session from the left to open the live terminal here. This view attaches to the existing session instead of starting a duplicate shell.
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             ) : (

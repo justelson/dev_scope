@@ -32,28 +32,57 @@ export function FileActionsMenu({
     const rootRef = useRef<HTMLDivElement | null>(null)
     const buttonRef = useRef<HTMLButtonElement | null>(null)
     const menuRef = useRef<HTMLDivElement | null>(null)
-    const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
+    const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; originClassName: string } | null>(null)
+
+    const updatePosition = (menuWidth = 180, menuHeight = 220) => {
+        const button = buttonRef.current
+        if (!button) return
+
+        const viewportPadding = 12
+        const gap = 6
+        const rect = button.getBoundingClientRect()
+        const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
+        const spaceAbove = rect.top - viewportPadding
+        const shouldOpenUpward = spaceBelow < menuHeight && spaceAbove > spaceBelow
+        const maxTop = Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding)
+        const top = shouldOpenUpward
+            ? Math.max(viewportPadding, rect.top - menuHeight - gap)
+            : Math.max(viewportPadding, Math.min(maxTop, rect.bottom + gap))
+        const maxLeft = Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+        const left = Math.max(viewportPadding, Math.min(rect.right - menuWidth, maxLeft))
+
+        setMenuPosition({
+            top,
+            left,
+            originClassName: shouldOpenUpward ? 'origin-bottom-right animate-scaleIn' : 'origin-top-right animate-scaleIn'
+        })
+    }
 
     useEffect(() => {
         if (!open) return
 
-        const updatePosition = () => {
-            const button = buttonRef.current
-            if (!button) return
-            const rect = button.getBoundingClientRect()
-            setMenuPosition({
-                top: rect.bottom + 6,
-                left: rect.right
-            })
+        updatePosition()
+        const handleResize = () => {
+            const width = menuRef.current?.offsetWidth ?? 180
+            const height = menuRef.current?.offsetHeight ?? 220
+            updatePosition(width, height)
         }
 
-        updatePosition()
-        window.addEventListener('resize', updatePosition)
-        window.addEventListener('scroll', updatePosition, true)
+        const rafId = window.requestAnimationFrame(handleResize)
+        window.addEventListener('resize', handleResize)
         return () => {
-            window.removeEventListener('resize', updatePosition)
-            window.removeEventListener('scroll', updatePosition, true)
+            window.cancelAnimationFrame(rafId)
+            window.removeEventListener('resize', handleResize)
         }
+    }, [open])
+
+    useEffect(() => {
+        if (!open) return
+
+        const handleScroll = () => setOpen(false)
+
+        window.addEventListener('scroll', handleScroll, true)
+        return () => window.removeEventListener('scroll', handleScroll, true)
     }, [open])
 
     useEffect(() => {
@@ -108,13 +137,15 @@ export function FileActionsMenu({
                     )}
                     style={{
                         top: `${menuPosition.top}px`,
-                        left: `${menuPosition.left}px`,
-                        transform: 'translateX(-100%)'
+                        left: `${menuPosition.left}px`
                     }}
                     onClick={(event) => event.stopPropagation()}
                 >
                     <AnimatedHeight isOpen={open} duration={220}>
-                        <div className="rounded-xl border border-white/10 bg-sparkle-card p-1 shadow-2xl shadow-black/60 origin-top-right animate-scaleIn">
+                        <div className={cn(
+                            'rounded-xl border border-white/10 bg-sparkle-card p-1 shadow-2xl shadow-black/60',
+                            menuPosition.originClassName
+                        )}>
                             {items.map((item) => (
                                 <button
                                     key={item.id}

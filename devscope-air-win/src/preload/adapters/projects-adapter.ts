@@ -17,6 +17,9 @@ export function createProjectsAdapter() {
         openInExplorer: (path: string) => ipcRenderer.invoke('devscope:openInExplorer', path),
         openInTerminal: (path: string, preferredShell: 'powershell' | 'cmd' = 'powershell', initialCommand?: string) =>
             ipcRenderer.invoke('devscope:openInTerminal', path, preferredShell, initialCommand),
+        listInstalledIdes: () => ipcRenderer.invoke('devscope:listInstalledIdes'),
+        openProjectInIde: (projectPath: string, ideId: string) =>
+            ipcRenderer.invoke('devscope:openProjectInIde', projectPath, ideId),
         installProjectDependencies: (projectPath: string, options?: { onlyMissing?: boolean }) =>
             ipcRenderer.invoke('devscope:installProjectDependencies', projectPath, options),
         getProjectDetails: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectDetails', projectPath),
@@ -113,7 +116,10 @@ export function createProjectsAdapter() {
             preferredShell?: 'powershell' | 'cmd'
             cols?: number
             rows?: number
+            title?: string
         }) => ipcRenderer.invoke('devscope:previewTerminal:create', input),
+        listPreviewTerminalSessions: (input?: { targetPath?: string }) =>
+            ipcRenderer.invoke('devscope:previewTerminal:list', input),
         writePreviewTerminal: (input: { sessionId: string; data: string }) =>
             ipcRenderer.invoke('devscope:previewTerminal:write', input),
         resizePreviewTerminal: (input: { sessionId: string; cols: number; rows: number }) =>

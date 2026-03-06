@@ -24,6 +24,7 @@ import type {
     GitStatusDetail,
     GitStashSummary,
     GitTagSummary,
+    InstalledIde,
     ProjectDetails
 } from './types'
 
@@ -138,8 +139,11 @@ export default function ProjectDetailsPage() {
     const [error, setError] = useState<string | null>(null)
     const [showHidden, setShowHidden] = useState(false)
     const [copiedPath, setCopiedPath] = useState(false)
+    const [installedIdes, setInstalledIdes] = useState<InstalledIde[]>([])
+    const [loadingInstalledIdes, setLoadingInstalledIdes] = useState(false)
+    const [openingIdeId, setOpeningIdeId] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'readme' | 'files' | 'git'>(() => (
-        readStoredProjectActiveTab(decodedPath) || 'files'
+        readStoredProjectActiveTab(decodedPath) || 'readme'
     ))
     const [showDependenciesModal, setShowDependenciesModal] = useState(false)
     const [isProjectLive, setIsProjectLive] = useState(false)
@@ -265,12 +269,31 @@ export default function ProjectDetailsPage() {
     useEffect(() => {
         if (!decodedPath) return
         const storedTab = readStoredProjectActiveTab(decodedPath)
-        setActiveTab(storedTab || 'files')
+        setActiveTab(storedTab || 'readme')
     }, [decodedPath])
     useEffect(() => {
         if (!decodedPath) return
         writeStoredProjectActiveTab(decodedPath, activeTab)
     }, [decodedPath, activeTab])
+    const loadInstalledIdes = async () => {
+        setLoadingInstalledIdes(true)
+        try {
+            const result = await window.devscope.listInstalledIdes()
+            if (result.success) {
+                setInstalledIdes(result.ides)
+                return
+            }
+            setInstalledIdes([])
+        } catch (err) {
+            console.error('Failed to load installed IDEs:', err)
+            setInstalledIdes([])
+        } finally {
+            setLoadingInstalledIdes(false)
+        }
+    }
+    useEffect(() => {
+        void loadInstalledIdes()
+    }, [decodedPath])
     const goBack = () => {
         const parentPath = getParentFolderPath(project?.path || decodedPath)
         if (parentPath) {
@@ -464,6 +487,25 @@ export default function ProjectDetailsPage() {
         }
     }
 
+    const handleOpenProjectInIde = async (ideId: string) => {
+        const projectPath = String(project?.path || decodedPath || '').trim()
+        if (!projectPath) return
+
+        setOpeningIdeId(ideId)
+        try {
+            const result = await window.devscope.openProjectInIde(projectPath, ideId)
+            if (!result.success) {
+                showToast(result.error || 'Failed to open project in IDE', undefined, undefined, 'error')
+                return
+            }
+            showToast(`Opening in ${result.ide.name}`)
+        } catch (err: any) {
+            showToast(err?.message || 'Failed to open project in IDE', undefined, undefined, 'error')
+        } finally {
+            setOpeningIdeId(null)
+        }
+    }
+
     const handleFileTreeCopyPath = async (node: FileTreeNode) => {
         await copyTextToClipboard(node.path, `Copied path: ${node.name}`)
     }
@@ -576,7 +618,11 @@ export default function ProjectDetailsPage() {
 
         if (createdType === 'file') {
             const ext = getFileExtensionFromName(createdName) || 'txt'
-            await openPreview({ name: createdName, path: createdPath }, ext)
+            await openPreview(
+                { name: createdName, path: createdPath },
+                ext,
+                { startInEditMode: true }
+            )
         }
     }
 
@@ -757,6 +803,10 @@ export default function ProjectDetailsPage() {
                 activePorts={activePorts}
                 formatRelTime={formatRelTime}
                 onOpenTerminal={() => openTerminal({ displayName: project.name, id: 'main', category: 'project' }, project.path)}
+                installedIdes={installedIdes}
+                loadingInstalledIdes={loadingInstalledIdes}
+                openingIdeId={openingIdeId}
+                onOpenProjectInIde={handleOpenProjectInIde}
                 handleCopyPath={handleCopyPath}
                 copiedPath={copiedPath}
                 handleOpenInExplorer={handleOpenInExplorer}
@@ -775,7 +825,9 @@ export default function ProjectDetailsPage() {
                     navigate(`/folder-browse/${encodedPath}`)
                 }}
                 onShipToAssistant={() => void handleShipToAssistant()}
-                loadProjectDetails={loadProjectDetails}
+                loadProjectDetails={async () => {
+                    await Promise.all([loadProjectDetails(), loadInstalledIdes()])
+                }}
                 refreshFileTree={refreshFileTree}
                 readmeContentRef={readmeContentRef}
                 readmeExpanded={readmeExpanded}

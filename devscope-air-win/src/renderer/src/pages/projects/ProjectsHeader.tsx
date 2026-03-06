@@ -1,13 +1,11 @@
 import { Link } from 'react-router-dom'
-import { FolderTree, Loader2, FolderOpen, Settings, RefreshCw } from 'lucide-react'
+import { FolderTree, Loader2, Settings, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { StatChip } from './projectsTypes'
 
 interface ProjectsHeaderProps {
     totalProjects: number
     loading: boolean
-    projectsFolder: string
-    additionalFoldersCount: number
     statChips: StatChip[]
     onRefresh: () => void
     onOpenStats: (key: 'projects' | 'frameworks' | 'types') => void
@@ -16,8 +14,6 @@ interface ProjectsHeaderProps {
 export function ProjectsHeader({
     totalProjects,
     loading,
-    projectsFolder,
-    additionalFoldersCount,
     statChips,
     onRefresh,
     onOpenStats
@@ -83,18 +79,6 @@ export function ProjectsHeader({
                                         })}
                                         <div className="h-4 w-px bg-sparkle-border" />
                                     </>
-                                )}
-
-                                <div className="flex items-center gap-1.5 rounded-lg bg-sparkle-card px-2.5 py-1.5 border border-sparkle-border">
-                                    <FolderOpen size={12} color="var(--accent-primary)" strokeWidth={2} />
-                                    <span className="font-mono text-xs text-sparkle-text-muted truncate max-w-xs">
-                                        {projectsFolder}
-                                    </span>
-                                </div>
-                                {additionalFoldersCount > 0 && (
-                                    <span className="text-xs text-sparkle-text-muted">
-                                        +{additionalFoldersCount} more
-                                    </span>
                                 )}
                             </div>
                         </div>

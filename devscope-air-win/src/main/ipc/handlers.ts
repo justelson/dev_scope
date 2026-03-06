@@ -44,7 +44,9 @@ import {
     handleIndexAllFolders,
     handleOpenFile,
     handleOpenInExplorer,
+    handleOpenProjectInIde,
     handleOpenWith,
+    handleListInstalledIdes,
     handleScanProjects,
     handleSelectFolder
 } from './handlers/project-discovery-handlers'
@@ -70,6 +72,7 @@ import { handleOpenInTerminal } from './handlers/terminal-handlers'
 import {
     handleClosePreviewTerminal,
     handleCreatePreviewTerminal,
+    handleListPreviewTerminalSessions,
     handleResizePreviewTerminal,
     handleWritePreviewTerminal
 } from './handlers/preview-terminal-handlers'
@@ -249,8 +252,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
     ipcMain.handle('devscope:openInExplorer', handleOpenInExplorer)
     ipcMain.handle('devscope:openInTerminal', handleOpenInTerminal)
+    ipcMain.handle('devscope:listInstalledIdes', handleListInstalledIdes)
+    ipcMain.handle('devscope:openProjectInIde', handleOpenProjectInIde)
     ipcMain.handle('devscope:tasks:listActive', handleListActiveTasks)
     ipcMain.handle('devscope:previewTerminal:create', handleCreatePreviewTerminal)
+    ipcMain.handle('devscope:previewTerminal:list', handleListPreviewTerminalSessions)
     ipcMain.handle('devscope:previewTerminal:write', handleWritePreviewTerminal)
     ipcMain.handle('devscope:previewTerminal:resize', handleResizePreviewTerminal)
     ipcMain.handle('devscope:previewTerminal:close', handleClosePreviewTerminal)

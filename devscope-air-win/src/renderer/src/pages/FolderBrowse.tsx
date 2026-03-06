@@ -4,8 +4,8 @@
  */
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, RefreshCw } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { AlertCircle, Folder, FolderTree, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useTerminal } from '@/App'
@@ -16,10 +16,13 @@ import { PromptModal } from '@/components/ui/PromptModal'
 import { openAssistantDock } from '@/lib/assistantDockStore'
 import { trackRecentProject } from '@/lib/recentProjects'
 import { useSettings } from '@/lib/settings'
+import { ProjectsStatsModal } from './projects/ProjectsStatsModal'
+import { useProjectStatsModal } from './projects/useProjectStatsModal'
+import type { IndexedInventory, IndexedTotals, IndexAllFoldersResult } from './projects/projectsTypes'
 import { FolderBrowseContent } from './folder-browse/FolderBrowseContent'
 import { FolderBrowseHeader } from './folder-browse/FolderBrowseHeader'
 import { FolderBrowseToolbar } from './folder-browse/FolderBrowseToolbar'
-import type { FileItem, FolderItem, Project } from './folder-browse/types'
+import { getProjectTypeById, type FileItem, type FolderItem, type Project } from './folder-browse/types'
 import { formatFileSize, formatRelativeTime, getFileColor, getProjectTypes } from './folder-browse/utils'
 
 const FILES_PAGE_SIZE = 300
@@ -149,7 +152,11 @@ export default function FolderBrowse() {
     const { folderPath } = useParams<{ folderPath: string }>()
     const navigate = useNavigate()
 
-    const decodedPath = folderPath ? decodeURIComponent(folderPath) : ''
+    const decodedPath = useMemo(() => {
+        const pathFromRoute = folderPath ? decodeURIComponent(folderPath) : ''
+        if (pathFromRoute.trim()) return pathFromRoute
+        return String(settings.projectsFolder || '').trim()
+    }, [folderPath, settings.projectsFolder])
     const folderName = decodedPath.split(/[/\\]/).pop() || 'Folder'
     const folderHistoryRef = useRef<string[]>([])
     const configuredBrowseRoots = useMemo(() => (
@@ -188,6 +195,9 @@ export default function FolderBrowse() {
     const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<FileSystemClipboardItem | null>(null)
     const [toast, setToast] = useState<{ message: string; visible: boolean; tone?: 'success' | 'error' } | null>(null)
+    const [indexedTotals, setIndexedTotals] = useState<IndexedTotals | null>(null)
+    const [indexedInventory, setIndexedInventory] = useState<IndexedInventory | null>(null)
+    const indexTotalsRunRef = useRef(0)
 
     const {
         previewFile,
@@ -292,6 +302,74 @@ export default function FolderBrowse() {
     )
 
     const projectTypes = useMemo(() => getProjectTypes(projects), [projects])
+    const isProjectsRootView = useMemo(() => {
+        const normalizedCurrent = normalizePath(decodedPath)
+        const normalizedProjectsRoot = normalizePath(settings.projectsFolder || '')
+        return Boolean(normalizedCurrent && normalizedProjectsRoot && normalizedCurrent === normalizedProjectsRoot)
+    }, [decodedPath, settings.projectsFolder])
+    const statsScanKey = useMemo(() => normalizePath(decodedPath).toLowerCase(), [decodedPath])
+    const statsModalController = useProjectStatsModal(projects, indexedTotals, indexedInventory, statsScanKey)
+    const rootStats = useMemo(() => ({
+        projects: statsModalController.totalProjects,
+        frameworks: statsModalController.frameworkCount,
+        types: statsModalController.typeCount
+    }), [statsModalController.frameworkCount, statsModalController.totalProjects, statsModalController.typeCount])
+
+    useEffect(() => {
+        if (!decodedPath || !isProjectsRootView) {
+            setIndexedTotals(null)
+            setIndexedInventory(null)
+            return
+        }
+
+        const currentRunId = ++indexTotalsRunRef.current
+        void (async () => {
+            try {
+                const indexResult = await window.devscope.indexAllFolders([decodedPath]) as IndexAllFoldersResult
+                if (currentRunId !== indexTotalsRunRef.current) return
+                if (!indexResult?.success || !Array.isArray(indexResult.projects)) {
+                    setIndexedTotals(null)
+                    setIndexedInventory(null)
+                    return
+                }
+
+                const deduped = new Map<string, Project>()
+                const frameworkSet = new Set<string>()
+                const typeSet = new Set<string>()
+
+                for (const project of indexResult.projects) {
+                    const pathKey = String(project.path || '').toLowerCase()
+                    if (pathKey && !deduped.has(pathKey)) {
+                        deduped.set(pathKey, project)
+                    }
+                    for (const framework of project.frameworks || []) {
+                        if (framework) frameworkSet.add(framework)
+                    }
+                    if (project.type && project.type !== 'unknown' && project.type !== 'git') {
+                        typeSet.add(project.type)
+                    }
+                }
+
+                setIndexedTotals({
+                    scanKey: statsScanKey,
+                    projects: deduped.size,
+                    frameworks: frameworkSet.size,
+                    types: typeSet.size,
+                    folders: typeof indexResult.indexedFolders === 'number' ? indexResult.indexedFolders : 1
+                })
+
+                setIndexedInventory({
+                    scanKey: statsScanKey,
+                    projects: Array.from(deduped.values()),
+                    folderPaths: Array.isArray(indexResult.scannedFolderPaths) ? indexResult.scannedFolderPaths : []
+                })
+            } catch {
+                if (currentRunId !== indexTotalsRunRef.current) return
+                setIndexedTotals(null)
+                setIndexedInventory(null)
+            }
+        })()
+    }, [decodedPath, isProjectsRootView, projects, statsScanKey])
 
     const filteredProjects = useMemo(() => {
         if (parsedSearchQuery.hasExtensionFilter) return []
@@ -563,7 +641,11 @@ export default function FolderBrowse() {
 
         if (createdType === 'file') {
             const ext = getFileExtensionFromName(createdName) || 'txt'
-            await openPreview({ name: createdName, path: createdPath }, ext)
+            await openPreview(
+                { name: createdName, path: createdPath },
+                ext,
+                { startInEditMode: true }
+            )
         }
     }, [createDraft, createTarget, loadContents, openPreview, showToast])
 
@@ -618,12 +700,45 @@ export default function FolderBrowse() {
         await loadContents(true)
     }, [deleteTarget, fileClipboardItem?.path, loadContents, showToast])
 
+    if (!decodedPath) {
+        return (
+            <div className="animate-fadeIn">
+                <div className="mb-8">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-indigo-500/10">
+                            <FolderTree className="text-indigo-400" size={24} />
+                        </div>
+                        <h1 className="text-2xl font-semibold text-sparkle-text">Projects</h1>
+                    </div>
+                    <p className="text-sparkle-text-secondary">Your coding projects in one place</p>
+                </div>
+
+                <div className="flex flex-col items-center justify-center py-16 bg-sparkle-card rounded-xl border border-sparkle-border">
+                    <Folder size={48} className="text-sparkle-text-muted mb-4" />
+                    <h3 className="text-lg font-medium text-sparkle-text mb-2">No Projects Folder Configured</h3>
+                    <p className="text-sparkle-text-secondary text-center max-w-md mb-6">
+                        Set up a projects folder in settings to browse your projects.
+                    </p>
+                    <Link
+                        to="/settings/projects"
+                        className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-primary)] text-white rounded-lg hover:bg-[var(--accent-primary)]/90 transition-colors"
+                    >
+                        <SettingsIcon size={16} />
+                        <span>Configure Projects Folder</span>
+                    </Link>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="max-w-[1600px] mx-auto animate-fadeIn pb-20">
             <FolderBrowseHeader
                 folderName={folderName}
                 decodedPath={decodedPath}
                 totalProjects={projects.length}
+                isProjectsRootView={isProjectsRootView}
+                rootStats={rootStats}
                 isCurrentFolderGitRepo={isCurrentFolderGitRepo}
                 loading={loading}
                 onBack={handleBack}
@@ -634,6 +749,8 @@ export default function FolderBrowse() {
                 onOpenAssistant={() => openAssistantDock({ contextPath: decodedPath })}
                 onCopyPath={handleCopyPath}
                 copiedPath={copiedPath}
+                onOpenStats={(key) => statsModalController.setStatsModal(key)}
+                onOpenProjectsSettings={() => navigate('/settings/projects')}
                 onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}
                 onRefresh={() => { void loadContents(true) }}
                 onCreateFile={(presetExtension) => handleCreateInCurrentFolder('file', presetExtension)}
@@ -717,6 +834,23 @@ export default function FolderBrowse() {
                     onClose={closePreview}
                 />
             )}
+
+            <ProjectsStatsModal
+                statsModal={statsModalController.statsModal}
+                modalTitle={statsModalController.modalTitle}
+                modalCount={statsModalController.modalCount}
+                projectsModalQuery={statsModalController.projectsModalQuery}
+                setProjectsModalQuery={statsModalController.setProjectsModalQuery}
+                filteredModalProjects={statsModalController.filteredModalProjects}
+                modalFrameworks={statsModalController.modalFrameworks}
+                modalTypes={statsModalController.modalTypes}
+                onClose={() => statsModalController.setStatsModal(null)}
+                onProjectClick={handleProjectClick}
+                onProjectRename={handleProjectRename}
+                onProjectDelete={handleProjectDelete}
+                getProjectTypeLabel={(type) => getProjectTypeById(type)?.displayName || type}
+                onOpenInExplorer={(path) => window.devscope.openInExplorer?.(path)}
+            />
 
             <CreateFileTypeModal
                 isOpen={Boolean(createTarget && createTarget.type === 'file')}

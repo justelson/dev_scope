@@ -20,7 +20,11 @@ export interface UseFilePreviewReturn {
     previewSize: number | null
     previewBytes: number | null
     previewModifiedAt: number | null
-    openPreview: (file: { name: string; path: string }, ext: string) => Promise<void>
+    openPreview: (
+        file: { name: string; path: string },
+        ext: string,
+        options?: { startInEditMode?: boolean }
+    ) => Promise<void>
     closePreview: () => void
     openFile: (filePath: string) => Promise<void>
 }
@@ -65,7 +69,11 @@ export function useFilePreview(): UseFilePreviewReturn {
         }
     }
 
-    const openPreview = async (file: { name: string; path: string }, ext: string) => {
+    const openPreview = async (
+        file: { name: string; path: string },
+        ext: string,
+        options?: { startInEditMode?: boolean }
+    ) => {
         resetMeta()
         const previewTarget = resolvePreviewType(file.name, ext)
 
@@ -79,7 +87,8 @@ export function useFilePreview(): UseFilePreviewReturn {
             name: file.name,
             path: file.path,
             type: previewTarget.type,
-            language: previewTarget.language
+            language: previewTarget.language,
+            startInEditMode: options?.startInEditMode === true
         })
         await yieldToBrowserPaint()
 

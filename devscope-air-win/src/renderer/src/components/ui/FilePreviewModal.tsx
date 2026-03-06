@@ -6,9 +6,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Terminal as XtermTerminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
+import { WebLinksAddon } from 'xterm-addon-web-links'
 import 'xterm/css/xterm.css'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
+import type { DevScopePreviewTerminalSessionSummary } from '@shared/contracts/devscope-api'
 import { summarizeGitDiff, type GitDiffSummary, type GitLineMarker } from './file-preview/gitDiff'
 import type { PreviewFile, PreviewMeta } from './file-preview/types'
 import PreviewBody from './file-preview/PreviewBody'
@@ -40,6 +42,9 @@ type PythonOutputEntry = {
     text: string
     at: number
 }
+type PreviewTerminalSessionItem = DevScopePreviewTerminalSessionSummary & {
+    hasUnreadOutput?: boolean
+}
 type PreviewTerminalState = 'idle' | 'connecting' | 'active' | 'exited' | 'error'
 type TerminalPanelPhase = 'hidden' | 'entering' | 'visible' | 'exiting'
 
@@ -69,6 +74,23 @@ function readCssVariable(name: string, fallback: string): string {
     if (typeof window === 'undefined') return fallback
     const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
     return value || fallback
+}
+
+function formatRelativeActivity(timestamp: number): string {
+    const deltaMs = Math.max(0, Date.now() - timestamp)
+    const seconds = Math.floor(deltaMs / 1000)
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    if (minutes < 60) return `${minutes}m`
+    const hours = Math.floor(minutes / 60)
+    return `${hours}h`
+}
+
+function mapTerminalStatusToState(status?: string | null): PreviewTerminalState {
+    if (status === 'running') return 'active'
+    if (status === 'error') return 'error'
+    if (status === 'exited') return 'exited'
+    return 'idle'
 }
 
 function isEditableFileType(fileType: PreviewFile['type']): boolean {
@@ -176,6 +198,7 @@ export function FilePreviewModal({
     const isHtml = file.type === 'html'
     const canEdit = isEditableFileType(file.type)
     const defaultMode: 'preview' | 'edit' = canEdit ? settings.filePreviewDefaultMode : 'preview'
+    const initialMode: 'preview' | 'edit' = file.startInEditMode && canEdit ? 'edit' : defaultMode
     const defaultStartExpanded = settings.filePreviewOpenInFullscreen
     const defaultLeftPanelOpen = settings.filePreviewFullscreenShowLeftPanel
     const defaultRightPanelOpen = settings.filePreviewFullscreenShowRightPanel
@@ -231,15 +254,20 @@ export function FilePreviewModal({
     const [pythonShowTimestamps, setPythonShowTimestamps] = useState(false)
     const [isResizingPythonOutput, setIsResizingPythonOutput] = useState(false)
     const [terminalVisible, setTerminalVisible] = useState(false)
+    const [terminalSessions, setTerminalSessions] = useState<PreviewTerminalSessionItem[]>([])
     const [terminalState, setTerminalState] = useState<PreviewTerminalState>('idle')
     const [terminalPanelPhase, setTerminalPanelPhase] = useState<TerminalPanelPhase>('hidden')
-    const [terminalSessionId, setTerminalSessionId] = useState(() => createPreviewTerminalSessionId())
+    const [terminalSessionId, setTerminalSessionId] = useState('')
+    const [terminalGroupKey, setTerminalGroupKey] = useState('')
+    const [terminalGroupCwd, setTerminalGroupCwd] = useState('')
     const [terminalHeight, setTerminalHeight] = useState(() =>
         Math.max(PREVIEW_TERMINAL_MIN_HEIGHT, Math.min(720, Math.round(settings.filePreviewTerminalPanelHeight || 220)))
     )
     const [isResizingTerminal, setIsResizingTerminal] = useState(false)
     const [terminalError, setTerminalError] = useState<string | null>(null)
     const [pendingTerminalCommand, setPendingTerminalCommand] = useState<string | null>(null)
+    const [terminalShellLabel, setTerminalShellLabel] = useState(settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell')
+    const [terminalSessionCwd, setTerminalSessionCwd] = useState(projectPath || file.path || '')
     const panelResizeRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
     const outputResizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
     const terminalResizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
@@ -248,6 +276,7 @@ export function FilePreviewModal({
     const terminalHostRef = useRef<HTMLDivElement | null>(null)
     const xtermRef = useRef<XtermTerminal | null>(null)
     const fitAddonRef = useRef<FitAddon | null>(null)
+    const terminalHydratedSessionIdRef = useRef('')
     const pythonOutputSequenceRef = useRef(1)
     const pythonSessionIdRef = useRef(pythonSessionId)
     const terminalSessionIdRef = useRef(terminalSessionId)
@@ -256,12 +285,15 @@ export function FilePreviewModal({
     const totalFileLines = countLines(mode === 'edit' ? draftContent : sourceContent)
     const presetConfig = VIEWPORT_PRESETS[viewport]
     const isCompactHtmlViewport = isHtml && viewport !== 'responsive' && presetConfig.width <= 768
+    const shouldShowTerminalPanel = canUsePreviewTerminal && terminalVisible
+    const renderTerminalPanel = terminalPanelPhase !== 'hidden'
+    const currentTerminalSession = terminalSessions.find((session) => session.sessionId === terminalSessionId) || null
     const terminalTheme = useMemo(() => {
         const accent = readCssVariable('--accent-primary', settings.accentColor.primary || '#38bdf8')
-        const card = readCssVariable('--color-card', '#0f172a')
+        const card = readCssVariable('--color-card', '#0b1220')
         const bg = readCssVariable('--color-bg', '#020617')
-        const text = readCssVariable('--color-text', '#e2e8f0')
-        const textSecondary = readCssVariable('--color-text-secondary', '#94a3b8')
+        const text = '#e5e7eb'
+        const textSecondary = '#94a3b8'
         const borderSecondary = readCssVariable('--color-border-secondary', '#334155')
         return {
             background: card,
@@ -320,8 +352,8 @@ export function FilePreviewModal({
 
     useEffect(() => {
         setViewport('responsive')
-        setHtmlViewMode(defaultMode === 'edit' && isHtml ? 'code' : 'rendered')
-        setMode(defaultMode)
+        setHtmlViewMode(initialMode === 'edit' && isHtml ? 'code' : 'rendered')
+        setMode(initialMode)
         setIsExpanded(defaultStartExpanded)
         setLeftPanelOpen(defaultLeftPanelOpen)
         setRightPanelOpen(defaultRightPanelOpen)
@@ -351,8 +383,11 @@ export function FilePreviewModal({
         setPythonOutputHeight(160)
         setPythonShowTimestamps(false)
         setTerminalVisible(false)
+        setTerminalSessions([])
         setTerminalState('idle')
-        setTerminalSessionId(createPreviewTerminalSessionId())
+        setTerminalSessionId('')
+        setTerminalGroupKey('')
+        setTerminalGroupCwd('')
         setTerminalHeight(Math.max(
             PREVIEW_TERMINAL_MIN_HEIGHT,
             Math.min(720, Math.round(settings.filePreviewTerminalPanelHeight || 220))
@@ -360,16 +395,21 @@ export function FilePreviewModal({
         setIsResizingTerminal(false)
         setTerminalError(null)
         setPendingTerminalCommand(null)
+        setTerminalShellLabel(settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell')
+        setTerminalSessionCwd(projectPath || file.path || '')
         pythonOutputSequenceRef.current = 1
     }, [
         content,
         defaultLeftPanelOpen,
-        defaultMode,
         defaultRightPanelOpen,
         defaultStartExpanded,
         file.path,
+        file.startInEditMode,
+        initialMode,
         isHtml,
         modifiedAt,
+        projectPath,
+        settings.defaultShell,
         truncated
     ])
 
@@ -667,7 +707,137 @@ export function FilePreviewModal({
         await window.devscope.closePreviewTerminal(targetSessionId).catch(() => undefined)
     }, [])
 
+    const refreshPreviewTerminalSessions = useCallback(async (preferredSessionId?: string) => {
+        if (!canUsePreviewTerminal) {
+            setTerminalSessions([])
+            setTerminalSessionId('')
+            setTerminalGroupKey('')
+            setTerminalGroupCwd('')
+            return []
+        }
+
+        const targetPath = projectPath || file.path
+        const result = await window.devscope.listPreviewTerminalSessions({ targetPath })
+        if (!result?.success) {
+            setTerminalError(result?.error || 'Failed to load terminal sessions.')
+            return []
+        }
+
+        const nextSessions = (result.sessions || []) as PreviewTerminalSessionItem[]
+        setTerminalGroupKey(String(result.groupKey || ''))
+        setTerminalGroupCwd(String(result.cwd || targetPath || ''))
+        setTerminalSessions((current) => {
+            const unreadIds = new Set(current.filter((session) => session.hasUnreadOutput).map((session) => session.sessionId))
+            return nextSessions.map((session) => ({
+                ...session,
+                hasUnreadOutput: unreadIds.has(session.sessionId)
+                    && session.sessionId !== preferredSessionId
+                    && session.sessionId !== terminalSessionIdRef.current
+            }))
+        })
+
+        const selectedSessionId = (
+            preferredSessionId
+            || terminalSessionIdRef.current
+            || nextSessions.find((session) => session.status === 'running')?.sessionId
+            || nextSessions[0]?.sessionId
+            || ''
+        )
+
+        terminalSessionIdRef.current = selectedSessionId
+        setTerminalSessionId(selectedSessionId)
+
+        const activeSession = nextSessions.find((session) => session.sessionId === selectedSessionId) || null
+        setTerminalShellLabel(
+            String(activeSession?.shell || settings.defaultShell || 'terminal')
+                .replace(/\.exe$/i, '')
+                .replace(/^pwsh$/i, 'PowerShell')
+                .replace(/^powershell$/i, 'PowerShell')
+                .replace(/^cmd$/i, 'CMD')
+        )
+        setTerminalSessionCwd(String(activeSession?.cwd || result.cwd || targetPath || ''))
+        setTerminalState(mapTerminalStatusToState(activeSession?.status))
+
+        if (!activeSession) {
+            xtermRef.current?.clear()
+        }
+
+        return nextSessions
+    }, [canUsePreviewTerminal, file.path, projectPath, settings.defaultShell])
+
+    const createPreviewTerminalSession = useCallback(async (options?: { title?: string; preferredSessionId?: string }) => {
+        if (!canUsePreviewTerminal) return null
+
+        const nextSessionId = createPreviewTerminalSessionId()
+        terminalSessionIdRef.current = nextSessionId
+        setTerminalSessionId(nextSessionId)
+        setTerminalState('connecting')
+        setTerminalError(null)
+
+        const result = await window.devscope.createPreviewTerminal({
+            sessionId: nextSessionId,
+            targetPath: projectPath || file.path,
+            preferredShell: settings.defaultShell,
+            cols: 100,
+            rows: 28,
+            title: options?.title
+        })
+
+        if (!result?.success) {
+            setTerminalState('error')
+            setTerminalError(result?.error || 'Failed to start terminal session.')
+            return null
+        }
+
+        await refreshPreviewTerminalSessions(options?.preferredSessionId || nextSessionId)
+        return nextSessionId
+    }, [canUsePreviewTerminal, file.path, projectPath, refreshPreviewTerminalSessions, settings.defaultShell])
+
+    const stopPreviewTerminalSession = useCallback(async (sessionId?: string) => {
+        const targetSessionId = String(sessionId || terminalSessionIdRef.current || '').trim()
+        if (!targetSessionId) return
+
+        await closePreviewTerminal(targetSessionId)
+        const nextSessions = await refreshPreviewTerminalSessions(
+            targetSessionId === terminalSessionIdRef.current ? undefined : terminalSessionIdRef.current
+        )
+        if (targetSessionId === terminalSessionIdRef.current && nextSessions.length === 0) {
+            setTerminalState('idle')
+            setTerminalShellLabel(settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell')
+            setTerminalSessionCwd(terminalGroupCwd || projectPath || file.path || '')
+            xtermRef.current?.clear()
+        }
+    }, [closePreviewTerminal, file.path, projectPath, refreshPreviewTerminalSessions, settings.defaultShell, terminalGroupCwd])
+
+    const restartPreviewTerminal = useCallback(async () => {
+        if (!canUsePreviewTerminal) return
+        setTerminalError(null)
+        setPendingTerminalCommand(null)
+        xtermRef.current?.clear()
+        if (!terminalVisible) {
+            setTerminalVisible(true)
+            return
+        }
+
+        if (terminalSessionIdRef.current) {
+            await stopPreviewTerminalSession(terminalSessionIdRef.current)
+        }
+        await createPreviewTerminalSession()
+    }, [canUsePreviewTerminal, createPreviewTerminalSession, stopPreviewTerminalSession, terminalVisible])
+
+    const selectPreviewTerminalSession = useCallback((sessionId: string) => {
+        if (!sessionId) return
+        terminalSessionIdRef.current = sessionId
+        setTerminalSessionId(sessionId)
+        setTerminalSessions((current) => current.map((session) => (
+            session.sessionId === sessionId
+                ? { ...session, hasUnreadOutput: false }
+                : session
+        )))
+    }, [])
+
     const disposePreviewTerminal = useCallback(() => {
+        terminalHydratedSessionIdRef.current = ''
         fitAddonRef.current = null
         xtermRef.current?.dispose()
         xtermRef.current = null
@@ -678,14 +848,20 @@ export function FilePreviewModal({
             setTerminalState('idle')
             setTerminalError(null)
             setPendingTerminalCommand(null)
-            void closePreviewTerminal()
             disposePreviewTerminal()
             return
         }
 
+        if (!renderTerminalPanel) return
+
         if (!canUsePreviewTerminal) {
             setTerminalState('error')
             setTerminalError('No valid path available to open terminal.')
+            return
+        }
+
+        if (!currentTerminalSession) {
+            disposePreviewTerminal()
             return
         }
 
@@ -698,13 +874,16 @@ export function FilePreviewModal({
             terminal = new XtermTerminal({
                 cursorBlink: true,
                 fontFamily: 'Consolas, "Cascadia Code", monospace',
-                fontSize: 12,
+                fontSize: Math.max(11, Number.parseInt(readCssVariable('--terminal-font-size', '14'), 10) || 14),
                 convertEol: true,
+                scrollback: 5000,
                 allowProposedApi: true,
                 theme: terminalTheme
             })
             fitAddon = new FitAddon()
+            const webLinksAddon = new WebLinksAddon()
             terminal.loadAddon(fitAddon)
+            terminal.loadAddon(webLinksAddon)
             terminal.open(host)
             terminal.focus()
             xtermRef.current = terminal
@@ -716,6 +895,14 @@ export function FilePreviewModal({
                     data
                 }).catch(() => undefined)
             })
+        }
+
+        if (terminalHydratedSessionIdRef.current !== currentTerminalSession.sessionId) {
+            terminal.clear()
+            if (currentTerminalSession.recentOutput) {
+                terminal.write(currentTerminalSession.recentOutput)
+            }
+            terminalHydratedSessionIdRef.current = currentTerminalSession.sessionId
         }
 
         const syncTerminalSize = () => {
@@ -735,82 +922,133 @@ export function FilePreviewModal({
             syncTerminalSize()
         })
         resizeObserver.observe(host)
-        window.addEventListener('resize', syncTerminalSize)
-        window.setTimeout(syncTerminalSize, 0)
+            window.addEventListener('resize', syncTerminalSize)
+            const initialSyncTimer = window.setTimeout(syncTerminalSize, 0)
+            const settleSyncTimer = window.setTimeout(syncTerminalSize, TERMINAL_PANEL_ANIMATION_MS + 40)
 
         return () => {
             resizeObserver.disconnect()
             window.removeEventListener('resize', syncTerminalSize)
+            window.clearTimeout(initialSyncTimer)
+            window.clearTimeout(settleSyncTimer)
         }
-    }, [canUsePreviewTerminal, closePreviewTerminal, disposePreviewTerminal, terminalTheme, terminalVisible])
+    }, [canUsePreviewTerminal, currentTerminalSession, disposePreviewTerminal, renderTerminalPanel, terminalTheme, terminalVisible])
 
     useEffect(() => {
-        if (!terminalVisible || !canUsePreviewTerminal) return
-        let active = true
-        const nextSessionId = createPreviewTerminalSessionId()
-        terminalSessionIdRef.current = nextSessionId
-        setTerminalSessionId(nextSessionId)
-        setTerminalState('connecting')
-        setTerminalError(null)
-        xtermRef.current?.clear()
-
-        const initialize = async () => {
-            const result = await window.devscope.createPreviewTerminal({
-                sessionId: nextSessionId,
-                targetPath: projectPath || file.path,
-                preferredShell: settings.defaultShell,
-                cols: 100,
-                rows: 28
-            })
-            if (!active) return
-            if (!result?.success) {
-                setTerminalState('error')
-                setTerminalError(result?.error || 'Failed to start terminal session.')
-                return
-            }
-            setTerminalState('active')
-        }
-
-        void initialize()
-        return () => {
-            active = false
-            void closePreviewTerminal(nextSessionId)
-        }
-    }, [canUsePreviewTerminal, closePreviewTerminal, file.path, projectPath, settings.defaultShell, terminalVisible])
-
-    useEffect(() => {
-        if (!terminalVisible) return
+        if (!terminalVisible || !renderTerminalPanel) return
         const unsubscribe = window.devscope.onPreviewTerminalEvent((eventPayload) => {
-            if (!eventPayload || eventPayload.sessionId !== terminalSessionIdRef.current) return
-
-            if (eventPayload.type === 'started') {
-                setTerminalState('active')
-                setTerminalError(null)
-                return
-            }
+            if (!eventPayload?.sessionId) return
 
             if (eventPayload.type === 'output') {
-                xtermRef.current?.write(String(eventPayload.data || ''))
+                const outputChunk = String(eventPayload.data || '')
+                setTerminalSessions((current) => current.map((session) => {
+                    if (session.sessionId !== eventPayload.sessionId) return session
+                    const nextRecentOutput = `${session.recentOutput || ''}${outputChunk}`.slice(-60_000)
+                    const isActive = eventPayload.sessionId === terminalSessionIdRef.current
+                    return {
+                        ...session,
+                        recentOutput: nextRecentOutput,
+                        lastActivityAt: Date.now(),
+                        hasUnreadOutput: isActive ? false : true
+                    }
+                }))
+
+                if (eventPayload.sessionId === terminalSessionIdRef.current) {
+                    xtermRef.current?.write(outputChunk)
+                }
+                return
+            }
+
+            if (eventPayload.type === 'started') {
+                void refreshPreviewTerminalSessions(eventPayload.sessionId).then(() => {
+                    if (eventPayload.sessionId === terminalSessionIdRef.current) {
+                        setTerminalState('active')
+                        setTerminalError(null)
+                        window.setTimeout(() => xtermRef.current?.focus(), 0)
+                    }
+                })
                 return
             }
 
             if (eventPayload.type === 'error') {
                 const message = String(eventPayload.message || 'Terminal session error.')
-                setTerminalState('error')
                 setTerminalError(message)
+                void refreshPreviewTerminalSessions(eventPayload.sessionId)
                 return
             }
 
             if (eventPayload.type === 'exit') {
-                setTerminalState('exited')
+                void refreshPreviewTerminalSessions(eventPayload.sessionId)
             }
         })
         return () => unsubscribe()
-    }, [terminalVisible])
+    }, [refreshPreviewTerminalSessions, renderTerminalPanel, terminalVisible])
+
+    useEffect(() => {
+        if (!terminalVisible || !renderTerminalPanel || !canUsePreviewTerminal) return
+        let active = true
+
+        const initialize = async () => {
+            const sessions = await refreshPreviewTerminalSessions()
+            if (!active) return
+            if (sessions.length === 0) {
+                await createPreviewTerminalSession()
+            }
+        }
+
+        void initialize()
+        return () => {
+            active = false
+        }
+    }, [canUsePreviewTerminal, createPreviewTerminalSession, refreshPreviewTerminalSessions, renderTerminalPanel, terminalVisible])
+
+    useEffect(() => {
+        if (!terminalVisible || !renderTerminalPanel) return
+        const activeSession = currentTerminalSession
+        if (!activeSession) {
+            setTerminalState('idle')
+            setTerminalShellLabel(settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell')
+            setTerminalSessionCwd(terminalGroupCwd || projectPath || file.path || '')
+            return
+        }
+
+        setTerminalShellLabel(
+            String(activeSession.shell || settings.defaultShell || 'terminal')
+                .replace(/\.exe$/i, '')
+                .replace(/^pwsh$/i, 'PowerShell')
+                .replace(/^powershell$/i, 'PowerShell')
+                .replace(/^cmd$/i, 'CMD')
+        )
+        setTerminalSessionCwd(activeSession.cwd || terminalGroupCwd || projectPath || file.path || '')
+        setTerminalState(mapTerminalStatusToState(activeSession.status))
+        setTerminalSessions((current) => {
+            let changed = false
+            const nextSessions = current.map((session) => {
+                if (session.sessionId !== terminalSessionId || !session.hasUnreadOutput) return session
+                changed = true
+                return { ...session, hasUnreadOutput: false }
+            })
+            return changed ? nextSessions : current
+        })
+    }, [currentTerminalSession, file.path, projectPath, renderTerminalPanel, settings.defaultShell, terminalGroupCwd, terminalSessionId, terminalVisible])
+
+    useEffect(() => {
+        if (!terminalVisible || !renderTerminalPanel) return
+        if (!currentTerminalSession) return
+        if (!xtermRef.current) return
+        if (terminalHydratedSessionIdRef.current === currentTerminalSession.sessionId) return
+
+        xtermRef.current.clear()
+        if (currentTerminalSession.recentOutput) {
+            xtermRef.current.write(currentTerminalSession.recentOutput)
+        }
+        terminalHydratedSessionIdRef.current = currentTerminalSession.sessionId
+        window.setTimeout(() => xtermRef.current?.focus(), 0)
+    }, [currentTerminalSession?.sessionId, currentTerminalSession?.recentOutput, renderTerminalPanel, terminalVisible])
 
     useEffect(() => {
         if (!pendingTerminalCommand) return
-        if (!terminalVisible || terminalState !== 'active') return
+        if (!terminalVisible || terminalState !== 'active' || !terminalSessionIdRef.current) return
         const commandToWrite = pendingTerminalCommand
         setPendingTerminalCommand(null)
         void window.devscope.writePreviewTerminal({
@@ -823,10 +1061,9 @@ export function FilePreviewModal({
 
     useEffect(() => {
         return () => {
-            void closePreviewTerminal()
             disposePreviewTerminal()
         }
-    }, [closePreviewTerminal, disposePreviewTerminal])
+    }, [disposePreviewTerminal])
 
     const requestIntent = useCallback((intent: PendingIntent) => {
         if (!isDirty) {
@@ -1157,8 +1394,6 @@ export function FilePreviewModal({
 
     const activeContent = mode === 'edit' ? draftContent : sourceContent
     const showPythonOutputPanel = canRunPython && (pythonOutputVisible || pythonRunState !== 'idle')
-    const shouldShowTerminalPanel = canUsePreviewTerminal && terminalVisible
-    const renderTerminalPanel = terminalPanelPhase !== 'hidden'
     const hasBottomPanel = showPythonOutputPanel || renderTerminalPanel
     const centerHtmlRenderedPreview = isHtml && htmlViewMode === 'rendered' && mode === 'preview' && !hasBottomPanel
     const flushResponsiveHtmlPreview = isHtml && htmlViewMode === 'rendered' && viewport === 'responsive' && !isExpanded
@@ -1303,29 +1538,203 @@ export function FilePreviewModal({
                 <div className="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sparkle-border-secondary/70 group-hover:bg-[var(--accent-primary)]/65 transition-colors" />
             </div>
             <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-sparkle-border-secondary">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                     <div className="text-xs font-medium text-sparkle-text flex items-center gap-1.5">
                         <span className={cn('inline-block h-2 w-2 rounded-full', terminalStatusDotClass)} />
                         <span>Terminal</span>
+                        <span className="rounded-md border border-amber-400/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.16em] text-amber-200">
+                            Beta
+                        </span>
+                        <span className="rounded-md border border-sparkle-border bg-sparkle-bg/60 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.16em] text-sparkle-text-muted">
+                            {terminalShellLabel}
+                        </span>
+                        <span className="rounded-md border border-sparkle-border bg-sparkle-bg/60 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.16em] text-sparkle-text-muted">
+                            {terminalSessions.length} session{terminalSessions.length === 1 ? '' : 's'}
+                        </span>
+                        {terminalGroupKey && (
+                            <span className="rounded-md border border-sparkle-border bg-sparkle-bg/60 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.16em] text-sparkle-text-muted">
+                                linked
+                            </span>
+                        )}
                     </div>
                     <div className="text-[10px] text-sparkle-text-muted truncate">
-                        {projectPath || file.path}
+                        {terminalGroupCwd || terminalSessionCwd || projectPath || file.path}
                     </div>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => setTerminalVisible(false)}
-                    className="rounded-md border border-sparkle-border px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors"
-                >
-                    Hide
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0 rounded-lg border border-sparkle-border bg-sparkle-bg/40 p-1">
+                    <button
+                        type="button"
+                        onClick={() => { void createPreviewTerminalSession() }}
+                        className="rounded-md px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors"
+                    >
+                        New
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => xtermRef.current?.clear()}
+                        className="rounded-md px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors"
+                    >
+                        Clear
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { void restartPreviewTerminal() }}
+                        disabled={!currentTerminalSession}
+                        className="rounded-md px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        Restart
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { void stopPreviewTerminalSession() }}
+                        disabled={!currentTerminalSession}
+                        className="rounded-md px-2 py-1 text-[10px] text-red-300 hover:bg-red-500/10 hover:text-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        Stop
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setTerminalVisible(false)}
+                        className="rounded-md px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors"
+                    >
+                        Minimize
+                    </button>
+                </div>
             </div>
             <div className="flex-1 min-h-0 p-2">
-                <div
-                    ref={terminalHostRef}
-                    className="h-full w-full overflow-hidden rounded-md border border-sparkle-border-secondary"
-                    style={{ backgroundColor: terminalTheme.background }}
-                />
+                <div className="flex h-full min-h-0 gap-2">
+                    <div className="min-w-0 flex-1 rounded-md border border-sparkle-border-secondary bg-sparkle-bg/40 p-2">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                                <div className="text-[11px] font-medium text-sparkle-text truncate">
+                                    {currentTerminalSession?.title || (terminalSessions.length > 0 ? 'Select a terminal session' : 'No terminal session')}
+                                </div>
+                                <div className="text-[10px] text-sparkle-text-muted truncate">
+                                    {currentTerminalSession
+                                        ? (terminalSessionCwd || terminalGroupCwd || projectPath || file.path)
+                                        : (terminalGroupCwd || projectPath || file.path)}
+                                </div>
+                            </div>
+                            <div className="text-[10px] text-sparkle-text-muted shrink-0">
+                                {currentTerminalSession
+                                    ? `${currentTerminalSession.status} / ${formatRelativeActivity(currentTerminalSession.lastActivityAt)} ago`
+                                    : ''}
+                            </div>
+                        </div>
+                        {currentTerminalSession ? (
+                            <div
+                                onMouseDownCapture={() => xtermRef.current?.focus()}
+                                ref={terminalHostRef}
+                                className="h-[calc(100%-2.25rem)] w-full overflow-hidden rounded-md border border-sparkle-border-secondary focus-within:border-[var(--accent-primary)]/60 focus-within:shadow-[0_0_0_1px_rgba(56,189,248,0.2)]"
+                                style={{ backgroundColor: terminalTheme.background }}
+                            />
+                        ) : (
+                            <div className="flex h-[calc(100%-2.25rem)] w-full items-center justify-center rounded-md border border-dashed border-sparkle-border-secondary bg-black/15 px-6 text-center">
+                                <div className="max-w-sm space-y-3">
+                                    <div className="text-sm font-medium text-sparkle-text">
+                                        {terminalSessions.length > 0 ? 'Choose a session to continue' : 'No terminal is open'}
+                                    </div>
+                                    <div className="text-xs leading-relaxed text-sparkle-text-secondary">
+                                        {terminalSessions.length > 0
+                                            ? 'Pick a session from the sidebar to attach it here, or start a fresh shell for this directory.'
+                                            : 'Start a new shell for this file or project. The session will stay grouped here and can be managed from Tasks.'}
+                                    </div>
+                                    <div className="flex items-center justify-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => { void createPreviewTerminalSession() }}
+                                            className="rounded-md border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-[11px] font-medium text-sky-200 transition-colors hover:bg-sky-500/15"
+                                        >
+                                            New Session
+                                        </button>
+                                        {terminalSessions.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => selectPreviewTerminalSession(terminalSessions[0]?.sessionId || '')}
+                                                className="rounded-md border border-sparkle-border px-3 py-1.5 text-[11px] font-medium text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                                            >
+                                                Select First
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <aside className="flex w-[220px] shrink-0 flex-col rounded-md border border-sparkle-border-secondary bg-sparkle-bg/55">
+                        <div className="border-b border-sparkle-border-secondary px-3 py-2">
+                            <div className="text-[11px] font-medium text-sparkle-text">Session Group</div>
+                            <div className="mt-1 text-[10px] text-sparkle-text-muted truncate">
+                                {terminalGroupCwd || projectPath || file.path}
+                            </div>
+                        </div>
+                        <div className="flex-1 min-h-0 overflow-auto custom-scrollbar p-2 space-y-2">
+                            {terminalSessions.length === 0 ? (
+                                <div className="rounded-md border border-dashed border-sparkle-border-secondary px-3 py-4 text-center text-[11px] text-sparkle-text-muted">
+                                    No sessions yet
+                                </div>
+                            ) : terminalSessions.map((session) => {
+                                const isActiveSession = session.sessionId === terminalSessionId
+                                const sessionStatusClass = (
+                                    session.status === 'running'
+                                        ? 'bg-emerald-300'
+                                        : session.status === 'error'
+                                            ? 'bg-red-300'
+                                            : 'bg-amber-300'
+                                )
+                                const sessionPreview = String(session.recentOutput || '')
+                                    .trim()
+                                    .split(/\r?\n/)
+                                    .filter(Boolean)
+                                    .slice(-1)[0] || session.cwd
+
+                                return (
+                                    <div
+                                        key={session.sessionId}
+                                        className={cn(
+                                            'rounded-lg border p-2 transition-colors',
+                                            isActiveSession
+                                                ? 'border-sky-400/35 bg-sky-500/12'
+                                                : 'border-sparkle-border bg-sparkle-card/60 hover:border-sparkle-border-secondary hover:bg-sparkle-card-hover/60'
+                                        )}
+                                    >
+                                        <div className="flex items-start justify-between gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => selectPreviewTerminalSession(session.sessionId)}
+                                                className="min-w-0 flex-1 text-left"
+                                            >
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={cn('inline-block h-2 w-2 rounded-full shrink-0', sessionStatusClass)} />
+                                                    <span className="truncate text-[11px] font-medium text-sparkle-text">
+                                                        {session.title}
+                                                    </span>
+                                                    {session.hasUnreadOutput && !isActiveSession && (
+                                                        <span className="h-1.5 w-1.5 rounded-full bg-sky-300 shrink-0" />
+                                                    )}
+                                                </div>
+                                                <div className="mt-1 truncate text-[10px] text-sparkle-text-muted">
+                                                    {session.shell.replace(/\.exe$/i, '')} · {formatRelativeActivity(session.lastActivityAt)} ago
+                                                </div>
+                                                <div className="mt-1 truncate text-[10px] text-sparkle-text-secondary/90">
+                                                    {sessionPreview}
+                                                </div>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { void stopPreviewTerminalSession(session.sessionId) }}
+                                                className="rounded-md px-1.5 py-1 text-[10px] text-red-300 hover:bg-red-500/10 hover:text-red-200 transition-colors"
+                                                title="Stop session"
+                                            >
+                                                Stop
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </aside>
+                </div>
             </div>
             {terminalError && (
                 <div className="px-3 pb-2 text-[10px] text-red-300 truncate">
@@ -1579,8 +1988,6 @@ export function FilePreviewModal({
                                         />
                                     </PreviewErrorBoundary>
                                 </div>
-                                {pythonOutputPanel}
-                                {terminalPanel}
                             </div>
                         </div>
                         <aside
@@ -1753,11 +2160,12 @@ export function FilePreviewModal({
                                     />
                                 </PreviewErrorBoundary>
                             </div>
-                            {pythonOutputPanel}
-                            {terminalPanel}
                         </div>
                     </div>
                 )}
+
+                {pythonOutputPanel}
+                {terminalPanel}
             </div>
 
             {showUnsavedModal && (

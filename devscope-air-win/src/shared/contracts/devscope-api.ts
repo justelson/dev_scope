@@ -173,6 +173,13 @@ export type DevScopeRunningApp = {
     memoryMb: number
 }
 
+export type DevScopeInstalledIde = {
+    id: string
+    name: string
+    icon: string
+    color: string
+}
+
 export type DevScopeAssistantStatus = {
     connected: boolean
     state: 'offline' | 'connecting' | 'ready' | 'error'
@@ -270,7 +277,23 @@ export type DevScopePreviewTerminalEvent = {
     message?: string
     shell?: string
     cwd?: string
+    title?: string
+    groupKey?: string
+    status?: 'running' | 'exited' | 'error'
     exitCode?: number
+}
+
+export type DevScopePreviewTerminalSessionSummary = {
+    sessionId: string
+    title: string
+    shell: string
+    cwd: string
+    groupKey: string
+    status: 'running' | 'exited' | 'error'
+    startedAt: number
+    lastActivityAt: number
+    exitCode?: number | null
+    recentOutput?: string
 }
 
 export type DevScopeTaskType =
@@ -440,6 +463,8 @@ export interface DevScopeApi {
     scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) => Promise<DevScopeResult<{ projects: DevScopeProject[]; folders: DevScopeFolderItem[]; files: DevScopeFileItem[]; cached?: boolean; cachedAt?: number }>>
     openInExplorer: (path: string) => Promise<DevScopeResult>
     openInTerminal: (path: string, preferredShell?: 'powershell' | 'cmd', initialCommand?: string) => Promise<DevScopeResult>
+    listInstalledIdes: () => Promise<DevScopeResult<{ ides: DevScopeInstalledIde[] }>>
+    openProjectInIde: (projectPath: string, ideId: string) => Promise<DevScopeResult<{ ide: DevScopeInstalledIde }>>
     installProjectDependencies: (
         projectPath: string,
         options?: { onlyMissing?: boolean }
@@ -536,7 +561,10 @@ export interface DevScopeApi {
         preferredShell?: 'powershell' | 'cmd'
         cols?: number
         rows?: number
-    }) => Promise<DevScopeResult<{ shell: string; cwd: string }>>
+        title?: string
+    }) => Promise<DevScopeResult<{ shell: string; cwd: string; groupKey: string; session: DevScopePreviewTerminalSessionSummary }>>
+    listPreviewTerminalSessions: (input?: { targetPath?: string }) =>
+        Promise<DevScopeResult<{ groupKey?: string; cwd?: string; sessions: DevScopePreviewTerminalSessionSummary[] }>>
     writePreviewTerminal: (input: { sessionId: string; data: string }) => Promise<DevScopeResult>
     resizePreviewTerminal: (input: { sessionId: string; cols: number; rows: number }) => Promise<DevScopeResult>
     closePreviewTerminal: (sessionId: string) => Promise<DevScopeResult<{ closed: boolean }>>

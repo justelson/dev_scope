@@ -65,7 +65,12 @@ export async function handleOpenInTerminal(
                 args = ['-NoExit', '-ExecutionPolicy', 'Bypass', '-File', tempScriptPath]
             }
         } else {
-            args = normalizedShell === 'cmd' ? ['/k'] : ['-NoExit']
+            if (normalizedShell === 'cmd') {
+                args = ['/k', `cd /d "${cwd}"`]
+            } else {
+                const escapedCwd = cwd.replace(/'/g, "''")
+                args = ['-NoExit', '-Command', `Set-Location -LiteralPath '${escapedCwd}'`]
+            }
         }
 
         const launcherArgs = ['/d', '/s', '/c', 'start', '""', executable, ...args]

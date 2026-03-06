@@ -1,11 +1,19 @@
-import { ArrowLeft, ArrowUp, Bot, Check, Code, Copy, ExternalLink, FileJson, FilePlus, FileText, FolderOpen, FolderPlus, Plus, RefreshCw, Terminal } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Bot, Check, Code, Copy, ExternalLink, FileJson, FilePlus, FileText, FolderOpen, FolderPlus, Plus, RefreshCw, Settings, Terminal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
+
+type RootStats = {
+    projects: number
+    frameworks: number
+    types: number
+}
 
 interface FolderBrowseHeaderProps {
     folderName: string
     decodedPath: string
     totalProjects: number
+    isProjectsRootView?: boolean
+    rootStats?: RootStats
     isCurrentFolderGitRepo: boolean
     loading: boolean
     onBack: () => void
@@ -16,6 +24,8 @@ interface FolderBrowseHeaderProps {
     onOpenAssistant: () => void
     onCopyPath: () => void
     copiedPath: boolean
+    onOpenStats?: (key: 'projects' | 'frameworks' | 'types') => void
+    onOpenProjectsSettings?: () => void
     onOpenInExplorer: () => void
     onRefresh: () => void
     onCreateFile: (presetExtension?: string) => void
@@ -26,6 +36,8 @@ export function FolderBrowseHeader({
     folderName,
     decodedPath,
     totalProjects,
+    isProjectsRootView = false,
+    rootStats,
     isCurrentFolderGitRepo,
     loading,
     onBack,
@@ -36,47 +48,80 @@ export function FolderBrowseHeader({
     onOpenAssistant,
     onCopyPath,
     copiedPath,
+    onOpenStats,
+    onOpenProjectsSettings,
     onOpenInExplorer,
     onRefresh,
     onCreateFile,
     onCreateFolder
 }: FolderBrowseHeaderProps) {
+    const title = isProjectsRootView ? 'Projects' : folderName
+    const stats = rootStats ?? { projects: totalProjects, frameworks: 0, types: 0 }
+
     return (
         <div className="mb-8 flex flex-col gap-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-4 min-w-0">
-                    {/* Navigation Actions */}
-                    <div className="flex items-center gap-1.5 p-1 bg-white/5 rounded-xl border border-white/5 shrink-0">
-                        <button
-                            onClick={onBack}
-                            className="h-9 w-9 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-lg transition-all active:scale-95"
-                            title="Back"
-                        >
-                            <ArrowLeft size={18} />
-                        </button>
-                        <button
-                            onClick={onNavigateUp}
-                            disabled={!canNavigateUp}
-                            className="h-9 w-9 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-lg transition-all active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
-                            title="Go to parent folder"
-                        >
-                            <ArrowUp size={18} />
-                        </button>
-                    </div>
+                    {!isProjectsRootView && (
+                        <div className="flex items-center gap-1.5 p-1 bg-white/5 rounded-xl border border-white/5 shrink-0">
+                            <button
+                                onClick={onBack}
+                                className="h-9 w-9 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-lg transition-all active:scale-95"
+                                title="Back"
+                            >
+                                <ArrowLeft size={18} />
+                            </button>
+                            <button
+                                onClick={onNavigateUp}
+                                disabled={!canNavigateUp}
+                                className="h-9 w-9 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-lg transition-all active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                                title="Go to parent folder"
+                            >
+                                <ArrowUp size={18} />
+                            </button>
+                        </div>
+                    )}
 
                     {/* Folder Info */}
                     <div className="flex items-center gap-3 min-w-0">
                         <div className="p-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/10 shrink-0">
                             <FolderOpen className="text-yellow-400" size={22} />
                         </div>
-                        <div className="min-w-0 flex items-center gap-3">
-                            <h1 className="text-2xl font-bold text-white truncate leading-tight">
-                                {folderName}
-                            </h1>
-                            {totalProjects > 0 && (
-                                <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-yellow-500/20 text-yellow-300 rounded-full border border-yellow-500/20 shadow-sm shrink-0">
-                                    {totalProjects} {totalProjects === 1 ? 'project' : 'projects'}
-                                </span>
+                        <div className="min-w-0">
+                            <div className="min-w-0 flex items-center gap-3">
+                                <h1 className="text-2xl font-bold text-white truncate leading-tight">
+                                    {title}
+                                </h1>
+                                {!isProjectsRootView && totalProjects > 0 && (
+                                    <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-yellow-500/20 text-yellow-300 rounded-full border border-yellow-500/20 shadow-sm shrink-0">
+                                        {totalProjects} {totalProjects === 1 ? 'project' : 'projects'}
+                                    </span>
+                                )}
+                            </div>
+                            {isProjectsRootView && (
+                                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpenStats?.('projects')}
+                                        className="px-2.5 py-1 rounded-md border border-amber-400/45 bg-amber-500/15 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 transition-colors"
+                                    >
+                                        {stats.projects} projects
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpenStats?.('frameworks')}
+                                        className="px-2.5 py-1 rounded-md border border-emerald-400/45 bg-emerald-500/15 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 transition-colors"
+                                    >
+                                        {stats.frameworks} frameworks
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpenStats?.('types')}
+                                        className="px-2.5 py-1 rounded-md border border-yellow-400/45 bg-yellow-500/15 text-xs font-semibold text-yellow-300 hover:bg-yellow-500/25 transition-colors"
+                                    >
+                                        {stats.types} types
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -84,7 +129,16 @@ export function FolderBrowseHeader({
 
                 {/* Primary Actions */}
                 <div className="flex items-center gap-2 shrink-0 self-end lg:self-auto">
-                    <div className="flex items-center gap-1.5 mr-2">
+                    {isProjectsRootView && onOpenProjectsSettings && (
+                        <button
+                            onClick={onOpenProjectsSettings}
+                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/75 hover:text-white hover:bg-white/10 transition-all"
+                            title="Projects settings"
+                        >
+                            <Settings size={16} />
+                        </button>
+                    )}
+                    <div className={cn('flex items-center gap-1.5 mr-2', isProjectsRootView && 'ml-1')}>
                         <button
                             onClick={onRefresh}
                             disabled={loading}
