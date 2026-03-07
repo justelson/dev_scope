@@ -22,12 +22,12 @@ function App() {
     <div className="min-h-screen bg-sparkle-bg text-sparkle-text selection:bg-sparkle-primary/30 relative overflow-hidden">
 
       {/* Navigation */}
-      <nav className={`fixed top-0 left-0 right-0 z-40 px-8 py-6 flex justify-between items-center transition-all duration-1000 delay-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
+      <nav className={`fixed top-0 left-0 right-0 z-40 px-4 md:px-8 py-4 md:py-6 flex justify-between items-center transition-all duration-1000 delay-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
         <div className="flex items-center opacity-40 hover:opacity-100 transition-opacity">
           <img
             src="/logo.png"
             alt="DevScope Logo"
-            className="w-8 h-8 rounded-lg"
+            className="w-7 h-7 md:w-8 md:h-8 rounded-lg"
           />
         </div>
         <a
@@ -41,24 +41,28 @@ function App() {
       </nav>
 
       {/* Hero Section */}
-      <main className="relative pt-32 pb-20 px-6 max-w-[1600px] mx-auto flex flex-col items-center text-center">
+      <main className="relative pt-24 md:pt-32 pb-12 md:pb-20 px-4 md:px-6 max-w-[1600px] mx-auto flex flex-col items-center text-center">
         <div className={`transition-all duration-1000 delay-500 w-full ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
-          <h1 className="text-6xl md:text-7xl font-normal mb-6 tracking-[-0.02em] leading-[1.1] text-white">
+          <h1 className="text-6xl md:text-6xl lg:text-7xl font-bold mb-4 md:mb-6 tracking-[-0.02em] leading-[1.1] text-white">
             DevScope
           </h1>
           
-          <p className="text-xl md:text-2xl font-normal mb-3 tracking-[-0.01em] text-white/90">
+          <p className="text-base md:text-xl lg:text-2xl font-normal mb-3 tracking-[-0.01em] text-white/90 px-4">
             A new standard to code in AI-driven development.
           </p>
           
-          <p className="text-sm text-white/40 mb-12">
+          <p className="text-xs md:text-sm text-white/40 mb-2 md:mb-3">
             AI powered by T3 Code
           </p>
+          
+          <p className="text-[10px] md:text-xs mb-8 md:mb-12 font-bold" style={{ color: '#007aff', opacity: 0.6 }}>
+            Early alpha • Frequent updates and fixes ongoing
+          </p>
 
-          <div className="flex flex-wrap justify-center gap-6 mb-16">
+          <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-10 md:mb-16">
             <a
               href="https://github.com/justelson/dev_scope.git"
-              className="px-8 py-3 bg-white hover:bg-gray-100 text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-sm"
+              className="px-6 md:px-8 py-2.5 md:py-3 bg-white hover:bg-gray-100 text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-sm"
             >
               Download now
             </a>
@@ -67,7 +71,7 @@ function App() {
 
         {/* Ultra-Wide App Preview */}
         <div 
-          className={`w-full max-w-[1440px] rounded-lg border-2 border-white/20 bg-sparkle-card/20 backdrop-blur-3xl overflow-hidden shadow-[0_0_150px_rgba(0,0,0,0.95)] delay-700 relative group ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
+          className={`w-full max-w-[1440px] rounded-md md:rounded-lg border border-white/20 md:border-2 bg-sparkle-card/20 backdrop-blur-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.95)] md:shadow-[0_0_150px_rgba(0,0,0,0.95)] delay-700 relative group ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
           style={{ 
             transform: `scale(${scrollScale})`,
             transition: 'transform 0.1s ease-out, opacity 1s 0.7s, translate 1s 0.7s'
@@ -82,13 +86,13 @@ function App() {
       </main>
 
       {/* Footer */}
-      <footer className={`py-20 text-center transition-all duration-1000 delay-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-white/40 text-[11px] font-bold tracking-[0.2em] uppercase">
+      <footer className={`py-12 md:py-20 text-center transition-all duration-1000 delay-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+        <div className="flex flex-col items-center gap-3 md:gap-4 px-4">
+          <p className="text-white/40 text-[10px] md:text-[11px] font-bold tracking-[0.2em] uppercase">
             PRODUCED BY ELSON
           </p>
           <div className="w-8 h-[1px] bg-white/10" />
-          <p className="text-white/20 text-[10px] italic">
+          <p className="text-white/20 text-[9px] md:text-[10px] italic">
             devs dont use light mode
           </p>
         </div>
