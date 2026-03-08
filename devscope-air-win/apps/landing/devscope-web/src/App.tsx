@@ -34,9 +34,11 @@ function App() {
   return (
     <div className="min-h-screen bg-sparkle-bg text-sparkle-text selection:bg-sparkle-primary/30 relative overflow-hidden">
       {/* Animated Grid Background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 grid-dots opacity-20"></div>
-        <div className="absolute inset-0 grid-glow"></div>
+      <div className="grid-container">
+        <div className="grid-dots"></div>
+        <div className="grid-glow-1"></div>
+        <div className="grid-glow-2"></div>
+        <div className="grid-glow-3"></div>
       </div>
 
       {/* Navigation */}
