@@ -315,7 +315,6 @@ export interface DevScopeApi {
     getAIAgents: () => Promise<DevScopeResult<{ agents: unknown[] }>>
 
     // Settings + AI
-    exportData: (data: unknown) => Promise<DevScopeResult>
     setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) => Promise<DevScopeResult>
     getStartupSettings: () => Promise<DevScopeResult>
     getAiDebugLogs: (limit?: number) => Promise<DevScopeResult>

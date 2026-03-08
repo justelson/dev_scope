@@ -4,7 +4,7 @@
 
 import { Link } from 'react-router-dom'
 import {
-    Palette, RefreshCw, Download, Info,
+    Palette, RefreshCw, Info,
     ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal
 } from 'lucide-react'
 import { useAppUpdateState } from '@/lib/app-updates'
@@ -111,14 +111,6 @@ export default function Settings() {
                     title="Terminal"
                     description="Set default terminal and shell behavior"
                     preview={settings.defaultShell === 'cmd' ? 'Default: CMD' : 'Default: PowerShell'}
-                />
-
-                <SettingsCard
-                    to="/settings/data"
-                    icon={<Download className="text-cyan-400" size={24} />}
-                    iconBg="bg-cyan-500/10"
-                    title="Data & Export"
-                    description="Export, clear cache, reset settings"
                 />
 
                 <SettingsCard

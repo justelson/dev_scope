@@ -19,7 +19,6 @@ import {
 } from './handlers/system-handlers'
 import {
     handleClearAiDebugLogs,
-    handleExportData,
     handleGenerateCommitMessage,
     handleGetAiDebugLogs,
     handleGetStartupSettings,
@@ -144,7 +143,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle(UPDATE_DOWNLOAD_CHANNEL, handleDownloadUpdate)
     ipcMain.handle(UPDATE_INSTALL_CHANNEL, handleInstallUpdate)
 
-    ipcMain.handle('devscope:exportData', handleExportData)
     ipcMain.handle('devscope:setStartupSettings', handleSetStartupSettings)
     ipcMain.handle('devscope:getStartupSettings', handleGetStartupSettings)
     ipcMain.handle('devscope:testGroqConnection', handleTestGroqConnection)

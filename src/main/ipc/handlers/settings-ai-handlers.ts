@@ -1,33 +1,10 @@
-import { app, dialog } from 'electron'
+import { app } from 'electron'
 import log from 'electron-log'
 import { clearAiDebugLogs, getAiDebugLogs } from '../../ai/ai-debug-log'
 import { generateGeminiCommitMessage, testGeminiConnection } from '../../ai/gemini'
 import { generateCommitMessage as generateGroqCommitMessage, testGroqConnection } from '../../ai/groq'
 
 type CommitAIProvider = 'groq' | 'gemini'
-
-export async function handleExportData(_event: Electron.IpcMainInvokeEvent, data: any) {
-    log.info('IPC: exportData')
-
-    try {
-        const result = await dialog.showSaveDialog({
-            title: 'Export DevScope Data',
-            defaultPath: `devscope-export-${Date.now()}.json`,
-            filters: [{ name: 'JSON Files', extensions: ['json'] }]
-        })
-
-        if (result.canceled || !result.filePath) {
-            return { success: false, cancelled: true }
-        }
-
-        const { writeFile } = await import('fs/promises')
-        await writeFile(result.filePath, JSON.stringify(data, null, 2), 'utf-8')
-        return { success: true, filePath: result.filePath }
-    } catch (err: any) {
-        log.error('Failed to export data:', err)
-        return { success: false, error: err.message }
-    }
-}
 
 export async function handleSetStartupSettings(_event: Electron.IpcMainInvokeEvent, settings: { openAtLogin: boolean; openAsHidden: boolean }) {
     log.info('IPC: setStartupSettings', settings)

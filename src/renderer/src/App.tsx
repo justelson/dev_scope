@@ -20,7 +20,6 @@ const QuickOpen = lazy(() => import('./pages/QuickOpen'))
 // Settings sub-pages
 const AppearanceSettings = lazy(() => import('./pages/settings/AppearanceSettings'))
 const BehaviorSettings = lazy(() => import('./pages/settings/BehaviorSettings'))
-const DataSettings = lazy(() => import('./pages/settings/DataSettings'))
 const AboutSettings = lazy(() => import('./pages/settings/AboutSettings'))
 const ProjectsSettings = lazy(() => import('./pages/settings/ProjectsSettings'))
 const AISettings = lazy(() => import('./pages/settings/AISettings'))
@@ -158,7 +157,7 @@ function MainContent() {
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/settings/appearance" element={<AppearanceSettings />} />
                     <Route path="/settings/behavior" element={<BehaviorSettings />} />
-                    <Route path="/settings/data" element={<DataSettings />} />
+                    <Route path="/settings/data" element={<Navigate to="/settings" replace />} />
                     <Route path="/settings/about" element={<AboutSettings />} />
                     <Route path="/settings/projects" element={<ProjectsSettings />} />
                     <Route path="/settings/ai" element={<AISettings />} />

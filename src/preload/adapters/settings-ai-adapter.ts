@@ -2,7 +2,6 @@ import { ipcRenderer } from 'electron'
 
 export function createSettingsAndAiAdapter() {
     return {
-        exportData: (data: any) => ipcRenderer.invoke('devscope:exportData', data),
         setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) =>
             ipcRenderer.invoke('devscope:setStartupSettings', settings),
         getStartupSettings: () => ipcRenderer.invoke('devscope:getStartupSettings'),
