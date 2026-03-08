@@ -5,12 +5,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Download, Trash2, RotateCcw, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react'
+import { useAppUpdateState } from '@/lib/app-updates'
 import { useSettings } from '@/lib/settings'
 import { updateCache } from '@/lib/refreshCache'
 import { cn } from '@/lib/utils'
 
 export default function DataSettings() {
     const { settings, resetSettings, clearCache } = useSettings()
+    const updateState = useAppUpdateState()
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [exportStatus, setExportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
     const [cacheCleared, setCacheCleared] = useState(false)
@@ -33,7 +35,8 @@ export default function DataSettings() {
             const data = await window.devscope.refreshAll()
             const exportData = {
                 exportedAt: new Date().toISOString(),
-                version: '1.0.0',
+                version: updateState?.currentVersion || 'unknown',
+                displayVersion: updateState?.currentDisplayVersion || 'unknown',
                 settings: settings,
                 ...data
             }
@@ -87,7 +90,7 @@ export default function DataSettings() {
                     </div>
                     <Link
                         to="/settings"
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-sparkle-text hover:text-[var(--accent-primary)] bg-sparkle-card hover:bg-sparkle-card-hover border border-sparkle-border rounded-lg transition-all shrink-0"
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-sparkle-text hover:text-[var(--accent-primary)] bg-sparkle-card hover:bg-white/[0.03] border border-white/10 hover:border-white/20 rounded-lg transition-all shrink-0"
                     >
                         <ArrowLeft size={16} />
                         Back to Settings
@@ -177,7 +180,7 @@ export default function DataSettings() {
                                 </button>
                                 <button
                                     onClick={() => setShowResetConfirm(false)}
-                                    className="px-4 py-2 rounded-lg bg-sparkle-border text-sparkle-text hover:bg-sparkle-border-secondary transition-colors"
+                                    className="px-4 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 transition-colors"
                                 >
                                     Cancel
                                 </button>
@@ -213,7 +216,7 @@ function ActionCard({
     action: React.ReactNode
 }) {
     return (
-        <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-5">
+        <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-4">
                     <div className={cn('p-3 rounded-xl', iconBg)}>

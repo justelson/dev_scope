@@ -2,14 +2,51 @@
  * DevScope - About Page
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Info, Github, Heart, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Download, ExternalLink, Github, Heart, Info, RefreshCw, Rocket } from 'lucide-react'
 import { DevScopeLogoASCII } from '@/components/ui/DevScopeLogo'
+import { getUpdateActionLabel, useAppUpdateState } from '@/lib/app-updates'
+import { cn } from '@/lib/utils'
+
+type UpdateAction = 'check' | 'download' | 'install' | null
 
 export default function AboutSettings() {
+    const updateState = useAppUpdateState()
+    const [pendingAction, setPendingAction] = useState<UpdateAction>(null)
+
+    const handleCheck = async () => {
+        setPendingAction('check')
+        try {
+            await window.devscope.updates.checkForUpdates()
+        } finally {
+            setPendingAction(null)
+        }
+    }
+
+    const handleDownload = async () => {
+        setPendingAction('download')
+        try {
+            await window.devscope.updates.downloadUpdate()
+        } finally {
+            setPendingAction(null)
+        }
+    }
+
+    const handleInstall = async () => {
+        setPendingAction('install')
+        try {
+            await window.devscope.updates.installUpdate()
+        } finally {
+            setPendingAction(null)
+        }
+    }
+
+    const isBusy = pendingAction !== null
+    const updateSummary = getUpdateActionLabel(updateState)
+
     return (
         <div className="animate-fadeIn">
-            {/* Header */}
             <div className="mb-6">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
@@ -18,12 +55,12 @@ export default function AboutSettings() {
                         </div>
                         <div>
                             <h1 className="text-xl font-semibold text-sparkle-text">About DevScope</h1>
-                            <p className="text-sm text-sparkle-text-secondary">Version and credits</p>
+                            <p className="text-sm text-sparkle-text-secondary">Version, channel, and release updates</p>
                         </div>
                     </div>
                     <Link
                         to="/settings"
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-sparkle-text hover:text-[var(--accent-primary)] bg-sparkle-card hover:bg-sparkle-card-hover border border-sparkle-border rounded-lg transition-all shrink-0"
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-sparkle-text hover:text-[var(--accent-primary)] bg-sparkle-card hover:bg-white/[0.03] border border-white/10 hover:border-white/20 rounded-lg transition-all shrink-0"
                     >
                         <ArrowLeft size={16} />
                         Back to Settings
@@ -32,34 +69,92 @@ export default function AboutSettings() {
             </div>
 
             <div className="space-y-6">
-                {/* ASCII Logo & Version */}
-                <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-8 overflow-hidden">
+                <div className="bg-sparkle-card rounded-xl border border-white/10 p-8 overflow-hidden">
                     <div className="flex flex-col items-center">
-                        {/* ASCII Art Logo */}
                         <div className="mb-6 overflow-x-auto max-w-full">
                             <DevScopeLogoASCII />
                         </div>
-                        
+
                         <p className="text-sparkle-text-secondary mb-4 text-center">Developer Machine Status System</p>
-                        
+
                         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] text-sm font-medium">
-                            Version 1.0.0 AIR
+                            {updateState?.currentDisplayVersion || 'v1.0 Alpha 1'}
                         </div>
-                        
-                        <p className="text-xs text-sparkle-text-muted mt-4">by justelson</p>
+
+                        <p className="text-xs text-sparkle-text-muted mt-3">
+                            {updateState?.currentVersion || '1.0.0-alpha.1'}
+                            {updateState?.channel ? ` \u2022 ${updateState.channel} channel` : ''}
+                        </p>
+                        <p className="text-xs text-sparkle-text-muted mt-2">by justelson</p>
                     </div>
                 </div>
 
-                {/* Info Grid */}
+                <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h3 className="font-semibold text-sparkle-text">App Updates</h3>
+                            <p className="text-sm text-sparkle-text-secondary mt-1">
+                                {updateSummary}
+                            </p>
+                            {updateState?.message && (
+                                <p className="text-xs text-amber-300 mt-2">{updateState.message}</p>
+                            )}
+                            {updateState?.repository && (
+                                <p className="text-xs text-sparkle-text-muted mt-2">
+                                    GitHub Releases: {updateState.repository}
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                            <button
+                                onClick={() => { void handleCheck() }}
+                                disabled={isBusy || !updateState?.enabled || updateState.status === 'checking'}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <RefreshCw size={16} className={cn(pendingAction === 'check' && 'animate-spin')} />
+                                {updateState?.status === 'checking' ? 'Checking...' : 'Check'}
+                            </button>
+                            <button
+                                onClick={() => { void handleDownload() }}
+                                disabled={isBusy || updateState?.status !== 'available'}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <Download size={16} />
+                                {pendingAction === 'download' ? 'Downloading...' : 'Download'}
+                            </button>
+                            <button
+                                onClick={() => { void handleInstall() }}
+                                disabled={isBusy || updateState?.status !== 'downloaded'}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-primary)]/12 border border-white/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/18 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <Rocket size={16} />
+                                {pendingAction === 'install' ? 'Restarting...' : 'Restart to Install'}
+                            </button>
+                        </div>
+                    </div>
+                    {updateState?.status === 'downloading' && updateState.downloadPercent !== null && (
+                        <div className="mt-4">
+                            <div className="h-2 rounded-full bg-white/[0.05] overflow-hidden">
+                                <div
+                                    className="h-full bg-[var(--accent-primary)] transition-[width] duration-300"
+                                    style={{ width: `${Math.max(0, Math.min(100, updateState.downloadPercent))}%` }}
+                                />
+                            </div>
+                            <p className="text-xs text-sparkle-text-muted mt-2">
+                                {Math.round(updateState.downloadPercent)}% downloaded
+                            </p>
+                        </div>
+                    )}
+                </div>
+
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <InfoCard label="Platform" value="Windows" />
                     <InfoCard label="Framework" value="Electron + React" />
-                    <InfoCard label="Design System" value="Sparkle" />
+                    <InfoCard label="Channel" value={updateState?.channel || 'alpha'} />
                     <InfoCard label="License" value="MIT" />
                 </div>
 
-                {/* Author */}
-                <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-5">
+                <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
                             <Heart size={20} className="text-white" />
@@ -71,29 +166,27 @@ export default function AboutSettings() {
                     </div>
                 </div>
 
-                {/* Links */}
-                <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-5">
+                <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
                     <h3 className="font-semibold text-sparkle-text mb-4">Links</h3>
                     <div className="space-y-2">
-                        <LinkRow 
+                        <LinkRow
                             icon={<Github size={18} />}
                             label="Source Code"
-                            href="https://github.com/justelson/devscope"
+                            href="https://github.com/justelson/dev_scope"
                         />
-                        <LinkRow 
+                        <LinkRow
                             icon={<ExternalLink size={18} />}
                             label="Report an Issue"
-                            href="https://github.com/justelson/devscope/issues"
+                            href="https://github.com/justelson/dev_scope/issues"
                         />
                     </div>
                 </div>
 
-                {/* Tech Stack */}
-                <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-5">
+                <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
                     <h3 className="font-semibold text-sparkle-text mb-4">Built With</h3>
                     <div className="flex flex-wrap gap-2">
                         {['Electron', 'React', 'TypeScript', 'Tailwind CSS', 'Vite', 'Lucide Icons'].map((tech) => (
-                            <span 
+                            <span
                                 key={tech}
                                 className="px-3 py-1 rounded-full bg-sparkle-accent text-sm text-sparkle-text-secondary"
                             >
@@ -109,7 +202,7 @@ export default function AboutSettings() {
 
 function InfoCard({ label, value }: { label: string; value: string }) {
     return (
-        <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-4">
+        <div className="bg-sparkle-card rounded-xl border border-white/10 p-4">
             <p className="text-xs text-sparkle-text-muted uppercase tracking-wide mb-1">{label}</p>
             <p className="font-semibold text-sparkle-text">{value}</p>
         </div>
@@ -122,7 +215,7 @@ function LinkRow({ icon, label, href }: { icon: React.ReactNode; label: string; 
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-sparkle-accent transition-colors group"
+            className="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:border-white/20 hover:bg-white/[0.03] transition-colors group"
         >
             <span className="text-sparkle-text-secondary group-hover:text-[var(--accent-primary)] transition-colors">
                 {icon}
@@ -134,5 +227,3 @@ function LinkRow({ icon, label, href }: { icon: React.ReactNode; label: string; 
         </a>
     )
 }
-
-
