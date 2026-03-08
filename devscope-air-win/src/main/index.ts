@@ -10,6 +10,7 @@ import { electronApp, is } from './utils'
 import log from 'electron-log'
 import { registerIpcHandlers } from './ipc'
 import { disposeSystemMetricsBridge } from './system-metrics/manager'
+import { disposeUpdater, initializeUpdater, registerUpdateWindow } from './update/manager'
 
 // Configure logging
 log.transports.file.level = 'info'
@@ -193,6 +194,7 @@ function createWindow(showOnReady = true): BrowserWindow {
     })
 
     loadRendererRoute(window, '/')
+    registerUpdateWindow(window)
 
     return window
 }
@@ -268,8 +270,9 @@ app.on('second-instance', (_event, argv) => {
 })
 
 app.whenReady().then(() => {
-    // Set app user model id for Windows
-    electronApp.setAppUserModelId('com.devscope.win')
+    app.setName('DevScope Air')
+    electronApp.setAppUserModelId('com.devscope.air.win')
+    initializeUpdater()
 
     protocol.registerFileProtocol(FILE_PROTOCOL, (request, callback) => {
         try {
@@ -299,7 +302,6 @@ app.whenReady().then(() => {
     const launchHidden = Boolean(initialAssociatedFilePath)
     mainWindow = createWindow(!launchHidden)
     ensureIpcHandlersRegistered(mainWindow)
-
     if (initialAssociatedFilePath) {
         createQuickPreviewWindow(initialAssociatedFilePath)
     }
@@ -329,9 +331,14 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
     disposeSystemMetricsBridge()
+    disposeUpdater()
     if (process.platform !== 'darwin') {
         app.quit()
     }
+})
+
+app.on('before-quit', () => {
+    disposeUpdater()
 })
 
 // Handle window control IPC

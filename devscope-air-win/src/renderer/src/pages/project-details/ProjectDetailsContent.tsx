@@ -3,6 +3,7 @@ import { ProjectDetailsHeaderSection } from './ProjectDetailsHeaderSection'
 import { ProjectDetailsReadmeTab } from './ProjectDetailsReadmeTab'
 import { ProjectDetailsFilesTab } from './ProjectDetailsFilesTab'
 import { ProjectDetailsGitTab } from './ProjectDetailsGitTab'
+import { cn } from '@/lib/utils'
 
 export interface ProjectDetailsContentProps {
     [key: string]: any
@@ -11,6 +12,7 @@ export interface ProjectDetailsContentProps {
 export function ProjectDetailsContent(props: ProjectDetailsContentProps) {
     const {
         activeTab,
+        isCondensedLayout,
         project,
         scriptPredictions,
         scriptIntentContext,
@@ -22,8 +24,11 @@ export function ProjectDetailsContent(props: ProjectDetailsContentProps) {
         <>
             <ProjectDetailsHeaderSection {...props} />
 
-            <div className="grid grid-cols-12 gap-6">
-                <div className="col-span-12 lg:col-span-8 flex flex-col gap-6">
+            <div className={cn(
+                'grid grid-cols-12 transition-[gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                isCondensedLayout ? 'gap-5' : 'gap-6'
+            )}>
+                <div className={isCondensedLayout ? 'col-span-12 flex min-w-0 flex-col gap-6' : 'col-span-12 lg:col-span-8 flex min-w-0 flex-col gap-6'}>
                     <div className="bg-sparkle-card border border-white/5 rounded-2xl overflow-hidden min-h-[500px] shadow-sm">
                         {activeTab === 'readme' ? (
                             <ProjectDetailsReadmeTab {...props} />
@@ -35,16 +40,19 @@ export function ProjectDetailsContent(props: ProjectDetailsContentProps) {
                     </div>
                 </div>
 
-                <ProjectDetailsSidebar
-                    scripts={project.scripts}
-                    dependencies={project.dependencies}
-                    devDependencies={project.devDependencies}
-                    dependencyInstallStatus={project.dependencyInstallStatus}
-                    scriptPredictions={scriptPredictions}
-                    scriptIntentContext={scriptIntentContext}
-                    onRunScript={runScript}
-                    onShowDependencies={() => setShowDependenciesModal(true)}
-                />
+                {!isCondensedLayout && (
+                    <ProjectDetailsSidebar
+                        dockOpen={Boolean(isCondensedLayout)}
+                        scripts={project.scripts}
+                        dependencies={project.dependencies}
+                        devDependencies={project.devDependencies}
+                        dependencyInstallStatus={project.dependencyInstallStatus}
+                        scriptPredictions={scriptPredictions}
+                        scriptIntentContext={scriptIntentContext}
+                        onRunScript={runScript}
+                        onShowDependencies={() => setShowDependenciesModal(true)}
+                    />
+                )}
             </div>
         </>
     )

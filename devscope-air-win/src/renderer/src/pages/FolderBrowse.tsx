@@ -13,12 +13,11 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { CreateFileTypeModal } from '@/components/ui/CreateFileTypeModal'
 import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
 import { PromptModal } from '@/components/ui/PromptModal'
-import { openAssistantDock } from '@/lib/assistantDockStore'
 import { trackRecentProject } from '@/lib/recentProjects'
 import { useSettings } from '@/lib/settings'
 import { ProjectsStatsModal } from './projects/ProjectsStatsModal'
 import { useProjectStatsModal } from './projects/useProjectStatsModal'
-import type { IndexedInventory, IndexedTotals, IndexAllFoldersResult } from './projects/projectsTypes'
+import type { IndexedInventory, IndexedProject, IndexedTotals, IndexAllFoldersResult } from './projects/projectsTypes'
 import { FolderBrowseContent } from './folder-browse/FolderBrowseContent'
 import { FolderBrowseHeader } from './folder-browse/FolderBrowseHeader'
 import { FolderBrowseToolbar } from './folder-browse/FolderBrowseToolbar'
@@ -333,7 +332,7 @@ export default function FolderBrowse() {
                     return
                 }
 
-                const deduped = new Map<string, Project>()
+                const deduped = new Map<string, IndexedProject>()
                 const frameworkSet = new Set<string>()
                 const typeSet = new Set<string>()
 
@@ -732,7 +731,9 @@ export default function FolderBrowse() {
     }
 
     return (
-        <div className="max-w-[1600px] mx-auto animate-fadeIn pb-20">
+        <div
+            className="project-surface-scrollbar mx-auto min-w-0 max-w-[1600px] animate-fadeIn overflow-x-hidden overflow-y-auto pb-20 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        >
             <FolderBrowseHeader
                 folderName={folderName}
                 decodedPath={decodedPath}
@@ -746,7 +747,6 @@ export default function FolderBrowse() {
                 canNavigateUp={canNavigateUp}
                 onViewAsProject={handleViewAsProject}
                 onOpenTerminal={() => openTerminal({ displayName: folderName, id: 'main', category: 'folder' }, decodedPath)}
-                onOpenAssistant={() => openAssistantDock({ contextPath: decodedPath })}
                 onCopyPath={handleCopyPath}
                 copiedPath={copiedPath}
                 onOpenStats={(key) => statsModalController.setStatsModal(key)}
@@ -758,6 +758,7 @@ export default function FolderBrowse() {
             />
 
             <FolderBrowseToolbar
+                isCondensedLayout={false}
                 searchQuery={searchQuery}
                 filterType={filterType}
                 projectTypes={projectTypes}
@@ -793,6 +794,7 @@ export default function FolderBrowse() {
                     displayedProjects={filteredProjects}
                     viewMode={settings.browserViewMode}
                     contentLayout={settings.browserContentLayout}
+                    isCondensedLayout={false}
                     searchQuery={searchQuery}
                     error={error}
                     onFolderClick={handleFolderClick}

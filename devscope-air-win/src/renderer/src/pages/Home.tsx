@@ -15,7 +15,7 @@ export default function Home() {
         }
     })
     const { settings } = useSettings()
-    const tasksFeaturePath = settings.tasksPageEnabled ? '/tasks' : '/assistant'
+    const tasksFeaturePath = settings.tasksPageEnabled ? '/tasks' : '/projects'
 
     const cards = [
         {
@@ -41,20 +41,9 @@ export default function Home() {
             novelty: 'Novel feature: write + read git workflow'
         },
         {
-            title: 'Session-Based Assistant',
-            description: 'Persistent assistant sessions with streaming events, project-aware prompts, and workflow helpers.',
-            icon: Users,
-            tone: 'from-amber-300/15 via-amber-300/0 to-transparent',
-            accent: 'text-amber-200',
-            border: 'group-hover:border-amber-300/55',
-            glow: 'bg-amber-300/20',
-            path: '/assistant',
-            novelty: 'Novel feature: durable thread lifecycle'
-        },
-        {
             title: 'Operational Task Loop',
             description: 'Move between focused tasks and execution context fast, keeping momentum inside the app shell.',
-            icon: Rocket,
+            icon: settings.tasksPageEnabled ? Rocket : Users,
             tone: 'from-blue-400/15 via-blue-400/0 to-transparent',
             accent: 'text-blue-300',
             border: 'group-hover:border-blue-400/55',
@@ -62,7 +51,7 @@ export default function Home() {
             path: tasksFeaturePath,
             novelty: settings.tasksPageEnabled
                 ? 'Novel feature: dedicated tasks surface'
-                : 'Novel feature: assistant-driven fallback'
+                : 'Novel feature: project workflow fallback'
         }
     ]
 

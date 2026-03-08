@@ -5,8 +5,9 @@
 import { Link } from 'react-router-dom'
 import {
     Palette, RefreshCw, Download, Info,
-    ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal, Bot, Smartphone
+    ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal, Smartphone
 } from 'lucide-react'
+import { useAppUpdateState } from '@/lib/app-updates'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { REMOTE_ACCESS_ENABLED } from '@shared/feature-flags'
@@ -24,7 +25,7 @@ function SettingsCard({ to, icon, iconBg, title, description, preview }: Setting
     return (
         <Link
             to={to}
-            className="group bg-sparkle-card rounded-xl border border-sparkle-border p-5 hover:border-[var(--accent-primary)]/50 transition-all hover:shadow-lg hover:shadow-[var(--accent-primary)]/5 flex flex-col"
+            className="group bg-sparkle-card rounded-xl border border-white/10 p-5 hover:border-white/20 transition-all hover:shadow-lg hover:shadow-[var(--accent-primary)]/5 flex flex-col"
         >
             <div className="flex items-start justify-between mb-3">
                 <div className={cn('p-3 rounded-xl', iconBg)}>
@@ -52,6 +53,7 @@ function SettingsCard({ to, icon, iconBg, title, description, preview }: Setting
 
 export default function Settings() {
     const { settings } = useSettings()
+    const updateState = useAppUpdateState()
 
     return (
         <div className="animate-fadeIn">
@@ -92,15 +94,6 @@ export default function Settings() {
                     title="Projects"
                     description="Configure projects folder location"
                     preview={settings.projectsFolder ? 'Configured' : 'Not set'}
-                />
-
-                <SettingsCard
-                    to="/settings/assistant"
-                    icon={<Bot className="text-indigo-300" size={24} />}
-                    iconBg="bg-indigo-400/10"
-                    title="Assistant"
-                    description="Configure in-app coding assistant behavior"
-                    preview={`${settings.assistantEnabled ? 'Enabled' : 'Disabled'} • ${settings.assistantApprovalMode.toUpperCase()}${settings.assistantAutoConnectOnOpen ? ' • Auto-connect' : ''}`}
                 />
 
                 {REMOTE_ACCESS_ENABLED && (
@@ -150,7 +143,7 @@ export default function Settings() {
                     iconBg="bg-emerald-500/10"
                     title="About"
                     description="Version info and credits"
-                    preview="v1.0.0 Air"
+                    preview={updateState?.currentDisplayVersion || 'Version info'}
                 />
             </div>
         </div>

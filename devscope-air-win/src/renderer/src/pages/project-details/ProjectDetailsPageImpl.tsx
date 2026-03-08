@@ -7,9 +7,9 @@ import { CreateFileTypeModal } from '@/components/ui/CreateFileTypeModal'
 import { PromptModal } from '@/components/ui/PromptModal'
 import { useSettings } from '@/lib/settings'
 import { trackRecentProject } from '@/lib/recentProjects'
-import { openAssistantDock } from '@/lib/assistantDockStore'
 import { useScriptRunModal } from './useScriptRunModal'
 import { useProjectFileView } from './useProjectFileView'
+import { getAllFolderPaths, isFileTreeFullyLoaded } from './fileTreeUtils'
 import { createProjectGitActions } from './gitActions'
 import { useProjectDataLifecycle } from './useProjectDataLifecycle'
 import { ProjectDetailsContent } from './ProjectDetailsContent'
@@ -97,6 +97,23 @@ function getFileExtensionFromName(name: string): string {
     return name.slice(dotIndex + 1).toLowerCase()
 }
 
+function resolveBranchState(defaultBranch: string): {
+    branchName: 'main' | 'master' | 'custom'
+    customBranchName: string
+} {
+    const normalized = String(defaultBranch || '').trim()
+    if (normalized === 'main') {
+        return { branchName: 'main', customBranchName: '' }
+    }
+    if (normalized === 'master') {
+        return { branchName: 'master', customBranchName: '' }
+    }
+    return {
+        branchName: 'custom',
+        customBranchName: normalized || 'develop'
+    }
+}
+
 function validateCreateName(name: string): string | null {
     const trimmed = String(name || '').trim()
     if (!trimmed) return 'Name cannot be empty.'
@@ -132,7 +149,7 @@ export default function ProjectDetailsPage() {
     const decodedPath = projectPath ? decodeURIComponent(projectPath) : ''
     const navigate = useNavigate()
     const { openTerminal } = useTerminal()
-    const { settings } = useSettings()
+    const { settings, updateSettings } = useSettings()
     const [project, setProject] = useState<ProjectDetails | null>(null)
     const [fileTree, setFileTree] = useState<FileTreeNode[]>([])
     const [loading, setLoading] = useState(true)
@@ -146,6 +163,7 @@ export default function ProjectDetailsPage() {
         readStoredProjectActiveTab(decodedPath) || 'readme'
     ))
     const [showDependenciesModal, setShowDependenciesModal] = useState(false)
+    const [showScriptsModal, setShowScriptsModal] = useState(false)
     const [isProjectLive, setIsProjectLive] = useState(false)
     const [activePorts, setActivePorts] = useState<number[]>([])
     const [gitHistory, setGitHistory] = useState<GitCommit[]>([])
@@ -176,16 +194,19 @@ export default function ProjectDetailsPage() {
         tone?: 'success' | 'error' | 'info'
     } | null>(null)
     const [showAuthorMismatch, setShowAuthorMismatch] = useState(false)
-    const [dontShowAuthorWarning, setDontShowAuthorWarning] = useState(false)
     const [isGitRepo, setIsGitRepo] = useState<boolean | null>(null)
     const [showInitModal, setShowInitModal] = useState(false)
     const [initStep, setInitStep] = useState<'config' | 'remote'>('config')
-    const [branchName, setBranchName] = useState<'main' | 'master' | 'custom'>('main')
-    const [customBranchName, setCustomBranchName] = useState('')
-    const [createGitignore, setCreateGitignore] = useState(true)
+    const initialBranchState = useMemo(
+        () => resolveBranchState(settings.gitInitDefaultBranch),
+        [settings.gitInitDefaultBranch]
+    )
+    const [branchName, setBranchName] = useState<'main' | 'master' | 'custom'>(initialBranchState.branchName)
+    const [customBranchName, setCustomBranchName] = useState(initialBranchState.customBranchName)
+    const [createGitignore, setCreateGitignore] = useState(settings.gitInitCreateGitignore)
     const [gitignoreTemplate, setGitignoreTemplate] = useState<string>('')
     const [availableTemplates, setAvailableTemplates] = useState<string[]>([])
-    const [createInitialCommit, setCreateInitialCommit] = useState(false)
+    const [createInitialCommit, setCreateInitialCommit] = useState(settings.gitInitCreateInitialCommit)
     const [initialCommitMessage, setInitialCommitMessage] = useState('Initial commit')
     const [isInitializing, setIsInitializing] = useState(false)
     const [remoteUrl, setRemoteUrl] = useState('')
@@ -220,6 +241,7 @@ export default function ProjectDetailsPage() {
     const readmeContentRef = useRef<HTMLDivElement | null>(null)
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
     const [isExpandingFolders, setIsExpandingFolders] = useState(false)
+    const [loadingFolderPaths, setLoadingFolderPaths] = useState<Set<string>>(new Set())
     const [sortBy, setSortBy] = useState<'name' | 'size' | 'type'>('name')
     const [sortAsc, setSortAsc] = useState(true)
     const [fileSearch, setFileSearch] = useState('')
@@ -272,6 +294,19 @@ export default function ProjectDetailsPage() {
         setActiveTab(storedTab || 'readme')
     }, [decodedPath])
     useEffect(() => {
+        if (!showInitModal) return
+        const nextBranchState = resolveBranchState(settings.gitInitDefaultBranch)
+        setBranchName(nextBranchState.branchName)
+        setCustomBranchName(nextBranchState.customBranchName)
+        setCreateGitignore(settings.gitInitCreateGitignore)
+        setCreateInitialCommit(settings.gitInitCreateInitialCommit)
+    }, [
+        showInitModal,
+        settings.gitInitDefaultBranch,
+        settings.gitInitCreateGitignore,
+        settings.gitInitCreateInitialCommit
+    ])
+    useEffect(() => {
         if (!decodedPath) return
         writeStoredProjectActiveTab(decodedPath, activeTab)
     }, [decodedPath, activeTab])
@@ -301,12 +336,6 @@ export default function ProjectDetailsPage() {
             return
         }
         navigate('/projects')
-    }
-    const handleShipToAssistant = async () => {
-        const projectScopePath = String(project?.path || decodedPath || '').trim()
-        if (!projectScopePath) return
-
-        openAssistantDock({ contextPath: projectScopePath })
     }
     const showToast = (
         message: string,
@@ -340,6 +369,8 @@ export default function ProjectDetailsPage() {
         decodedPath,
         activeTab,
         project,
+        fileTree,
+        autoRefreshGitOnProjectOpen: settings.gitAutoRefreshOnProjectOpen,
         showInitModal,
         gitignoreTemplate,
         availableTemplates,
@@ -399,6 +430,7 @@ export default function ProjectDetailsPage() {
         previewableExtensions: PREVIEWABLE_EXTENSIONS,
         previewableFileNames: PREVIEWABLE_FILE_NAMES
     })
+    const fileTreeFullyLoaded = useMemo(() => isFileTreeFullyLoaded(fileTree), [fileTree])
     const stagedFiles = useMemo(() => (
         gitStatusDetails
             .filter((item) => item.staged)
@@ -460,13 +492,86 @@ export default function ProjectDetailsPage() {
         }
     }
 
-    const handleFileTreeOpen = async (node: FileTreeNode) => {
-        if (node.type === 'directory') {
+    const refreshVisibleFileTree = async (targetPath?: string) => {
+        const normalizedTargetPath = String(targetPath || '').trim()
+        const projectRootPath = String(project?.path || decodedPath || '').trim()
+        const shouldDeepRefresh = fileTreeFullyLoaded || fileSearch.trim().length > 0
+
+        if (!projectRootPath || !normalizedTargetPath || normalizedTargetPath === projectRootPath) {
+            return refreshFileTree({ deep: shouldDeepRefresh })
+        }
+
+        if (shouldDeepRefresh) {
+            return refreshFileTree({ deep: true })
+        }
+
+        return refreshFileTree({ targetPath: normalizedTargetPath })
+    }
+
+    const handleToggleFolder = async (node: FileTreeNode) => {
+        if (node.type !== 'directory') return
+
+        if (expandedFolders.has(node.path)) {
             setExpandedFolders((prev) => {
                 const next = new Set(prev)
-                next.add(node.path)
+                next.delete(node.path)
                 return next
             })
+            return
+        }
+
+        // Add to expanded folders BEFORE loading children to prevent close-on-load
+        setExpandedFolders((prev) => {
+            const next = new Set(prev)
+            next.add(node.path)
+            return next
+        })
+
+        const needsChildren = node.childrenLoaded === false || typeof node.children === 'undefined'
+        if (needsChildren) {
+            setLoadingFolderPaths((prev) => new Set(prev).add(node.path))
+            try {
+                await refreshFileTree({ targetPath: node.path })
+            } catch (err: any) {
+                showToast(err?.message || `Failed to load "${node.name}"`, undefined, undefined, 'error')
+                // Remove from expanded folders if loading failed
+                setExpandedFolders((prev) => {
+                    const next = new Set(prev)
+                    next.delete(node.path)
+                    return next
+                })
+                return
+            } finally {
+                setLoadingFolderPaths((prev) => {
+                    const next = new Set(prev)
+                    next.delete(node.path)
+                    return next
+                })
+            }
+        }
+    }
+
+    const handleToggleAllFolders = async () => {
+        setIsExpandingFolders(true)
+        try {
+            if (expandedFolders.size > 0) {
+                setExpandedFolders(new Set())
+                return
+            }
+
+            const nextTree = fileTreeFullyLoaded
+                ? fileTree
+                : (await refreshFileTree({ deep: true })) || fileTree
+
+            setExpandedFolders(new Set(getAllFolderPaths(nextTree)))
+        } finally {
+            setIsExpandingFolders(false)
+        }
+    }
+
+    const handleFileTreeOpen = async (node: FileTreeNode) => {
+        if (node.type === 'directory') {
+            await handleToggleFolder(node)
             return
         }
         await openFile(node.path)
@@ -550,7 +655,7 @@ export default function ProjectDetailsPage() {
         }
 
         showToast(`Pasted ${fileClipboardItem.name}`)
-        await loadProjectDetails()
+        await refreshVisibleFileTree(destinationDirectory)
     }
 
     const resolveCreateDestinationDirectory = (node?: FileTreeNode): string | null => {
@@ -614,7 +719,7 @@ export default function ProjectDetailsPage() {
         setCreateErrorMessage(null)
 
         showToast(`Created ${createdType === 'file' ? 'file' : 'folder'}: ${createdName}`)
-        await refreshFileTree()
+        await refreshVisibleFileTree(createTarget.destinationDirectory)
 
         if (createdType === 'file') {
             const ext = getFileExtensionFromName(createdName) || 'txt'
@@ -655,7 +760,7 @@ export default function ProjectDetailsPage() {
         setRenameDraft('')
         setRenameExtensionSuffix('')
         setRenameErrorMessage(null)
-        await loadProjectDetails()
+        await refreshVisibleFileTree(getParentFolderPath(renameTarget.path) || project?.path || decodedPath)
     }
 
     const confirmDeleteTarget = async () => {
@@ -672,8 +777,15 @@ export default function ProjectDetailsPage() {
 
         showToast(`Deleted ${deleteTarget.name}`)
         setDeleteTarget(null)
-        await loadProjectDetails()
+        await refreshVisibleFileTree(getParentFolderPath(deleteTarget.path) || project?.path || decodedPath)
     }
+
+    useEffect(() => {
+        if (activeTab !== 'files' || loadingFiles) return
+        if (!fileSearch.trim()) return
+        if (fileTreeFullyLoaded) return
+        void refreshFileTree({ deep: true })
+    }, [activeTab, fileSearch, fileTreeFullyLoaded, loadingFiles, refreshFileTree])
 
     const {
         handleCommitClick,
@@ -710,7 +822,6 @@ export default function ProjectDetailsPage() {
         createInitialCommit,
         initialCommitMessage,
         remoteUrl,
-        dontShowAuthorWarning,
         projectPath: project?.path,
         refreshGitData,
         showToast,
@@ -745,15 +856,27 @@ export default function ProjectDetailsPage() {
         return <ProjectDetailsErrorView error={error} onBackToProjects={() => navigate('/projects')} />
     }
     const themeColor = project.typeInfo?.themeColor || '#525252'
+    const isCondensedLayout = false
     return (
-        <div className="max-w-[1600px] mx-auto animate-fadeIn pb-24 px-6 pt-6">
+        <div
+            className={isCondensedLayout
+                ? 'animate-fadeIn pb-24 pl-6 pt-6 pr-6 transition-[width,margin-right,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'
+                : 'mx-auto animate-fadeIn pb-24 px-6 pt-6 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'}
+            style={{
+                maxWidth: isCondensedLayout ? undefined : '1600px',
+            }}
+        >
             <ProjectDetailsOverlays
                 project={project}
+                showScriptsModal={showScriptsModal}
+                setShowScriptsModal={setShowScriptsModal}
                 showDependenciesModal={showDependenciesModal}
                 setShowDependenciesModal={setShowDependenciesModal}
                 onDependenciesUpdated={async () => {
                     await loadProjectDetails()
                 }}
+                onRunScript={runScript}
+                scriptPredictions={scriptPredictions}
                 selectedCommit={selectedCommit}
                 commitDiff={commitDiff}
                 loadingDiff={loadingDiff}
@@ -764,8 +887,8 @@ export default function ProjectDetailsPage() {
                 repoOwner={repoOwner}
                 handleAuthorMismatchConfirm={handleAuthorMismatchConfirm}
                 setShowAuthorMismatch={setShowAuthorMismatch}
-                dontShowAuthorWarning={dontShowAuthorWarning}
-                setDontShowAuthorWarning={setDontShowAuthorWarning}
+                dontShowAuthorWarning={!settings.gitWarnOnAuthorMismatch}
+                setDontShowAuthorWarning={(value: boolean) => updateSettings({ gitWarnOnAuthorMismatch: !value })}
                 showInitModal={showInitModal}
                 setShowInitModal={setShowInitModal}
                 setInitStep={setInitStep}
@@ -797,12 +920,15 @@ export default function ProjectDetailsPage() {
                 handleSkipRemote={handleSkipRemote}
             />
             <ProjectDetailsContent
+                isCondensedLayout={isCondensedLayout}
                 themeColor={themeColor}
                 project={project}
                 isProjectLive={isProjectLive}
                 activePorts={activePorts}
                 formatRelTime={formatRelTime}
                 onOpenTerminal={() => openTerminal({ displayName: project.name, id: 'main', category: 'project' }, project.path)}
+                scriptCount={Object.keys(project.scripts || {}).length}
+                dependencyCount={Object.keys(project.dependencies || {}).length + Object.keys(project.devDependencies || {}).length}
                 installedIdes={installedIdes}
                 loadingInstalledIdes={loadingInstalledIdes}
                 openingIdeId={openingIdeId}
@@ -824,11 +950,13 @@ export default function ProjectDetailsPage() {
                     const encodedPath = encodeURIComponent(project.path)
                     navigate(`/folder-browse/${encodedPath}`)
                 }}
-                onShipToAssistant={() => void handleShipToAssistant()}
+                onShowScriptsModal={() => setShowScriptsModal(true)}
+                onShowDependenciesModal={() => setShowDependenciesModal(true)}
                 loadProjectDetails={async () => {
                     await Promise.all([loadProjectDetails(), loadInstalledIdes()])
                 }}
                 refreshFileTree={refreshFileTree}
+                onToggleAllFolders={handleToggleAllFolders}
                 readmeContentRef={readmeContentRef}
                 readmeExpanded={readmeExpanded}
                 readmeNeedsExpand={readmeNeedsExpand}
@@ -838,6 +966,7 @@ export default function ProjectDetailsPage() {
                 setIsExpandingFolders={setIsExpandingFolders}
                 expandedFolders={expandedFolders}
                 setExpandedFolders={setExpandedFolders}
+                loadingFolderPaths={loadingFolderPaths}
                 allFolderPathsSet={allFolderPathsSet}
                 isExpandingFolders={isExpandingFolders}
                 showHidden={showHidden}
@@ -849,6 +978,7 @@ export default function ProjectDetailsPage() {
                 visibleFileList={visibleFileList}
                 openPreview={openPreview}
                 onFileTreeOpen={handleFileTreeOpen}
+                onToggleFolder={handleToggleFolder}
                 onFileTreeOpenWith={handleFileTreeOpenWith}
                 onFileTreeOpenInExplorer={handleFileTreeOpenInExplorer}
                 onFileTreeCopyPath={handleFileTreeCopyPath}
@@ -934,7 +1064,7 @@ export default function ProjectDetailsPage() {
                 previewBytes={previewBytes}
                 previewModifiedAt={previewModifiedAt}
                 onPreviewSaved={async () => {
-                    await Promise.all([refreshFileTree(), refreshGitData()])
+                    await Promise.all([refreshVisibleFileTree(getParentFolderPath(previewFile?.path || '') || undefined), refreshGitData()])
                 }}
                 closePreview={closePreview}
                 toast={toast}

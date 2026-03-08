@@ -3,7 +3,8 @@
  */
 
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Bot, Activity } from 'lucide-react'
+import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Activity } from 'lucide-react'
+import { useAppUpdateState } from '@/lib/app-updates'
 import { cn } from '@/lib/utils'
 import { createContext, useCallback, useEffect, useContext, type ReactNode } from 'react'
 import { useSettings } from '@/lib/settings'
@@ -49,7 +50,6 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
     { id: 'home', label: 'Home', path: '/home', icon: House },
     { id: 'projects', label: 'Projects', path: '/projects', icon: FolderOpen },
-    { id: 'assistant', label: 'Assistant', path: '/assistant', icon: Bot },
     { id: 'tasks', label: 'Tasks', path: '/tasks', icon: Activity },
     { id: 'settings', label: 'Settings', path: '/settings', icon: Settings }
 ]
@@ -79,6 +79,7 @@ export default function Sidebar() {
     const navigate = useNavigate()
     const { isCollapsed, setIsCollapsed } = useSidebar()
     const { settings } = useSettings()
+    const updateState = useAppUpdateState()
     const visibleNavItems = settings.tasksPageEnabled
         ? NAV_ITEMS
         : NAV_ITEMS.filter((item) => item.id !== 'tasks')
@@ -102,7 +103,7 @@ export default function Sidebar() {
 
     return (
         <nav className={cn(
-            "h-[calc(100vh-46px)] fixed left-0 top-[46px] flex flex-col py-4 border-r border-sparkle-border-secondary bg-sparkle-bg z-40 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+            "h-[calc(100vh-46px)] fixed left-0 top-[46px] flex flex-col py-4 border-r border-white/10 bg-sparkle-bg z-40 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
             isCollapsed ? "w-16" : "w-64"
         )}>
             <div className="flex-1 flex flex-col gap-1 px-3">
@@ -154,13 +155,13 @@ export default function Sidebar() {
             </div>
 
             <div className={cn(
-                "pt-4 mt-2 border-t border-sparkle-border-secondary transition-all duration-300",
+                "pt-4 mt-2 border-t border-white/5 transition-all duration-300",
                 isCollapsed ? "px-3" : "px-4"
             )}>
                 <div className="flex items-center justify-between gap-2 h-8">
                     {!isCollapsed && (
                         <p className="text-[10px] text-sparkle-text-muted flex-1 whitespace-nowrap transition-all duration-300 animate-fadeIn overflow-hidden uppercase tracking-wider font-medium">
-                            DevScope Air v1.0.0
+                            DevScope Air {updateState?.currentDisplayVersion || 'v1.0 Alpha 1'}
                         </p>
                     )}
                     <button

@@ -14,22 +14,6 @@ export type DevScopeOk<T = Record<string, unknown>> = { success: true } & T
 export type DevScopeErr = { success: false; error: string }
 export type DevScopeResult<T = Record<string, unknown>> = DevScopeOk<T> | DevScopeErr
 
-export type AssistantAttachmentInput = {
-    path: string
-    content?: string
-    name?: string
-    mimeType?: string
-    kind?: 'image' | 'doc' | 'code' | 'file'
-    sizeBytes?: number
-    previewText?: string
-}
-
-export type DevScopeAssistantEvent = {
-    type: string
-    timestamp: number
-    payload: Record<string, unknown>
-}
-
 export type DevScopeGitFileStatus = 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown'
 export type DevScopeGitStatusDetail = {
     path: string
@@ -102,6 +86,7 @@ export type DevScopeFileTreeNode = {
     type: 'file' | 'directory'
     size?: number
     children?: DevScopeFileTreeNode[]
+    childrenLoaded?: boolean
     isHidden: boolean
     gitStatus?: DevScopeGitFileStatus
 }
@@ -178,84 +163,6 @@ export type DevScopeInstalledIde = {
     name: string
     icon: string
     color: string
-}
-
-export type DevScopeAssistantStatus = {
-    connected: boolean
-    state: 'offline' | 'connecting' | 'ready' | 'error'
-    approvalMode: 'safe' | 'yolo'
-    provider: 'codex'
-    model: string
-    profile?: string
-    activeTurnId: string | null
-    lastError: string | null
-}
-
-export type DevScopeAssistantApprovalDecision = 'decline' | 'acceptForSession'
-export type DevScopeAssistantTurnPartKind = 'text' | 'reasoning' | 'tool' | 'tool-result' | 'approval' | 'final' | 'error'
-export type DevScopeAssistantTurnPart = {
-    id: string
-    turnId: string
-    attemptGroupId: string
-    kind: DevScopeAssistantTurnPartKind
-    timestamp: number
-    text?: string
-    method?: string
-    summary?: string
-    decision?: DevScopeAssistantApprovalDecision
-    status?: 'pending' | 'decided'
-    payload?: Record<string, unknown>
-    provisional?: boolean
-}
-export type DevScopeAssistantPendingApproval = {
-    requestId: number
-    method: string
-    mode: 'safe' | 'yolo'
-    turnId: string | null
-    attemptGroupId: string | null
-    createdAt: number
-}
-
-export type DevScopeAssistantHistoryAttachment = {
-    path: string
-    name?: string
-    mimeType?: string
-    kind?: 'image' | 'doc' | 'code' | 'file'
-    sizeBytes?: number
-    previewText?: string
-    previewDataUrl?: string
-    textPreview?: string
-}
-
-export type DevScopeAssistantHistoryMessage = {
-    id: string
-    role: 'user' | 'assistant' | 'system'
-    text: string
-    attachments?: DevScopeAssistantHistoryAttachment[]
-    sourcePrompt?: string
-    reasoningText?: string
-    createdAt: number
-    turnId?: string
-    attemptGroupId?: string
-    attemptIndex?: number
-    isActiveAttempt?: boolean
-}
-
-export type DevScopeAssistantSession = {
-    id: string
-    title: string
-    archived: boolean
-    createdAt: number
-    updatedAt: number
-    messageCount: number
-    projectPath?: string
-}
-
-export type DevScopeAssistantModelInfo = {
-    id: string
-    label: string
-    isDefault: boolean
-    capabilities?: string[]
 }
 
 export type DevScopePythonPreviewEvent = {
@@ -335,6 +242,43 @@ export type DevScopeTaskEvent = {
     taskId?: string
 }
 
+export type DevScopeReleaseChannel = 'alpha' | 'beta' | 'stable'
+export type DevScopeUpdateStatus =
+    | 'disabled'
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'downloading'
+    | 'downloaded'
+    | 'up-to-date'
+    | 'error'
+
+export type DevScopeUpdateErrorContext = 'check' | 'download' | 'install' | null
+
+export type DevScopeUpdateState = {
+    enabled: boolean
+    status: DevScopeUpdateStatus
+    currentVersion: string
+    currentDisplayVersion: string
+    channel: DevScopeReleaseChannel
+    repository: string
+    availableVersion: string | null
+    availableDisplayVersion: string | null
+    downloadedVersion: string | null
+    downloadedDisplayVersion: string | null
+    downloadPercent: number | null
+    checkedAt: string | null
+    message: string | null
+    errorContext: DevScopeUpdateErrorContext
+    canRetry: boolean
+}
+
+export type DevScopeUpdateActionResult = {
+    accepted: boolean
+    completed: boolean
+    state: DevScopeUpdateState
+}
+
 export interface DevScopeRemoteAccessApi {
     validateServer: (serverUrl: string) => Promise<DevScopeResult<{ wellKnown: RemoteWellKnownResponse }>>
     challengeServer: (input: { serverUrl: string; nonce: string; relayApiKey?: string }) => Promise<DevScopeResult<{ signature: string; fingerprint: string; algorithm: string }>>
@@ -354,73 +298,19 @@ export interface DevScopeSystemApi {
     readMetrics: () => Promise<DevScopeResult>
 }
 
-export interface DevScopeAssistantApi {
-    subscribe: () => Promise<DevScopeResult>
-    unsubscribe: () => Promise<DevScopeResult>
-    connect: (options?: { approvalMode?: 'safe' | 'yolo'; provider?: 'codex'; model?: string; profile?: string }) => Promise<DevScopeResult>
-    disconnect: () => Promise<DevScopeResult>
-    status: (query?: { kind?: string; limit?: number; types?: string[]; search?: string; refreshToken?: boolean }) => Promise<DevScopeResult<{ status: DevScopeAssistantStatus; models?: DevScopeAssistantModelInfo[] }>>
-    send: (prompt: string, options?: {
-        model?: string
-        approvalMode?: 'safe' | 'yolo'
-        regenerateFromTurnId?: string
-        projectPath?: string
-        profile?: string
-        contextFiles?: AssistantAttachmentInput[]
-        contextDiff?: string
-        promptTemplate?: string
-    }) => Promise<DevScopeResult>
-    respondApproval: (requestId: number, decision: DevScopeAssistantApprovalDecision) => Promise<DevScopeResult<{ requestId: number; decision: DevScopeAssistantApprovalDecision }>>
-    regenerate: (turnId: string, options?: {
-        model?: string
-        approvalMode?: 'safe' | 'yolo'
-        projectPath?: string
-        profile?: string
-        contextFiles?: AssistantAttachmentInput[]
-        contextDiff?: string
-        promptTemplate?: string
-    }) => Promise<DevScopeResult>
-    cancelTurn: (turnId?: string) => Promise<DevScopeResult>
-    setApprovalMode: (mode: 'safe' | 'yolo') => Promise<DevScopeResult<{ status: DevScopeAssistantStatus }>>
-    getApprovalMode: () => Promise<DevScopeResult<{ mode: 'safe' | 'yolo' }>>
-    getHistory: (query?: { kind?: string; limit?: number; types?: string[]; search?: string }) => Promise<DevScopeResult<{
-        history: DevScopeAssistantHistoryMessage[]
-        partsByTurn?: Record<string, DevScopeAssistantTurnPart[]>
-        pendingApprovals?: DevScopeAssistantPendingApproval[]
-    }>>
-    clearHistory: (request?: { kind?: string }) => Promise<DevScopeResult>
-    getEvents: (query?: { limit?: number; types?: string[]; search?: string }) => Promise<DevScopeResult<{ events: DevScopeAssistantEvent[] }>>
-    clearEvents: () => Promise<DevScopeResult>
-    exportEvents: () => Promise<DevScopeResult<{ format: 'json'; content: string }>>
-    exportConversation: (input?: { format?: 'json' | 'markdown'; sessionId?: string }) => Promise<DevScopeResult<{ format: 'json' | 'markdown'; content: string }>>
-    listSessions: () => Promise<DevScopeResult<{ sessions: DevScopeAssistantSession[]; activeSessionId?: string | null }>>
-    createSession: (title?: string) => Promise<DevScopeResult<{ session?: DevScopeAssistantSession }>>
-    selectSession: (sessionId: string) => Promise<DevScopeResult>
-    renameSession: (sessionId: string, title: string) => Promise<DevScopeResult>
-    deleteSession: (sessionId: string) => Promise<DevScopeResult>
-    archiveSession: (sessionId: string, archived?: boolean) => Promise<DevScopeResult>
-    setSessionProjectPath: (sessionId: string, projectPath: string) => Promise<DevScopeResult>
-    newThread: () => Promise<DevScopeResult>
-    estimateTokens: (input: { prompt: string; contextDiff?: string; contextFiles?: AssistantAttachmentInput[]; promptTemplate?: string }) => Promise<DevScopeResult<{ tokens: number; chars: number }>>
-    listProfiles: () => Promise<DevScopeResult>
-    setProfile: (profile: string) => Promise<DevScopeResult>
-    getProjectModel: (projectPath: string) => Promise<DevScopeResult<{ model: string | null }>>
-    setProjectModel: (projectPath: string, model: string) => Promise<DevScopeResult>
-    getTelemetryIntegrity: () => Promise<DevScopeResult<{ eventsStored: number; monotonicDescending: boolean; newestTimestamp: number | null; oldestTimestamp: number | null }>>
-    readAccount: (refreshToken?: boolean) => Promise<DevScopeResult>
-    readRateLimits: () => Promise<DevScopeResult>
-    runWorkflowExplainDiff: (projectPath: string, filePath?: string, model?: string) => Promise<DevScopeResult<{ turnId?: string; workflow?: string }>>
-    runWorkflowReviewStaged: (projectPath: string, model?: string) => Promise<DevScopeResult<{ turnId?: string; workflow?: string }>>
-    runWorkflowDraftCommit: (projectPath: string, model?: string) => Promise<DevScopeResult<{ turnId?: string; workflow?: string }>>
-    listModels: () => Promise<DevScopeResult<{ models: DevScopeAssistantModelInfo[] }>>
-    onEvent: (callback: (event: DevScopeAssistantEvent) => void) => () => void
-}
-
 export interface DevScopeWindowApi {
     minimize: () => void
     maximize: () => void
     close: () => void
     isMaximized: () => Promise<boolean>
+}
+
+export interface DevScopeUpdatesApi {
+    getState: () => Promise<DevScopeUpdateState>
+    checkForUpdates: () => Promise<DevScopeUpdateActionResult>
+    downloadUpdate: () => Promise<DevScopeUpdateActionResult>
+    installUpdate: () => Promise<DevScopeUpdateActionResult>
+    onStateChange: (callback: (state: DevScopeUpdateState) => void) => () => void
 }
 
 export interface DevScopeTerminalApi {
@@ -454,8 +344,6 @@ export interface DevScopeApi {
     testGeminiConnection: (apiKey: string) => Promise<DevScopeResult>
     generateCommitMessage: (provider: 'groq' | 'gemini', apiKey: string, diff: string) => Promise<DevScopeResult<{ message: string }>>
 
-    // Assistant
-    assistant: DevScopeAssistantApi
     remoteAccess: DevScopeRemoteAccessApi
 
     // Projects + Git
@@ -486,7 +374,10 @@ export interface DevScopeApi {
         } | null
     }>>
     getProjectDetails: (projectPath: string) => Promise<DevScopeResult<{ project: DevScopeProjectDetails }>>
-    getFileTree: (projectPath: string, options?: { showHidden?: boolean; maxDepth?: number }) => Promise<DevScopeResult<{ tree: DevScopeFileTreeNode[] }>>
+    getFileTree: (
+        projectPath: string,
+        options?: { showHidden?: boolean; maxDepth?: number; rootPath?: string }
+    ) => Promise<DevScopeResult<{ tree: DevScopeFileTreeNode[] }>>
     getGitHistory: (projectPath: string) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
     getCommitDiff: (projectPath: string, commitHash: string) => Promise<DevScopeResult<{ diff: string }>>
     getWorkingDiff: (
@@ -499,6 +390,7 @@ export interface DevScopeApi {
     getGitStatusDetailed: (projectPath: string) => Promise<DevScopeResult<{ entries: DevScopeGitStatusDetail[] }>>
     getUnpushedCommits: (projectPath: string) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
     getGitUser: (projectPath: string) => Promise<DevScopeResult<{ user: { name: string; email: string } | null }>>
+    getGlobalGitUser: () => Promise<DevScopeResult<{ user: { name: string; email: string } | null }>>
     getRepoOwner: (projectPath: string) => Promise<DevScopeResult<{ owner: string | null }>>
     hasRemoteOrigin: (projectPath: string) => Promise<DevScopeResult<{ hasRemote: boolean }>>
     getProjectsGitOverview: (projectPaths: string[]) => Promise<DevScopeResult<{ items: DevScopeProjectGitOverviewItem[] }>>
@@ -518,6 +410,7 @@ export interface DevScopeApi {
         options?: { scope?: 'project' | 'repo' }
     ) => Promise<DevScopeResult>
     createCommit: (projectPath: string, message: string) => Promise<DevScopeResult>
+    setGlobalGitUser: (user: { name: string; email: string }) => Promise<DevScopeResult>
     pushCommits: (projectPath: string) => Promise<DevScopeResult>
     fetchUpdates: (projectPath: string, remoteName?: string) => Promise<DevScopeResult>
     pullUpdates: (projectPath: string) => Promise<DevScopeResult>
@@ -590,5 +483,6 @@ export interface DevScopeApi {
 
     terminal: DevScopeTerminalApi
     agentscope: DevScopeAgentScopeApi
+    updates: DevScopeUpdatesApi
     window: DevScopeWindowApi
 }

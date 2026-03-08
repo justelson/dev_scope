@@ -9,8 +9,6 @@ import { SettingsProvider, useSettings } from './lib/settings'
 import { CommandPaletteProvider } from './lib/commandPalette'
 import CommandPalette from './components/CommandPalette'
 import LinkHoverStatus from './components/ui/LinkHoverStatus'
-import { AssistantDock } from './components/assistant/AssistantDock'
-import { useAssistantDockState } from './lib/assistantDockStore'
 import { REMOTE_ACCESS_ENABLED } from '@shared/feature-flags'
 
 const Settings = lazy(() => import('./pages/Settings'))
@@ -18,7 +16,6 @@ const Home = lazy(() => import('./pages/Home'))
 const Tasks = lazy(() => import('./pages/Tasks'))
 const ProjectDetails = lazy(() => import('./pages/ProjectDetails'))
 const FolderBrowse = lazy(() => import('./pages/FolderBrowse'))
-const Assistant = lazy(() => import('./pages/Assistant'))
 const QuickOpen = lazy(() => import('./pages/QuickOpen'))
 
 // Settings sub-pages
@@ -30,8 +27,6 @@ const ProjectsSettings = lazy(() => import('./pages/settings/ProjectsSettings'))
 const AISettings = lazy(() => import('./pages/settings/AISettings'))
 const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
-const AssistantSettings = lazy(() => import('./pages/settings/AssistantSettings'))
-const AssistantAccountSettings = lazy(() => import('./pages/settings/AssistantAccountSettings'))
 const RemoteAccessSettings = lazy(() => import('./pages/settings/RemoteAccessSettings'))
 const LAST_MAIN_TAB_KEY = 'devscope:last-main-tab:v1'
 
@@ -71,17 +66,16 @@ function isProjectsAreaPath(pathname: string): boolean {
 function resolveMainTabPath(
     pathname: string,
     options?: { allowTasks?: boolean }
-): '/home' | '/projects' | '/assistant' | '/settings' | '/tasks' | null {
+): '/home' | '/projects' | '/settings' | '/tasks' | null {
     const allowTasks = options?.allowTasks !== false
     if (pathname === '/home' || pathname.startsWith('/home/')) return '/home'
-    if (pathname === '/assistant' || pathname.startsWith('/assistant/')) return '/assistant'
     if (allowTasks && (pathname === '/tasks' || pathname.startsWith('/tasks/'))) return '/tasks'
     if (pathname === '/settings' || pathname.startsWith('/settings/')) return '/settings'
     if (isProjectsAreaPath(pathname)) return '/projects'
     return null
 }
 
-function readLastMainTabPath(allowTasks: boolean): '/home' | '/projects' | '/assistant' | '/settings' | '/tasks' {
+function readLastMainTabPath(allowTasks: boolean): '/home' | '/projects' | '/settings' | '/tasks' {
     try {
         const stored = String(localStorage.getItem(LAST_MAIN_TAB_KEY) || '').trim()
         const resolved = resolveMainTabPath(stored, { allowTasks })
@@ -89,7 +83,7 @@ function readLastMainTabPath(allowTasks: boolean): '/home' | '/projects' | '/ass
     } catch {
         // Ignore storage read errors.
     }
-    return '/assistant'
+    return '/home'
 }
 
 function LaunchRedirect() {
@@ -102,16 +96,13 @@ function PageLoader() {
 }
 
 function MainContent() {
-    const mainRef = useRef<HTMLElement>(null)
+    const mainRef = useRef<HTMLElement>(null!)
     const location = useLocation()
     const navigate = useNavigate()
     const isSettingsRoute = location.pathname.startsWith('/settings')
-    const isAssistantRoute = location.pathname === '/assistant' || location.pathname.startsWith('/assistant/')
     const isProjectsAreaRoute = isProjectsAreaPath(location.pathname)
     const { isCollapsed } = useSidebar()
     const { settings } = useSettings()
-    const dock = useAssistantDockState()
-    const dockOffset = isProjectsAreaRoute && !isAssistantRoute && dock.open ? dock.width : 0
 
     const { targetY, currentY, animationFrame, isAnimating } = useSmoothScroll(mainRef, {
         ease: 0.12,
@@ -152,8 +143,7 @@ function MainContent() {
     return (
         <main
             ref={mainRef}
-            className={`flex-1 min-h-0 focus:outline-none transition-[margin-left,margin-right] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${isAssistantRoute ? 'p-0 overflow-hidden' : 'p-6 overflow-y-auto overflow-x-hidden'}${isSettingsRoute ? '' : ' theme-adaptive'} ${isCollapsed ? 'ml-16' : 'ml-64'}`}
-            style={{ marginRight: `${dockOffset}px` }}
+            className={`flex-1 min-h-0 focus:outline-none transition-[margin-left] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-y-auto overflow-x-hidden p-6${isSettingsRoute ? '' : ' theme-adaptive'} ${isCollapsed ? 'ml-16' : 'ml-64'}`}
             tabIndex={0}
         >
             <Suspense fallback={<PageLoader />}>
@@ -167,9 +157,6 @@ function MainContent() {
                     />
                     <Route path="/projects/:projectPath" element={<ProjectDetails />} />
                     <Route path="/folder-browse/:folderPath" element={<FolderBrowse />} />
-                    <Route path="/assistant" element={<Assistant />} />
-                    <Route path="/assistant/skills" element={<Assistant />} />
-                    <Route path="/skills" element={<Navigate to="/assistant/skills" replace />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/settings/appearance" element={<AppearanceSettings />} />
                     <Route path="/settings/behavior" element={<BehaviorSettings />} />
@@ -177,15 +164,19 @@ function MainContent() {
                     <Route path="/settings/about" element={<AboutSettings />} />
                     <Route path="/settings/projects" element={<ProjectsSettings />} />
                     <Route path="/settings/ai" element={<AISettings />} />
+                    <Route path="/settings/git" element={<Navigate to="/settings" replace />} />
                     <Route path="/settings/terminal" element={<TerminalSettings />} />
                     <Route path="/settings/logs" element={<LogsSettings />} />
-                    <Route path="/settings/assistant" element={<AssistantSettings />} />
-                    <Route path="/settings/account" element={<AssistantAccountSettings />} />
-                    <Route path="/settings/usage" element={<AssistantAccountSettings />} />
                     <Route
                         path="/settings/remote-access"
                         element={REMOTE_ACCESS_ENABLED ? <RemoteAccessSettings /> : <Navigate to="/settings" replace />}
                     />
+                    <Route path="/assistant" element={<Navigate to="/home" replace />} />
+                    <Route path="/assistant/skills" element={<Navigate to="/home" replace />} />
+                    <Route path="/skills" element={<Navigate to="/home" replace />} />
+                    <Route path="/settings/assistant" element={<Navigate to="/settings" replace />} />
+                    <Route path="/settings/account" element={<Navigate to="/settings/ai" replace />} />
+                    <Route path="/settings/usage" element={<Navigate to="/settings/ai" replace />} />
                     <Route path="*" element={<LaunchRedirect />} />
                 </Routes>
             </Suspense>
@@ -283,7 +274,6 @@ function AppContent() {
                     <Sidebar />
                     <MainContent />
                 </div>
-                <AssistantDock />
             </SidebarProvider>
             <LinkHoverStatus />
         </div>

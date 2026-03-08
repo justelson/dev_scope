@@ -159,18 +159,18 @@
 
 /* Navy Theme */
 .navy {
-  --color-bg: #0d1520;
-  --color-text: #d4e4f7;
-  --color-text-dark: #b8d0f0;
-  --color-text-darker: #9bbce3;
-  --color-text-secondary: #7aa8d6;
-  --color-text-muted: #2d3d52;
-  --color-card: #131d2c;
-  --color-border: #1a2a3f;
-  --color-border-secondary: #1e3047;
-  --color-primary: #4f90e6;
-  --color-secondary: #3d7dd9;
-  --color-accent: #1a2a40;
+  --color-bg: #0b0d10;
+  --color-text: #eef2f7;
+  --color-text-dark: #d3d9e2;
+  --color-text-darker: #afb8c4;
+  --color-text-secondary: #838d9b;
+  --color-text-muted: #343a45;
+  --color-card: #12161c;
+  --color-border: #1b212a;
+  --color-border-secondary: #232a35;
+  --color-primary: #5c96e6;
+  --color-secondary: #4a83d4;
+  --color-accent: #171b22;
 }
 
 /* ============================================================================
@@ -203,22 +203,22 @@
    Custom Scrollbar
    ============================================================================ */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-border);
-  border-radius: 4px;
+  background: transparent;
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-primary);
-  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-text), transparent 86%);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-secondary);
+  background: color-mix(in srgb, var(--color-text), transparent 76%);
 }
 
 /* ============================================================================
@@ -247,6 +247,31 @@
 
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+
+
+  .project-surface-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-text), transparent 86%) transparent;
+  }
+
+  .project-surface-scrollbar::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  .project-surface-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .project-surface-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-text), transparent 86%);
+    border-radius: 999px;
+  }
+
+  .project-surface-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--color-text), transparent 78%);
   }
 
   .drag-region {

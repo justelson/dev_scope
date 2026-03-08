@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUp, Bot, Check, Code, Copy, ExternalLink, FileJson, FilePlus, FileText, FolderOpen, FolderPlus, Plus, RefreshCw, Settings, Terminal } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Check, Code, Copy, ExternalLink, FileJson, FilePlus, FileText, FolderOpen, FolderPlus, Plus, RefreshCw, Settings, Terminal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
 
@@ -21,7 +21,6 @@ interface FolderBrowseHeaderProps {
     canNavigateUp: boolean
     onViewAsProject: () => void
     onOpenTerminal: () => void
-    onOpenAssistant: () => void
     onCopyPath: () => void
     copiedPath: boolean
     onOpenStats?: (key: 'projects' | 'frameworks' | 'types') => void
@@ -45,7 +44,6 @@ export function FolderBrowseHeader({
     canNavigateUp,
     onViewAsProject,
     onOpenTerminal,
-    onOpenAssistant,
     onCopyPath,
     copiedPath,
     onOpenStats,
@@ -59,14 +57,26 @@ export function FolderBrowseHeader({
     const stats = rootStats ?? { projects: totalProjects, frameworks: 0, types: 0 }
 
     return (
-        <div className="mb-8 flex flex-col gap-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className={cn(
+            'flex flex-col transition-[margin,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+            'mb-8 gap-5'
+        )}>
+            <div className={cn(
+                'flex flex-col gap-4 transition-[gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                'lg:flex-row lg:items-center lg:justify-between'
+            )}>
                 <div className="flex items-center gap-4 min-w-0">
                     {!isProjectsRootView && (
-                        <div className="flex items-center gap-1.5 p-1 bg-white/5 rounded-xl border border-white/5 shrink-0">
+                        <div className={cn(
+                            'flex items-center gap-1.5 rounded-xl border border-white/5 bg-white/5 shrink-0',
+                            'p-1'
+                        )}>
                             <button
                                 onClick={onBack}
-                                className="h-9 w-9 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-lg transition-all active:scale-95"
+                                className={cn(
+                                    'flex items-center justify-center rounded-lg text-white/50 transition-all active:scale-95 hover:bg-white/10 hover:text-white',
+                                    'h-9 w-9'
+                                )}
                                 title="Back"
                             >
                                 <ArrowLeft size={18} />
@@ -74,7 +84,10 @@ export function FolderBrowseHeader({
                             <button
                                 onClick={onNavigateUp}
                                 disabled={!canNavigateUp}
-                                className="h-9 w-9 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-lg transition-all active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                                className={cn(
+                                    'flex items-center justify-center rounded-lg text-white/50 transition-all active:scale-95 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30',
+                                    'h-9 w-9'
+                                )}
                                 title="Go to parent folder"
                             >
                                 <ArrowUp size={18} />
@@ -84,12 +97,18 @@ export function FolderBrowseHeader({
 
                     {/* Folder Info */}
                     <div className="flex items-center gap-3 min-w-0">
-                        <div className="p-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/10 shrink-0">
+                        <div className={cn(
+                            'rounded-xl bg-yellow-500/10 border border-yellow-500/10 shrink-0',
+                            'p-2.5'
+                        )}>
                             <FolderOpen className="text-yellow-400" size={22} />
                         </div>
                         <div className="min-w-0">
                             <div className="min-w-0 flex items-center gap-3">
-                                <h1 className="text-2xl font-bold text-white truncate leading-tight">
+                                <h1 className={cn(
+                                    'truncate font-bold text-white leading-tight',
+                                    'text-2xl'
+                                )}>
                                     {title}
                                 </h1>
                                 {!isProjectsRootView && totalProjects > 0 && (
@@ -128,7 +147,10 @@ export function FolderBrowseHeader({
                 </div>
 
                 {/* Primary Actions */}
-                <div className="flex items-center gap-2 shrink-0 self-end lg:self-auto">
+                <div className={cn(
+                    'flex items-center gap-2 shrink-0 self-end',
+                    'lg:self-auto'
+                )}>
                     {isProjectsRootView && onOpenProjectsSettings && (
                         <button
                             onClick={onOpenProjectsSettings}
@@ -142,21 +164,30 @@ export function FolderBrowseHeader({
                         <button
                             onClick={onRefresh}
                             disabled={loading}
-                            className="h-10 w-10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 rounded-xl border border-white/5 transition-all disabled:opacity-50"
+                            className={cn(
+                                'flex items-center justify-center rounded-xl border border-white/5 text-white/40 transition-all hover:bg-white/5 hover:text-white disabled:opacity-50',
+                                'h-10 w-10'
+                            )}
                             title="Refresh"
                         >
                             <RefreshCw size={16} className={cn(loading && 'animate-spin')} />
                         </button>
                         <button
                             onClick={onOpenInExplorer}
-                            className="h-10 w-10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 rounded-xl border border-white/5 transition-all"
+                            className={cn(
+                                'flex items-center justify-center rounded-xl border border-white/5 text-white/40 transition-all hover:bg-white/5 hover:text-white',
+                                'h-10 w-10'
+                            )}
                             title="Open in folder"
                         >
                             <ExternalLink size={16} />
                         </button>
                         <FileActionsMenu
                             title="Create"
-                            buttonClassName="!h-10 !w-10 !inline-flex !items-center !justify-center !rounded-xl !border-white/5 !text-white/40 hover:!text-white hover:!bg-white/5"
+                            buttonClassName={cn(
+                                '!inline-flex !items-center !justify-center !rounded-xl !border-white/5 !text-white/40 hover:!text-white hover:!bg-white/5',
+                                '!h-10 !w-10'
+                            )}
                             triggerIcon={<Plus size={16} className="mx-auto" />}
                             items={[
                                 {
@@ -204,7 +235,10 @@ export function FolderBrowseHeader({
                     {isCurrentFolderGitRepo && (
                         <button
                             onClick={onViewAsProject}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white text-sm font-bold rounded-xl transition-all active:scale-95 shadow-lg shadow-sky-500/20"
+                            className={cn(
+                                'flex items-center gap-2 rounded-xl bg-sky-500 text-white font-bold transition-all active:scale-95 shadow-lg shadow-sky-500/20 hover:bg-sky-400',
+                                'px-4 py-2.5 text-sm'
+                            )}
                             title="View as Project"
                         >
                             <Code size={18} />
@@ -213,24 +247,23 @@ export function FolderBrowseHeader({
                     )}
                     <button
                         onClick={onOpenTerminal}
-                        className="flex items-center gap-2 px-4 py-2.5 text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all font-medium text-sm"
+                        className={cn(
+                            'flex items-center gap-2 border border-white/10 bg-white/5 text-white/70 font-medium rounded-xl transition-all hover:bg-white/10 hover:text-white',
+                            'px-4 py-2.5 text-sm'
+                        )}
                         title="Open terminal in this folder"
                     >
                         <Terminal size={17} />
                         <span>Terminal</span>
                     </button>
-                    <button
-                        onClick={onOpenAssistant}
-                        className="h-10 w-10 inline-flex items-center justify-center text-[#E2A257] bg-[#E2A257]/12 hover:bg-[#E2A257]/22 border border-[#E2A257]/35 rounded-xl transition-all"
-                        title="Open assistant in this folder context"
-                    >
-                        <Bot size={17} />
-                    </button>
                 </div>
             </div>
 
             {/* Path Bar */}
-            <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] pl-4 pr-2 py-2 group hover:bg-white/[0.04] transition-colors">
+            <div className={cn(
+                'group flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] pr-2 transition-[padding,background-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-white/[0.04]',
+                'pl-4 py-2'
+            )}>
                 <FolderOpen size={14} className="text-white/20 shrink-0" />
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-white/40 group-hover:text-white/60 transition-colors">
                     {decodedPath}

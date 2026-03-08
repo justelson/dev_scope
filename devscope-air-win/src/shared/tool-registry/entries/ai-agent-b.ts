@@ -174,25 +174,6 @@ export const AI_AGENT_TOOLS_B: ToolDefinition[] = [
             },
 
     {
-                id: 'codex-cli',
-                command: 'codex',
-                displayName: 'Codex CLI',
-                description: 'Codex CLI is OpenAI\'s command-line coding assistant. It brings the power of OpenAI models to your terminal for code generation and assistance.',
-                themeColor: '#10A37F',
-                icon: 'openai',
-                website: 'https://github.com/openai/codex-cli',
-                docsUrl: 'https://github.com/openai/codex-cli',
-                category: 'ai_agent',
-                usedFor: ['ai', 'coding', 'terminal', 'openai'],
-                capabilities: ['OpenAI Models', 'Code Generation', 'Terminal Native'],
-                installCommand: 'npm install -g @openai/codex',
-                startupCommand: 'codex',
-                versionCheckCommand: 'codex --version',
-                updateCommand: 'npm install -g @openai/codex',
-                logoUrl: 'https://openai.com/favicon.ico'
-            },
-
-    {
                 id: 'amazon-q',
                 command: 'q',
                 displayName: 'Amazon Q Developer',

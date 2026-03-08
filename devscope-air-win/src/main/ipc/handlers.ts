@@ -4,9 +4,7 @@
 
 import { BrowserWindow, ipcMain } from 'electron'
 import log from 'electron-log'
-import { assistantBridge } from '../assistant'
 import { systemMetricsBridge } from '../system-metrics/manager'
-import { ASSISTANT_IPC, assertAssistantIpcContract } from '../../shared/contracts/assistant-ipc'
 import {
     handleGetDetailedSystemStats,
     handleGetDeveloperTooling,
@@ -79,6 +77,12 @@ import {
 import { handleRunPythonPreview, handleStopPythonPreview } from './handlers/python-preview-handlers'
 import { handleListActiveTasks } from './handlers/task-manager-handlers'
 import {
+    handleCheckForUpdates,
+    handleDownloadUpdate,
+    handleGetUpdateState,
+    handleInstallUpdate
+} from './handlers/update-handlers'
+import {
     handleCheckIsGitRepo,
     handleGenerateCustomGitignoreContent,
     handleGenerateGitignoreContent,
@@ -86,6 +90,7 @@ import {
     handleGetGitHistory,
     handleGetGitStatus,
     handleGetGitStatusDetailed,
+    handleGetGlobalGitUser,
     handleGetGitUser,
     handleGetGitignorePatterns,
     handleGetGitignoreTemplates,
@@ -119,48 +124,17 @@ import {
     handlePushCommits,
     handleRemoveRemote,
     handleSetRemoteUrl,
+    handleSetGlobalGitUser,
     handleStageFiles,
     handleUnstageFiles
 } from './handlers/git-write-handlers'
-import {
-    handleAssistantArchiveSession,
-    handleAssistantCancelTurn,
-    handleAssistantClearHistory,
-    handleAssistantClearEvents,
-    handleAssistantConnect,
-    handleAssistantCreateSession,
-    handleAssistantDeleteSession,
-    handleAssistantDisconnect,
-    handleAssistantEstimateTokens,
-    handleAssistantExportConversation,
-    handleAssistantExportEvents,
-    handleAssistantGetEvents,
-    handleAssistantGetApprovalMode,
-    handleAssistantGetProjectModel,
-    handleAssistantGetHistory,
-    handleAssistantGetTelemetryIntegrity,
-    handleAssistantListModels,
-    handleAssistantListProfiles,
-    handleAssistantListSessions,
-    handleAssistantNewThread,
-    handleAssistantReadAccount,
-    handleAssistantReadRateLimits,
-    handleAssistantRenameSession,
-    handleAssistantRunWorkflowDraftCommit,
-    handleAssistantRunWorkflowExplainDiff,
-    handleAssistantRunWorkflowReviewStaged,
-    handleAssistantRespondApproval,
-    handleAssistantSelectSession,
-    handleAssistantSend,
-    handleAssistantSetApprovalMode,
-    handleAssistantSetProfile,
-    handleAssistantSetProjectModel,
-    handleAssistantSetSessionProjectPath,
-    handleAssistantStatus,
-    handleAssistantSubscribe,
-    handleAssistantUnsubscribe
-} from './handlers/assistant-handlers'
 import { REMOTE_ACCESS_DISABLED_MESSAGE, REMOTE_ACCESS_ENABLED } from '../../shared/feature-flags'
+import {
+    UPDATE_CHECK_CHANNEL,
+    UPDATE_DOWNLOAD_CHANNEL,
+    UPDATE_GET_STATE_CHANNEL,
+    UPDATE_INSTALL_CHANNEL
+} from '../update/manager'
 
 async function handleRemoteAccessDisabled() {
     return { success: false, error: REMOTE_ACCESS_DISABLED_MESSAGE }
@@ -168,7 +142,6 @@ async function handleRemoteAccessDisabled() {
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     log.info('Registering IPC handlers...')
-    assertAssistantIpcContract()
 
     ipcMain.handle('devscope:system:bootstrap', handleSystemMetricsBootstrap)
     ipcMain.handle('devscope:system:subscribe', handleSystemMetricsSubscribe)
@@ -181,6 +154,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getReadinessReport', handleGetReadinessReport)
     ipcMain.handle('devscope:refreshAll', handleRefreshAll)
     ipcMain.handle('devscope:getFileSystemRoots', handleGetFileSystemRoots)
+    ipcMain.handle(UPDATE_GET_STATE_CHANNEL, handleGetUpdateState)
+    ipcMain.handle(UPDATE_CHECK_CHANNEL, handleCheckForUpdates)
+    ipcMain.handle(UPDATE_DOWNLOAD_CHANNEL, handleDownloadUpdate)
+    ipcMain.handle(UPDATE_INSTALL_CHANNEL, handleInstallUpdate)
 
     ipcMain.handle('devscope:exportData', handleExportData)
     ipcMain.handle('devscope:setStartupSettings', handleSetStartupSettings)
@@ -209,43 +186,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         ipcMain.handle('devscope:remote:revokeDevice', handleRemoteAccessDisabled)
         ipcMain.handle('devscope:remote:publishEnvelope', handleRemoteAccessDisabled)
     }
-
-    ipcMain.handle(ASSISTANT_IPC.subscribe, handleAssistantSubscribe)
-    ipcMain.handle(ASSISTANT_IPC.unsubscribe, handleAssistantUnsubscribe)
-    ipcMain.handle(ASSISTANT_IPC.connect, handleAssistantConnect)
-    ipcMain.handle(ASSISTANT_IPC.disconnect, handleAssistantDisconnect)
-    ipcMain.handle(ASSISTANT_IPC.status, handleAssistantStatus)
-    ipcMain.handle(ASSISTANT_IPC.send, handleAssistantSend)
-    ipcMain.handle(ASSISTANT_IPC.respondApproval, handleAssistantRespondApproval)
-    ipcMain.handle(ASSISTANT_IPC.cancelTurn, handleAssistantCancelTurn)
-    ipcMain.handle(ASSISTANT_IPC.setApprovalMode, handleAssistantSetApprovalMode)
-    ipcMain.handle(ASSISTANT_IPC.getApprovalMode, handleAssistantGetApprovalMode)
-    ipcMain.handle(ASSISTANT_IPC.getHistory, handleAssistantGetHistory)
-    ipcMain.handle(ASSISTANT_IPC.clearHistory, handleAssistantClearHistory)
-    ipcMain.handle(ASSISTANT_IPC.listModels, handleAssistantListModels)
-    ipcMain.handle(ASSISTANT_IPC.getEvents, handleAssistantGetEvents)
-    ipcMain.handle(ASSISTANT_IPC.clearEvents, handleAssistantClearEvents)
-    ipcMain.handle(ASSISTANT_IPC.exportEvents, handleAssistantExportEvents)
-    ipcMain.handle(ASSISTANT_IPC.exportConversation, handleAssistantExportConversation)
-    ipcMain.handle(ASSISTANT_IPC.listSessions, handleAssistantListSessions)
-    ipcMain.handle(ASSISTANT_IPC.createSession, handleAssistantCreateSession)
-    ipcMain.handle(ASSISTANT_IPC.selectSession, handleAssistantSelectSession)
-    ipcMain.handle(ASSISTANT_IPC.renameSession, handleAssistantRenameSession)
-    ipcMain.handle(ASSISTANT_IPC.deleteSession, handleAssistantDeleteSession)
-    ipcMain.handle(ASSISTANT_IPC.archiveSession, handleAssistantArchiveSession)
-    ipcMain.handle(ASSISTANT_IPC.setSessionProjectPath, handleAssistantSetSessionProjectPath)
-    ipcMain.handle(ASSISTANT_IPC.newThread, handleAssistantNewThread)
-    ipcMain.handle(ASSISTANT_IPC.estimateTokens, handleAssistantEstimateTokens)
-    ipcMain.handle(ASSISTANT_IPC.listProfiles, handleAssistantListProfiles)
-    ipcMain.handle(ASSISTANT_IPC.setProfile, handleAssistantSetProfile)
-    ipcMain.handle(ASSISTANT_IPC.getProjectModel, handleAssistantGetProjectModel)
-    ipcMain.handle(ASSISTANT_IPC.setProjectModel, handleAssistantSetProjectModel)
-    ipcMain.handle(ASSISTANT_IPC.getTelemetryIntegrity, handleAssistantGetTelemetryIntegrity)
-    ipcMain.handle(ASSISTANT_IPC.readAccount, handleAssistantReadAccount)
-    ipcMain.handle(ASSISTANT_IPC.readRateLimits, handleAssistantReadRateLimits)
-    ipcMain.handle(ASSISTANT_IPC.runWorkflowExplainDiff, handleAssistantRunWorkflowExplainDiff)
-    ipcMain.handle(ASSISTANT_IPC.runWorkflowReviewStaged, handleAssistantRunWorkflowReviewStaged)
-    ipcMain.handle(ASSISTANT_IPC.runWorkflowDraftCommit, handleAssistantRunWorkflowDraftCommit)
 
     ipcMain.handle('devscope:selectFolder', handleSelectFolder)
     ipcMain.handle('devscope:scanProjects', handleScanProjects)
@@ -288,6 +228,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getGitStatusDetailed', handleGetGitStatusDetailed)
     ipcMain.handle('devscope:getUnpushedCommits', handleGetUnpushedCommits)
     ipcMain.handle('devscope:getGitUser', handleGetGitUser)
+    ipcMain.handle('devscope:getGlobalGitUser', handleGetGlobalGitUser)
     ipcMain.handle('devscope:getRepoOwner', handleGetRepoOwner)
     ipcMain.handle('devscope:hasRemoteOrigin', handleHasRemoteOrigin)
     ipcMain.handle('devscope:getProjectsGitOverview', handleGetProjectsGitOverview)
@@ -297,6 +238,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:unstageFiles', handleUnstageFiles)
     ipcMain.handle('devscope:discardChanges', handleDiscardChanges)
     ipcMain.handle('devscope:createCommit', handleCreateCommit)
+    ipcMain.handle('devscope:setGlobalGitUser', handleSetGlobalGitUser)
     ipcMain.handle('devscope:pushCommits', handlePushCommits)
     ipcMain.handle('devscope:fetchUpdates', handleFetchUpdates)
     ipcMain.handle('devscope:pullUpdates', handlePullUpdates)
@@ -346,6 +288,5 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     mainWindow.webContents.once('destroyed', () => {
         systemMetricsBridge.unsubscribe(mainWindow.webContents.id)
-        assistantBridge.unsubscribe(mainWindow.webContents.id)
     })
 }

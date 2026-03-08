@@ -1,7 +1,7 @@
 {
     "name": "devscope-air-win",
-    "version": "1.0.0",
-    "description": "DevScope Air - Projects-focused Windows Electron app with project scanning and Git workflows",
+    "version": "1.0.0-alpha.1",
+    "description": "DevScope Air - Projects-focused Windows app with project scanning and Git workflows",
     "main": "./out/main/index.js",
     "author": "DevScope",
     "license": "MIT",
@@ -23,12 +23,13 @@
         "ansi-to-html": "^0.7.2",
         "clsx": "^2.1.1",
         "electron-log": "^5.1.7",
+        "electron-updater": "^6.8.3",
         "lucide-react": "^0.469.0",
         "mermaid": "^11.12.3",
         "monaco-editor": "^0.55.1",
         "node-pty": "^1.1.0",
-        "react": "^18.3.1",
-        "react-dom": "^18.3.1",
+        "react": "^19.2.0",
+        "react-dom": "^19.2.0",
         "react-markdown": "^10.1.0",
         "react-router-dom": "^7.1.1",
         "react-syntax-highlighter": "^16.1.0",
@@ -44,9 +45,9 @@
     },
     "devDependencies": {
         "@types/node": "^22.10.5",
-        "@types/react": "^18.3.17",
-        "@types/react-dom": "^18.3.5",
-        "@vitejs/plugin-react": "^4.3.4",
+        "@types/react": "^19.2.2",
+        "@types/react-dom": "^19.2.2",
+        "@vitejs/plugin-react": "^5.1.0",
         "autoprefixer": "^10.4.20",
         "electron": "^33.3.0",
         "electron-builder": "^25.1.8",
@@ -64,6 +65,14 @@
         "directories": {
             "output": "dist"
         },
+        "publish": [
+            {
+                "provider": "github",
+                "owner": "justelson",
+                "repo": "dev_scope"
+            }
+        ],
+        "generateUpdatesFilesForAllChannels": true,
         "fileAssociations": [
             {
                 "name": "Code and Text File",
@@ -126,7 +135,6 @@
                 ]
             }
         ],
-        "asarUnpack": [],
         "win": {
             "target": [
                 "nsis"
