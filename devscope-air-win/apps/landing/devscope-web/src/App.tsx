@@ -3,9 +3,16 @@ import { useEffect, useState } from 'react'
 function App() {
   const [isVisible, setIsVisible] = useState(false);
   const [scrollScale, setScrollScale] = useState(0.95);
+  const [isWindows, setIsWindows] = useState(true);
 
   useEffect(() => {
     setIsVisible(true);
+    
+    // Detect if user is on Windows
+    const userAgent = navigator.userAgent.toLowerCase();
+    const platform = navigator.platform.toLowerCase();
+    const isWindowsOS = platform.includes('win') || userAgent.includes('windows');
+    setIsWindows(isWindowsOS);
     
     const handleScroll = () => {
       const scrollY = window.scrollY;
@@ -20,6 +27,11 @@ function App() {
 
   return (
     <div className="min-h-screen bg-sparkle-bg text-sparkle-text selection:bg-sparkle-primary/30 relative overflow-hidden">
+      {/* Animated Grid Background */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute inset-0 grid-dots opacity-20"></div>
+        <div className="absolute inset-0 grid-glow"></div>
+      </div>
 
       {/* Navigation */}
       <nav className={`fixed top-0 left-0 right-0 z-40 px-4 md:px-8 py-4 md:py-6 flex justify-between items-center transition-all duration-1000 delay-300 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
@@ -55,18 +67,29 @@ function App() {
             AI powered by T3 Code
           </p>
           
-          <p className="text-[10px] md:text-xs mb-8 md:mb-12 font-bold" style={{ color: '#007aff', opacity: 0.6 }}>
+          <p className="hidden md:block text-[10px] md:text-xs mb-8 md:mb-12 font-bold" style={{ color: '#007aff', opacity: 0.6 }}>
             Early alpha • Frequent updates and fixes ongoing
           </p>
+          
+          <div className="md:hidden h-8" />
 
-          <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-10 md:mb-16">
-            <a
-              href="https://github.com/justelson/dev_scope.git"
-              className="px-6 md:px-8 py-2.5 md:py-3 bg-white hover:bg-gray-100 text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-sm"
-            >
-              Download now
-            </a>
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-wrap justify-center gap-4 md:gap-6">
+              <a
+                href="https://github.com/justelson/dev_scope.git"
+                className="px-6 md:px-8 py-2.5 md:py-3 bg-white hover:bg-gray-100 text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-sm"
+              >
+                {isWindows ? 'Download now' : 'View on GitHub'}
+              </a>
+            </div>
+            {!isWindows && (
+              <p className="text-xs text-white/40 mt-2">
+                Currently only available on Windows
+              </p>
+            )}
           </div>
+          
+          <div className="h-10 md:h-16" />
         </div>
 
         {/* Ultra-Wide App Preview */}
@@ -88,6 +111,9 @@ function App() {
       {/* Footer */}
       <footer className={`py-12 md:py-20 text-center transition-all duration-1000 delay-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
         <div className="flex flex-col items-center gap-3 md:gap-4 px-4">
+          <p className="md:hidden text-[10px] font-bold mb-2" style={{ color: '#007aff', opacity: 0.6 }}>
+            Early alpha • Frequent updates and fixes ongoing
+          </p>
           <p className="text-white/40 text-[10px] md:text-[11px] font-bold tracking-[0.2em] uppercase">
             PRODUCED BY ELSON
           </p>
