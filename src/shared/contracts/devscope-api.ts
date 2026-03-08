@@ -82,6 +82,13 @@ export type DevScopeFileTreeNode = {
     gitStatus?: DevScopeGitFileStatus
 }
 
+export type DevScopePathInfo = {
+    path: string
+    name: string
+    exists: boolean
+    type: 'file' | 'directory' | null
+}
+
 export type DevScopeGitCommit = {
     hash: string
     shortHash: string
@@ -107,6 +114,20 @@ export type DevScopeGitRemoteSummary = {
     name: string
     fetchUrl: string
     pushUrl: string
+}
+
+export type DevScopeGitSyncStatus = {
+    currentBranch: string
+    upstreamBranch: string | null
+    headHash: string | null
+    upstreamHeadHash: string | null
+    hasRemote: boolean
+    ahead: number
+    behind: number
+    workingTreeChanged: boolean
+    workingTreeChangeCount: number
+    statusToken: string
+    detached: boolean
 }
 
 export type DevScopeGitTagSummary = {
@@ -355,7 +376,11 @@ export interface DevScopeApi {
         projectPath: string,
         options?: { showHidden?: boolean; maxDepth?: number; rootPath?: string }
     ) => Promise<DevScopeResult<{ tree: DevScopeFileTreeNode[] }>>
-    getGitHistory: (projectPath: string) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
+    getGitHistory: (
+        projectPath: string,
+        limit?: number,
+        options?: { all?: boolean; includeStats?: boolean }
+    ) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
     getCommitDiff: (projectPath: string, commitHash: string) => Promise<DevScopeResult<{ diff: string }>>
     getWorkingDiff: (
         projectPath: string,
@@ -364,7 +389,12 @@ export interface DevScopeApi {
     ) => Promise<DevScopeResult<{ diff: string }>>
     getWorkingChangesForAI: (projectPath: string) => Promise<DevScopeResult<{ context: string }>>
     getGitStatus: (projectPath: string) => Promise<DevScopeResult<{ status: Record<string, DevScopeGitFileStatus | undefined> }>>
-    getGitStatusDetailed: (projectPath: string) => Promise<DevScopeResult<{ entries: DevScopeGitStatusDetail[] }>>
+    getGitStatusDetailed: (
+        projectPath: string,
+        options?: { includeStats?: boolean }
+    ) => Promise<DevScopeResult<{ entries: DevScopeGitStatusDetail[] }>>
+    getGitSyncStatus: (projectPath: string) => Promise<DevScopeResult<{ sync: DevScopeGitSyncStatus }>>
+    getIncomingCommits: (projectPath: string, limit?: number) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
     getUnpushedCommits: (projectPath: string) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
     getGitUser: (projectPath: string) => Promise<DevScopeResult<{ user: { name: string; email: string } | null }>>
     getGlobalGitUser: () => Promise<DevScopeResult<{ user: { name: string; email: string } | null }>>
@@ -416,6 +446,7 @@ export interface DevScopeApi {
     copyToClipboard: (text: string) => Promise<DevScopeResult>
     readFileContent: (filePath: string) => Promise<DevScopeResult<{ content: string; size: number; previewBytes: number; truncated: boolean; modifiedAt: number }>>
     readTextFileFull: (filePath: string) => Promise<DevScopeResult<{ content: string; size: number; modifiedAt: number }>>
+    getPathInfo: (targetPath: string) => Promise<DevScopeResult<DevScopePathInfo>>
     writeTextFile: (
         filePath: string,
         content: string,

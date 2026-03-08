@@ -25,7 +25,8 @@ export function createProjectsAdapter() {
         getProjectDetails: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectDetails', projectPath),
         getFileTree: (projectPath: string, options?: { showHidden?: boolean; maxDepth?: number; rootPath?: string }) =>
             ipcRenderer.invoke('devscope:getFileTree', projectPath, options),
-        getGitHistory: (projectPath: string) => ipcRenderer.invoke('devscope:getGitHistory', projectPath),
+        getGitHistory: (projectPath: string, limit?: number, options?: { all?: boolean; includeStats?: boolean }) =>
+            ipcRenderer.invoke('devscope:getGitHistory', projectPath, limit, options),
         getCommitDiff: (projectPath: string, commitHash: string) => ipcRenderer.invoke('devscope:getCommitDiff', projectPath, commitHash),
         getWorkingDiff: (
             projectPath: string,
@@ -34,7 +35,11 @@ export function createProjectsAdapter() {
         ) => ipcRenderer.invoke('devscope:getWorkingDiff', projectPath, filePath, mode),
         getWorkingChangesForAI: (projectPath: string) => ipcRenderer.invoke('devscope:getWorkingChangesForAI', projectPath),
         getGitStatus: (projectPath: string) => ipcRenderer.invoke('devscope:getGitStatus', projectPath),
-        getGitStatusDetailed: (projectPath: string) => ipcRenderer.invoke('devscope:getGitStatusDetailed', projectPath),
+        getGitStatusDetailed: (projectPath: string, options?: { includeStats?: boolean }) =>
+            ipcRenderer.invoke('devscope:getGitStatusDetailed', projectPath, options),
+        getGitSyncStatus: (projectPath: string) => ipcRenderer.invoke('devscope:getGitSyncStatus', projectPath),
+        getIncomingCommits: (projectPath: string, limit?: number) =>
+            ipcRenderer.invoke('devscope:getIncomingCommits', projectPath, limit),
         getUnpushedCommits: (projectPath: string) => ipcRenderer.invoke('devscope:getUnpushedCommits', projectPath),
         getGitUser: (projectPath: string) => ipcRenderer.invoke('devscope:getGitUser', projectPath),
         getGlobalGitUser: () => ipcRenderer.invoke('devscope:getGlobalGitUser'),
@@ -97,6 +102,7 @@ export function createProjectsAdapter() {
         copyToClipboard: (text: string) => ipcRenderer.invoke('devscope:copyToClipboard', text),
         readFileContent: (filePath: string) => ipcRenderer.invoke('devscope:readFileContent', filePath),
         readTextFileFull: (filePath: string) => ipcRenderer.invoke('devscope:readTextFileFull', filePath),
+        getPathInfo: (targetPath: string) => ipcRenderer.invoke('devscope:getPathInfo', targetPath),
         writeTextFile: (filePath: string, content: string, expectedModifiedAt?: number) =>
             ipcRenderer.invoke('devscope:writeTextFile', filePath, content, expectedModifiedAt),
         runPythonPreview: (input: { sessionId: string; filePath: string; projectPath?: string }) =>

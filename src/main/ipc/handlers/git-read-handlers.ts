@@ -5,12 +5,14 @@ import {
     generateGitignoreContent,
     getCommitDiff,
     getGitHistory,
+    getGitSyncStatus,
     getGitStatus,
     getGitStatusDetailed,
     getGlobalGitUser,
     getGitUser,
     getGitignorePatterns,
     getGitignoreTemplates,
+    getIncomingCommits,
     getProjectsGitOverview as getProjectsGitOverviewBatch,
     getRepoOwner,
     getUnpushedCommits,
@@ -19,9 +21,14 @@ import {
     hasRemoteOrigin
 } from '../../inspectors/git'
 
-export async function handleGetGitHistory(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+export async function handleGetGitHistory(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    limit?: number,
+    options?: { all?: boolean; includeStats?: boolean }
+) {
     try {
-        const result = await getGitHistory(projectPath)
+        const result = await getGitHistory(projectPath, limit, options)
         return { success: true, ...result }
     } catch (err: any) {
         log.error('Failed to get git history:', err)
@@ -74,9 +81,13 @@ export async function handleGetGitStatus(_event: Electron.IpcMainInvokeEvent, pr
     }
 }
 
-export async function handleGetGitStatusDetailed(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+export async function handleGetGitStatusDetailed(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    options?: { includeStats?: boolean }
+) {
     try {
-        const entries = await getGitStatusDetailed(projectPath)
+        const entries = await getGitStatusDetailed(projectPath, options)
         return { success: true, entries }
     } catch (err: any) {
         log.error('Failed to get detailed git status:', err)
@@ -100,6 +111,20 @@ export async function handleGetGitUser(_event: Electron.IpcMainInvokeEvent, proj
         return { success: true, user }
     } catch (err: any) {
         log.error('Failed to get git user:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetIncomingCommits(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    limit?: number
+) {
+    try {
+        const commits = await getIncomingCommits(projectPath, limit)
+        return { success: true, commits }
+    } catch (err: any) {
+        log.error('Failed to get incoming commits:', err)
         return { success: false, error: err.message }
     }
 }
@@ -130,6 +155,16 @@ export async function handleHasRemoteOrigin(_event: Electron.IpcMainInvokeEvent,
         return { success: true, hasRemote }
     } catch (err: any) {
         log.error('Failed to check remote origin:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetGitSyncStatus(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+    try {
+        const sync = await getGitSyncStatus(projectPath)
+        return { success: true, sync }
+    } catch (err: any) {
+        log.error('Failed to get git sync status:', err)
         return { success: false, error: err.message }
     }
 }

@@ -49,6 +49,7 @@ import {
     handleCreateFileSystemItem,
     handleDeleteFileSystemItem,
     handleGetFileTree,
+    handleGetPathInfo,
     handlePasteFileSystemItem,
     handleReadFileContent,
     handleReadTextFileFull,
@@ -77,12 +78,14 @@ import {
     handleGenerateGitignoreContent,
     handleGetCommitDiff,
     handleGetGitHistory,
+    handleGetGitSyncStatus,
     handleGetGitStatus,
     handleGetGitStatusDetailed,
     handleGetGlobalGitUser,
     handleGetGitUser,
     handleGetGitignorePatterns,
     handleGetGitignoreTemplates,
+    handleGetIncomingCommits,
     handleGetProjectsGitOverview,
     handleGetRepoOwner,
     handleGetUnpushedCommits,
@@ -172,6 +175,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getFileTree', handleGetFileTree)
     ipcMain.handle('devscope:readFileContent', handleReadFileContent)
     ipcMain.handle('devscope:readTextFileFull', handleReadTextFileFull)
+    ipcMain.handle('devscope:getPathInfo', handleGetPathInfo)
     ipcMain.handle('devscope:writeTextFile', handleWriteTextFile)
     ipcMain.handle('devscope:openFile', handleOpenFile)
     ipcMain.handle('devscope:openWith', handleOpenWith)
@@ -190,6 +194,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getWorkingChangesForAI', handleGetWorkingChangesForAI)
     ipcMain.handle('devscope:getGitStatus', handleGetGitStatus)
     ipcMain.handle('devscope:getGitStatusDetailed', handleGetGitStatusDetailed)
+    ipcMain.handle('devscope:getGitSyncStatus', handleGetGitSyncStatus)
+    ipcMain.handle('devscope:getIncomingCommits', handleGetIncomingCommits)
     ipcMain.handle('devscope:getUnpushedCommits', handleGetUnpushedCommits)
     ipcMain.handle('devscope:getGitUser', handleGetGitUser)
     ipcMain.handle('devscope:getGlobalGitUser', handleGetGlobalGitUser)

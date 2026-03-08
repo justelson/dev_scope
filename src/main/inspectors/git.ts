@@ -10,7 +10,8 @@ export type {
     CheckoutBranchResult,
     GitCommit,
     GitHistoryResult,
-    GitignorePattern
+    GitignorePattern,
+    GitSyncStatus
 } from './git/types'
 
 export {
@@ -21,6 +22,8 @@ export {
     getWorkingDiff,
     getWorkingChangesForAI,
     hasRemoteOrigin,
+    getGitSyncStatus,
+    getIncomingCommits,
     getUnpushedCommits,
     getGitUser,
     getGlobalGitUser,

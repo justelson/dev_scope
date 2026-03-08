@@ -19,8 +19,18 @@ import type {
     GitHistoryResult,
     GitStatusMap,
     GitFileStatus,
-    ProjectGitOverview
+    ProjectGitOverview,
+    GitSyncStatus
 } from './types'
+
+interface GitStatusDetailedOptions {
+    includeStats?: boolean
+}
+
+interface GitHistoryOptions {
+    all?: boolean
+    includeStats?: boolean
+}
 
 function classifyGitStatus(code: string): GitFileStatus {
     if (code === '??') return 'untracked'
@@ -77,62 +87,81 @@ function parseNumstat(stdout: string, projectRelativeToRepo: string): Map<string
     return result
 }
 
-export async function getGitStatusDetailed(projectPath: string): Promise<GitStatusDetail[]> {
+function parseStatusEntries(stdout: string, projectRelativeToRepo: string): GitStatusDetail[] {
+    const entries = stdout.split('\0').filter(Boolean)
+    const details: GitStatusDetail[] = []
+
+    for (let i = 0; i < entries.length; i += 1) {
+        const line = entries[i]
+        if (line.length < 3) continue
+        const code = line.substring(0, 2)
+        const rawPath = line.substring(3)
+        const status = classifyGitStatus(code)
+        const path = stripPathPrefix(normalizeGitPath(rawPath), projectRelativeToRepo)
+        if (!path) continue
+
+        const indexCode = code[0] || ' '
+        const workTreeCode = code[1] || ' '
+        const staged = code !== '??' && code !== '!!' && indexCode !== ' '
+        const unstaged = code === '??' || (code !== '!!' && workTreeCode !== ' ')
+
+        let previousPath: string | undefined
+        if (status === 'renamed') {
+            const rawPrevious = entries[i + 1]
+            if (rawPrevious) {
+                previousPath = stripPathPrefix(normalizeGitPath(rawPrevious), projectRelativeToRepo) || undefined
+                i += 1
+            }
+        }
+
+        details.push({
+            path,
+            previousPath,
+            status,
+            code,
+            staged,
+            unstaged,
+            additions: 0,
+            deletions: 0,
+            stagedAdditions: 0,
+            stagedDeletions: 0,
+            unstagedAdditions: 0,
+            unstagedDeletions: 0
+        })
+    }
+
+    return details
+}
+
+export async function getGitStatusDetailed(
+    projectPath: string,
+    options?: GitStatusDetailedOptions
+): Promise<GitStatusDetail[]> {
     try {
         const git = createGit(projectPath)
         const repoContext = await getRepoContext(git, projectPath)
         const stdout = await git.raw(['-c', 'status.relativePaths=true', 'status', '--porcelain=v1', '--ignored', '-z'])
-        const [stagedNumstatRaw, unstagedNumstatRaw] = await Promise.all([
-            git.raw(['diff', '--cached', '--numstat']).catch(() => ''),
-            git.raw(['diff', '--numstat']).catch(() => '')
-        ])
+        const details = parseStatusEntries(stdout, repoContext.projectRelativeToRepo)
 
-        const stagedNumstat = parseNumstat(stagedNumstatRaw, repoContext.projectRelativeToRepo)
-        const unstagedNumstat = parseNumstat(unstagedNumstatRaw, repoContext.projectRelativeToRepo)
+        if (options?.includeStats !== false && details.length > 0) {
+            const [stagedNumstatRaw, unstagedNumstatRaw] = await Promise.all([
+                git.raw(['diff', '--cached', '--numstat']).catch(() => ''),
+                git.raw(['diff', '--numstat']).catch(() => '')
+            ])
 
-        const entries = stdout.split('\0').filter(Boolean)
-        const details: GitStatusDetail[] = []
+            const stagedNumstat = parseNumstat(stagedNumstatRaw, repoContext.projectRelativeToRepo)
+            const unstagedNumstat = parseNumstat(unstagedNumstatRaw, repoContext.projectRelativeToRepo)
 
-        for (let i = 0; i < entries.length; i += 1) {
-            const line = entries[i]
-            if (line.length < 3) continue
-            const code = line.substring(0, 2)
-            const rawPath = line.substring(3)
-            const status = classifyGitStatus(code)
-            const path = stripPathPrefix(normalizeGitPath(rawPath), repoContext.projectRelativeToRepo)
-            if (!path) continue
-
-            const indexCode = code[0] || ' '
-            const workTreeCode = code[1] || ' '
-            const staged = code !== '??' && code !== '!!' && indexCode !== ' '
-            const unstaged = code === '??' || (code !== '!!' && workTreeCode !== ' ')
-
-            let previousPath: string | undefined
-            if (status === 'renamed') {
-                const rawPrevious = entries[i + 1]
-                if (rawPrevious) {
-                    previousPath = stripPathPrefix(normalizeGitPath(rawPrevious), repoContext.projectRelativeToRepo) || undefined
-                    i += 1
-                }
+            for (const detail of details) {
+                const stagedStats = stagedNumstat.get(detail.path) || { additions: 0, deletions: 0 }
+                const unstagedStats = unstagedNumstat.get(detail.path) || { additions: 0, deletions: 0 }
+                detail.additions = stagedStats.additions + unstagedStats.additions
+                detail.deletions = stagedStats.deletions + unstagedStats.deletions
+                detail.stagedAdditions = stagedStats.additions
+                detail.stagedDeletions = stagedStats.deletions
+                detail.unstagedAdditions = unstagedStats.additions
+                detail.unstagedDeletions = unstagedStats.deletions
             }
-
-            const stagedStats = stagedNumstat.get(path) || { additions: 0, deletions: 0 }
-            const unstagedStats = unstagedNumstat.get(path) || { additions: 0, deletions: 0 }
-
-            details.push({
-                path,
-                previousPath,
-                status,
-                code,
-                staged,
-                unstaged,
-                additions: stagedStats.additions + unstagedStats.additions,
-                deletions: stagedStats.deletions + unstagedStats.deletions,
-                stagedAdditions: stagedStats.additions,
-                stagedDeletions: stagedStats.deletions,
-                unstagedAdditions: unstagedStats.additions,
-                unstagedDeletions: unstagedStats.deletions
-            })
         }
 
         details.sort((a, b) => a.path.localeCompare(b.path))
@@ -148,7 +177,7 @@ export async function getGitStatusDetailed(projectPath: string): Promise<GitStat
  */
 export async function getGitStatus(projectPath: string): Promise<GitStatusMap> {
     try {
-        const details = await getGitStatusDetailed(projectPath)
+        const details = await getGitStatusDetailed(projectPath, { includeStats: false })
         return toStatusDetailMap(details)
     } catch (err) {
         log.error('Failed to get git status', err)
@@ -159,17 +188,21 @@ export async function getGitStatus(projectPath: string): Promise<GitStatusMap> {
 /**
  * Get git history for a project
  */
-export async function getGitHistory(projectPath: string, limit: number = 0): Promise<GitHistoryResult> {
+export async function getGitHistory(
+    projectPath: string,
+    limit: number = 0,
+    options?: GitHistoryOptions
+): Promise<GitHistoryResult> {
     try {
         const git = createGit(projectPath)
         const safeLimit = Math.trunc(limit)
         const limitArgs = safeLimit > 0 ? ['-n', String(Math.max(1, Math.min(5000, safeLimit)))] : []
         const stdout = await git.raw([
             'log',
-            '--all',
+            ...(options?.all === false ? [] : ['--all']),
             '--date=iso',
             '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
-            '--numstat',
+            ...(options?.includeStats === false ? [] : ['--numstat']),
             ...limitArgs
         ])
 
@@ -303,6 +336,94 @@ export async function hasRemoteOrigin(projectPath: string): Promise<boolean> {
     } catch (err) {
         log.error('Failed to inspect remotes', err)
         throw toError(err, 'Failed to inspect remotes')
+    }
+}
+
+export async function getGitSyncStatus(projectPath: string): Promise<GitSyncStatus> {
+    try {
+        const git = createGit(projectPath)
+        const [currentBranchRaw, headHashRaw, upstreamBranchRaw, workingTreeRaw, hasRemote] = await Promise.all([
+            git.raw(['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => 'HEAD'),
+            git.raw(['rev-parse', 'HEAD']).catch(() => ''),
+            git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => ''),
+            git.raw(['status', '--porcelain=v1', '-uno']).catch(() => ''),
+            hasRemoteOrigin(projectPath).catch(() => false)
+        ])
+
+        const currentBranch = String(currentBranchRaw || '').trim()
+        const headHash = String(headHashRaw || '').trim() || null
+        const upstreamBranch = String(upstreamBranchRaw || '').trim() || null
+        const workingTreeLines = String(workingTreeRaw || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+        const workingTreeChangeCount = workingTreeLines.length
+
+        let ahead = 0
+        let behind = 0
+        let upstreamHeadHash: string | null = null
+
+        if (upstreamBranch) {
+            const [aheadBehindRaw, upstreamHeadHashRaw] = await Promise.all([
+                git.raw(['rev-list', '--left-right', '--count', 'HEAD...@{u}']).catch(() => ''),
+                git.raw(['rev-parse', '@{u}']).catch(() => '')
+            ])
+
+            const [aheadText, behindText] = String(aheadBehindRaw || '').trim().split(/\s+/)
+            ahead = Number.parseInt(aheadText || '0', 10)
+            behind = Number.parseInt(behindText || '0', 10)
+            upstreamHeadHash = String(upstreamHeadHashRaw || '').trim() || null
+        }
+
+        return {
+            currentBranch,
+            upstreamBranch,
+            headHash,
+            upstreamHeadHash,
+            hasRemote,
+            ahead: Number.isNaN(ahead) ? 0 : ahead,
+            behind: Number.isNaN(behind) ? 0 : behind,
+            workingTreeChanged: workingTreeChangeCount > 0,
+            workingTreeChangeCount,
+            statusToken: [
+                currentBranch,
+                headHash || '',
+                upstreamBranch || '',
+                upstreamHeadHash || '',
+                workingTreeChangeCount
+            ].join('|'),
+            detached: currentBranch === 'HEAD'
+        }
+    } catch (err) {
+        log.error('Failed to get git sync status', err)
+        throw toError(err, 'Failed to get git sync status')
+    }
+}
+
+export async function getIncomingCommits(projectPath: string, limit: number = 100): Promise<GitCommit[]> {
+    try {
+        const git = createGit(projectPath)
+        const upstreamRef = String(
+            await git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => '')
+        ).trim()
+        if (!upstreamRef) return []
+
+        const safeLimit = Math.trunc(limit)
+        const limitArgs = safeLimit > 0 ? ['-n', String(Math.max(1, Math.min(1000, safeLimit)))] : []
+        const stdout = await git.raw([
+            'log',
+            `HEAD..${upstreamRef}`,
+            '--date=iso',
+            '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
+            '--numstat',
+            ...limitArgs
+        ]).catch(() => '')
+
+        if (!stdout.trim()) return []
+        return parseCommitLog(stdout)
+    } catch (err) {
+        log.error('Failed to get incoming commits', err)
+        throw toError(err, 'Failed to get incoming commits')
     }
 }
 
