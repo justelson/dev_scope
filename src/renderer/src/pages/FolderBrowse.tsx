@@ -830,6 +830,7 @@ export default function FolderBrowse() {
                     previewBytes={previewBytes}
                     modifiedAt={previewModifiedAt}
                     projectPath={decodedPath}
+                    onOpenLinkedPreview={openPreview}
                     onSaved={async () => {
                         await loadContents(true)
                     }}

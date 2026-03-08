@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, ChevronUp } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowUpRight, BookOpen, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
+import { navigateMarkdownLink } from '@/components/ui/markdown/linkNavigation'
 
 interface ProjectDetailsReadmeTabProps {
     [key: string]: any
@@ -10,11 +12,13 @@ interface ProjectDetailsReadmeTabProps {
 export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
     const {
         project,
+        openPreview,
         readmeContentRef,
         readmeExpanded,
         readmeNeedsExpand,
         setReadmeExpanded
     } = props
+    const navigate = useNavigate()
     const readmeSectionRef = useRef<HTMLDivElement | null>(null)
     const lastScrollYRef = useRef(0)
     const [showFloatingCollapse, setShowFloatingCollapse] = useState(false)
@@ -117,7 +121,18 @@ export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
                             !readmeExpanded && "max-h-[500px]"
                         )}
                     >
-                        <MarkdownRenderer content={project.readme} filePath={`${project.path}/README.md`} />
+                        <MarkdownRenderer
+                            content={project.readme}
+                            filePath={`${project.path}/README.md`}
+                            onInternalLinkClick={async (href) => {
+                                await navigateMarkdownLink({
+                                    href,
+                                    filePath: `${project.path}/README.md`,
+                                    navigate,
+                                    openPreview
+                                })
+                            }}
+                        />
                     </div>
                     {readmeNeedsExpand && !readmeExpanded && (
                         <div
@@ -141,14 +156,32 @@ export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
                     )}
 
                     {showFloatingCollapse && (
-                        <button
-                            onClick={handleCollapseToTop}
+                        <div
                             style={{ right: `${floatingRightPx}px`, bottom: '20px' }}
-                            className="fixed z-40 inline-flex items-center gap-2 rounded-full border border-white/20 bg-black/65 px-4 py-2 text-sm text-white/90 shadow-lg backdrop-blur-md transition-colors hover:bg-black/80"
+                            className="fixed z-40 inline-flex items-center gap-2"
                         >
-                            <ChevronUp size={14} />
-                            Show Less
-                        </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    void openPreview?.(
+                                        { name: 'README.md', path: `${project.path}/README.md` },
+                                        'md'
+                                    )
+                                }}
+                                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/65 px-4 py-2 text-sm text-white/85 shadow-lg backdrop-blur-md transition-colors hover:border-white/20 hover:bg-black/80 hover:text-white"
+                            >
+                                <ArrowUpRight size={14} />
+                                View In Detail
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCollapseToTop}
+                                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/65 px-4 py-2 text-sm text-white/90 shadow-lg backdrop-blur-md transition-colors hover:border-white/20 hover:bg-black/80"
+                            >
+                                <ChevronUp size={14} />
+                                Show Less
+                            </button>
+                        </div>
                     )}
                 </>
             ) : (

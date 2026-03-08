@@ -110,12 +110,10 @@ export async function handleGetFileTree(
             if (maxDepth >= 0 && depth > maxDepth) return []
 
             const entries = await readdir(currentPath, { withFileTypes: true })
-            const nodes: FileTreeNode[] = []
-
-            for (const entry of entries) {
+            const nodes = await Promise.all(entries.map(async (entry) => {
                 const isHiddenEntry = entry.name.startsWith('.')
-                if (!showHidden && isHiddenEntry) continue
-                if (entry.name === 'node_modules' || entry.name === '.git') continue
+                if (!showHidden && isHiddenEntry) return null
+                if (entry.name === 'node_modules' || entry.name === '.git') return null
 
                 const fullPath = join(currentPath, entry.name)
                 const relativePath = relative(resolvedProjectPath, fullPath).replace(/\\/g, '/')
@@ -126,7 +124,7 @@ export async function handleGetFileTree(
                     const children = shouldLoadChildren
                         ? await readDirRec(fullPath, depth + 1)
                         : undefined
-                    nodes.push({
+                    return {
                         name: entry.name,
                         path: fullPath,
                         type: 'directory',
@@ -134,30 +132,34 @@ export async function handleGetFileTree(
                         childrenLoaded: shouldLoadChildren,
                         isHidden: isHiddenEntry,
                         gitStatus: status
-                    })
+                    } satisfies FileTreeNode
                 } else if (entry.isFile()) {
                     try {
                         const stats = await stat(fullPath)
-                        nodes.push({
+                        return {
                             name: entry.name,
                             path: fullPath,
                             type: 'file',
                             size: stats.size,
                             isHidden: isHiddenEntry,
                             gitStatus: status
-                        })
+                        } satisfies FileTreeNode
                     } catch {
                         // Ignore unreadable file metadata.
+                        return null
                     }
                 }
-            }
+                return null
+            }))
 
-            nodes.sort((a, b) => {
+            const filteredNodes = nodes.filter((node): node is NonNullable<typeof node> => node !== null)
+
+            filteredNodes.sort((a, b) => {
                 if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
                 return a.name.localeCompare(b.name)
             })
 
-            return nodes
+            return filteredNodes
         }
 
         const tree = await readDirRec(resolvedRootPath, 0)
@@ -255,6 +257,41 @@ export async function handleReadTextFileFull(_event: Electron.IpcMainInvokeEvent
         }
     } catch (err: any) {
         log.error('Failed to read full text file:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetPathInfo(_event: Electron.IpcMainInvokeEvent, targetPath: string) {
+    log.info('IPC: getPathInfo', targetPath)
+
+    try {
+        const normalizedTargetPath = String(targetPath || '').trim()
+        if (!normalizedTargetPath) {
+            return { success: false, error: 'Path is required.' }
+        }
+
+        const resolvedTargetPath = resolve(normalizedTargetPath)
+
+        if (!(await pathExists(resolvedTargetPath))) {
+            return {
+                success: true,
+                path: resolvedTargetPath,
+                name: basename(resolvedTargetPath),
+                exists: false,
+                type: null
+            }
+        }
+
+        const targetStats = await lstat(resolvedTargetPath)
+        return {
+            success: true,
+            path: resolvedTargetPath,
+            name: basename(resolvedTargetPath),
+            exists: true,
+            type: targetStats.isDirectory() ? 'directory' : 'file'
+        }
+    } catch (err: any) {
+        log.error('Failed to get path info:', err)
         return { success: false, error: err.message }
     }
 }

@@ -14,6 +14,7 @@ interface PreviewBodyProps {
     loading?: boolean
     meta: PreviewMeta
     projectPath?: string
+    onInternalLinkClick?: (href: string) => Promise<void> | void
     gitDiffText?: string
     viewport: ViewportPreset
     presetConfig: ViewportPresetConfig
@@ -53,6 +54,7 @@ export default function PreviewBody({
     loading,
     meta,
     projectPath,
+    onInternalLinkClick,
     gitDiffText,
     viewport,
     presetConfig,
@@ -131,6 +133,7 @@ export default function PreviewBody({
                     content={content}
                     meta={meta}
                     projectPath={projectPath}
+                    onInternalLinkClick={onInternalLinkClick}
                     gitDiffText={gitDiffText}
                     csvDistinctColorsEnabled={csvDistinctColorsEnabled}
                     focusLine={previewFocusLine}
@@ -218,7 +221,7 @@ export default function PreviewBody({
             <iframe
                 src={getFileUrl(file.path)}
                 title={`${file.name} preview`}
-                style={{ width: '100%', height: '100%', background: 'white', border: 'none' }}
+                style={{ width: '100%', height: '100%', background: 'white', border: 'none', display: 'block' }}
             />
         </div>
     )

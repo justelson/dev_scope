@@ -15,12 +15,13 @@ interface MarkdownRendererProps {
     className?: string
     filePath?: string
     codeBlockMaxLines?: number
+    onInternalLinkClick?: (href: string) => Promise<void> | void
 }
 
-function MarkdownRenderer({ content, className, filePath, codeBlockMaxLines }: MarkdownRendererProps) {
+function MarkdownRenderer({ content, className, filePath, codeBlockMaxLines, onInternalLinkClick }: MarkdownRendererProps) {
     const components = useMemo(
-        () => createMarkdownComponents(filePath, { codeBlockMaxLines }),
-        [filePath, codeBlockMaxLines]
+        () => createMarkdownComponents(filePath, { codeBlockMaxLines, onInternalLinkClick }),
+        [filePath, codeBlockMaxLines, onInternalLinkClick]
     )
 
     return (
@@ -38,5 +39,6 @@ export default memo(
         previous.content === next.content &&
         previous.className === next.className &&
         previous.filePath === next.filePath &&
-        previous.codeBlockMaxLines === next.codeBlockMaxLines
+        previous.codeBlockMaxLines === next.codeBlockMaxLines &&
+        previous.onInternalLinkClick === next.onInternalLinkClick
 )

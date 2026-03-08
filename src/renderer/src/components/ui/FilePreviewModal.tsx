@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { Terminal as XtermTerminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
@@ -18,12 +19,18 @@ import PreviewErrorBoundary from './file-preview/PreviewErrorBoundary'
 import PreviewModalHeader from './file-preview/PreviewModalHeader'
 import { VIEWPORT_PRESETS, type ViewportPreset } from './file-preview/viewport'
 import { useFilePreview } from './file-preview/useFilePreview'
+import { navigateMarkdownLink } from './markdown/linkNavigation'
 
 interface FilePreviewModalProps extends PreviewMeta {
     file: PreviewFile
     content: string
     loading?: boolean
     projectPath?: string
+    onOpenLinkedPreview?: (
+        file: { name: string; path: string },
+        ext: string,
+        options?: { startInEditMode?: boolean }
+    ) => Promise<void>
     onSaved?: (filePath: string) => Promise<void> | void
     onClose: () => void
 }
@@ -190,9 +197,11 @@ export function FilePreviewModal({
     previewBytes,
     modifiedAt,
     projectPath,
+    onOpenLinkedPreview,
     onSaved,
     onClose
 }: FilePreviewModalProps) {
+    const navigate = useNavigate()
     const { settings, updateSettings } = useSettings()
     const isCsv = file.type === 'csv'
     const isHtml = file.type === 'html'
@@ -443,6 +452,15 @@ export function FilePreviewModal({
         }
         setPendingIntent(null)
     }, [onClose, pendingIntent])
+
+    const handleInternalMarkdownLink = useCallback(async (href: string) => {
+        await navigateMarkdownLink({
+            href,
+            filePath: file.path,
+            navigate,
+            openPreview: onOpenLinkedPreview
+        })
+    }, [file.path, navigate, onOpenLinkedPreview])
 
     const handleSave = useCallback(async () => {
         if (!canEdit || isSaving || !isDirty || !file.path) return true
@@ -1962,6 +1980,7 @@ export function FilePreviewModal({
                                             loading={loading}
                                             meta={{ truncated, size, previewBytes }}
                                             projectPath={projectPath}
+                                            onInternalLinkClick={handleInternalMarkdownLink}
                                             gitDiffText={gitDiffText}
                                             viewport={viewport}
                                             presetConfig={presetConfig}
@@ -2134,6 +2153,7 @@ export function FilePreviewModal({
                                         loading={loading}
                                         meta={{ truncated, size, previewBytes }}
                                         projectPath={projectPath}
+                                        onInternalLinkClick={handleInternalMarkdownLink}
                                         gitDiffText={gitDiffText}
                                         viewport={viewport}
                                         presetConfig={presetConfig}

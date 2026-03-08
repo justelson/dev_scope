@@ -5,12 +5,16 @@ import { cn } from '@/lib/utils'
 import { CodeBlock, InlineCode } from './CodeElements'
 import { renderColorAwareChildren } from './colorTokens'
 import { resolveImageSrc } from './paths'
+import { resolveMarkdownLinkTarget } from './linkNavigation'
 
 type DivProps = HTMLAttributes<HTMLDivElement> & { align?: string }
 
 export function createMarkdownComponents(
     filePath?: string,
-    options?: { codeBlockMaxLines?: number }
+    options?: {
+        codeBlockMaxLines?: number
+        onInternalLinkClick?: (href: string) => Promise<void> | void
+    }
 ): Components {
     return {
         h1: ({ children }) => (
@@ -40,17 +44,50 @@ export function createMarkdownComponents(
                 {renderColorAwareChildren(children, 'p')}
             </p>
         ),
-        a: ({ href, children }) => (
-            <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1"
-            >
-                {renderColorAwareChildren(children, 'a')}
-                <ExternalLink size={12} className="opacity-50" />
-            </a>
-        ),
+        a: ({ href, children }) => {
+            const rawHref = String(href || '').trim()
+            const isAnchorLink = rawHref.startsWith('#')
+            const internalTarget = rawHref && resolveMarkdownLinkTarget(rawHref, filePath)
+            const isInternalLink = Boolean(internalTarget && options?.onInternalLinkClick)
+
+            if (isAnchorLink) {
+                return (
+                    <a
+                        href={href}
+                        className="text-[var(--accent-primary)] hover:text-white hover:underline inline-flex items-center gap-1"
+                    >
+                        {renderColorAwareChildren(children, 'a')}
+                    </a>
+                )
+            }
+
+            if (isInternalLink) {
+                return (
+                    <a
+                        href={href}
+                        onClick={(event) => {
+                            event.preventDefault()
+                            void options?.onInternalLinkClick?.(rawHref)
+                        }}
+                        className="text-[var(--accent-primary)] hover:text-white hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    >
+                        {renderColorAwareChildren(children, 'a')}
+                    </a>
+                )
+            }
+
+            return (
+                <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1"
+                >
+                    {renderColorAwareChildren(children, 'a')}
+                    <ExternalLink size={12} className="opacity-50" />
+                </a>
+            )
+        },
         strong: ({ children }) => (
             <strong className="font-semibold text-sparkle-text">
                 {renderColorAwareChildren(children, 'strong')}

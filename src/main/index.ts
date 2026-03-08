@@ -274,7 +274,7 @@ app.whenReady().then(() => {
     electronApp.setAppUserModelId('com.devscope.air.win')
     void initializeUpdater()
 
-    protocol.registerFileProtocol(FILE_PROTOCOL, (request, callback) => {
+    protocol.registerBufferProtocol(FILE_PROTOCOL, (request, callback) => {
         try {
             const url = new URL(request.url)
             let filePath = decodeURIComponent(url.pathname)
@@ -291,10 +291,50 @@ app.whenReady().then(() => {
             else if (process.platform === 'win32' && filePath.startsWith('/')) {
                 filePath = filePath.slice(1)
             }
-            callback({ path: filePath })
+
+            // Read file and return as buffer with permissive CSP
+            import('fs').then(({ readFile }) => {
+                readFile(filePath, (err, data) => {
+                    if (err) {
+                        log.error('Failed to read file:', filePath, err)
+                        callback({ statusCode: 404, data: Buffer.from('') })
+                        return
+                    }
+
+                    // Determine MIME type
+                    const ext = filePath.split('.').pop()?.toLowerCase() || ''
+                    const mimeTypes: Record<string, string> = {
+                        'html': 'text/html',
+                        'htm': 'text/html',
+                        'css': 'text/css',
+                        'js': 'application/javascript',
+                        'json': 'application/json',
+                        'png': 'image/png',
+                        'jpg': 'image/jpeg',
+                        'jpeg': 'image/jpeg',
+                        'gif': 'image/gif',
+                        'svg': 'image/svg+xml',
+                        'mp4': 'video/mp4',
+                        'webm': 'video/webm'
+                    }
+                    const mimeType = mimeTypes[ext] || 'application/octet-stream'
+
+                    callback({
+                        statusCode: 200,
+                        data,
+                        mimeType,
+                        headers: {
+                            'Content-Security-Policy': "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;"
+                        }
+                    })
+                })
+            }).catch(err => {
+                log.error('Failed to import fs:', err)
+                callback({ statusCode: 500, data: Buffer.from('') })
+            })
         } catch (err) {
             log.error('Failed to resolve protocol URL:', request.url, err)
-            callback({ path: '' })
+            callback({ statusCode: 500, data: Buffer.from('') })
         }
     })
 

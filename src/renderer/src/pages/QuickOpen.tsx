@@ -113,6 +113,7 @@ export default function QuickOpen() {
                     previewBytes={previewBytes}
                     modifiedAt={previewModifiedAt}
                     projectPath={undefined}
+                    onOpenLinkedPreview={openPreview}
                     onClose={closeWindow}
                 />
             )}
