@@ -7,10 +7,10 @@ Date: March 4, 2026
 
 Build the landing app here:
 
-`C:\Users\elson\my_coding_play\devscope\devscope-air-win\apps\landing-web`
+`C:\Users\elson\my_coding_play\devscope\apps\landing\devscope-web`
 
 Why:
-1. `devscope-air-win` is the active product track.
+1. The repository root desktop app is the active product track.
 2. `apps/` already hosts standalone web clients (`mobile-companion`), so this keeps structure consistent.
 3. It keeps marketing web concerns separated from Electron renderer code.
 
@@ -78,7 +78,7 @@ Built for developers who want less context switching and more momentum."
 ## Technical Guardrails For The Agent
 
 1. Build as standalone web app (no Electron APIs).
-2. Keep this app isolated under `apps/landing-web`.
+2. Keep this app isolated under `apps/landing/devscope-web`.
 3. Include simple build/run scripts in that app's `package.json`.
 4. Prepare for static deployment (Vercel/Netlify compatible).
 
@@ -88,4 +88,4 @@ Built for developers who want less context switching and more momentum."
 2. All required sections exist with real copy.
 3. CTA buttons are wired (even if temporarily to placeholders).
 4. No references to internal-only implementation details.
-5. README exists in `apps/landing-web` with run/build/deploy steps.
+5. README exists in `apps/landing/devscope-web` with run/build/deploy steps.
