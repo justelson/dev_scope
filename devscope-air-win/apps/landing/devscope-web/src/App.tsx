@@ -3,16 +3,19 @@ import { useEffect, useState } from 'react'
 function App() {
   const [isVisible, setIsVisible] = useState(false);
   const [scrollScale, setScrollScale] = useState(0.95);
-  const [isWindows, setIsWindows] = useState(true);
-
-  useEffect(() => {
-    setIsVisible(true);
-    
-    // Detect if user is on Windows
+  
+  // Detect platform once during initialization
+  const [isWindows] = useState(() => {
     const userAgent = navigator.userAgent.toLowerCase();
     const platform = navigator.platform.toLowerCase();
-    const isWindowsOS = platform.includes('win') || userAgent.includes('windows');
-    setIsWindows(isWindowsOS);
+    return platform.includes('win') || userAgent.includes('windows');
+  });
+
+  useEffect(() => {
+    // Defer state updates to avoid synchronous setState in effect
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, 0);
     
     const handleScroll = () => {
       const scrollY = window.scrollY;
@@ -22,7 +25,10 @@ function App() {
     };
 
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   return (
