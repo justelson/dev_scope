@@ -10,6 +10,8 @@ interface ProjectDetailsGitManageViewProps {
 export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewProps) {
     const {
         isGitRepo,
+        loadingGit,
+        gitError,
         setShowInitModal,
         currentBranch,
         targetBranch,
@@ -19,6 +21,8 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
         handleSwitchBranch,
         changedFiles,
         hasRemote,
+        gitSyncStatus,
+        incomingCommits,
         setInitStep,
         unpushedCommits,
         gitHistory,
@@ -27,6 +31,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
         tags,
         stashes
     } = props
+    const loadingCounts = loadingGit && !gitError
 
     if (isGitRepo === false) {
         return (
@@ -120,9 +125,11 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                 {(() => {
                     const hasWorkingChanges = changedFiles.length > 0
                     const hasUnpushedCommits = unpushedCommits.length > 0
+                    const hasIncomingCommits = (gitSyncStatus?.behind || 0) > 0 || incomingCommits.length > 0
                     const hasRecentCommits = gitHistory.length > 0
                     const visibleSummaryCards =
                         (hasWorkingChanges ? 1 : 0) +
+                        (hasIncomingCommits ? 1 : 0) +
                         (hasUnpushedCommits ? 1 : 0) +
                         (hasRecentCommits ? 1 : 0)
 
@@ -136,7 +143,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="text-sm font-medium text-[#E2C08D]">Working Changes</h4>
                                         <span className="text-xs bg-[#E2C08D]/20 text-[#E2C08D] px-2 py-0.5 rounded-full">
-                                            {changedFiles.length}
+                                            {loadingCounts ? '...' : changedFiles.length}
                                         </span>
                                     </div>
                                     <div className="space-y-1">
@@ -157,7 +164,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="text-sm font-medium text-blue-400">To Push</h4>
                                         <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
-                                            {unpushedCommits.length}
+                                            {loadingCounts ? '...' : unpushedCommits.length}
                                         </span>
                                     </div>
                                     <div className="space-y-1">
@@ -168,7 +175,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                                         <span className="font-mono text-white/40">{commit.shortHash}</span> {commit.message}
                                                     </div>
                                                     <div className="shrink-0">
-                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact />
+                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact loading={loadingCounts} />
                                                     </div>
                                                 </div>
                                             </div>
@@ -182,6 +189,29 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                 </div>
                             )}
 
+                            {hasIncomingCommits && (
+                                <div className="bg-amber-500/5 rounded-xl border border-amber-500/20 p-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h4 className="text-sm font-medium text-amber-300">Incoming</h4>
+                                        <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
+                                            {loadingCounts ? '...' : (gitSyncStatus?.behind || incomingCommits.length)}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-1">
+                                        {incomingCommits.slice(0, 3).map((commit: any) => (
+                                            <div key={commit.hash} className="rounded-md border border-white/5 bg-black/20 px-2 py-1.5">
+                                                <div className="text-xs text-white/60 truncate min-w-0">
+                                                    <span className="font-mono text-white/40">{commit.shortHash}</span> {commit.message}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <button onClick={() => setGitView('pulls')} className="text-xs text-amber-300 hover:underline">
+                                            Open Pulls...
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             {hasRecentCommits && (
                                 <div className={cn(
                                     'bg-white/5 rounded-xl border border-white/5 p-4',
@@ -190,7 +220,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="text-sm font-medium text-white/80">Recent Commits</h4>
                                         <span className="text-xs bg-white/10 text-white/60 px-2 py-0.5 rounded-full">
-                                            {gitHistory.length}
+                                            {loadingCounts ? '...' : gitHistory.length}
                                         </span>
                                     </div>
                                     <div className="space-y-1">
@@ -201,7 +231,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                                         <span className="font-mono text-white/40">{commit.shortHash}</span> {commit.message}
                                                     </div>
                                                     <div className="shrink-0">
-                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact />
+                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact loading={loadingCounts} />
                                                     </div>
                                                 </div>
                                             </div>
@@ -228,19 +258,19 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                         <div className="grid grid-cols-2 gap-2 text-xs">
                             <div className="bg-black/20 rounded-lg border border-white/5 px-3 py-2">
                                 <div className="text-white/40">Branches</div>
-                                <div className="text-white/80 font-medium">{branches.length}</div>
+                                <div className="text-white/80 font-medium">{loadingCounts ? '...' : branches.length}</div>
                             </div>
                             <div className="bg-black/20 rounded-lg border border-white/5 px-3 py-2">
                                 <div className="text-white/40">Remotes</div>
-                                <div className="text-white/80 font-medium">{remotes.length}</div>
+                                <div className="text-white/80 font-medium">{loadingCounts ? '...' : remotes.length}</div>
                             </div>
                             <div className="bg-black/20 rounded-lg border border-white/5 px-3 py-2">
                                 <div className="text-white/40">Tags</div>
-                                <div className="text-white/80 font-medium">{tags.length}</div>
+                                <div className="text-white/80 font-medium">{loadingCounts ? '...' : tags.length}</div>
                             </div>
                             <div className="bg-black/20 rounded-lg border border-white/5 px-3 py-2">
                                 <div className="text-white/40">Stashes</div>
-                                <div className="text-white/80 font-medium">{stashes.length}</div>
+                                <div className="text-white/80 font-medium">{loadingCounts ? '...' : stashes.length}</div>
                             </div>
                         </div>
                     </div>

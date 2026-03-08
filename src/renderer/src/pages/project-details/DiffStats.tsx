@@ -5,14 +5,37 @@ interface DiffStatsProps {
     deletions?: number
     compact?: boolean
     className?: string
+    loading?: boolean
 }
 
-export function DiffStats({ additions = 0, deletions = 0, compact = false, className }: DiffStatsProps) {
+export function DiffStats({
+    additions = 0,
+    deletions = 0,
+    compact = false,
+    className,
+    loading = false
+}: DiffStatsProps) {
     const safeAdditions = Math.max(0, additions)
     const safeDeletions = Math.max(0, deletions)
     const total = safeAdditions + safeDeletions
     const addRatio = total > 0 ? (safeAdditions / total) * 100 : 0
     const delRatio = total > 0 ? (safeDeletions / total) * 100 : 0
+
+    if (loading) {
+        return (
+            <div className={cn('flex items-center gap-2', className)} aria-label="Loading diff stats">
+                <span className={cn(compact ? 'text-[10px]' : 'text-xs', 'font-mono text-white/35 animate-pulse')}>
+                    +...
+                </span>
+                <span className={cn(compact ? 'text-[10px]' : 'text-xs', 'font-mono text-white/35 animate-pulse')}>
+                    -...
+                </span>
+                <div className={cn(compact ? 'h-1.5 w-16' : 'h-2 w-24', 'overflow-hidden rounded-none border border-white/10 bg-white/5')}>
+                    <div className="h-full w-full animate-pulse bg-white/12" />
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className={cn('flex items-center gap-2', className)}>

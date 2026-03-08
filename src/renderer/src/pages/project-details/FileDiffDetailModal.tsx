@@ -1,13 +1,18 @@
-import { useState } from 'react'
-import { Check, Copy, RefreshCw, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Check, Columns3, Copy, RefreshCw, Rows3, X } from 'lucide-react'
+import type { FileDiffMetadata } from '@pierre/diffs/react'
 import { cn } from '@/lib/utils'
 import { DiffStats } from './DiffStats'
-import MonacoDiffViewer from '@/components/ui/diff-viewer/MonacoDiffViewer'
+import PatchDiffViewer from '@/components/ui/diff-viewer/PatchDiffViewer'
+import { parsePatchForRendering, resolveFileDiffPath } from '@/lib/diffRendering'
+
+const DIFF_RENDER_MODE_STORAGE_KEY = 'devscope:project-details:diff-render-mode:v1'
 
 interface FileDiffDetailModalProps {
     isOpen: boolean
     filePath: string
     diff: string
+    fileDiff?: FileDiffMetadata | null
     loading?: boolean
     additions?: number
     deletions?: number
@@ -36,6 +41,7 @@ export function FileDiffDetailModal({
     isOpen,
     filePath,
     diff,
+    fileDiff = null,
     loading = false,
     additions = 0,
     deletions = 0,
@@ -44,11 +50,71 @@ export function FileDiffDetailModal({
     onClose
 }: FileDiffDetailModalProps) {
     const [copied, setCopied] = useState(false)
+    const [renderMode, setRenderMode] = useState<'stacked' | 'split'>(() => {
+        try {
+            const stored = String(window.localStorage.getItem(DIFF_RENDER_MODE_STORAGE_KEY) || '').trim()
+            return stored === 'split' ? 'split' : 'stacked'
+        } catch {
+            return 'stacked'
+        }
+    })
+    const [parsedDiff, setParsedDiff] = useState(() => parsePatchForRendering('', 'file-detail:initial'))
+    const [isPreparingDiff, setIsPreparingDiff] = useState(false)
+
+    useEffect(() => {
+        if (!isOpen || fileDiff) {
+            setIsPreparingDiff(false)
+            if (!diff) {
+                setParsedDiff(parsePatchForRendering('', `file-detail:${filePath}`))
+            }
+            return
+        }
+
+        let cancelled = false
+        let frameId = 0
+        let timeoutId = 0
+        const scope = `file-detail:${filePath}`
+
+        setIsPreparingDiff(Boolean(diff))
+        frameId = window.requestAnimationFrame(() => {
+            timeoutId = window.setTimeout(() => {
+                if (cancelled) return
+                const next = parsePatchForRendering(diff, scope)
+                if (cancelled) return
+                setParsedDiff(next)
+                setIsPreparingDiff(false)
+            }, 0)
+        })
+
+        return () => {
+            cancelled = true
+            window.cancelAnimationFrame(frameId)
+            window.clearTimeout(timeoutId)
+        }
+    }, [diff, fileDiff, filePath, isOpen])
+
+    const resolvedFileDiff = useMemo(() => {
+        if (fileDiff) return fileDiff
+
+        const normalizedPath = filePath.replace(/\\/g, '/')
+        return parsedDiff.files.find((entry) => {
+            const currentPath = resolveFileDiffPath(entry)
+            const previousPath = entry.prevName?.replace(/\\/g, '/')
+            return currentPath === normalizedPath || previousPath === normalizedPath
+        }) || parsedDiff.files[0] || null
+    }, [fileDiff, filePath, parsedDiff.files])
+    const hasDiff = Boolean(resolvedFileDiff || parsedDiff.patch)
+    const isBusy = loading || isPreparingDiff
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(DIFF_RENDER_MODE_STORAGE_KEY, renderMode)
+        } catch {
+            // Ignore storage failures.
+        }
+    }, [renderMode])
 
     if (!isOpen) return null
-
-    const hasDiff = Boolean(diff && diff !== 'No changes' && diff !== 'No diff available')
-    const lines = hasDiff ? diff.split('\n') : []
 
     const handleCopyPath = async () => {
         await navigator.clipboard.writeText(filePath)
@@ -76,32 +142,76 @@ export function FileDiffDetailModal({
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         <DiffStats additions={additions} deletions={deletions} />
+                        {!loading && hasDiff && (
+                            <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
+                                <button
+                                    onClick={() => setRenderMode('stacked')}
+                                    className={cn(
+                                        'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all',
+                                        renderMode === 'stacked'
+                                            ? 'border-white/10 bg-white/10 text-white'
+                                            : 'border-transparent text-white/55 hover:border-white/10 hover:bg-white/[0.03] hover:text-white'
+                                    )}
+                                    title="Stacked view"
+                                >
+                                    <Rows3 size={13} />
+                                </button>
+                                <button
+                                    onClick={() => setRenderMode('split')}
+                                    className={cn(
+                                        'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all',
+                                        renderMode === 'split'
+                                            ? 'border-white/10 bg-white/10 text-white'
+                                            : 'border-transparent text-white/55 hover:border-white/10 hover:bg-white/[0.03] hover:text-white'
+                                    )}
+                                    title="Split view"
+                                >
+                                    <Columns3 size={13} />
+                                </button>
+                            </div>
+                        )}
                         <button
                             onClick={() => { void handleCopyPath() }}
                             className={cn(
-                                'p-1.5 rounded-lg transition-colors',
+                                'inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] transition-all hover:border-white/20 hover:bg-white/10',
                                 copied
                                     ? 'text-emerald-300 bg-emerald-500/10'
-                                    : 'text-white/50 hover:text-white hover:bg-white/10'
+                                    : 'text-white/50 hover:text-white'
                             )}
                             title={copied ? 'Copied' : 'Copy path'}
                         >
                             {copied ? <Check size={14} /> : <Copy size={14} />}
                         </button>
-                        <button onClick={onClose} className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+                        <button
+                            onClick={onClose}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-white/50 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white"
+                        >
                             <X size={16} />
                         </button>
                     </div>
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-hidden bg-black/20">
-                    {loading ? (
+                    {isBusy ? (
                         <div className="flex items-center justify-center py-16 text-white/30">
                             <RefreshCw size={18} className="animate-spin mr-2" />
-                            <span className="text-sm">Loading diff...</span>
+                            <span className="text-sm">{loading ? 'Loading diff...' : 'Preparing diff...'}</span>
                         </div>
                     ) : hasDiff ? (
-                        <MonacoDiffViewer filePath={filePath} diff={diff} />
+                        resolvedFileDiff ? (
+                            <PatchDiffViewer fileDiff={resolvedFileDiff} mode={renderMode} />
+                        ) : parsedDiff.error ? (
+                            <div className="h-full overflow-auto custom-scrollbar px-5 py-4">
+                                <p className="mb-3 text-xs text-amber-300/80">
+                                    Falling back to raw diff view because patch parsing failed.
+                                </p>
+                                <pre className="whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-black/30 p-4 font-mono text-[12px] leading-5 text-white/75">
+                                    {parsedDiff.patch}
+                                </pre>
+                            </div>
+                        ) : (
+                            <PatchDiffViewer patch={parsedDiff.patch} mode={renderMode} />
+                        )
                     ) : (
                         <div className="flex items-center justify-center py-16 text-white/35">
                             <span className="text-sm">No diff available for this file.</span>

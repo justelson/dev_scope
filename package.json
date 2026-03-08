@@ -19,6 +19,7 @@
     },
     "dependencies": {
         "@monaco-editor/react": "^4.7.0",
+        "@pierre/diffs": "^1.1.0-beta.18",
         "@types/react-syntax-highlighter": "^15.5.13",
         "ansi-to-html": "^0.7.2",
         "clsx": "^2.1.1",

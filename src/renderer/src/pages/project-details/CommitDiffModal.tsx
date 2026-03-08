@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import {
     Calendar,
     Check,
@@ -17,6 +17,7 @@ import {
     X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { parsePatchForRendering, summarizeFileDiff, type FileDiffSummary } from '@/lib/diffRendering'
 import type { GitCommit } from './types'
 import { DiffStats } from './DiffStats'
 import { FileDiffDetailModal } from './FileDiffDetailModal'
@@ -58,61 +59,50 @@ function getFileIcon(name: string, isDirectory: boolean, isExpanded?: boolean) {
 }
 
 export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: GitCommit, diff: string, loading: boolean, onClose: () => void }) {
+    const FILES_PER_PAGE = 15
     const [showCommitInfo, setShowCommitInfo] = useState(false)
     const [copiedHash, setCopiedHash] = useState(false)
     const [copiedPath, setCopiedPath] = useState<string | null>(null)
     const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
+    const [parsedDiff, setParsedDiff] = useState<FileDiffSummary[]>([])
+    const [isPreparingDiff, setIsPreparingDiff] = useState(false)
+    const [currentPage, setCurrentPage] = useState(1)
 
-    const handleCopyPath = (path: string, e: React.MouseEvent) => {
+    const handleCopyPath = (path: string, e: MouseEvent) => {
         e.stopPropagation()
         navigator.clipboard.writeText(path)
         setCopiedPath(path)
         setTimeout(() => setCopiedPath(null), 1500)
     }
 
-    // Parse diff into file sections
-    const parsedDiff = useMemo(() => {
-        if (!diff) return []
-
-        const files: Array<{ path: string; diff: string; additions: number; deletions: number; totalLines: number }> = []
-        const lines = diff.split('\n')
-        let currentFile: { path: string; diff: string; additions: number; deletions: number; totalLines: number } | null = null
-        let inDiff = false
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i]
-
-            // Detect file header (diff --git a/... b/...)
-            if (line.startsWith('diff --git')) {
-                if (currentFile) {
-                    files.push(currentFile)
-                }
-
-                // Extract file path from "diff --git a/path b/path"
-                const match = line.match(/diff --git a\/(.*?) b\/(.*)/)
-                const path = match ? match[2] : 'unknown'
-
-                currentFile = { path, diff: line + '\n', additions: 0, deletions: 0, totalLines: 0 }
-                inDiff = true
-            } else if (currentFile && inDiff) {
-                currentFile.diff += line + '\n'
-                currentFile.totalLines++
-
-                // Count additions and deletions
-                if (line.startsWith('+') && !line.startsWith('+++')) {
-                    currentFile.additions++
-                } else if (line.startsWith('-') && !line.startsWith('---')) {
-                    currentFile.deletions++
-                }
-            }
+    useEffect(() => {
+        if (loading || !diff.trim()) {
+            setParsedDiff([])
+            setIsPreparingDiff(false)
+            return
         }
 
-        if (currentFile) {
-            files.push(currentFile)
-        }
+        let cancelled = false
+        let frameId = 0
+        let timeoutId = 0
 
-        return files
-    }, [diff])
+        setIsPreparingDiff(true)
+        frameId = window.requestAnimationFrame(() => {
+            timeoutId = window.setTimeout(() => {
+                if (cancelled) return
+                const next = parsePatchForRendering(diff, `commit-diff:${commit.hash}`).files.map(summarizeFileDiff)
+                if (cancelled) return
+                setParsedDiff(next)
+                setIsPreparingDiff(false)
+            }, 0)
+        })
+
+        return () => {
+            cancelled = true
+            window.cancelAnimationFrame(frameId)
+            window.clearTimeout(timeoutId)
+        }
+    }, [commit.hash, diff, loading])
 
     const commitMeta = useMemo(() => {
         const lines = diff.split('\n')
@@ -143,10 +133,10 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
         const messageLines: string[] = []
         if (commitDateIdx >= 0) {
             let idx = commitDateIdx + 1
-            while (idx < lines.length && lines[idx].trim() === '') idx++
+            while (idx < lines.length && lines[idx].trim() === '') idx += 1
             while (idx < lines.length && lines[idx].startsWith('    ')) {
                 messageLines.push(lines[idx].replace(/^    /, ''))
-                idx++
+                idx += 1
             }
         }
 
@@ -164,10 +154,25 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
 
     const totalAdditions = useMemo(() => parsedDiff.reduce((sum, file) => sum + file.additions, 0), [parsedDiff])
     const totalDeletions = useMemo(() => parsedDiff.reduce((sum, file) => sum + file.deletions, 0), [parsedDiff])
-    const selectedFileDiff = useMemo(
+    const totalPages = useMemo(() => Math.max(1, Math.ceil(parsedDiff.length / FILES_PER_PAGE)), [parsedDiff.length, FILES_PER_PAGE])
+    const paginatedFiles = useMemo(() => {
+        const start = (currentPage - 1) * FILES_PER_PAGE
+        return parsedDiff.slice(start, start + FILES_PER_PAGE)
+    }, [currentPage, parsedDiff, FILES_PER_PAGE])
+    const pageStart = parsedDiff.length === 0 ? 0 : ((currentPage - 1) * FILES_PER_PAGE) + 1
+    const pageEnd = parsedDiff.length === 0 ? 0 : Math.min(currentPage * FILES_PER_PAGE, parsedDiff.length)
+    const selectedFileDiff = useMemo<FileDiffSummary | null>(
         () => parsedDiff.find((file) => file.path === selectedFilePath) || null,
         [parsedDiff, selectedFilePath]
     )
+
+    useEffect(() => {
+        setCurrentPage((page) => Math.min(page, totalPages))
+    }, [totalPages])
+
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [commit.hash])
 
     const copyCommitHash = async () => {
         const value = commitMeta.fullHash || commit.hash
@@ -190,7 +195,6 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                 className="relative bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col m-4 overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
-                {/* Header */}
                 <div className="flex items-start justify-between p-5 border-b border-white/5 bg-white/5">
                     <div className="flex-1 min-w-0">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2 mb-2">
@@ -209,7 +213,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                             </span>
                         </div>
 
-                        {!loading && (
+                        {!loading && !isPreparingDiff && (
                             <div className="mt-3 space-y-2">
                                 <div className="flex flex-wrap items-center gap-2 text-[11px]">
                                     <span className="px-2 py-1 rounded bg-white/5 border border-white/10 text-white/70">
@@ -274,8 +278,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                     </div>
                 </div>
 
-                {/* Toolbar */}
-                {!loading && parsedDiff.length > 0 && (
+                {!loading && !isPreparingDiff && parsedDiff.length > 0 && (
                     <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-black/20">
                         <div className="flex items-center gap-3 text-xs text-white/50">
                             <span className="flex items-center gap-1">
@@ -293,52 +296,78 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                     </div>
                 )}
 
-                {/* Diff Content */}
                 <div className="overflow-y-auto p-4 custom-scrollbar flex-1 bg-black/10">
-                    {loading ? (
+                    {loading || isPreparingDiff ? (
                         <div className="flex flex-col items-center justify-center py-16 text-white/30">
                             <RefreshCw size={32} className="mb-4 animate-spin" />
-                            <p className="text-sm">Loading diff...</p>
+                            <p className="text-sm">{loading ? 'Loading diff...' : 'Preparing diff...'}</p>
                         </div>
                     ) : parsedDiff.length > 0 ? (
-                        <div className="space-y-2">
-                            {parsedDiff.map((file, idx) => {
-                                return (
-                                    <div key={idx} className="bg-black/30 rounded-xl border border-white/5 p-3 group">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div className="flex items-start gap-3 flex-1 min-w-0">
-                                                {getFileIcon(file.path.split('/').pop() || '', false)}
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-mono text-white/80 truncate">{file.path}</p>
-                                                    <p className="text-xs text-white/45">{file.totalLines} diff lines</p>
+                        <>
+                            <div className="space-y-2">
+                                {paginatedFiles.map((file) => {
+                                    return (
+                                        <div key={file.path} className="group rounded-xl border border-white/5 bg-black/30 p-3 transition-all hover:border-white/10">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="flex items-start gap-3 flex-1 min-w-0">
+                                                    {getFileIcon(file.path.split('/').pop() || '', false)}
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-mono text-white/80 truncate">{file.path}</p>
+                                                        {file.previousPath && (
+                                                            <p className="text-[11px] text-blue-300/80 truncate">from {file.previousPath}</p>
+                                                        )}
+                                                        <p className="text-xs text-white/45">{file.totalLines} diff lines</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => handleCopyPath(file.path, e)}
+                                                        className={cn(
+                                                            'p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100',
+                                                            copiedPath === file.path
+                                                                ? 'text-emerald-400 bg-emerald-400/10'
+                                                                : 'text-white/40 hover:text-white hover:bg-white/10'
+                                                        )}
+                                                        title={copiedPath === file.path ? 'Copied!' : `Copy path: ${file.path}`}
+                                                    >
+                                                        {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onClick={(e) => handleCopyPath(file.path, e)}
-                                                    className={cn(
-                                                        'p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100',
-                                                        copiedPath === file.path
-                                                            ? 'text-emerald-400 bg-emerald-400/10'
-                                                            : 'text-white/40 hover:text-white hover:bg-white/10'
-                                                    )}
-                                                    title={copiedPath === file.path ? 'Copied!' : `Copy path: ${file.path}`}
-                                                >
-                                                    {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
-                                                </button>
-                                            </div>
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                <DiffStats additions={file.additions} deletions={file.deletions} compact />
-                                                <button
-                                                    onClick={() => setSelectedFilePath(file.path)}
-                                                    className="px-2 py-1 text-[11px] rounded border border-blue-400/25 text-blue-300 hover:text-blue-100 hover:bg-blue-500/10"
-                                                >
-                                                    View Diff
-                                                </button>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <DiffStats additions={file.additions} deletions={file.deletions} compact />
+                                                    <button
+                                                        onClick={() => setSelectedFilePath(file.path)}
+                                                        className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/75 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white"
+                                                    >
+                                                        View Diff
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
+                                    )
+                                })}
+                            </div>
+                            {parsedDiff.length > FILES_PER_PAGE && (
+                                <div className="mt-4 flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/55">
+                                    <span>Showing {pageStart}-{pageEnd} of {parsedDiff.length}</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <button
+                                            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                                            disabled={currentPage <= 1}
+                                            className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+                                        >
+                                            Prev
+                                        </button>
+                                        <span className="min-w-[54px] text-center text-white/65">{currentPage}/{totalPages}</span>
+                                        <button
+                                            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                                            disabled={currentPage >= totalPages}
+                                            className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+                                        >
+                                            Next
+                                        </button>
                                     </div>
-                                )
-                            })}
-                        </div>
+                                </div>
+                            )}
+                        </>
                     ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-white/30">
                             <FileText size={48} className="mb-4 opacity-20" />
@@ -395,10 +424,11 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                 <FileDiffDetailModal
                     isOpen={Boolean(selectedFileDiff)}
                     filePath={selectedFileDiff?.path || ''}
-                    diff={selectedFileDiff?.diff || ''}
+                    diff=""
+                    fileDiff={selectedFileDiff?.fileDiff || null}
                     additions={selectedFileDiff?.additions || 0}
                     deletions={selectedFileDiff?.deletions || 0}
-                    subtitle={selectedFileDiff ? `Commit diff • ${commit.shortHash}` : undefined}
+                    subtitle={selectedFileDiff ? `Commit diff - ${commit.shortHash}` : undefined}
                     onClose={() => setSelectedFilePath(null)}
                 />
             </div>

@@ -107,6 +107,20 @@ export interface GitRemoteSummary {
     pushUrl: string
 }
 
+export interface GitSyncStatus {
+    currentBranch: string
+    upstreamBranch: string | null
+    headHash: string | null
+    upstreamHeadHash: string | null
+    hasRemote: boolean
+    ahead: number
+    behind: number
+    workingTreeChanged: boolean
+    workingTreeChangeCount: number
+    statusToken: string
+    detached: boolean
+}
+
 export interface GitTagSummary {
     name: string
     commit?: string

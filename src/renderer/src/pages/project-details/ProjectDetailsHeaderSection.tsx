@@ -455,9 +455,6 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                                 )}
                             >
                                 <FolderOpen size={isCondensedLayout ? 14 : 15} /> Files
-                                {loadingFiles && (
-                                    <RefreshCw size={11} className="animate-spin text-[var(--accent-primary)]" />
-                                )}
                             </button>
                             <button
                                 onClick={() => setActiveTab('git')}
@@ -469,9 +466,6 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                             >
                                 <GitBranch size={isCondensedLayout ? 14 : 15} />
                                 Git
-                                {loadingGit && (
-                                    <RefreshCw size={11} className="animate-spin text-[var(--accent-primary)]" />
-                                )}
                                 {changedFiles.length > 0 && (
                                     <span className="rounded-full bg-[#E2C08D]/20 px-1.5 py-0.5 text-[10px] text-[#E2C08D]">
                                         {changedFiles.length}

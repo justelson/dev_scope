@@ -2,6 +2,7 @@ import type { FileTreeNode, GitCommit, GitStatusDetail } from './types'
 
 type RefreshGitOptions = {
     quiet?: boolean
+    mode?: 'working' | 'unpushed' | 'pulls' | 'full'
 }
 
 interface GitActionParams {
@@ -40,6 +41,10 @@ interface GitActionParams {
     setCommitMessage: (value: string) => void
     setIsCommitting: (loading: boolean) => void
     setIsPushing: (loading: boolean) => void
+    setIsFetching: (loading: boolean) => void
+    setIsPulling: (loading: boolean) => void
+    setLastFetched: (timestamp: number | undefined) => void
+    setLastPulled: (timestamp: number | undefined) => void
     setIsSwitchingBranch: (loading: boolean) => void
     setIsInitializing: (loading: boolean) => void
     setIsGitRepo: (value: boolean) => void
@@ -163,7 +168,8 @@ export function createProjectGitActions(params: GitActionParams) {
             }
 
             params.setCommitMessage('')
-            await params.refreshGitData(false)
+            await params.refreshGitData(false, { mode: 'unpushed' })
+            void params.refreshGitData(false, { quiet: true, mode: 'full' })
             params.showToast('Commit created successfully.')
         } catch (err: any) {
             params.showToast(`Failed to commit: ${err.message}`, undefined, undefined, 'error')
@@ -223,7 +229,7 @@ export function createProjectGitActions(params: GitActionParams) {
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to stage file')
             }
-            void params.refreshGitData(false, { quiet: true })
+            void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()
             params.showToast(`Failed to stage file: ${err.message}`, undefined, undefined, 'error')
@@ -248,7 +254,7 @@ export function createProjectGitActions(params: GitActionParams) {
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to unstage file')
             }
-            void params.refreshGitData(false, { quiet: true })
+            void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()
             params.showToast(`Failed to unstage file: ${err.message}`, undefined, undefined, 'error')
@@ -267,7 +273,7 @@ export function createProjectGitActions(params: GitActionParams) {
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to stage all files')
             }
-            void params.refreshGitData(false, { quiet: true })
+            void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()
             params.showToast(`Failed to stage files: ${err.message}`, undefined, undefined, 'error')
@@ -286,7 +292,7 @@ export function createProjectGitActions(params: GitActionParams) {
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to unstage all files')
             }
-            void params.refreshGitData(false, { quiet: true })
+            void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()
             params.showToast(`Failed to unstage files: ${err.message}`, undefined, undefined, 'error')
@@ -383,7 +389,7 @@ export function createProjectGitActions(params: GitActionParams) {
                 params.showToast('Push succeeded after retry.')
             }
 
-            await params.refreshGitData(false)
+            await params.refreshGitData(false, { mode: 'unpushed' })
             if (!retriedAfterTransientError) {
                 if (mode === 'publish' || !hadUnpushedCommits) {
                     params.showToast(`Published branch "${params.currentBranch || 'current'}" to remote.`)
@@ -531,6 +537,46 @@ export function createProjectGitActions(params: GitActionParams) {
         void performCommit()
     }
 
+    const handleFetch = async () => {
+        if (!params.decodedPath) return
+
+        params.setIsFetching(true)
+        try {
+            const result = await window.devscope.fetchUpdates(params.decodedPath)
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to fetch updates')
+            }
+
+            params.setLastFetched(Date.now())
+            await params.refreshGitData(false, { quiet: true, mode: 'pulls' })
+            params.showToast('Fetched remote updates.')
+        } catch (err: any) {
+            params.showToast(`Failed to fetch: ${err.message}`, undefined, undefined, 'error')
+        } finally {
+            params.setIsFetching(false)
+        }
+    }
+
+    const handlePull = async () => {
+        if (!params.decodedPath) return
+
+        params.setIsPulling(true)
+        try {
+            const result = await window.devscope.pullUpdates(params.decodedPath)
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to pull updates')
+            }
+
+            params.setLastPulled(Date.now())
+            await params.refreshGitData(true, { mode: 'full' })
+            params.showToast('Pulled remote updates successfully.')
+        } catch (err: any) {
+            params.showToast(`Failed to pull: ${err.message}`, undefined, undefined, 'error')
+        } finally {
+            params.setIsPulling(false)
+        }
+    }
+
     const handleOpenInExplorer = async () => {
         if (params.projectPath) {
             try {
@@ -548,7 +594,9 @@ export function createProjectGitActions(params: GitActionParams) {
         handleCommitClick,
         handleCommit,
         handleGenerateCommitMessage,
+        handleFetch,
         handlePush,
+        handlePull,
         handleStageFile,
         handleUnstageFile,
         handleStageAll,

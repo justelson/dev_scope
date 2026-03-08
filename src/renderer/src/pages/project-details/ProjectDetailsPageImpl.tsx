@@ -21,6 +21,7 @@ import type {
     GitBranchSummary,
     GitCommit,
     GitRemoteSummary,
+    GitSyncStatus,
     GitStatusDetail,
     GitStashSummary,
     GitTagSummary,
@@ -123,6 +124,7 @@ function validateCreateName(name: string): string | null {
 }
 
 const PROJECT_ACTIVE_TAB_STORAGE_PREFIX = 'devscope:project-details:active-tab:'
+const PROJECT_GIT_ACTIVITY_STORAGE_PREFIX = 'devscope:project-details:git-activity:'
 
 function readStoredProjectActiveTab(projectPath: string): 'readme' | 'files' | 'git' | null {
     try {
@@ -139,6 +141,47 @@ function writeStoredProjectActiveTab(projectPath: string, tab: 'readme' | 'files
     try {
         const key = `${PROJECT_ACTIVE_TAB_STORAGE_PREFIX}${projectPath}`
         window.localStorage.setItem(key, tab)
+    } catch {
+        // ignore storage access issues
+    }
+}
+
+function readStoredProjectGitActivity(projectPath: string): {
+    lastFetched?: number
+    lastPulled?: number
+} {
+    try {
+        const key = `${PROJECT_GIT_ACTIVITY_STORAGE_PREFIX}${projectPath}`
+        const raw = window.localStorage.getItem(key)
+        if (!raw) return {}
+
+        const parsed = JSON.parse(raw) as {
+            lastFetched?: unknown
+            lastPulled?: unknown
+        }
+
+        return {
+            lastFetched: typeof parsed?.lastFetched === 'number' ? parsed.lastFetched : undefined,
+            lastPulled: typeof parsed?.lastPulled === 'number' ? parsed.lastPulled : undefined
+        }
+    } catch {
+        return {}
+    }
+}
+
+function writeStoredProjectGitActivity(
+    projectPath: string,
+    value: {
+        lastFetched?: number
+        lastPulled?: number
+    }
+): void {
+    try {
+        const key = `${PROJECT_GIT_ACTIVITY_STORAGE_PREFIX}${projectPath}`
+        window.localStorage.setItem(key, JSON.stringify({
+            lastFetched: typeof value.lastFetched === 'number' ? value.lastFetched : null,
+            lastPulled: typeof value.lastPulled === 'number' ? value.lastPulled : null
+        }))
     } catch {
         // ignore storage access issues
     }
@@ -168,11 +211,13 @@ export default function ProjectDetailsPage() {
     const [activePorts, setActivePorts] = useState<number[]>([])
     const [gitHistory, setGitHistory] = useState<GitCommit[]>([])
     const [loadingGit, setLoadingGit] = useState(false)
+    const [loadingGitHistory, setLoadingGitHistory] = useState(false)
     const [gitError, setGitError] = useState<string | null>(null)
     const [loadingFiles, setLoadingFiles] = useState(true)
-    const [gitView, setGitView] = useState<'changes' | 'history' | 'unpushed' | 'manage'>('manage')
+    const [gitView, setGitView] = useState<'changes' | 'history' | 'unpushed' | 'pulls' | 'manage'>('manage')
     const [commitPage, setCommitPage] = useState(1)
     const [unpushedPage, setUnpushedPage] = useState(1)
+    const [pullsPage, setPullsPage] = useState(1)
     const [changesPage, setChangesPage] = useState(1)
     const COMMITS_PER_PAGE = 15
     const ITEMS_PER_PAGE = 15
@@ -180,12 +225,18 @@ export default function ProjectDetailsPage() {
     const [commitDiff, setCommitDiff] = useState<string>('')
     const [loadingDiff, setLoadingDiff] = useState(false)
     const [unpushedCommits, setUnpushedCommits] = useState<GitCommit[]>([])
+    const [incomingCommits, setIncomingCommits] = useState<GitCommit[]>([])
     const [gitUser, setGitUser] = useState<{ name: string; email: string } | null>(null)
     const [repoOwner, setRepoOwner] = useState<string | null>(null)
+    const [gitSyncStatus, setGitSyncStatus] = useState<GitSyncStatus | null>(null)
     const [commitMessage, setCommitMessage] = useState('')
     const [isCommitting, setIsCommitting] = useState(false)
     const [isGeneratingCommitMessage, setIsGeneratingCommitMessage] = useState(false)
     const [isPushing, setIsPushing] = useState(false)
+    const [isFetching, setIsFetching] = useState(false)
+    const [isPulling, setIsPulling] = useState(false)
+    const [lastFetched, setLastFetched] = useState<number | undefined>(undefined)
+    const [lastPulled, setLastPulled] = useState<number | undefined>(undefined)
     const [toast, setToast] = useState<{
         message: string
         visible: boolean
@@ -291,8 +342,20 @@ export default function ProjectDetailsPage() {
     useEffect(() => {
         if (!decodedPath) return
         const storedTab = readStoredProjectActiveTab(decodedPath)
+        const storedGitActivity = readStoredProjectGitActivity(decodedPath)
         setActiveTab(storedTab || 'readme')
+        setLastFetched(storedGitActivity.lastFetched)
+        setLastPulled(storedGitActivity.lastPulled)
+        setPullsPage(1)
     }, [decodedPath])
+    useEffect(() => {
+        if (!decodedPath) return
+        writeStoredProjectGitActivity(decodedPath, { lastFetched, lastPulled })
+    }, [decodedPath, lastFetched, lastPulled])
+    useEffect(() => {
+        const totalPages = Math.max(1, Math.ceil(incomingCommits.length / ITEMS_PER_PAGE))
+        setPullsPage((prev) => Math.min(prev, totalPages))
+    }, [incomingCommits.length, ITEMS_PER_PAGE])
     useEffect(() => {
         if (!showInitModal) return
         const nextBranchState = resolveBranchState(settings.gitInitDefaultBranch)
@@ -368,8 +431,23 @@ export default function ProjectDetailsPage() {
     } = useProjectDataLifecycle({
         decodedPath,
         activeTab,
+        gitView,
         project,
         fileTree,
+        isGitRepo,
+        gitStatusDetails,
+        gitHistory,
+        incomingCommits,
+        unpushedCommits,
+        gitUser,
+        repoOwner,
+        hasRemote,
+        gitSyncStatus,
+        gitStatusMap,
+        branches,
+        remotes,
+        tags,
+        stashes,
         autoRefreshGitOnProjectOpen: settings.gitAutoRefreshOnProjectOpen,
         showInitModal,
         gitignoreTemplate,
@@ -383,14 +461,17 @@ export default function ProjectDetailsPage() {
         setProject,
         setFileTree,
         setLoadingGit,
+        setLoadingGitHistory,
         setGitError,
         setIsGitRepo,
         setGitStatusDetails,
         setGitHistory,
+        setIncomingCommits,
         setUnpushedCommits,
         setGitUser,
         setRepoOwner,
         setHasRemote,
+        setGitSyncStatus,
         setGitStatusMap,
         setBranches,
         setRemotes,
@@ -791,7 +872,9 @@ export default function ProjectDetailsPage() {
         handleCommitClick,
         handleCommit,
         handleGenerateCommitMessage,
+        handleFetch,
         handlePush,
+        handlePull,
         handleStageFile,
         handleUnstageFile,
         handleStageAll,
@@ -833,6 +916,10 @@ export default function ProjectDetailsPage() {
         setCommitMessage,
         setIsCommitting,
         setIsPushing,
+        setIsFetching,
+        setIsPulling,
+        setLastFetched,
+        setLastPulled,
         setIsSwitchingBranch,
         setIsInitializing,
         setIsGitRepo,
@@ -941,6 +1028,7 @@ export default function ProjectDetailsPage() {
                 setActiveTab={setActiveTab}
                 fileTree={fileTree}
                 loadingGit={loadingGit}
+                loadingGitHistory={loadingGitHistory}
                 loadingFiles={loadingFiles}
                 changedFiles={changedFiles}
                 stagedFiles={stagedFiles}
@@ -1015,9 +1103,17 @@ export default function ProjectDetailsPage() {
                 handleStageAll={handleStageAll}
                 handleUnstageAll={handleUnstageAll}
                 hasRemote={hasRemote}
+                gitSyncStatus={gitSyncStatus}
+                incomingCommits={incomingCommits}
                 setInitStep={setInitStep}
+                handleFetch={handleFetch}
                 handlePush={handlePush}
+                handlePull={handlePull}
                 isPushing={isPushing}
+                isFetching={isFetching}
+                isPulling={isPulling}
+                lastFetched={lastFetched}
+                lastPulled={lastPulled}
                 gitHistory={gitHistory}
                 remotes={remotes}
                 tags={tags}
@@ -1029,6 +1125,8 @@ export default function ProjectDetailsPage() {
                 handleCommitClick={handleCommitClick}
                 unpushedPage={unpushedPage}
                 setUnpushedPage={setUnpushedPage}
+                pullsPage={pullsPage}
+                setPullsPage={setPullsPage}
                 COMMITS_PER_PAGE={COMMITS_PER_PAGE}
                 commitPage={commitPage}
                 setCommitPage={setCommitPage}
@@ -1063,6 +1161,7 @@ export default function ProjectDetailsPage() {
                 previewSize={previewSize}
                 previewBytes={previewBytes}
                 previewModifiedAt={previewModifiedAt}
+                openPreview={openPreview}
                 onPreviewSaved={async () => {
                     await Promise.all([refreshVisibleFileTree(getParentFolderPath(previewFile?.path || '') || undefined), refreshGitData()])
                 }}
