@@ -1,7 +1,7 @@
 {
     "name": "devscope-air-win",
     "version": "1.0.0-alpha.1",
-    "description": "DevScope Air - Projects-focused Windows app with project scanning and Git workflows",
+    "description": "DevScope primary Windows desktop app for project scanning, Git workflows, and desktop updates",
     "main": "./out/main/index.js",
     "author": "DevScope",
     "license": "MIT",

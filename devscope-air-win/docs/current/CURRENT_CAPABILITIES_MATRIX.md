@@ -1,13 +1,13 @@
 # Current Capabilities Matrix
 
-Last validated: February 23, 2026
+Last validated: March 8, 2026
 
-This matrix reflects the currently exposed DevScope Air capabilities from the shared contract and adapters.
+This matrix reflects the currently exposed DevScope desktop capabilities from the shared contract and adapters.
 
 ## Legend
 
 - `Implemented`: available and wired in main/preload/renderer.
-- `Air-Limited`: intentionally stubbed or limited in Air variant.
+- `Deprecated/Removed`: intentionally not part of the active desktop product surface.
 - `Planned`: design docs exist but not first-class product surface yet.
 
 ## Capability Areas
@@ -32,29 +32,26 @@ This matrix reflects the currently exposed DevScope Air capabilities from the sh
 - Write flows (stage/unstage/discard/commit/push/fetch/pull): `Implemented`
 - Repo setup flows (init, initial commit, remote origin, gitignore generators): `Implemented`
 
-### Assistant
-
-- Connect/disconnect/status/send/cancel: `Implemented`
-- Streaming events subscription: `Implemented`
-- Sessions and thread lifecycle: `Implemented`
-- Typed per-turn part stream (`text`/`reasoning`/`tool`/`tool-result`/`approval`/`final`/`error`): `Implemented`
-- Explicit approval response control (`respondApproval`) with pending approval tracking: `Implemented`
-- Profile/model/project-default controls: `Implemented`
-- Token estimate + workflow helpers (explain diff/review staged/draft commit): `Implemented`
-- Account/rate-limit/telemetry integrity reads: `Implemented`
-
 ### Terminal
 
 - Open external terminal at path via IPC bridge: `Implemented`
-- Full in-app terminal manager APIs: `Air-Limited` (not core app surface in Air)
+- Full in-app terminal manager APIs: `Deprecated/Removed`
+
+### Desktop Updates
+
+- Current version/release channel surface: `Implemented`
+- Check/download/install update actions: `Implemented`
+- GitHub Releases update feed integration: `Implemented`
 
 ### Window Controls
 
 - Minimize/maximize/close/isMaximized: `Implemented` for Electron client
 
-### AgentScope / Runtime Agent Orchestration
+### Archived Assistant / Agent Runtime Surfaces
 
-- AgentScope runtime operations: `Air-Limited` (disabled adapter surface)
+- In-app assistant pages and IPC surface: `Deprecated/Removed`
+- AgentScope/runtime orchestration surface: `Deprecated/Removed`
+- Archived source retained for reference under `archive/codex-assistant`: `Implemented`
 
 ## Client Surface Coverage
 
@@ -82,4 +79,3 @@ This matrix reflects the currently exposed DevScope Air capabilities from the sh
 For exact operation signatures, use:
 
 - `src/shared/contracts/devscope-api.ts`
-- `src/shared/contracts/assistant-ipc.ts`

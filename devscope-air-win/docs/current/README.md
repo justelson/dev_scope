@@ -1,8 +1,10 @@
 # Current Docs
 
-Last updated: February 23, 2026
+Last updated: March 8, 2026
 
 This folder is the active documentation set for the present codebase.
+
+This repo is the active DevScope desktop app. The sibling `devscope-win` codebase is deprecated and no longer the default development target.
 
 ## Core References
 

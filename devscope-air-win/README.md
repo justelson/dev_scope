@@ -10,7 +10,7 @@
   </pre>
 </div>
 
-<h1 align="center">DevScope Air</h1>
+<h1 align="center">DevScope</h1>
 
 <p align="center">
   <strong>Projects-First Developer Workspace for Windows</strong>
@@ -24,10 +24,11 @@
 
 ## Overview
 
-> **Air Variant Note**
-> This build focuses on Projects workflows (scan, browse, details, Git, commit-assist)
-> and removes in-app Terminal and Agent orchestration surfaces.
-DevScope Air is a projects-focused Windows Electron app that gives developers a clear view of local projects, tooling, and Git status. It keeps the DevScope desktop architecture while excluding AgentScope and integrated terminal features.
+> **Primary Desktop App**
+> `devscope-air-win` is the active Windows desktop codebase. The sibling
+> `devscope-win` repo path is deprecated and maintenance-only.
+
+DevScope is a projects-first Windows Electron app that gives developers a clear view of local projects, tooling, Git status, release updates, and machine readiness from one desktop surface.
 
 Mainly targeted for Windows developers, DevScope eliminates the "fragmented environment" problem by providing a single source of truth for your developer stack.
 
@@ -40,6 +41,7 @@ Mainly targeted for Windows developers, DevScope eliminates the "fragmented envi
 | **Projects Workflows** | Deep project scanning, folder browsing, file preview, and repository insights. |
 | **AI Commit Assistant** | Integrated Groq-powered AI that generates detailed, conventional commit messages based on your diffs. |
 | **Git Productivity** | Commit history, diffs, staging, commit/push, and repo initialization utilities. |
+| **Desktop Updates** | GitHub Releases-based update flow with channel-aware versioning and in-app update state. |
 | **Modern Aesthetics** | A high-end UI built with the Sparkle Design System, featuring glassmorphism and smooth animations. |
 
 ## Supported Tool Categories
@@ -76,8 +78,8 @@ DevScope is built with a focus on performance and native Windows integration:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/elsonmgaya/devscope.git
-   cd devscope-win
+   git clone https://github.com/justelson/dev_scope.git
+   cd devscope-air-win
    ```
 
 2. Install dependencies:
@@ -115,7 +117,7 @@ bun run build
 graph TD
     A[Electron Main] --> B[Sensing Engine]
     A --> C[IPC Handlers]
-    A --> D[Terminal Manager]
+    A --> D[Updater Manager]
     C --> E[Renderer Process]
     E --> F[Vite/React UI]
     F --> G[Sparkle Design System]
@@ -140,6 +142,12 @@ Special thanks to the [Sparkle Design System](https://github.com/sparkle-design-
 ## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
+
+## Repository Notes
+
+- `devscope-air-win` is the primary desktop app and release target.
+- `devscope-win` is deprecated per the parent workspace deprecation plan.
+- Do not add new feature work to `devscope-win`; keep roadmap work here.
 
 ---
 

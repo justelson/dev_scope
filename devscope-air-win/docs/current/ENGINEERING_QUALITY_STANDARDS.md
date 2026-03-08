@@ -1,14 +1,14 @@
 # Engineering Quality Standards
 
-Last updated: February 23, 2026
+Last updated: March 8, 2026
 
-This document defines engineering quality expectations for the current DevScope Air codebase.
+This document defines engineering quality expectations for the current DevScope desktop codebase.
 
 ## Quality Goals
 
 1. Preserve user-visible behavior unless change is intentional.
 2. Keep architecture direction contract-first and adapter-thin.
-3. Avoid regressions in streaming UX, project browsing, and git workflows.
+3. Avoid regressions in project browsing, git workflows, and desktop update UX.
 4. Keep changes verifiable even when full builds are not allowed.
 
 ## Layer-Specific Standards
@@ -25,7 +25,7 @@ This document defines engineering quality expectations for the current DevScope 
 - Keep adapters transport-focused (`ipcRenderer.invoke` wiring).
 - Do not add domain logic in preload.
 - Keep API shape aligned to `DevScopeApi`.
-- Keep unsupported Air capabilities explicitly stubbed rather than silently missing.
+- Keep unsupported/deprecated capabilities explicitly stubbed or redirected rather than silently missing.
 
 ### IPC Handlers (`src/main/ipc/handlers/*`)
 
@@ -44,14 +44,14 @@ This document defines engineering quality expectations for the current DevScope 
 - Keep UI state and async state explicit (`loading`, `error`, `empty` must not conflict).
 - Avoid blocking interactions on background operations.
 - Preserve theming and accessibility affordances in control updates.
-- Ensure metadata (session titles, counts, badges) does not leak into message content.
+- Ensure metadata (counts, badges, version labels, release channel labels) stays separate from task content.
 
 ## Reliability Standards
 
 - Loading states must not flicker into incorrect empty states.
 - Stale async requests must not overwrite newer request state.
 - Background indexing/search behavior must remain non-blocking and deduped.
-- Session metadata updates must be one-time and out-of-band.
+- Update/version state must remain monotonic and not regress on stale async responses.
 
 ## Performance Standards
 

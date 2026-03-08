@@ -1,6 +1,6 @@
 # Current Codebase Architecture
 
-Last validated against code on February 23, 2026.
+Last validated against code on March 8, 2026.
 
 ## Runtime Layers
 
@@ -18,18 +18,19 @@ Last validated against code on February 23, 2026.
    - Project discovery/indexing service in `src/main/services/project-discovery-service.ts`.
 5. Shared Contracts
    - Type surface in `src/shared/contracts/devscope-api.ts`.
-   - Assistant channel constants in `src/shared/contracts/assistant-ipc.ts`.
+   - Update state/action contracts in `src/shared/contracts/devscope-api.ts`.
 
 ## Renderer Route Surface
 
 From `src/renderer/src/App.tsx`:
 
-- `/assistant` (default root redirect target)
 - `/home`
 - `/projects`
 - `/projects/:projectPath`
 - `/folder-browse/:folderPath`
-- `/settings` + subroutes for appearance/behavior/data/about/projects/ai/terminal/logs/assistant/account/usage
+- `/settings` + subroutes for appearance/behavior/data/about/projects/ai/terminal/logs/remote-access
+
+Legacy compatibility redirects remain for removed assistant routes, but they resolve back into the active app surface rather than rendering assistant pages.
 
 ## API Exposure Model
 
@@ -39,9 +40,9 @@ From `src/renderer/src/App.tsx`:
   - system
   - settings/AI utilities
   - projects/git/file operations
-  - assistant operations
+  - desktop update operations
   - window controls
-  - disabled stubs for unsupported Air capabilities
+  - disabled stubs for unsupported capability groups
 
 ## IPC Composition
 
@@ -49,7 +50,7 @@ From `src/renderer/src/App.tsx`:
 
 - System + metrics handlers
 - Settings + AI utility handlers
-- Assistant handlers via shared assistant IPC constants
+- Desktop updater handlers
 - Project discovery/file/project-details handlers
 - Git read and write handlers
 - Terminal-open handler
@@ -60,8 +61,8 @@ From `src/renderer/src/App.tsx`:
 Current positive state:
 
 - Project scanning and folder indexing already route through `devscopeCore.projects`.
-- Assistant lifecycle/actions route through `devscopeCore.assistant`.
-- Assistant approval decisions route through explicit `respondApproval` IPC/core bridge flow (no renderer-side auto-approve behavior).
+- Desktop updates route through `src/main/update/*` with a dedicated state machine and IPC bridge.
+- Git/file tree operations expose both project-scoped and global git configuration helpers through the shared contract.
 
 Current gap:
 
@@ -72,20 +73,21 @@ Current gap:
 
 - Renderer settings store in `src/renderer/src/lib/settings.tsx`.
 - Persisted in localStorage key: `devscope-settings`.
-- Includes appearance, behavior, projects, AI provider keys, and assistant settings.
+- Includes appearance, behavior, projects, git defaults/warnings, and AI provider settings.
 
-## Assistant Telemetry Model (Current)
+## Update Model (Current)
 
-- Main process bridge emits backward-compatible legacy events and normalized `turn-part` events.
-- Renderer hydrates chat state from history + `partsByTurn` + `pendingApprovals` when available, with legacy-event fallback.
-- Assistant chat UI renders per-attempt tool/reasoning/approval traces and uses explicit approval decision actions.
-- Session metadata surfaces `thread/tokenUsage/updated`, `account/updated`, and `account/rateLimits/updated` timestamps.
+- Main process updater tracks `disabled | idle | checking | available | downloading | downloaded | up-to-date | error`.
+- Renderer consumes update state through `window.devscope.updates`.
+- About/settings surfaces show current display version, release channel, and install/download actions.
+- GitHub Releases is the current update feed target for packaged builds.
 
 ## Caching / Performance Notes (Current)
 
 - Project scanning has in-memory TTL cache and in-flight deduping in `src/main/services/project-discovery-service.ts`.
 - Renderer performs startup background indexing when enabled (`autoIndexOnStartup`) in `src/renderer/src/App.tsx`.
 - Search index cache is shared in renderer search logic (projects page) and reused across navigations.
+- File tree refresh now supports partial subtree loading to avoid unnecessary full-tree reloads.
 
 ## Architecture Direction
 

@@ -1,8 +1,8 @@
 # Change Validation Checklist
 
-Last updated: February 23, 2026
+Last updated: March 8, 2026
 
-Use this checklist for PRs/patches in the current DevScope Air codebase.
+Use this checklist for PRs/patches in the current DevScope desktop codebase.
 
 ## 1) Scope + Architecture Check
 
@@ -19,12 +19,14 @@ Use this checklist for PRs/patches in the current DevScope Air codebase.
 ## 3) UX Regression Check
 
 - Verify key routes still function:
-  - `/assistant`
+  - `/home`
   - `/projects`
   - `/projects/:projectPath`
   - `/folder-browse/:folderPath`
+  - `/settings/about`
 - Verify buttons/controls are aligned and responsive after UI changes.
 - Verify copy/open/refresh actions continue working for path-based flows.
+- Verify removed legacy routes redirect cleanly instead of throwing renderer errors.
 
 ## 4) Data + Indexing Check
 
