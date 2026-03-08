@@ -272,7 +272,7 @@ app.on('second-instance', (_event, argv) => {
 app.whenReady().then(() => {
     app.setName('DevScope Air')
     electronApp.setAppUserModelId('com.devscope.air.win')
-    initializeUpdater()
+    void initializeUpdater()
 
     protocol.registerFileProtocol(FILE_PROTOCOL, (request, callback) => {
         try {

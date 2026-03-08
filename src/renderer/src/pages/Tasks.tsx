@@ -829,55 +829,6 @@ export default function Tasks() {
 
             {activeView === 'operations' ? (
                 <div className="space-y-4">
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                        <div className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
-                            <div className="mb-3 flex items-center gap-2">
-                                <Activity size={16} className="text-[var(--accent-primary)]" />
-                                <h2 className="text-sm font-semibold text-sparkle-text">Active Operations ({activeTasks.length})</h2>
-                            </div>
-                            {initialLoading && activeTasks.length === 0 ? (
-                                <p className="text-sm text-sparkle-text-secondary">Loading active tasks...</p>
-                            ) : activeTasks.length === 0 ? (
-                                <p className="text-sm text-sparkle-text-secondary">No active operations.</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {activeTasks.map((task) => (
-                                        <div key={task.id} className="rounded-lg border border-sparkle-border bg-sparkle-bg px-3 py-2 flex items-center justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <p className="text-sm text-sparkle-text truncate">{task.title}</p>
-                                                <p className="text-xs text-sparkle-text-secondary truncate">{task.projectPath || 'Project scope not set'}</p>
-                                            </div>
-                                            <span className="inline-flex items-center gap-1 text-xs text-sparkle-text-secondary shrink-0">
-                                                <Clock3 size={12} />
-                                                {formatRelativeShort(task.startedAt)}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="rounded-xl border border-sparkle-border bg-sparkle-card p-5">
-                            <h2 className="mb-3 text-sm font-semibold text-sparkle-text">Active Ports ({activePorts.length})</h2>
-                            {initialLoading && activePorts.length === 0 ? (
-                                <p className="text-sm text-sparkle-text-secondary">Loading active ports...</p>
-                            ) : activePorts.length === 0 ? (
-                                <p className="text-sm text-sparkle-text-secondary">No active ports right now.</p>
-                            ) : (
-                                <div className="flex flex-wrap gap-2">
-                                    {activePorts.map((port) => (
-                                        <span
-                                            key={port}
-                                            className="rounded-md border border-sky-400/35 bg-sky-500/10 px-2.5 py-1 text-xs font-mono text-sky-300"
-                                        >
-                                            :{port}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
                     <div className="rounded-xl border border-sparkle-border bg-sparkle-card overflow-hidden">
                         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-sparkle-border px-5 py-4 bg-sparkle-bg/50">
                             <div>

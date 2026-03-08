@@ -1,6 +1,5 @@
 import { app, BrowserWindow } from 'electron'
 import log from 'electron-log'
-import { autoUpdater } from 'electron-updater'
 import type {
     DevScopeUpdateActionResult,
     DevScopeUpdateErrorContext,
@@ -39,6 +38,12 @@ const releaseRepository =
     || process.env.GITHUB_REPOSITORY?.trim()
     || DEFAULT_RELEASE_REPOSITORY
 
+type ElectronUpdaterModule = typeof import('electron-updater')
+type AutoUpdater = ElectronUpdaterModule['autoUpdater']
+
+let autoUpdaterRef: AutoUpdater | null = null
+let autoUpdaterLoadPromise: Promise<AutoUpdater> | null = null
+
 let trackedWindowIds = new Set<number>()
 let updatePollTimer: ReturnType<typeof setInterval> | null = null
 let updateStartupTimer: ReturnType<typeof setTimeout> | null = null
@@ -48,6 +53,17 @@ let isInstallingUpdate = false
 let updaterConfigured = false
 let updaterInitialized = false
 let updateState: DevScopeUpdateState = createInitialUpdateState(app.getVersion(), releaseRepository, false)
+
+async function loadAutoUpdater(): Promise<AutoUpdater> {
+    if (autoUpdaterRef) return autoUpdaterRef
+    if (!autoUpdaterLoadPromise) {
+        autoUpdaterLoadPromise = import('electron-updater').then((module) => {
+            autoUpdaterRef = module.autoUpdater
+            return autoUpdaterRef
+        })
+    }
+    return autoUpdaterLoadPromise
+}
 
 function nowIso(): string {
     return new Date().toISOString()
@@ -112,7 +128,7 @@ export function getUpdateState(): DevScopeUpdateState {
     return updateState
 }
 
-export function initializeUpdater(): void {
+export async function initializeUpdater(): Promise<void> {
     if (updaterInitialized) return
     updaterInitialized = true
 
@@ -128,6 +144,23 @@ export function initializeUpdater(): void {
             log.info(`[updater] disabled: ${disabledReason}`)
         }
         emitUpdateState()
+        return
+    }
+
+    let autoUpdater: AutoUpdater
+    try {
+        autoUpdater = await loadAutoUpdater()
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setUpdateState({
+            ...updateState,
+            status: 'error',
+            checkedAt: nowIso(),
+            message: `Failed to load updater: ${message}`,
+            errorContext: 'check',
+            canRetry: true
+        })
+        log.error('[updater] failed to load electron-updater', error)
         return
     }
 
@@ -194,7 +227,7 @@ export function initializeUpdater(): void {
 }
 
 export async function checkForAppUpdates(_reason: string = 'manual'): Promise<DevScopeUpdateActionResult> {
-    if (!updaterConfigured || updateCheckInFlight) {
+    if (!updaterConfigured || !autoUpdaterRef || updateCheckInFlight) {
         return buildActionResult(false, false)
     }
     if (updateState.status === 'downloading' || updateState.status === 'downloaded') {
@@ -205,7 +238,7 @@ export async function checkForAppUpdates(_reason: string = 'manual'): Promise<De
     setUpdateState(reduceUpdateStateOnCheckStart(updateState, nowIso()))
 
     try {
-        await autoUpdater.checkForUpdates()
+        await autoUpdaterRef.checkForUpdates()
         return buildActionResult(true, true)
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -218,7 +251,7 @@ export async function checkForAppUpdates(_reason: string = 'manual'): Promise<De
 }
 
 export async function downloadAppUpdate(): Promise<DevScopeUpdateActionResult> {
-    if (!updaterConfigured || updateDownloadInFlight || updateState.status !== 'available') {
+    if (!updaterConfigured || !autoUpdaterRef || updateDownloadInFlight || updateState.status !== 'available') {
         return buildActionResult(false, false)
     }
 
@@ -226,7 +259,7 @@ export async function downloadAppUpdate(): Promise<DevScopeUpdateActionResult> {
     setUpdateState(reduceUpdateStateOnDownloadStart(updateState))
 
     try {
-        await autoUpdater.downloadUpdate()
+        await autoUpdaterRef.downloadUpdate()
         return buildActionResult(true, true)
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -239,7 +272,7 @@ export async function downloadAppUpdate(): Promise<DevScopeUpdateActionResult> {
 }
 
 export async function installAppUpdate(): Promise<DevScopeUpdateActionResult> {
-    if (!updaterConfigured || isInstallingUpdate || updateState.status !== 'downloaded') {
+    if (!updaterConfigured || !autoUpdaterRef || isInstallingUpdate || updateState.status !== 'downloaded') {
         return buildActionResult(false, false)
     }
 
@@ -247,7 +280,7 @@ export async function installAppUpdate(): Promise<DevScopeUpdateActionResult> {
     clearUpdateTimers()
 
     try {
-        autoUpdater.quitAndInstall()
+        autoUpdaterRef.quitAndInstall()
         return buildActionResult(true, true)
     } catch (error) {
         isInstallingUpdate = false
