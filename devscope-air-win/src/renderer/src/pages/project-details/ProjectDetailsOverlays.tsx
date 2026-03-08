@@ -1,6 +1,6 @@
 import { CommitDiffModal } from './CommitDiffModal'
 import { InitGitModal } from './InitGitModal'
-import { AuthorMismatchModal, DependenciesModal } from './ProjectDetailsModals'
+import { AuthorMismatchModal, DependenciesModal, ScriptCatalogModal } from './ProjectDetailsModals'
 
 export interface ProjectDetailsOverlaysProps {
     [key: string]: any
@@ -9,9 +9,13 @@ export interface ProjectDetailsOverlaysProps {
 export function ProjectDetailsOverlays(props: ProjectDetailsOverlaysProps) {
     const {
         project,
+        showScriptsModal,
+        setShowScriptsModal,
         showDependenciesModal,
         setShowDependenciesModal,
         onDependenciesUpdated,
+        onRunScript,
+        scriptPredictions,
         selectedCommit,
         commitDiff,
         loadingDiff,
@@ -57,6 +61,16 @@ export function ProjectDetailsOverlays(props: ProjectDetailsOverlaysProps) {
 
     return (
         <>
+            {showScriptsModal && project.scripts && Object.keys(project.scripts).length > 0 && (
+                <ScriptCatalogModal
+                    projectName={project.displayName || project.name}
+                    scripts={project.scripts}
+                    scriptPredictions={scriptPredictions}
+                    onRunScript={onRunScript}
+                    onClose={() => setShowScriptsModal(false)}
+                />
+            )}
+
             {showDependenciesModal && (project.dependencies || project.devDependencies) && (
                 <DependenciesModal
                     projectName={project.displayName || project.name}

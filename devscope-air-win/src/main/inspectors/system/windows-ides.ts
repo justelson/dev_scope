@@ -14,6 +14,7 @@ type IdeDefinition = DevScopeInstalledIde & {
     directCandidates: string[]
     searches?: IdeSearchSpec[]
     buildArgs?: (projectPath: string) => string[]
+    launchInProjectDirectory?: boolean
 }
 
 type ResolvedIde = DevScopeInstalledIde & {
@@ -87,6 +88,19 @@ const IDE_DEFINITIONS: IdeDefinition[] = [
             join(PROGRAM_FILES, 'cursor', 'Cursor.exe')
         ],
         buildArgs: (projectPath) => ['--reuse-window', projectPath]
+    },
+    {
+        id: 'warp',
+        name: 'Warp',
+        icon: 'warp',
+        color: '#01A4FF',
+        directCandidates: [
+            join(LOCAL_APP_DATA, 'Programs', 'Warp', 'bin', 'warp.cmd'),
+            join(LOCAL_APP_DATA, 'Programs', 'Warp', 'Warp.exe'),
+            join(LOCAL_APP_DATA, 'Programs', 'warp', 'bin', 'warp.cmd'),
+            join(LOCAL_APP_DATA, 'Programs', 'warp', 'Warp.exe')
+        ],
+        launchInProjectDirectory: true
     },
     {
         id: 'windsurf',
@@ -429,11 +443,16 @@ export async function launchProjectInIde(projectPath: string, ideId: string) {
     }
 
     const definition = IDE_DEFINITIONS.find((entry) => entry.id === ideId)
-    const launchArgs = definition?.buildArgs?.(normalizedProjectPath) || [normalizedProjectPath]
+    const launchArgs = definition?.buildArgs
+        ? definition.buildArgs(normalizedProjectPath)
+        : definition?.launchInProjectDirectory
+            ? []
+            : [normalizedProjectPath]
     const launchCommand = getLaunchCommand(ide.executablePath, launchArgs)
 
     return await new Promise<{ success: true; ide: DevScopeInstalledIde } | { success: false; error: string }>((resolve) => {
         const child = spawn(launchCommand.command, launchCommand.args, {
+            cwd: definition?.launchInProjectDirectory ? normalizedProjectPath : undefined,
             detached: true,
             windowsHide: true,
             stdio: 'ignore'

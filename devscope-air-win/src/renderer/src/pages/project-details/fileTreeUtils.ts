@@ -58,3 +58,57 @@ export function getAllFolderPaths(nodes: FileTreeNode[]): string[] {
     }
     return paths
 }
+
+export function isFileTreeFullyLoaded(nodes: FileTreeNode[]): boolean {
+    for (const node of nodes) {
+        if (node.type !== 'directory') continue
+        if (node.childrenLoaded === false) {
+            return false
+        }
+        if (node.children && !isFileTreeFullyLoaded(node.children)) {
+            return false
+        }
+    }
+    return true
+}
+
+export function mergeDirectoryChildren(
+    nodes: FileTreeNode[],
+    targetPath: string,
+    children: FileTreeNode[]
+): FileTreeNode[] {
+    let changed = false
+
+    const visit = (items: FileTreeNode[]): FileTreeNode[] => {
+        let localChanged = false
+        const nextItems = items.map((node) => {
+            if (node.type === 'directory' && node.path === targetPath) {
+                localChanged = true
+                changed = true
+                return {
+                    ...node,
+                    children,
+                    childrenLoaded: true
+                }
+            }
+
+            if (node.type === 'directory' && node.children) {
+                const nextChildren = visit(node.children)
+                if (nextChildren !== node.children) {
+                    localChanged = true
+                    return {
+                        ...node,
+                        children: nextChildren
+                    }
+                }
+            }
+
+            return node
+        })
+
+        return localChanged ? nextItems : items
+    }
+
+    const nextNodes = visit(nodes)
+    return changed ? nextNodes : nodes
+}

@@ -23,6 +23,7 @@ export {
     hasRemoteOrigin,
     getUnpushedCommits,
     getGitUser,
+    getGlobalGitUser,
     getRepoOwner,
     checkIsGitRepo,
     getProjectGitOverview,
@@ -31,6 +32,7 @@ export {
 
 export {
     stageFiles,
+    setGlobalGitUser,
     createCommit,
     pushCommits,
     initGitRepo,

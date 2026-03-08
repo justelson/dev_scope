@@ -107,6 +107,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
         setIsExpandingFolders,
         expandedFolders,
         setExpandedFolders,
+        loadingFolderPaths,
         allFolderPathsSet,
         isExpandingFolders,
         showHidden,
@@ -132,7 +133,9 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
         onFileTreeCreateFolder,
         hasFileClipboardItem,
         loadingFiles,
-        refreshFileTree
+        refreshFileTree,
+        onToggleFolder,
+        onToggleAllFolders
     } = props
 
     const projectRootPath = useMemo(() => normalizePath(project?.path || ''), [project?.path])
@@ -232,6 +235,10 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
 
                 <button
                     onClick={() => {
+                        if (onToggleAllFolders) {
+                            void onToggleAllFolders()
+                            return
+                        }
                         setIsExpandingFolders(true)
                         startTransition(() => {
                             if (expandedFolders.size > 0) {
@@ -331,7 +338,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                 <div className="col-span-2 text-right">Info</div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div className="project-surface-scrollbar flex-1 overflow-y-auto">
                 {loadingFiles && visibleFileList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 opacity-60">
                         <div className="w-10 h-10 rounded-full border-2 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] animate-spin mb-5" />
@@ -359,6 +366,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                         const effectiveVisual = getGitStatusVisual(effectiveStatus)
                         const directVisual = getGitStatusVisual(directStatus)
                         const hasStatusNameColor = Boolean(effectiveVisual.nameColor)
+                        const isFolderLoading = Boolean(isFolder && loadingFolderPaths?.has(node.path))
                         return (
                             <div
                                 key={node.path}
@@ -369,6 +377,10 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                 style={{ paddingLeft: `${12 + depth * 16}px` }}
                                 onClick={() => {
                                     if (isFolder) {
+                                        if (onToggleFolder) {
+                                            void onToggleFolder(node)
+                                            return
+                                        }
                                         startTransition(() => {
                                             setExpandedFolders((prev: Set<string>) => {
                                                 const next = new Set(prev)
@@ -387,7 +399,11 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                             >
                                     <div className="col-span-6 flex items-center gap-2 min-w-0">
                                         {isFolder ? (
-                                            <ChevronRight size={12} className={cn("text-white/30 transition-transform", isExpanded && "rotate-90")} />
+                                            isFolderLoading ? (
+                                                <RefreshCw size={12} className="text-white/40 animate-spin" />
+                                            ) : (
+                                                <ChevronRight size={12} className={cn("text-white/30 transition-transform", isExpanded && "rotate-90")} />
+                                            )
                                         ) : (
                                             <span className="w-3" />
                                         )}

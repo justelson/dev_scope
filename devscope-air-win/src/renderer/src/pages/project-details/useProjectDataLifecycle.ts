@@ -6,6 +6,7 @@ import {
     setCachedFileTree,
     setCachedProjectDetails
 } from '@/lib/projectViewCache'
+import { isFileTreeFullyLoaded, mergeDirectoryChildren } from './fileTreeUtils'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type {
     FileTreeNode,
@@ -32,6 +33,8 @@ interface UseProjectDataLifecycleParams {
     decodedPath: string
     activeTab: 'readme' | 'files' | 'git'
     project: ProjectDetails | null
+    fileTree: FileTreeNode[]
+    autoRefreshGitOnProjectOpen: boolean
     showInitModal: boolean
     gitignoreTemplate: string
     availableTemplates: string[]
@@ -77,6 +80,8 @@ export function useProjectDataLifecycle({
     decodedPath,
     activeTab,
     project,
+    fileTree,
+    autoRefreshGitOnProjectOpen,
     showInitModal,
     gitignoreTemplate,
     availableTemplates,
@@ -120,6 +125,11 @@ export function useProjectDataLifecycle({
     const loadDetailsRequestRef = useRef(0)
     const refreshGitRequestRef = useRef(0)
     const refreshFilesRequestRef = useRef(0)
+    const fileTreeRef = useRef(fileTree)
+
+    useEffect(() => {
+        fileTreeRef.current = fileTree
+    }, [fileTree])
 
     const measureReadmeOverflow = useCallback(() => {
         const element = readmeContentRef.current
@@ -178,6 +188,12 @@ export function useProjectDataLifecycle({
         }
         if (cachedTree) {
             setFileTree(cachedTree as any)
+            fileTreeRef.current = cachedTree as FileTreeNode[]
+            setLoadingFiles(false)
+        } else {
+            setFileTree([])
+            fileTreeRef.current = []
+            setLoadingFiles(false)
         }
 
         setError(null)
@@ -186,8 +202,6 @@ export function useProjectDataLifecycle({
         }
 
         try {
-            setLoadingFiles(true)
-            const treePromise = window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
             const detailsResult = await window.devscope.getProjectDetails(decodedPath)
 
             if (isStale()) return
@@ -204,12 +218,6 @@ export function useProjectDataLifecycle({
                 setLoading(false)
             }
 
-            const treeResult = await treePromise
-            if (isStale()) return
-            if (treeResult.success) {
-                setFileTree(treeResult.tree)
-                setCachedFileTree(decodedPath, treeResult.tree)
-            }
         } catch (err: any) {
             if (isStale()) return
             if (!hasCachedProject) {
@@ -219,14 +227,52 @@ export function useProjectDataLifecycle({
             if (!isStale() && !hasCachedProject) {
                 setLoading(false)
             }
-            if (!isStale()) {
-                setLoadingFiles(false)
-            }
         }
     }, [decodedPath, setLoading, setError, setProject, setFileTree, setLoadingFiles])
 
+    const refreshFileTree = useCallback(async (options?: { deep?: boolean; targetPath?: string }) => {
+        if (!decodedPath) return undefined
+
+        const requestId = ++refreshFilesRequestRef.current
+        const isStaleRefresh = () => requestId !== refreshFilesRequestRef.current
+        const targetPath = typeof options?.targetPath === 'string' && options.targetPath.trim().length > 0
+            ? options.targetPath.trim()
+            : undefined
+        const currentTree = fileTreeRef.current
+        const deep = options?.deep ?? (!targetPath && isFileTreeFullyLoaded(currentTree))
+        setLoadingFiles(true)
+
+        try {
+            const treeResult = await window.devscope.getFileTree(decodedPath, {
+                showHidden: true,
+                maxDepth: deep ? -1 : 1,
+                rootPath: targetPath
+            })
+            if (isStaleRefresh() || !treeResult?.success || !treeResult.tree) {
+                return undefined
+            }
+
+            if (targetPath) {
+                const mergedTree = mergeDirectoryChildren(currentTree, targetPath, treeResult.tree as FileTreeNode[])
+                fileTreeRef.current = mergedTree
+                setFileTree(mergedTree)
+                setCachedFileTree(decodedPath, mergedTree)
+                return mergedTree
+            }
+
+            fileTreeRef.current = treeResult.tree as FileTreeNode[]
+            setFileTree(treeResult.tree)
+            setCachedFileTree(decodedPath, treeResult.tree)
+            return treeResult.tree as FileTreeNode[]
+        } finally {
+            if (!isStaleRefresh()) {
+                setLoadingFiles(false)
+            }
+        }
+    }, [decodedPath, setFileTree, setLoadingFiles])
+
     const refreshGitData = useCallback(async (
-        refreshFileTree: boolean = false,
+        refreshFilesToo: boolean = false,
         options?: { quiet?: boolean }
     ) => {
         if (!decodedPath) return
@@ -240,18 +286,10 @@ export function useProjectDataLifecycle({
         await yieldToBrowserPaint()
 
         try {
-            if (refreshFileTree) {
-                setLoadingFiles(true)
-                try {
-                    const treeResult = await window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
-                    if (!isStaleRefresh() && treeResult?.success && treeResult.tree) {
-                        setFileTree(treeResult.tree)
-                    }
-                } finally {
-                    if (!isStaleRefresh()) {
-                        setLoadingFiles(false)
-                    }
-                }
+            if (refreshFilesToo) {
+                await refreshFileTree({
+                    deep: isFileTreeFullyLoaded(fileTree)
+                })
             }
 
             const repoResult = await window.devscope.checkIsGitRepo(decodedPath)
@@ -409,32 +447,27 @@ export function useProjectDataLifecycle({
         setRemotes,
         setTags,
         setStashes,
-        setError
+        setError,
+        fileTree,
+        refreshFileTree
     ])
-
-    const refreshFileTree = useCallback(async () => {
-        if (!decodedPath) return
-
-        const requestId = ++refreshFilesRequestRef.current
-        const isStaleRefresh = () => requestId !== refreshFilesRequestRef.current
-        setLoadingFiles(true)
-
-        try {
-            const treeResult = await window.devscope.getFileTree(decodedPath, { showHidden: true, maxDepth: -1 })
-            if (!isStaleRefresh() && treeResult?.success && treeResult.tree) {
-                setFileTree(treeResult.tree)
-                setCachedFileTree(decodedPath, treeResult.tree)
-            }
-        } finally {
-            if (!isStaleRefresh()) {
-                setLoadingFiles(false)
-            }
-        }
-    }, [decodedPath, setFileTree, setLoadingFiles])
 
     useEffect(() => {
         void loadProjectDetails()
     }, [loadProjectDetails])
+
+    useEffect(() => {
+        if (!decodedPath || activeTab !== 'files') return
+
+        const cachedTree = getCachedFileTree(decodedPath)
+        if (cachedTree) {
+            setFileTree(cachedTree as any)
+            setLoadingFiles(false)
+            return
+        }
+
+        void refreshFileTree({ deep: false })
+    }, [activeTab, decodedPath, refreshFileTree, setFileTree, setLoadingFiles])
 
     useEffect(() => {
         setGitHistory([])
@@ -478,9 +511,9 @@ export function useProjectDataLifecycle({
     ])
 
     useEffect(() => {
-        if (!decodedPath) return
+        if (!decodedPath || !autoRefreshGitOnProjectOpen) return
         void refreshGitData(false)
-    }, [decodedPath, refreshGitData])
+    }, [autoRefreshGitOnProjectOpen, decodedPath, refreshGitData])
 
     useEffect(() => {
         if (activeTab !== 'git' || !decodedPath) return

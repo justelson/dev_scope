@@ -21,6 +21,7 @@ import {
     pullUpdates,
     pushCommits,
     removeRemote,
+    setGlobalGitUser,
     setRemoteUrl,
     stageFiles,
     unstageFiles
@@ -87,6 +88,19 @@ export async function handleCreateCommit(_event: Electron.IpcMainInvokeEvent, pr
     } catch (err: any) {
         log.error('Failed to create commit:', err)
         completeTask(task.id, 'failed', err?.message || 'Failed to create commit.')
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleSetGlobalGitUser(
+    _event: Electron.IpcMainInvokeEvent,
+    user: { name: string; email: string }
+) {
+    try {
+        await setGlobalGitUser(user?.name || '', user?.email || '')
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to set global git user:', err)
         return { success: false, error: err.message }
     }
 }

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { AlertCircle, GitBranch, GitCommitHorizontal, GitPullRequest, Link, Plus, RefreshCw, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { WorkingChangesView } from './WorkingChangesView'
@@ -60,6 +61,17 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         && !currentBranchMeta.isRemote
     )
     const showPushAction = hasRemote === true && (unpushedCommits.length > 0 || currentBranchNeedsPublish)
+    const historyPageStart = Math.max(0, (commitPage - 1) * COMMITS_PER_PAGE)
+    const historyPageEnd = Math.max(historyPageStart, commitPage * COMMITS_PER_PAGE)
+    const visibleHistoryCommits = useMemo(
+        () => gitHistory.slice(historyPageStart, historyPageEnd),
+        [gitHistory, historyPageStart, historyPageEnd]
+    )
+    const visibleLaneSourceCommits = useMemo(
+        () => gitHistory.slice(0, Math.min(gitHistory.length, historyPageEnd)),
+        [gitHistory, historyPageEnd]
+    )
+    const isLargeHistory = gitHistory.length > COMMITS_PER_PAGE * 8
 
     return (
         <div className="flex flex-col h-full">
@@ -155,7 +167,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                 </button>
             </div>
 
-            <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
+            <div className="project-surface-scrollbar p-4 flex-1 overflow-y-auto">
                 {gitView === 'manage' ? (
                     <ProjectDetailsGitManageView {...props} />
                 ) : gitView === 'changes' ? (
@@ -301,9 +313,14 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         </div>
                     ) : gitHistory.length > 0 ? (
                         <>
+                            {isLargeHistory && (
+                                <div className="mb-4 rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-xs text-white/45">
+                                    Rendering the graph with page-local history context to keep large repositories smooth.
+                                </div>
+                            )}
                             <GitGraph
-                                commits={gitHistory.slice((commitPage - 1) * COMMITS_PER_PAGE, commitPage * COMMITS_PER_PAGE)}
-                                laneSourceCommits={gitHistory}
+                                commits={visibleHistoryCommits}
+                                laneSourceCommits={visibleLaneSourceCommits}
                                 onCommitClick={handleCommitClick}
                             />
                             {gitHistory.length > COMMITS_PER_PAGE && (

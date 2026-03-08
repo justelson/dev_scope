@@ -71,7 +71,7 @@ const ALLOWED_COMMANDS = new Set([
     // AI & ML Runtimes
     'ollama', 'nvcc', 'nvidia-smi',
     // AI Agents & Coding Assistants
-    'claude', 'gh', 'aider', 'cursor', 'cody', 'continue', 'codex', 'q', 'tabnine', 'codeium',
+    'claude', 'gh', 'aider', 'cursor', 'cody', 'continue', 'q', 'tabnine', 'codeium',
     'goose', 'mentat', 'gpt-engineer', 'sweep', 'gemini', 'opencode', 'droid', 'interpreter',
     'fabric', 'sgpt', 'shell-gpt', 'plandex', 'openhands', 'windsurf', 'zed', 'amp', 'roo', 'cline', 'kilo',
     // System utilities & Shells

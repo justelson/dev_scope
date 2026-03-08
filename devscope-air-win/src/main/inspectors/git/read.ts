@@ -372,6 +372,24 @@ export async function getGitUser(projectPath: string): Promise<{ name: string; e
     }
 }
 
+export async function getGlobalGitUser(): Promise<{ name: string; email: string } | null> {
+    try {
+        const git = createGit(process.cwd())
+        const [nameRaw, emailRaw] = await Promise.all([
+            git.raw(['config', '--global', '--get', 'user.name']).catch(() => ''),
+            git.raw(['config', '--global', '--get', 'user.email']).catch(() => '')
+        ])
+
+        const name = String(nameRaw || '').trim()
+        const email = String(emailRaw || '').trim()
+        if (!name && !email) return null
+        return { name, email }
+    } catch (err) {
+        log.error('Failed to get global git user config', err)
+        throw toError(err, 'Failed to get global git user config')
+    }
+}
+
 export async function getRepoOwner(projectPath: string): Promise<string | null> {
     try {
         const git = createGit(projectPath)

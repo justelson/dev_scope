@@ -24,7 +24,6 @@ interface GitActionParams {
     createInitialCommit: boolean
     initialCommitMessage: string
     remoteUrl: string
-    dontShowAuthorWarning: boolean
     projectPath?: string
     refreshGitData: (refreshFileTree?: boolean, options?: RefreshGitOptions) => Promise<void>
     showToast: (
@@ -130,6 +129,8 @@ function toUnstagedDetail(detail: GitStatusDetail): GitStatusDetail {
 }
 
 export function createProjectGitActions(params: GitActionParams) {
+    const bulkActionScope = params.settings.gitBulkActionScope === 'project' ? 'project' : 'repo'
+
     const applyOptimisticDetails = (
         mutate: (prev: GitStatusDetail[]) => GitStatusDetail[]
     ): (() => void) => {
@@ -163,6 +164,7 @@ export function createProjectGitActions(params: GitActionParams) {
 
             params.setCommitMessage('')
             await params.refreshGitData(false)
+            params.showToast('Commit created successfully.')
         } catch (err: any) {
             params.showToast(`Failed to commit: ${err.message}`, undefined, undefined, 'error')
         } finally {
@@ -194,7 +196,7 @@ export function createProjectGitActions(params: GitActionParams) {
     const handleCommit = async () => {
         if (!params.decodedPath || !params.commitMessage.trim() || params.stagedFiles.length === 0) return
 
-        const shouldWarn = localStorage.getItem('dontShowAuthorWarning') !== 'true'
+        const shouldWarn = params.settings.gitWarnOnAuthorMismatch !== false
         if (shouldWarn && params.gitUser && params.repoOwner && params.gitUser.name !== params.repoOwner) {
             params.setShowAuthorMismatch(true)
             return
@@ -261,7 +263,7 @@ export function createProjectGitActions(params: GitActionParams) {
         })
 
         try {
-            const result = await window.devscope.stageFiles(params.decodedPath, [], { scope: 'repo' })
+            const result = await window.devscope.stageFiles(params.decodedPath, [], { scope: bulkActionScope })
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to stage all files')
             }
@@ -280,7 +282,7 @@ export function createProjectGitActions(params: GitActionParams) {
         })
 
         try {
-            const result = await window.devscope.unstageFiles(params.decodedPath, [], { scope: 'repo' })
+            const result = await window.devscope.unstageFiles(params.decodedPath, [], { scope: bulkActionScope })
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to unstage all files')
             }
@@ -344,6 +346,7 @@ export function createProjectGitActions(params: GitActionParams) {
             }
 
             params.setCommitMessage(generateResult.message.trim())
+            params.showToast('Commit message generated successfully.')
         } catch (err: any) {
             params.showToast(`AI generation failed: ${err.message || 'Unknown error'}`, undefined, undefined, 'error')
         } finally {
@@ -524,9 +527,6 @@ export function createProjectGitActions(params: GitActionParams) {
     }
 
     const handleAuthorMismatchConfirm = () => {
-        if (params.dontShowAuthorWarning) {
-            localStorage.setItem('dontShowAuthorWarning', 'true')
-        }
         params.setShowAuthorMismatch(false)
         void performCommit()
     }

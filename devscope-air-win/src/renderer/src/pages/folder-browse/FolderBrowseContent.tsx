@@ -36,6 +36,7 @@ interface FolderBrowseContentProps {
     displayedProjects: Project[]
     viewMode: ViewMode
     contentLayout: ContentLayout
+    isCondensedLayout?: boolean
     searchQuery: string
     error: string | null
     onFolderClick: (folder: FolderItem) => void
@@ -70,6 +71,7 @@ export function FolderBrowseContent({
     displayedProjects,
     viewMode,
     contentLayout,
+    isCondensedLayout = false,
     searchQuery,
     error,
     onFolderClick,
@@ -297,6 +299,10 @@ export function FolderBrowseContent({
     })
 
     const totalExplorerCount = filteredFolders.length + gitRepos.length + displayedProjects.length + totalFilteredFiles
+    const pressuredFinderGridStyle = isCondensedLayout ? { gridTemplateColumns: 'repeat(auto-fit, minmax(92px, 108px))' } : undefined
+    const pressuredExplorerGridStyle = isCondensedLayout ? { gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' } : undefined
+    const pressuredFileGridStyle = isCondensedLayout ? { gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' } : undefined
+    const pressuredProjectGridStyle = isCondensedLayout ? { gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' } : undefined
 
     if (contentLayout === 'explorer') {
         const isFinderMode = viewMode === 'finder'
@@ -308,11 +314,12 @@ export function FolderBrowseContent({
                         <SectionHeader icon={Folder} iconClassName="text-yellow-400/70" title="All Items" count={totalExplorerCount} />
                         <div
                             className={cn(
-                                'grid gap-3',
+                                'grid gap-3 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
                                 isFinderMode
                                     ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10'
                                     : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 auto-rows-fr'
                             )}
+                            style={isFinderMode ? pressuredFinderGridStyle : pressuredExplorerGridStyle}
                         >
                             {explorerEntries.map((entry) => {
                                 if (entry.kind === 'project') {
@@ -523,11 +530,12 @@ export function FolderBrowseContent({
                 <div>
                     <SectionHeader icon={Folder} iconClassName="text-yellow-400/70" title="Folders" count={filteredFolders.length} />
                     <div className={cn(
-                        "grid gap-4",
+                        "grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
                         viewMode === 'finder'
                             ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10"
                             : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2"
-                    )}>
+                    )}
+                    style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredExplorerGridStyle}>
                         {filteredFolders.map((folder) => (
                             viewMode === 'finder' ? (
                                 <div
@@ -564,11 +572,12 @@ export function FolderBrowseContent({
                 <div>
                     <SectionHeader icon={Github} iconClassName="text-white/70" title="Git Repositories" count={gitRepos.length} />
                     <div className={cn(
-                        "grid gap-4",
+                        "grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
                         viewMode === 'finder'
                             ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10"
                             : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2"
-                    )}>
+                    )}
+                    style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredExplorerGridStyle}>
                         {gitRepos.map((repo) => (
                             viewMode === 'finder' ? (
                                 <div
@@ -611,11 +620,12 @@ export function FolderBrowseContent({
                 <div>
                     <SectionHeader icon={File} iconClassName="text-blue-400/70" title="Files" count={totalFilteredFiles} />
                     <div className={cn(
-                        "grid gap-4",
+                        "grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
                         viewMode === 'finder'
                             ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10"
                             : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2"
-                    )}>
+                    )}
+                    style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredFileGridStyle}>
                         {visibleFiles.map((file) => {
                             const iconColor = getFileColor(file.extension)
                             const isText = file.extension === 'md' || file.extension === 'txt'
@@ -681,10 +691,11 @@ export function FolderBrowseContent({
 
                     <div
                         className={cn(
-                            'grid gap-4',
+                            'grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
                             viewMode === 'finder' && 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10 gap-x-2 gap-y-6',
                             viewMode === 'grid' && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
                         )}
+                        style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredProjectGridStyle}
                     >
                         {displayedProjects.map((project) => (
                             <FolderBrowseProjectCard

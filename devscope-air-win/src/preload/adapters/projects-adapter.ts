@@ -23,7 +23,7 @@ export function createProjectsAdapter() {
         installProjectDependencies: (projectPath: string, options?: { onlyMissing?: boolean }) =>
             ipcRenderer.invoke('devscope:installProjectDependencies', projectPath, options),
         getProjectDetails: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectDetails', projectPath),
-        getFileTree: (projectPath: string, options?: { showHidden?: boolean; maxDepth?: number }) =>
+        getFileTree: (projectPath: string, options?: { showHidden?: boolean; maxDepth?: number; rootPath?: string }) =>
             ipcRenderer.invoke('devscope:getFileTree', projectPath, options),
         getGitHistory: (projectPath: string) => ipcRenderer.invoke('devscope:getGitHistory', projectPath),
         getCommitDiff: (projectPath: string, commitHash: string) => ipcRenderer.invoke('devscope:getCommitDiff', projectPath, commitHash),
@@ -37,6 +37,7 @@ export function createProjectsAdapter() {
         getGitStatusDetailed: (projectPath: string) => ipcRenderer.invoke('devscope:getGitStatusDetailed', projectPath),
         getUnpushedCommits: (projectPath: string) => ipcRenderer.invoke('devscope:getUnpushedCommits', projectPath),
         getGitUser: (projectPath: string) => ipcRenderer.invoke('devscope:getGitUser', projectPath),
+        getGlobalGitUser: () => ipcRenderer.invoke('devscope:getGlobalGitUser'),
         getRepoOwner: (projectPath: string) => ipcRenderer.invoke('devscope:getRepoOwner', projectPath),
         hasRemoteOrigin: (projectPath: string) => ipcRenderer.invoke('devscope:hasRemoteOrigin', projectPath),
         getProjectsGitOverview: (projectPaths: string[]) => ipcRenderer.invoke('devscope:getProjectsGitOverview', projectPaths),
@@ -56,6 +57,7 @@ export function createProjectsAdapter() {
             options?: { scope?: 'project' | 'repo' }
         ) => ipcRenderer.invoke('devscope:discardChanges', projectPath, files, options),
         createCommit: (projectPath: string, message: string) => ipcRenderer.invoke('devscope:createCommit', projectPath, message),
+        setGlobalGitUser: (user: { name: string; email: string }) => ipcRenderer.invoke('devscope:setGlobalGitUser', user),
         pushCommits: (projectPath: string) => ipcRenderer.invoke('devscope:pushCommits', projectPath),
         fetchUpdates: (projectPath: string, remoteName?: string) => ipcRenderer.invoke('devscope:fetchUpdates', projectPath, remoteName),
         pullUpdates: (projectPath: string) => ipcRenderer.invoke('devscope:pullUpdates', projectPath),

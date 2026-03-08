@@ -9,6 +9,7 @@ import {
 } from './scriptRun'
 
 export function ProjectDetailsSidebar({
+    dockOpen = false,
     scripts,
     dependencies,
     devDependencies,
@@ -18,6 +19,7 @@ export function ProjectDetailsSidebar({
     onRunScript,
     onShowDependencies
 }: {
+    dockOpen?: boolean
     scripts?: Record<string, string>
     dependencies?: Record<string, string>
     devDependencies?: Record<string, string>
@@ -63,7 +65,10 @@ export function ProjectDetailsSidebar({
             : 'border-white/10 bg-white/5 text-white/60'
 
     return (
-        <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
+        <div className={cn(
+            'col-span-12 flex flex-col gap-6',
+            dockOpen ? 'mt-1' : 'lg:col-span-4'
+        )}>
             {scripts && Object.keys(scripts).length > 0 && (
                 <div className="bg-sparkle-card border border-white/5 rounded-2xl overflow-hidden shadow-sm flex flex-col">
                     <div className="px-5 py-4 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">

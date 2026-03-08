@@ -53,6 +53,7 @@ export interface FileTreeNode {
     type: 'file' | 'directory'
     size?: number
     children?: FileTreeNode[]
+    childrenLoaded?: boolean
     isHidden: boolean
     gitStatus?: 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown'
 }

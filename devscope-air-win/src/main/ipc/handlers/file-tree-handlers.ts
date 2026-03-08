@@ -11,6 +11,7 @@ interface FileTreeNode {
     type: 'file' | 'directory'
     size?: number
     children?: FileTreeNode[]
+    childrenLoaded?: boolean
     isHidden: boolean
     gitStatus?: GitFileStatus
 }
@@ -69,19 +70,38 @@ function isLikelyBinaryBuffer(buffer: Buffer): boolean {
 export async function handleGetFileTree(
     _event: Electron.IpcMainInvokeEvent,
     projectPath: string,
-    options?: { showHidden?: boolean; maxDepth?: number }
+    options?: { showHidden?: boolean; maxDepth?: number; rootPath?: string }
 ) {
     log.info('IPC: getFileTree', projectPath, options)
 
     const showHidden = options?.showHidden ?? false
     const maxDepth = options?.maxDepth ?? 20
+    const resolvedProjectPath = resolve(projectPath)
+    const resolvedRootPath = resolve(options?.rootPath || projectPath)
 
     try {
-        await access(projectPath)
+        const normalizedProjectPath = normalizePathForComparison(resolvedProjectPath)
+        const normalizedRootPath = normalizePathForComparison(resolvedRootPath)
+        const rootPathPrefix = process.platform === 'win32'
+            ? `${normalizedProjectPath}\\`
+            : `${normalizedProjectPath}/`
+
+        if (
+            normalizedRootPath !== normalizedProjectPath
+            && !normalizedRootPath.startsWith(rootPathPrefix)
+        ) {
+            return { success: false, error: 'Requested path is outside the project root.' }
+        }
+
+        await access(resolvedRootPath)
+        const rootStats = await lstat(resolvedRootPath)
+        if (!rootStats.isDirectory()) {
+            return { success: false, error: 'Requested path is not a directory.' }
+        }
 
         let gitStatusMap: Record<string, GitFileStatus> = {}
         try {
-            gitStatusMap = await getGitStatus(projectPath)
+            gitStatusMap = await getGitStatus(resolvedProjectPath)
         } catch {
             // Ignore git errors.
         }
@@ -98,16 +118,20 @@ export async function handleGetFileTree(
                 if (entry.name === 'node_modules' || entry.name === '.git') continue
 
                 const fullPath = join(currentPath, entry.name)
-                const relativePath = relative(projectPath, fullPath).replace(/\\/g, '/')
+                const relativePath = relative(resolvedProjectPath, fullPath).replace(/\\/g, '/')
                 const status = gitStatusMap[relativePath] || gitStatusMap[fullPath]
 
                 if (entry.isDirectory()) {
-                    const children = await readDirRec(fullPath, depth + 1)
+                    const shouldLoadChildren = maxDepth < 0 || depth < maxDepth
+                    const children = shouldLoadChildren
+                        ? await readDirRec(fullPath, depth + 1)
+                        : undefined
                     nodes.push({
                         name: entry.name,
                         path: fullPath,
                         type: 'directory',
                         children,
+                        childrenLoaded: shouldLoadChildren,
                         isHidden: isHiddenEntry,
                         gitStatus: status
                     })
@@ -136,7 +160,7 @@ export async function handleGetFileTree(
             return nodes
         }
 
-        const tree = await readDirRec(projectPath, 0)
+        const tree = await readDirRec(resolvedRootPath, 0)
         return { success: true, tree }
     } catch (err: any) {
         log.error('Failed to get file tree:', err)

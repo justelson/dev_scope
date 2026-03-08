@@ -22,6 +22,13 @@ export function GitGraph({
     onCommitClick?: (commit: GitCommit) => void
 }) {
     const graphSource = laneSourceCommits && laneSourceCommits.length > 0 ? laneSourceCommits : commits
+    const commitIndexByHash = useMemo(() => {
+        const indexMap = new Map<string, number>()
+        commits.forEach((commit, index) => {
+            indexMap.set(commit.hash, index)
+        })
+        return indexMap
+    }, [commits])
 
     const lanes = useMemo(() => {
         const laneMap = new Map<string, number>()
@@ -65,9 +72,9 @@ export function GitGraph({
     }, [graphSource])
 
     const maxLanes = Math.max(1, ...Array.from(lanes.values(), (lane) => lane + 1))
-    const laneWidth = 24
+    const laneWidth = maxLanes > 10 ? 16 : maxLanes > 6 ? 20 : 24
     const nodeSize = 10
-    const rowHeight = 64
+    const rowHeight = maxLanes > 8 ? 60 : 64
 
     return (
         <div className="relative overflow-x-auto">
@@ -98,8 +105,8 @@ export function GitGraph({
                             )}
 
                             {commit.parents.slice(1).map((parentHash) => {
-                                const parentIdx = commits.findIndex((candidate) => candidate.hash === parentHash)
-                                if (parentIdx === -1) return null
+                                const parentIdx = commitIndexByHash.get(parentHash)
+                                if (parentIdx == null) return null
 
                                 const parentLane = lanes.get(parentHash) || 0
                                 const parentX = parentLane * laneWidth + laneWidth / 2 + 8

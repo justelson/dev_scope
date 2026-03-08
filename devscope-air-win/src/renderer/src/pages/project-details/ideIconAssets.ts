@@ -11,6 +11,7 @@ import pyCharmIconUrl from '@/assets/ide-icons/pycharm.svg'
 import riderIconUrl from '@/assets/ide-icons/rider.svg'
 import sublimeTextIconUrl from '@/assets/ide-icons/sublimetext.svg'
 import traeIconUrl from '@/assets/ide-icons/trae.png'
+import warpIconUrl from '@/assets/ide-icons/warp.ico'
 import vscodeIconUrl from '@/assets/ide-icons/vscode.png'
 import vscodiumIconUrl from '@/assets/ide-icons/vscodium.svg'
 import webStormIconUrl from '@/assets/ide-icons/webstorm.svg'
@@ -22,6 +23,7 @@ export const IDE_ICON_ASSETS: Record<string, string> = {
     kiro: kiroIconUrl,
     antigravity: antigravityIconUrl,
     cursor: cursorIconUrl,
+    warp: warpIconUrl,
     windsurf: windsurfIconUrl,
     trae: traeIconUrl,
     vscodium: vscodiumIconUrl,

@@ -162,6 +162,19 @@ export async function stageFiles(
     }
 }
 
+export async function setGlobalGitUser(name: string, email: string): Promise<void> {
+    try {
+        assertNonEmpty(name, 'Git user name')
+        assertNonEmpty(email, 'Git user email')
+        const git = createGit(process.cwd())
+        await git.raw(['config', '--global', 'user.name', name.trim()])
+        await git.raw(['config', '--global', 'user.email', email.trim()])
+    } catch (err) {
+        log.error('Failed to set global git user', err)
+        throw toError(err, 'Failed to set global git user')
+    }
+}
+
 export async function createCommit(projectPath: string, message: string): Promise<void> {
     try {
         assertNonEmpty(message, 'Commit message')

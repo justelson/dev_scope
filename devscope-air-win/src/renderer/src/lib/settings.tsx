@@ -13,9 +13,7 @@ export type CommitAIProvider = 'groq' | 'gemini'
 export type ScrollMode = 'smooth' | 'native'
 export type BrowserViewMode = 'grid' | 'finder'
 export type BrowserContentLayout = 'grouped' | 'explorer'
-export type AssistantProvider = 'codex'
-export type AssistantApprovalMode = 'safe' | 'yolo'
-export type AssistantProfile = 'safe-dev' | 'review' | 'yolo-fast' | 'custom'
+export type GitBulkActionScope = 'project' | 'repo'
 export type FilePreviewDefaultMode = 'preview' | 'edit'
 export type FilePreviewPythonRunMode = 'terminal' | 'output'
 export type RemoteAccessMode = 'local-only' | 'devscope-cloud' | 'self-hosted'
@@ -64,7 +62,7 @@ export const THEMES = [
     { id: 'forest' as Theme, name: 'Forest Night', color: '#0a1a11', description: 'Dark forest green', accentColor: 'Emerald' },
     { id: 'slate' as Theme, name: 'Slate', color: '#1a1d23', description: 'Cool gray slate', accentColor: 'Sky' },
     { id: 'charcoal' as Theme, name: 'Charcoal', color: '#16181d', description: 'Warm charcoal gray', accentColor: 'Amber' },
-    { id: 'navy' as Theme, name: 'Navy', color: '#0d1520', description: 'Deep navy blue', accentColor: 'Blue' },
+    { id: 'navy' as Theme, name: 'Cursor Dark', color: '#0b0d10', description: 'Near-black Cursor-inspired theme', accentColor: 'Blue' },
 ]
 
 export interface Settings {
@@ -99,25 +97,18 @@ export interface Settings {
     enableFolderIndexing: boolean
     autoIndexOnStartup: boolean
 
+    // Git
+    gitAutoRefreshOnProjectOpen: boolean
+    gitInitDefaultBranch: string
+    gitInitCreateGitignore: boolean
+    gitInitCreateInitialCommit: boolean
+    gitWarnOnAuthorMismatch: boolean
+    gitBulkActionScope: GitBulkActionScope
+
     // AI
     groqApiKey: string
     geminiApiKey: string
     commitAIProvider: CommitAIProvider
-
-    // Assistant
-    assistantEnabled: boolean
-    assistantProvider: AssistantProvider
-    assistantDefaultModel: string
-    assistantApprovalMode: AssistantApprovalMode
-    assistantShowThinking: boolean
-    assistantAutoConnectOnOpen: boolean
-    assistantSidebarCollapsed: boolean
-    assistantSidebarWidth: number
-    assistantAllowEventConsole: boolean
-    assistantShowEventPanel: boolean
-    assistantProfile: AssistantProfile
-    assistantProjectModels: Record<string, string>
-    assistantProjectProfiles: Record<string, AssistantProfile>
 
     // Remote Access
     remoteAccessEnabled: boolean
@@ -132,21 +123,8 @@ export interface Settings {
     remoteAccessConnectedDevices: RemoteAccessConnectedDevice[]
 }
 
-const ASSISTANT_PROFILES: AssistantProfile[] = ['safe-dev', 'review', 'yolo-fast', 'custom']
 const REMOTE_ACCESS_MODES: RemoteAccessMode[] = ['local-only', 'devscope-cloud', 'self-hosted']
 const REMOTE_DEVICE_PLATFORMS: RemoteDevicePlatform[] = ['ios', 'android', 'web', 'desktop', 'unknown']
-
-function clampAssistantSidebarWidth(value: unknown): number {
-    const numeric = Number(value)
-    if (!Number.isFinite(numeric)) return 320
-    return Math.max(180, Math.min(520, Math.round(numeric)))
-}
-
-function normalizeAssistantProfile(value: unknown): AssistantProfile {
-    return ASSISTANT_PROFILES.includes(value as AssistantProfile)
-        ? value as AssistantProfile
-        : 'safe-dev'
-}
 
 function normalizeStringRecord(value: unknown): Record<string, string> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -156,17 +134,6 @@ function normalizeStringRecord(value: unknown): Record<string, string> {
         const normalizedValue = typeof raw === 'string' ? raw.trim() : ''
         if (!normalizedKey || !normalizedValue) continue
         next[normalizedKey] = normalizedValue
-    }
-    return next
-}
-
-function normalizeAssistantProjectProfiles(value: unknown): Record<string, AssistantProfile> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-    const next: Record<string, AssistantProfile> = {}
-    for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-        const normalizedKey = key.trim()
-        if (!normalizedKey) continue
-        next[normalizedKey] = normalizeAssistantProfile(raw)
     }
     return next
 }
@@ -245,22 +212,15 @@ const DEFAULT_SETTINGS: Settings = {
     additionalFolders: [],
     enableFolderIndexing: true,
     autoIndexOnStartup: false,
+    gitAutoRefreshOnProjectOpen: true,
+    gitInitDefaultBranch: 'main',
+    gitInitCreateGitignore: true,
+    gitInitCreateInitialCommit: false,
+    gitWarnOnAuthorMismatch: true,
+    gitBulkActionScope: 'repo',
     groqApiKey: '',
     geminiApiKey: '',
     commitAIProvider: 'groq',
-    assistantEnabled: false,
-    assistantProvider: 'codex',
-    assistantDefaultModel: 'default',
-    assistantApprovalMode: 'safe',
-    assistantShowThinking: true,
-    assistantAutoConnectOnOpen: true,
-    assistantSidebarCollapsed: false,
-    assistantSidebarWidth: 320,
-    assistantAllowEventConsole: true,
-    assistantShowEventPanel: false,
-    assistantProfile: 'safe-dev',
-    assistantProjectModels: {},
-    assistantProjectProfiles: {},
     remoteAccessEnabled: false,
     remoteAccessMode: 'local-only',
     remoteAccessConsentAccepted: false,
@@ -317,24 +277,17 @@ function loadSettings(): Settings {
                 additionalFolders: candidate.additionalFolders,
                 enableFolderIndexing: candidate.enableFolderIndexing,
                 autoIndexOnStartup: candidate.autoIndexOnStartup,
+                gitAutoRefreshOnProjectOpen: candidate.gitAutoRefreshOnProjectOpen !== false,
+                gitInitDefaultBranch: typeof candidate.gitInitDefaultBranch === 'string' && candidate.gitInitDefaultBranch.trim()
+                    ? candidate.gitInitDefaultBranch.trim()
+                    : 'main',
+                gitInitCreateGitignore: candidate.gitInitCreateGitignore !== false,
+                gitInitCreateInitialCommit: !!candidate.gitInitCreateInitialCommit,
+                gitWarnOnAuthorMismatch: candidate.gitWarnOnAuthorMismatch !== false,
+                gitBulkActionScope: candidate.gitBulkActionScope === 'project' ? 'project' : 'repo',
                 groqApiKey: candidate.groqApiKey,
                 geminiApiKey: candidate.geminiApiKey,
                 commitAIProvider: candidate.commitAIProvider,
-                assistantEnabled: Boolean(candidate.assistantEnabled),
-                assistantProvider: candidate.assistantProvider === 'codex' ? 'codex' : 'codex',
-                assistantDefaultModel: typeof candidate.assistantDefaultModel === 'string' && candidate.assistantDefaultModel.trim()
-                    ? candidate.assistantDefaultModel.trim()
-                    : 'default',
-                assistantApprovalMode: candidate.assistantApprovalMode === 'yolo' ? 'yolo' : 'safe',
-                assistantShowThinking: candidate.assistantShowThinking !== false,
-                assistantAutoConnectOnOpen: candidate.assistantAutoConnectOnOpen !== false,
-                assistantSidebarCollapsed: !!candidate.assistantSidebarCollapsed,
-                assistantSidebarWidth: clampAssistantSidebarWidth(candidate.assistantSidebarWidth),
-                assistantAllowEventConsole: candidate.assistantAllowEventConsole !== false,
-                assistantShowEventPanel: !!candidate.assistantShowEventPanel,
-                assistantProfile: normalizeAssistantProfile(candidate.assistantProfile),
-                assistantProjectModels: normalizeStringRecord(candidate.assistantProjectModels),
-                assistantProjectProfiles: normalizeAssistantProjectProfiles(candidate.assistantProjectProfiles),
                 remoteAccessEnabled: normalizedRemoteAccessEnabled,
                 remoteAccessMode: normalizedRemoteAccessMode,
                 remoteAccessConsentAccepted: REMOTE_ACCESS_ENABLED && Boolean(candidate.remoteAccessConsentAccepted),

@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { getProjectTypeById, type ContentLayout, type ViewMode } from './types'
 
 interface FolderBrowseToolbarProps {
+    isCondensedLayout?: boolean
     searchQuery: string
     filterType: string
     projectTypes: string[]
@@ -20,6 +21,7 @@ const VIEW_MODES: Array<{ id: ViewMode; icon: typeof LayoutGrid }> = [
 ]
 
 export function FolderBrowseToolbar({
+    isCondensedLayout = false,
     searchQuery,
     filterType,
     projectTypes,
@@ -31,9 +33,18 @@ export function FolderBrowseToolbar({
     onContentLayoutChange
 }: FolderBrowseToolbarProps) {
     return (
-        <div className="sticky -top-6 z-20 bg-sparkle-bg/90 backdrop-blur-2xl pt-6 pb-5 mb-6 -mx-6 px-6">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-                <div className="flex flex-1 w-full gap-3">
+        <div className={cn(
+            'sticky z-20 -mx-6 bg-sparkle-bg/90 px-6 backdrop-blur-2xl transition-[padding,margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+            isCondensedLayout ? '-top-4 mb-5 pb-4 pt-4' : '-top-6 mb-6 pb-5 pt-6'
+        )}>
+            <div className={cn(
+                'flex justify-between gap-4 transition-[gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                isCondensedLayout ? 'flex-col xl:flex-row xl:items-center' : 'flex-col md:flex-row items-center'
+            )}>
+                <div className={cn(
+                    'flex flex-1 w-full gap-3',
+                    isCondensedLayout ? 'flex-col lg:flex-row' : ''
+                )}>
                     <div className="relative flex-1 group/search">
                         <Search
                             className="absolute left-4 top-1/2 -translate-y-1/2 text-sparkle-text-secondary group-focus-within/search:text-sparkle-primary transition-colors"
@@ -49,7 +60,7 @@ export function FolderBrowseToolbar({
                     </div>
 
                     {projectTypes.length > 0 && (
-                        <div className="relative min-w-[180px] group/filter">
+                        <div className={cn('relative group/filter', isCondensedLayout ? 'min-w-[160px] lg:w-[220px]' : 'min-w-[180px]')}>
                             <Filter
                                 className="absolute left-4 top-1/2 -translate-y-1/2 text-sparkle-text-secondary pointer-events-none group-focus-within/filter:text-sparkle-primary transition-colors"
                                 size={16}
@@ -73,12 +84,16 @@ export function FolderBrowseToolbar({
                     )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 rounded-xl border border-sparkle-border bg-sparkle-card p-1">
+                <div className={cn('flex items-center gap-2', isCondensedLayout && 'self-end xl:self-auto')}>
+                    <div className={cn(
+                        'flex items-center gap-1.5 rounded-xl border border-sparkle-border bg-sparkle-card p-1',
+                        isCondensedLayout && 'shrink-0'
+                    )}>
                         <button
                             onClick={() => onContentLayoutChange('grouped')}
                             className={cn(
-                                'px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200',
+                                'rounded-lg text-xs font-medium transition-all duration-200',
+                                isCondensedLayout ? 'px-2.5 py-1.5' : 'px-3 py-2',
                                 contentLayout === 'grouped'
                                     ? 'bg-sparkle-card-hover text-sparkle-text'
                                     : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'
@@ -89,7 +104,8 @@ export function FolderBrowseToolbar({
                         <button
                             onClick={() => onContentLayoutChange('explorer')}
                             className={cn(
-                                'px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200',
+                                'rounded-lg text-xs font-medium transition-all duration-200',
+                                isCondensedLayout ? 'px-2.5 py-1.5' : 'px-3 py-2',
                                 contentLayout === 'explorer'
                                     ? 'bg-sparkle-card-hover text-sparkle-text'
                                     : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'

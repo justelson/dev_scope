@@ -127,11 +127,14 @@ export function useProjectFileView({
     const deferredFileSearch = useDeferredValue(fileSearch)
     const parsedFileSearch = useMemo(() => parseFileSearchQuery(deferredFileSearch), [deferredFileSearch])
     const hasFileSearch = deferredFileSearch.trim().length > 0
-    const fileSearchIndex = useMemo(() => buildFileSearchIndex(treeWithGitStatus), [treeWithGitStatus])
+    const fileSearchIndex = useMemo(() => {
+        if (!hasFileSearch) return null
+        return buildFileSearchIndex(treeWithGitStatus)
+    }, [hasFileSearch, treeWithGitStatus])
     const folderChildInfoMap = useMemo(() => buildDirectoryChildInfoMap(treeWithGitStatus), [treeWithGitStatus])
 
     const indexedSearch = useMemo(() => {
-        if (!hasFileSearch) return null
+        if (!hasFileSearch || !fileSearchIndex) return null
         return searchFileIndex(fileSearchIndex, parsedFileSearch, {
             showHidden,
             includeDirectories: true
