@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "cd apps/landing/devscope-web && npm ci",
+  "buildCommand": "cd apps/landing/devscope-web && npm run build",
+  "outputDirectory": "apps/landing/devscope-web/dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
