@@ -43,6 +43,11 @@ This matrix reflects the currently exposed DevScope desktop capabilities from th
 - Check/download/install update actions: `Implemented`
 - GitHub Releases update feed integration: `Implemented`
 
+### Removed Lightweight Surfaces
+
+- Mobile companion web client: `Deprecated/Removed`
+- Remote access relay / pairing stack: `Deprecated/Removed`
+
 ### Window Controls
 
 - Minimize/maximize/close/isMaximized: `Implemented` for Electron client

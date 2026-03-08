@@ -4,7 +4,6 @@
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { REMOTE_ACCESS_ENABLED } from '@shared/feature-flags'
 
 // Settings Types
 export type Theme = 'dark' | 'light' | 'purple' | 'green' | 'midnight' | 'ocean' | 'forest' | 'slate' | 'charcoal' | 'navy'
@@ -16,23 +15,11 @@ export type BrowserContentLayout = 'grouped' | 'explorer'
 export type GitBulkActionScope = 'project' | 'repo'
 export type FilePreviewDefaultMode = 'preview' | 'edit'
 export type FilePreviewPythonRunMode = 'terminal' | 'output'
-export type RemoteAccessMode = 'local-only' | 'devscope-cloud' | 'self-hosted'
-export type RemoteDevicePlatform = 'ios' | 'android' | 'web' | 'desktop' | 'unknown'
 
 export interface AccentColor {
     name: string
     primary: string
     secondary: string
-}
-
-export interface RemoteAccessConnectedDevice {
-    id: string
-    name: string
-    platform: RemoteDevicePlatform
-    linkedAt: number
-    lastSeenAt: number
-    fingerprint: string
-    verified: boolean
 }
 
 export const ACCENT_COLORS: AccentColor[] = [
@@ -109,83 +96,6 @@ export interface Settings {
     groqApiKey: string
     geminiApiKey: string
     commitAIProvider: CommitAIProvider
-
-    // Remote Access
-    remoteAccessEnabled: boolean
-    remoteAccessMode: RemoteAccessMode
-    remoteAccessConsentAccepted: boolean
-    remoteAccessConsentAcceptedAt: number | null
-    remoteAccessServerUrl: string
-    remoteAccessApiKey: string
-    remoteAccessRequireE2EE: boolean
-    remoteAccessOwnerId: string
-    remoteAccessDesktopDeviceId: string
-    remoteAccessConnectedDevices: RemoteAccessConnectedDevice[]
-}
-
-const REMOTE_ACCESS_MODES: RemoteAccessMode[] = ['local-only', 'devscope-cloud', 'self-hosted']
-const REMOTE_DEVICE_PLATFORMS: RemoteDevicePlatform[] = ['ios', 'android', 'web', 'desktop', 'unknown']
-
-function normalizeStringRecord(value: unknown): Record<string, string> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-    const next: Record<string, string> = {}
-    for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-        const normalizedKey = key.trim()
-        const normalizedValue = typeof raw === 'string' ? raw.trim() : ''
-        if (!normalizedKey || !normalizedValue) continue
-        next[normalizedKey] = normalizedValue
-    }
-    return next
-}
-
-function normalizeRemoteAccessMode(value: unknown): RemoteAccessMode {
-    if (REMOTE_ACCESS_MODES.includes(value as RemoteAccessMode)) return value as RemoteAccessMode
-    return 'local-only'
-}
-
-function normalizeRemoteDevicePlatform(value: unknown): RemoteDevicePlatform {
-    if (REMOTE_DEVICE_PLATFORMS.includes(value as RemoteDevicePlatform)) return value as RemoteDevicePlatform
-    return 'unknown'
-}
-
-function normalizeRemoteAccessServerUrl(value: unknown): string {
-    if (typeof value !== 'string') return ''
-    return value.trim()
-}
-
-function normalizeRemoteAccessIdentifier(value: unknown, fallback: string): string {
-    if (typeof value !== 'string') return fallback
-    const normalized = value.trim()
-    return normalized || fallback
-}
-
-function normalizeRemoteAccessConnectedDevices(value: unknown): RemoteAccessConnectedDevice[] {
-    if (!Array.isArray(value)) return []
-    const seen = new Set<string>()
-    const next: RemoteAccessConnectedDevice[] = []
-
-    for (const raw of value) {
-        if (!raw || typeof raw !== 'object') continue
-        const entry = raw as Record<string, unknown>
-        const id = typeof entry.id === 'string' ? entry.id.trim() : ''
-        if (!id || seen.has(id)) continue
-        seen.add(id)
-
-        const linkedAt = Number(entry.linkedAt)
-        const lastSeenAt = Number(entry.lastSeenAt)
-
-        next.push({
-            id,
-            name: typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : 'Unknown device',
-            platform: normalizeRemoteDevicePlatform(entry.platform),
-            linkedAt: Number.isFinite(linkedAt) ? linkedAt : Date.now(),
-            lastSeenAt: Number.isFinite(lastSeenAt) ? lastSeenAt : Date.now(),
-            fingerprint: typeof entry.fingerprint === 'string' ? entry.fingerprint.trim() : '',
-            verified: entry.verified !== false
-        })
-    }
-
-    return next
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -220,17 +130,7 @@ const DEFAULT_SETTINGS: Settings = {
     gitBulkActionScope: 'repo',
     groqApiKey: '',
     geminiApiKey: '',
-    commitAIProvider: 'groq',
-    remoteAccessEnabled: false,
-    remoteAccessMode: 'local-only',
-    remoteAccessConsentAccepted: false,
-    remoteAccessConsentAcceptedAt: null,
-    remoteAccessServerUrl: '',
-    remoteAccessApiKey: '',
-    remoteAccessRequireE2EE: true,
-    remoteAccessOwnerId: 'local-owner',
-    remoteAccessDesktopDeviceId: 'desktop-primary',
-    remoteAccessConnectedDevices: []
+    commitAIProvider: 'groq'
 }
 
 const STORAGE_KEY = 'devscope-settings'
@@ -244,13 +144,6 @@ function loadSettings(): Settings {
             const candidate = { ...DEFAULT_SETTINGS, ...parsed }
 
             // Keep only active settings keys to drop obsolete/dead fields from older app versions.
-            const normalizedRemoteAccessMode = REMOTE_ACCESS_ENABLED
-                ? normalizeRemoteAccessMode(candidate.remoteAccessMode)
-                : 'local-only'
-            const normalizedRemoteAccessEnabled = REMOTE_ACCESS_ENABLED
-                && Boolean(candidate.remoteAccessEnabled)
-                && normalizedRemoteAccessMode !== 'local-only'
-
             return {
                 theme: candidate.theme,
                 accentColor: candidate.accentColor,
@@ -287,21 +180,7 @@ function loadSettings(): Settings {
                 gitBulkActionScope: candidate.gitBulkActionScope === 'project' ? 'project' : 'repo',
                 groqApiKey: candidate.groqApiKey,
                 geminiApiKey: candidate.geminiApiKey,
-                commitAIProvider: candidate.commitAIProvider,
-                remoteAccessEnabled: normalizedRemoteAccessEnabled,
-                remoteAccessMode: normalizedRemoteAccessMode,
-                remoteAccessConsentAccepted: REMOTE_ACCESS_ENABLED && Boolean(candidate.remoteAccessConsentAccepted),
-                remoteAccessConsentAcceptedAt: REMOTE_ACCESS_ENABLED && Number.isFinite(Number(candidate.remoteAccessConsentAcceptedAt))
-                    ? Number(candidate.remoteAccessConsentAcceptedAt)
-                    : null,
-                remoteAccessServerUrl: REMOTE_ACCESS_ENABLED ? normalizeRemoteAccessServerUrl(candidate.remoteAccessServerUrl) : '',
-                remoteAccessApiKey: REMOTE_ACCESS_ENABLED && typeof candidate.remoteAccessApiKey === 'string' ? candidate.remoteAccessApiKey : '',
-                remoteAccessRequireE2EE: candidate.remoteAccessRequireE2EE !== false,
-                remoteAccessOwnerId: normalizeRemoteAccessIdentifier(candidate.remoteAccessOwnerId, 'local-owner'),
-                remoteAccessDesktopDeviceId: normalizeRemoteAccessIdentifier(candidate.remoteAccessDesktopDeviceId, 'desktop-primary'),
-                remoteAccessConnectedDevices: REMOTE_ACCESS_ENABLED
-                    ? normalizeRemoteAccessConnectedDevices(candidate.remoteAccessConnectedDevices)
-                    : []
+                commitAIProvider: candidate.commitAIProvider
             }
         }
     } catch (e) {
@@ -357,19 +236,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }, [settings])
 
     const updateSettings = (partial: Partial<Settings>) => {
-        setSettings(prev => {
-            const next = { ...prev, ...partial }
-            if (!REMOTE_ACCESS_ENABLED) {
-                next.remoteAccessEnabled = false
-                next.remoteAccessMode = 'local-only'
-                next.remoteAccessConsentAccepted = false
-                next.remoteAccessConsentAcceptedAt = null
-                next.remoteAccessServerUrl = ''
-                next.remoteAccessApiKey = ''
-                next.remoteAccessConnectedDevices = []
-            }
-            return next
-        })
+        setSettings(prev => ({ ...prev, ...partial }))
     }
 
     const resetSettings = () => {

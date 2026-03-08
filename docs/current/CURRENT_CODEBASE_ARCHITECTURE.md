@@ -28,7 +28,7 @@ From `src/renderer/src/App.tsx`:
 - `/projects`
 - `/projects/:projectPath`
 - `/folder-browse/:folderPath`
-- `/settings` + subroutes for appearance/behavior/data/about/projects/ai/terminal/logs/remote-access
+- `/settings` + subroutes for appearance/behavior/data/about/projects/ai/terminal/logs
 
 Legacy compatibility redirects remain for removed assistant routes, but they resolve back into the active app surface rather than rendering assistant pages.
 

@@ -9,7 +9,6 @@ import { SettingsProvider, useSettings } from './lib/settings'
 import { CommandPaletteProvider } from './lib/commandPalette'
 import CommandPalette from './components/CommandPalette'
 import LinkHoverStatus from './components/ui/LinkHoverStatus'
-import { REMOTE_ACCESS_ENABLED } from '@shared/feature-flags'
 
 const Settings = lazy(() => import('./pages/Settings'))
 const Home = lazy(() => import('./pages/Home'))
@@ -27,7 +26,6 @@ const ProjectsSettings = lazy(() => import('./pages/settings/ProjectsSettings'))
 const AISettings = lazy(() => import('./pages/settings/AISettings'))
 const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
-const RemoteAccessSettings = lazy(() => import('./pages/settings/RemoteAccessSettings'))
 const LAST_MAIN_TAB_KEY = 'devscope:last-main-tab:v1'
 
 // Terminal Context
@@ -167,10 +165,6 @@ function MainContent() {
                     <Route path="/settings/git" element={<Navigate to="/settings" replace />} />
                     <Route path="/settings/terminal" element={<TerminalSettings />} />
                     <Route path="/settings/logs" element={<LogsSettings />} />
-                    <Route
-                        path="/settings/remote-access"
-                        element={REMOTE_ACCESS_ENABLED ? <RemoteAccessSettings /> : <Navigate to="/settings" replace />}
-                    />
                     <Route path="/assistant" element={<Navigate to="/home" replace />} />
                     <Route path="/assistant/skills" element={<Navigate to="/home" replace />} />
                     <Route path="/skills" element={<Navigate to="/home" replace />} />
