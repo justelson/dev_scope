@@ -71,7 +71,7 @@ function App() {
           <div className="flex flex-col items-center gap-2">
             <div className="flex flex-wrap justify-center gap-4 md:gap-6">
               <a
-                href="https://github.com/justelson/dev_scope.git"
+                href={isWindows ? "https://github.com/justelson/dev_scope/releases/latest" : "https://github.com/justelson/dev_scope.git"}
                 className="px-6 md:px-8 py-2.5 md:py-3 bg-white hover:bg-gray-100 text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-sm"
               >
                 {isWindows ? 'Download now' : 'View on GitHub'}
