@@ -58,12 +58,8 @@ function App() {
             A new standard to code in AI-driven development.
           </p>
           
-          <p className="text-xs md:text-sm text-white/40 mb-2 md:mb-3">
+          <p className="text-xs md:text-sm text-white/40 mb-8 md:mb-12">
             AI powered by T3 Code
-          </p>
-          
-          <p className="hidden md:block text-[10px] md:text-xs mb-8 md:mb-12 font-bold" style={{ color: '#007aff', opacity: 0.6 }}>
-            Early alpha • Frequent updates and fixes ongoing
           </p>
           
           <div className="md:hidden h-8" />
@@ -72,7 +68,7 @@ function App() {
             <div className="flex flex-wrap justify-center gap-4 md:gap-6">
               {isWindows ? (
                 <a
-                  href="https://github.com/justelson/dev_scope/releases/latest/download/DevScope-Setup.exe"
+                  href="https://github.com/justelson/dev_scope/releases/download/v1.0.0-alpha.3/DevScope-Air-Setup-1.0.0-alpha.3.exe"
                   className="px-6 md:px-8 py-2.5 md:py-3 bg-white hover:bg-gray-100 text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-sm"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -114,7 +110,7 @@ function App() {
       {/* Footer */}
       <footer className={`py-12 md:py-20 text-center transition-all duration-1000 delay-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
         <div className="flex flex-col items-center gap-3 md:gap-4 px-4">
-          <p className="md:hidden text-[10px] font-bold mb-2" style={{ color: '#007aff', opacity: 0.6 }}>
+          <p className="md:hidden text-[10px] font-bold mb-2 text-white/40">
             Early alpha • Frequent updates and fixes ongoing
           </p>
           <p className="text-white/40 text-[10px] md:text-[11px] font-bold tracking-[0.2em] uppercase">
