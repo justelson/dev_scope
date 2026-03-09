@@ -86,10 +86,6 @@ export function FolderBrowseProjectCard({
                                 size={32}
                             />
                         </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-white/30">
-                            <Clock size={12} />
-                            <span>{formatRelativeTime(project.lastModified)}</span>
-                        </div>
                         <FileActionsMenu
                             buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                             items={[
@@ -121,7 +117,7 @@ export function FolderBrowseProjectCard({
                         )}
                     </div>
 
-                    <div className="relative z-10 flex items-center gap-2">
+                    <div className="relative z-10 flex items-center justify-between gap-2">
                         <button
                             onClick={(event) => {
                                 event.stopPropagation()
@@ -132,6 +128,10 @@ export function FolderBrowseProjectCard({
                             <ExternalLink size={14} />
                             <span>Open</span>
                         </button>
+                        <div className="flex items-center gap-1.5 text-[10px] text-white/30">
+                            <Clock size={12} />
+                            <span>{formatRelativeTime(project.lastModified)}</span>
+                        </div>
                     </div>
 
                     <div

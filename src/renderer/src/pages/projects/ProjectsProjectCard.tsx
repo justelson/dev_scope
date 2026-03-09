@@ -85,21 +85,15 @@ export function ProjectsProjectCard({
                                 size={32}
                             />
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                            <div className="flex items-center gap-1.5 text-[10px] text-white/30">
-                                <Clock size={12} />
-                                <span>{formatRelativeTime(project.lastModified)}</span>
-                            </div>
-                            <FileActionsMenu
-                                buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                items={[
-                                    { id: 'open', label: 'Open', icon: <FolderOpen size={13} />, onSelect: () => onProjectOpen(project) },
-                                    { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => openInExplorer(project.path) },
-                                    { id: 'rename', label: 'Rename Project', icon: <Pencil size={13} />, onSelect: () => onProjectRename(project) },
-                                    { id: 'delete', label: 'Delete Project', icon: <Trash2 size={13} />, danger: true, onSelect: () => onProjectDelete(project) }
-                                ]}
-                            />
-                        </div>
+                        <FileActionsMenu
+                            buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                            items={[
+                                { id: 'open', label: 'Open', icon: <FolderOpen size={13} />, onSelect: () => onProjectOpen(project) },
+                                { id: 'explorer', label: 'Open in Explorer', icon: <ExternalLink size={13} />, onSelect: () => openInExplorer(project.path) },
+                                { id: 'rename', label: 'Rename Project', icon: <Pencil size={13} />, onSelect: () => onProjectRename(project) },
+                                { id: 'delete', label: 'Delete Project', icon: <Trash2 size={13} />, danger: true, onSelect: () => onProjectDelete(project) }
+                            ]}
+                        />
                     </div>
 
                     <div className="relative z-10 flex-1">
@@ -127,7 +121,7 @@ export function ProjectsProjectCard({
                         )}
                     </div>
 
-                    <div className="relative z-10 flex items-center gap-2">
+                    <div className="relative z-10 flex items-center justify-between gap-2">
                         <button
                             onClick={(e) => {
                                 e.stopPropagation()
@@ -138,6 +132,10 @@ export function ProjectsProjectCard({
                             <ExternalLink size={14} />
                             <span>Open</span>
                         </button>
+                        <div className="flex items-center gap-1.5 text-[10px] text-white/30">
+                            <Clock size={12} />
+                            <span>{formatRelativeTime(project.lastModified)}</span>
+                        </div>
                     </div>
 
                     <div

@@ -33,13 +33,8 @@ export default function ProjectsSettings() {
         try {
             const result = await window.devscope.selectFolder()
             if (result.success && result.folderPath) {
-                // Check if folder already exists in main or additional folders
-                if (result.folderPath === settings.projectsFolder) {
-                    return // Already the main folder
-                }
-                if (settings.additionalFolders?.includes(result.folderPath)) {
-                    return // Already in additional folders
-                }
+                if (result.folderPath === settings.projectsFolder) return
+                if (settings.additionalFolders?.includes(result.folderPath)) return
                 updateSettings({
                     additionalFolders: [...(settings.additionalFolders || []), result.folderPath]
                 })
@@ -60,12 +55,7 @@ export default function ProjectsSettings() {
         setIndexResult(null)
 
         try {
-            // Collect all folders to index
-            const foldersToIndex = [
-                settings.projectsFolder,
-                ...(settings.additionalFolders || [])
-            ].filter(Boolean)
-
+            const foldersToIndex = [settings.projectsFolder, ...(settings.additionalFolders || [])].filter(Boolean)
             if (foldersToIndex.length === 0) {
                 setIndexResult({ success: false, count: 0, errors: [{ folder: '', error: 'No folders configured' }] })
                 return
@@ -88,7 +78,6 @@ export default function ProjectsSettings() {
 
     return (
         <div className="animate-fadeIn">
-            {/* Header */}
             <div className="mb-8">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
@@ -97,14 +86,12 @@ export default function ProjectsSettings() {
                         </div>
                         <div>
                             <h1 className="text-2xl font-semibold text-sparkle-text">Projects</h1>
-                            <p className="text-sparkle-text-secondary">
-                                Configure where your coding projects are located
-                            </p>
+                            <p className="text-sparkle-text-secondary">Configure where your coding projects are located</p>
                         </div>
                     </div>
                     <Link
                         to="/settings"
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-sparkle-text hover:text-[var(--accent-primary)] bg-sparkle-card hover:bg-sparkle-card-hover border border-sparkle-border rounded-lg transition-all shrink-0"
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-sparkle-text hover:text-[var(--accent-primary)] bg-sparkle-card hover:bg-white/[0.03] border border-white/10 hover:border-white/20 rounded-lg transition-all shrink-0"
                     >
                         <ArrowLeft size={16} />
                         <span>Back to Settings</span>
@@ -112,193 +99,227 @@ export default function ProjectsSettings() {
                 </div>
             </div>
 
-            {/* Settings Content */}
-            <div className="space-y-6">
-                {/* Indexing Controls */}
-                <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-6">
-                    <h3 className="font-medium text-sparkle-text mb-1">Folder Indexing</h3>
-                    <p className="text-sm text-sparkle-text-secondary mb-4">
-                        Control how DevScope indexes your project folders to discover projects.
-                    </p>
+            {/* Quick Start Guide */}
+            <div className="mb-6 bg-gradient-to-br from-indigo-500/10 via-indigo-500/5 to-transparent border border-indigo-500/20 rounded-xl p-5">
+                <div className="flex items-start gap-3">
+                    <div className="rounded-lg bg-indigo-500/20 p-2 mt-0.5">
+                        <FolderOpen size={18} className="text-indigo-400" />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="font-semibold text-sparkle-text mb-1">Getting Started</h3>
+                        <p className="text-sm text-sparkle-text-secondary leading-relaxed">
+                            Select your main projects folder, then enable indexing to automatically discover all your projects. 
+                            DevScope scans for package.json, .git, Cargo.toml, and more.
+                        </p>
+                    </div>
+                </div>
+            </div>
 
-                    <div className="space-y-4">
-                        {/* Enable Indexing Toggle */}
-                        <div className="flex items-center justify-between py-3 border-b border-sparkle-border">
-                            <div className="flex items-center gap-3">
-                                <Power size={18} className="text-green-400" />
-                                <div>
-                                    <p className="text-sm font-medium text-sparkle-text">Enable Folder Indexing</p>
-                                    <p className="text-xs text-sparkle-text-secondary">Scan configured folders for projects</p>
-                                </div>
+            {/* Two Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column - Folders */}
+                <div className="space-y-6">
+                    {/* Main Projects Folder */}
+                    <section className="rounded-xl border border-white/10 bg-sparkle-card p-6">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                            <div>
+                                <h3 className="font-semibold text-sparkle-text mb-1">Main Projects Folder</h3>
+                                <p className="text-sm text-sparkle-text-secondary">Primary location for your projects</p>
                             </div>
-                            <button
-                                onClick={() => updateSettings({ enableFolderIndexing: !settings.enableFolderIndexing })}
-                                className={cn(
-                                    'relative w-12 h-6 rounded-full transition-colors',
-                                    settings.enableFolderIndexing ? 'bg-green-500' : 'bg-sparkle-border'
-                                )}
-                            >
-                                <div className={cn(
-                                    'absolute top-1 w-4 h-4 rounded-full bg-white transition-all',
-                                    settings.enableFolderIndexing ? 'left-7' : 'left-1'
-                                )} />
-                            </button>
+                            {settings.projectsFolder && (
+                                <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                    Active
+                                </span>
+                            )}
                         </div>
 
-                        {/* Auto-Index on Startup Toggle */}
-                        <div className="flex items-center justify-between py-3 border-b border-sparkle-border">
-                            <div className="flex items-center gap-3">
-                                <RefreshCw size={18} className="text-blue-400" />
-                                <div>
-                                    <p className="text-sm font-medium text-sparkle-text">Auto-Index on Startup</p>
-                                    <p className="text-xs text-sparkle-text-secondary">Automatically scan folders when DevScope starts</p>
+                        {settings.projectsFolder ? (
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-3 px-4 py-3 bg-white/[0.03] rounded-lg border border-white/10">
+                                    <Folder size={18} className="text-indigo-400 shrink-0" />
+                                    <span className="text-sm text-sparkle-text truncate font-mono flex-1">
+                                        {settings.projectsFolder}
+                                    </span>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleSelectFolder}
+                                        className="flex-1 px-4 py-2.5 bg-white/[0.05] text-sparkle-text rounded-lg hover:bg-white/[0.08] border border-white/10 hover:border-white/20 transition-all text-sm font-medium"
+                                    >
+                                        Change Folder
+                                    </button>
+                                    <button
+                                        onClick={handleClearFolder}
+                                        className="px-4 py-2.5 text-red-400 hover:bg-red-500/10 rounded-lg border border-white/10 hover:border-red-500/20 transition-all text-sm font-medium"
+                                    >
+                                        Clear
+                                    </button>
                                 </div>
                             </div>
+                        ) : (
                             <button
-                                onClick={() => updateSettings({ autoIndexOnStartup: !settings.autoIndexOnStartup })}
-                                className={cn(
-                                    'relative w-12 h-6 rounded-full transition-colors',
-                                    settings.autoIndexOnStartup ? 'bg-blue-500' : 'bg-sparkle-border'
-                                )}
+                                onClick={handleSelectFolder}
+                                className="w-full flex items-center justify-center gap-3 px-4 py-4 bg-indigo-500/10 text-indigo-400 rounded-lg hover:bg-indigo-500/15 border border-indigo-500/20 hover:border-indigo-500/30 transition-all"
                             >
-                                <div className={cn(
-                                    'absolute top-1 w-4 h-4 rounded-full bg-white transition-all',
-                                    settings.autoIndexOnStartup ? 'left-7' : 'left-1'
-                                )} />
+                                <FolderOpen size={18} />
+                                <span className="text-sm font-medium">Select Projects Folder</span>
                             </button>
+                        )}
+                    </section>
+
+                    {/* Additional Folders */}
+                    <section className="rounded-xl border border-white/10 bg-sparkle-card p-6">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                            <div>
+                                <h3 className="font-semibold text-sparkle-text mb-1">Additional Folders</h3>
+                                <p className="text-sm text-sparkle-text-secondary">Add more locations to scan</p>
+                            </div>
+                            {settings.additionalFolders && settings.additionalFolders.length > 0 && (
+                                <span className="text-xs px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                    {settings.additionalFolders.length}
+                                </span>
+                            )}
                         </div>
 
-                        {/* Index Now Button */}
-                        <div className="pt-2">
+                        {settings.additionalFolders && settings.additionalFolders.length > 0 && (
+                            <div className="space-y-2 mb-4">
+                                {settings.additionalFolders.map((folder) => (
+                                    <div key={folder} className="flex items-center gap-2">
+                                        <div className="flex-1 flex items-center gap-3 px-4 py-2.5 bg-white/[0.03] rounded-lg border border-white/10">
+                                            <Folder size={16} className="text-purple-400 shrink-0" />
+                                            <span className="text-sm text-sparkle-text truncate font-mono">
+                                                {folder}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleRemoveAdditionalFolder(folder)}
+                                            className="p-2.5 text-sparkle-text-secondary hover:text-red-400 hover:bg-red-500/10 rounded-lg border border-white/10 hover:border-red-500/20 transition-all"
+                                            title="Remove"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleAddAdditionalFolder}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-500/10 text-purple-400 rounded-lg hover:bg-purple-500/15 border border-purple-500/20 hover:border-purple-500/30 transition-all text-sm font-medium"
+                        >
+                            <Plus size={16} />
+                            Add Folder
+                        </button>
+                    </section>
+                </div>
+
+                {/* Right Column - Indexing */}
+                <div className="space-y-6">
+                    {/* Indexing Controls */}
+                    <section className="rounded-xl border border-white/10 bg-sparkle-card p-6">
+                        <h3 className="font-semibold text-sparkle-text mb-1">Indexing Settings</h3>
+                        <p className="text-sm text-sparkle-text-secondary mb-5">Control how DevScope discovers projects</p>
+
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between p-4 rounded-lg border border-white/10 bg-white/[0.02]">
+                                <div className="flex items-center gap-3">
+                                    <div className="rounded-lg bg-green-500/10 p-2">
+                                        <Power size={16} className="text-green-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-sparkle-text">Enable Indexing</p>
+                                        <p className="text-xs text-sparkle-text-secondary mt-0.5">Scan folders for projects</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => updateSettings({ enableFolderIndexing: !settings.enableFolderIndexing })}
+                                    className={cn(
+                                        'relative w-11 h-6 rounded-full transition-all border',
+                                        settings.enableFolderIndexing 
+                                            ? 'bg-green-500 border-green-500/30' 
+                                            : 'bg-white/10 border-white/10'
+                                    )}
+                                >
+                                    <div className={cn(
+                                        'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all',
+                                        settings.enableFolderIndexing ? 'left-5' : 'left-0.5'
+                                    )} />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between p-4 rounded-lg border border-white/10 bg-white/[0.02]">
+                                <div className="flex items-center gap-3">
+                                    <div className="rounded-lg bg-blue-500/10 p-2">
+                                        <RefreshCw size={16} className="text-blue-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-sparkle-text">Auto-Index on Startup</p>
+                                        <p className="text-xs text-sparkle-text-secondary mt-0.5">Scan when app starts</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => updateSettings({ autoIndexOnStartup: !settings.autoIndexOnStartup })}
+                                    className={cn(
+                                        'relative w-11 h-6 rounded-full transition-all border',
+                                        settings.autoIndexOnStartup 
+                                            ? 'bg-blue-500 border-blue-500/30' 
+                                            : 'bg-white/10 border-white/10'
+                                    )}
+                                >
+                                    <div className={cn(
+                                        'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all',
+                                        settings.autoIndexOnStartup ? 'left-5' : 'left-0.5'
+                                    )} />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="mt-5 pt-5 border-t border-white/5">
                             <button
                                 onClick={handleIndexNow}
                                 disabled={isIndexing || allFoldersCount === 0}
                                 className={cn(
-                                    'flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-medium',
+                                    'w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-lg transition-all text-sm font-medium border',
                                     isIndexing
-                                        ? 'bg-sparkle-border text-sparkle-text-secondary cursor-wait'
+                                        ? 'bg-white/5 text-sparkle-text-secondary cursor-wait border-white/10'
                                         : allFoldersCount === 0
-                                            ? 'bg-sparkle-border/50 text-sparkle-text-secondary cursor-not-allowed'
-                                            : 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/20'
+                                            ? 'bg-white/5 text-sparkle-text-secondary cursor-not-allowed border-white/10'
+                                            : 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/15 border-[var(--accent-primary)]/20 hover:border-[var(--accent-primary)]/30'
                                 )}
                             >
                                 <RefreshCw size={18} className={isIndexing ? 'animate-spin' : ''} />
-                                {isIndexing ? 'Indexing...' : `Index Now (${allFoldersCount} folder${allFoldersCount !== 1 ? 's' : ''})`}
+                                {isIndexing 
+                                    ? 'Indexing Projects...' 
+                                    : allFoldersCount === 0
+                                        ? 'No Folders Configured'
+                                        : `Index ${allFoldersCount} Folder${allFoldersCount !== 1 ? 's' : ''} Now`
+                                }
                             </button>
 
-                            {/* Index Result */}
                             {indexResult && (
                                 <div className={cn(
-                                    'mt-3 px-4 py-2 rounded-lg text-sm flex items-center gap-2',
+                                    'mt-3 px-4 py-3 rounded-lg text-sm flex items-start gap-3 border',
                                     indexResult.success
-                                        ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                        ? 'bg-green-500/10 text-green-300 border-green-500/20'
+                                        : 'bg-red-500/10 text-red-300 border-red-500/20'
                                 )}>
                                     {indexResult.success ? (
                                         <>
-                                            <CheckCircle size={16} />
-                                            Found {indexResult.count} projects
+                                            <CheckCircle size={18} className="shrink-0 mt-0.5" />
+                                            <span>Found {indexResult.count} project{indexResult.count !== 1 ? 's' : ''}</span>
                                         </>
                                     ) : (
                                         <>
-                                            <AlertCircle size={16} />
-                                            {indexResult.errors?.[0]?.error || 'Indexing failed'}
+                                            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                                            <span>{indexResult.errors?.[0]?.error || 'Indexing failed'}</span>
                                         </>
                                     )}
                                 </div>
                             )}
                         </div>
-                    </div>
-                </div>
-
-                {/* Main Projects Folder */}
-                <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-6">
-                    <h3 className="font-medium text-sparkle-text mb-1">Main Projects Folder</h3>
-                    <p className="text-sm text-sparkle-text-secondary mb-4">
-                        Select a folder containing your coding projects. DevScope will scan for projects with package.json, .git, or other project markers.
-                    </p>
-
-                    {settings.projectsFolder ? (
-                        <div className="flex items-center gap-3">
-                            <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-sparkle-bg rounded-lg border border-sparkle-border">
-                                <Folder size={18} className="text-indigo-400 shrink-0" />
-                                <span className="text-sm text-sparkle-text truncate font-mono">
-                                    {settings.projectsFolder}
-                                </span>
-                            </div>
-                            <button
-                                onClick={handleSelectFolder}
-                                className="px-4 py-3 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] rounded-lg hover:bg-[var(--accent-primary)]/20 transition-colors text-sm font-medium"
-                            >
-                                Change
-                            </button>
-                            <button
-                                onClick={handleClearFolder}
-                                className="p-3 text-sparkle-text-secondary hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                title="Clear folder"
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={handleSelectFolder}
-                            className="flex items-center gap-3 px-4 py-3 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] rounded-lg hover:bg-[var(--accent-primary)]/20 transition-colors"
-                        >
-                            <FolderOpen size={18} />
-                            <span className="text-sm font-medium">Select Projects Folder</span>
-                        </button>
-                    )}
-                </div>
-
-                {/* Additional Indexed Folders */}
-                <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-6">
-                    <h3 className="font-medium text-sparkle-text mb-1">Additional Indexed Folders</h3>
-                    <p className="text-sm text-sparkle-text-secondary mb-4">
-                        Add more folders to be scanned alongside your main projects folder. All projects from these folders will appear in your Projects view.
-                    </p>
-
-                    {/* List of additional folders */}
-                    {settings.additionalFolders && settings.additionalFolders.length > 0 && (
-                        <div className="space-y-2 mb-4">
-                            {settings.additionalFolders.map((folder) => (
-                                <div key={folder} className="flex items-center gap-3">
-                                    <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-sparkle-bg rounded-lg border border-sparkle-border">
-                                        <Folder size={18} className="text-purple-400 shrink-0" />
-                                        <span className="text-sm text-sparkle-text truncate font-mono">
-                                            {folder}
-                                        </span>
-                                    </div>
-                                    <button
-                                        onClick={() => handleRemoveAdditionalFolder(folder)}
-                                        className="p-3 text-sparkle-text-secondary hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                        title="Remove folder"
-                                    >
-                                        <X size={18} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    <button
-                        onClick={handleAddAdditionalFolder}
-                        className="flex items-center gap-3 px-4 py-3 bg-purple-500/10 text-purple-400 rounded-lg hover:bg-purple-500/20 transition-colors border border-purple-500/20 hover:border-purple-500/30"
-                    >
-                        <Plus size={18} />
-                        <span className="text-sm font-medium">Add Folder</span>
-                    </button>
-                </div>
-
-                {/* Info */}
-                <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-4">
-                    <p className="text-sm text-indigo-300">
-                        <strong>Tip:</strong> DevScope detects projects by looking for common markers like package.json, Cargo.toml, go.mod, .git folders, and more. Each subfolder in your indexed directories will be scanned.
-                    </p>
+                    </section>
                 </div>
             </div>
         </div>
     )
 }
-
-
