@@ -161,7 +161,7 @@ export default function Sidebar() {
                 <div className="flex items-center justify-between gap-2 h-8">
                     {!isCollapsed && (
                         <p className="text-[10px] text-sparkle-text-muted flex-1 whitespace-nowrap transition-all duration-300 animate-fadeIn overflow-hidden uppercase tracking-wider font-medium">
-                            DevScope Air {updateState?.currentDisplayVersion || 'v1.0 Alpha 1'}
+                            DevScope Air {updateState?.currentDisplayVersion || 'v1.1 Alpha 3'}
                         </p>
                     )}
                     <button

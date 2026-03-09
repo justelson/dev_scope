@@ -20,7 +20,7 @@
     <img src="https://img.shields.io/badge/Repo-dev__scope-181717?style=for-the-badge&logo=github" alt="Repository">
   </a>
   <img src="https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge&logo=windows" alt="Windows Support">
-  <img src="https://img.shields.io/badge/Version-1.0.0--alpha.1-7c3aed?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.1.0--alpha.3-7c3aed?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
 </p>
 
@@ -42,7 +42,7 @@
 
 DevScope Air is the main Windows Electron app in this repository. It is built around local project discovery, project browsing, file preview, Git workflows, app settings, and release update flows from one desktop surface.
 
-The current package is [`devscope-air-win`](./package.json), currently version `1.0.0-alpha.1`.
+The current package is [`devscope-air-win`](./package.json), currently version `1.1.0-alpha.3`.
 
 ## Key Features
 
