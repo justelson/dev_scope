@@ -60,18 +60,18 @@ export default function TitleBar() {
                     type="button"
                     onClick={() => openModal()}
                     className={cn(
-                        'group inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
+                        'group inline-flex h-8 w-8 items-center justify-center rounded-lg border text-xs transition-colors',
                         rocketToneClass
                     )}
                     style={{ WebkitAppRegion: 'no-drag' } as any}
                     title={updateLabel}
+                    aria-label={updateLabel}
                 >
                     {statusTone === 'checking' || statusTone === 'downloading' ? (
                         <RefreshCw size={14} className="animate-spin" />
                     ) : (
                         <Rocket size={14} className={cn(statusTone === 'available' && 'animate-pulse')} />
                     )}
-                    <span className="max-w-[128px] truncate">{updateLabel}</span>
                 </button>
             </div>
 
