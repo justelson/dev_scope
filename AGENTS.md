@@ -8,6 +8,14 @@ These constraints were explicitly set by the user and should be treated as activ
 - `apps/landing/devscope-web` is a separate landing site, not the desktop runtime.
 - This repo is still evolving. Strong maintainability refactors are encouraged when they reduce duplication or improve reliability.
 
+## Branch Workflow
+- `main` should stay stable, intentional, and releasable.
+- `dev` is the active branch for rapid iteration, in-progress app work, cleanup, and exploratory changes.
+- Tag and publish releases from `main`, not from `dev`.
+- Prefer landing/docs/process/infrastructure changes on `main` when they are stable on their own.
+- Prefer active renderer/app feature work on `dev` until it is ready to merge back into `main`.
+- Do not mix unrelated `dev` app work into `main` release-prep commits.
+
 ## Core Priorities
 1. Performance first.
 2. Reliability first.
