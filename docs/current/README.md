@@ -1,6 +1,6 @@
 # Current Docs
 
-Last updated: March 8, 2026
+Last updated: March 9, 2026
 
 This folder is the active documentation set for the present codebase.
 
@@ -16,6 +16,10 @@ This repo is the active DevScope desktop app. The sibling `devscope-win` codebas
   - Engineering quality expectations by layer and definition of done.
 - `docs/current/CHANGE_VALIDATION_CHECKLIST.md`
   - Practical validation checklist for scoped changes and regression control.
+- `docs/current/CHANGE_SCOPE_GUIDELINES.md`
+  - How to keep changes focused, layered correctly, and honestly reported.
+- `docs/current/RELEASE_OPERATIONS_PLAYBOOK.md`
+  - Operational release checklist, verification steps, and recovery guidance.
 - `docs/platform/README.md`
   - Multi-client architecture docs for CLI, IDE extension, and additional UIs.
 

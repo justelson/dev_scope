@@ -2,6 +2,12 @@
 
 These constraints were explicitly set by the user and should be treated as active defaults in this repo.
 
+## Project Snapshot
+- DevScope Air is the primary Windows Electron desktop app in this repository.
+- The repository root is the desktop app and release target.
+- `apps/landing/devscope-web` is a separate landing site, not the desktop runtime.
+- This repo is still evolving. Strong maintainability refactors are encouraged when they reduce duplication or improve reliability.
+
 ## Core Priorities
 1. Performance first.
 2. Reliability first.
@@ -12,13 +18,46 @@ If a tradeoff is required, choose correctness and robustness over short-term con
 ## Maintainability
 Long term maintainability is a core priority. If you add new functionality, first check if there are shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
 
+## Change Scope
+- Prefer small, focused changes that solve the requested problem directly.
+- Do not mix unrelated fixes into the same implementation unless they are required to make the requested change correct.
+- If a change grows beyond the original request, call that out explicitly instead of silently broadening scope.
+- For non-trivial UI changes, if visual verification is not performed, say that clearly instead of implying the UI was fully checked.
+
 ## Build/Test Permission
 - Do **not** run rebuilds, full builds, or test suites unless the user explicitly re-approves in the current session.
 - If validation is needed, prefer lightweight checks (for example, targeted syntax/transpile checks) unless build/test permission is granted.
 
+## Validation Defaults
+- If the user explicitly re-approves validation, prefer the lightest useful command first.
+- Default validation order:
+  1. `npm run typecheck`
+  2. targeted package/app-specific checks
+  3. full builds only when they are necessary for the requested change
+- If validation is skipped because permission was not granted, say that explicitly in the final response.
+
 ## Agent/Escalation Permission
 - Commands requiring agent/escalated privileges may need fresh approval in a new session.
 - If a required command is blocked by sandbox/permissions, request approval before proceeding.
+
+## Architecture Boundaries
+- `src/main`: Electron main-process logic, IPC registration, native integrations, update orchestration, and filesystem/process coordination.
+- `src/preload`: narrow renderer bridge adapters only. Keep this layer small and explicit.
+- `src/renderer/src`: UI, view state, and interaction flows. Do not push native or filesystem logic into renderer components.
+- `src/shared`: shared contracts, types, and reusable cross-process utilities. Prefer putting shared logic here instead of duplicating it in main and renderer.
+- `apps/landing/devscope-web`: marketing/landing experience only. Keep release/download behavior aligned with GitHub releases, but do not couple it to desktop-only runtime code.
+
+## Release Distribution Rules
+- Landing-page download buttons must resolve the newest GitHub release asset dynamically. Do **not** hardcode versioned `releases/download/...` URLs in the landing app.
+- Release artifacts must be organized by version:
+  - Installers and update metadata go under `dist/releases/v<package-version>/`
+  - Unpacked app bundles go under `dist/unpacked/v<package-version>/`
+- Avoid dropping versioned installers, blockmaps, `latest.yml`, or builder config files directly in the `dist` root unless it is a temporary manual recovery step.
+- If a release, cleanup, move, delete, or organization step is blocked by a running local process, file lock, or other machine-side issue, the assistant must say that clearly and identify what needs to be stopped or changed on the user's side.
+- For release tasks, verify the final published release state instead of assuming a tag push was enough.
+  - Confirm the GitHub release exists.
+  - Confirm expected Windows release assets exist: installer `.exe`, `latest.yml`, and `.blockmap`.
+  - If the release workflow fails remotely, surface the exact remote blocker before attempting workarounds.
 
 ## Assistant UI Notes
 - For subtle separators, dividers, and timeline guides in the assistant UI, do **not** use plain border-token lines by default.
@@ -52,4 +91,3 @@ Long term maintainability is a core priority. If you add new functionality, firs
   - Check both compact and non-compact modes
   - Verify collapsed and expanded states
   - Test hover and active states
-

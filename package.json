@@ -14,8 +14,9 @@
         "maint:loc": "node scripts/maint/check-loc.mjs",
         "maint:loc:strict": "node scripts/maint/check-loc.mjs --strict",
         "postinstall": "echo DevScope Air: skipping native terminal rebuild",
-        "build:win": "electron-vite build && electron-builder --win",
-        "build:unpack": "electron-vite build && electron-builder --dir"
+        "build:win": "electron-vite build && node scripts/maint/package-win-release.mjs release",
+        "build:unpack": "electron-vite build && node scripts/maint/package-win-release.mjs unpacked",
+        "dist:organize": "node scripts/maint/organize-dist.mjs"
     },
     "dependencies": {
         "@monaco-editor/react": "^4.7.0",

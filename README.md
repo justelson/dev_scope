@@ -142,6 +142,10 @@ npm run build
 npm run build:win
 ```
 
+Packaged installers and update metadata are written to `dist/releases/v<package-version>/`.
+Unpacked desktop bundles are written to `dist/unpacked/v<package-version>/win-unpacked/`.
+Use `npm run dist:organize` to move older flat `dist` artifacts into that versioned layout.
+
 ## Project Structure
 
 ```mermaid
