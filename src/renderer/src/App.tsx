@@ -3,8 +3,10 @@ import { useRef, lazy, Suspense, useEffect, useMemo, createContext, useContext, 
 import { HashRouter, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import TitleBar from './components/layout/TitleBar'
 import Sidebar, { SidebarProvider, useSidebar } from './components/layout/Sidebar'
+import { UpdatePromptCenter } from './components/updates/UpdatePromptCenter'
 import { useSmoothScroll } from './lib/useSmoothScroll'
 import { LoadingSpinner } from './components/ui/LoadingState'
+import { AppUpdatesProvider } from './lib/app-updates'
 import { SettingsProvider, useSettings } from './lib/settings'
 import { CommandPaletteProvider } from './lib/commandPalette'
 import CommandPalette from './components/CommandPalette'
@@ -216,8 +218,10 @@ function App() {
             <CommandPaletteProvider>
                 <TerminalContextProvider>
                     <HashRouter>
-                        <AppContent />
-                        <CommandPalette />
+                        <AppUpdatesProvider>
+                            <AppContent />
+                            <CommandPalette />
+                        </AppUpdatesProvider>
                     </HashRouter>
                 </TerminalContextProvider>
             </CommandPaletteProvider>
@@ -268,6 +272,7 @@ function AppContent() {
                     <MainContent />
                 </div>
             </SidebarProvider>
+            <UpdatePromptCenter />
             <LinkHoverStatus />
         </div>
     )

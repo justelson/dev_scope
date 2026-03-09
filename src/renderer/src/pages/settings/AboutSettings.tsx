@@ -2,45 +2,24 @@
  * DevScope - About Page
  */
 
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Download, ExternalLink, Github, Heart, Info, RefreshCw, Rocket } from 'lucide-react'
 import { DevScopeLogoASCII } from '@/components/ui/DevScopeLogo'
-import { getUpdateActionLabel, useAppUpdateState } from '@/lib/app-updates'
+import { getUpdateActionLabel, useAppUpdates } from '@/lib/app-updates'
 import { cn } from '@/lib/utils'
 
-type UpdateAction = 'check' | 'download' | 'install' | null
-
 export default function AboutSettings() {
-    const updateState = useAppUpdateState()
-    const [pendingAction, setPendingAction] = useState<UpdateAction>(null)
-
-    const handleCheck = async () => {
-        setPendingAction('check')
-        try {
-            await window.devscope.updates.checkForUpdates()
-        } finally {
-            setPendingAction(null)
-        }
-    }
-
-    const handleDownload = async () => {
-        setPendingAction('download')
-        try {
-            await window.devscope.updates.downloadUpdate()
-        } finally {
-            setPendingAction(null)
-        }
-    }
-
-    const handleInstall = async () => {
-        setPendingAction('install')
-        try {
-            await window.devscope.updates.installUpdate()
-        } finally {
-            setPendingAction(null)
-        }
-    }
+    const {
+        updateState,
+        pendingAction,
+        openModal,
+        checkForUpdates,
+        downloadUpdate,
+        installUpdate,
+        skipAvailableVersion,
+        remindLater,
+        clearSkippedVersion
+    } = useAppUpdates()
 
     const isBusy = pendingAction !== null
     const updateSummary = getUpdateActionLabel(updateState)
@@ -104,10 +83,18 @@ export default function AboutSettings() {
                                     GitHub Releases: {updateState.repository}
                                 </p>
                             )}
+                            {updateState?.checkedAt && (
+                                <p className="text-xs text-sparkle-text-muted mt-1">
+                                    Last checked {new Date(updateState.checkedAt).toLocaleString()}
+                                </p>
+                            )}
                         </div>
                         <div className="flex flex-wrap justify-end gap-2">
                             <button
-                                onClick={() => { void handleCheck() }}
+                                onClick={() => {
+                                    clearSkippedVersion()
+                                    void checkForUpdates()
+                                }}
                                 disabled={isBusy || !updateState?.enabled || updateState.status === 'checking'}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
@@ -115,7 +102,7 @@ export default function AboutSettings() {
                                 {updateState?.status === 'checking' ? 'Checking...' : 'Check'}
                             </button>
                             <button
-                                onClick={() => { void handleDownload() }}
+                                onClick={() => { void downloadUpdate() }}
                                 disabled={isBusy || updateState?.status !== 'available'}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
@@ -123,15 +110,42 @@ export default function AboutSettings() {
                                 {pendingAction === 'download' ? 'Downloading...' : 'Download'}
                             </button>
                             <button
-                                onClick={() => { void handleInstall() }}
+                                onClick={() => { void installUpdate() }}
                                 disabled={isBusy || updateState?.status !== 'downloaded'}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-primary)]/12 border border-white/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/18 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                                 <Rocket size={16} />
                                 {pendingAction === 'install' ? 'Restarting...' : 'Restart to Install'}
                             </button>
+                            <button
+                                onClick={openModal}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 transition-colors"
+                            >
+                                <Rocket size={16} />
+                                Open Update Center
+                            </button>
                         </div>
                     </div>
+                    {updateState?.status === 'available' && (
+                        <div className="mt-4 flex items-center justify-end gap-2">
+                            <button
+                                onClick={skipAvailableVersion}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 transition-colors"
+                            >
+                                Skip This Version
+                            </button>
+                        </div>
+                    )}
+                    {updateState?.status === 'downloaded' && (
+                        <div className="mt-4 flex items-center justify-end gap-2">
+                            <button
+                                onClick={remindLater}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 transition-colors"
+                            >
+                                Do It Later
+                            </button>
+                        </div>
+                    )}
                     {updateState?.status === 'downloading' && updateState.downloadPercent !== null && (
                         <div className="mt-4">
                             <div className="h-2 rounded-full bg-white/[0.05] overflow-hidden">
