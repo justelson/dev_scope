@@ -2,6 +2,16 @@
 
 These constraints were explicitly set by the user and should be treated as active defaults in this repo.
 
+## Core Priorities
+1. Performance first.
+2. Reliability first.
+3. Keep behavior predictable under load and during failures (session restarts, reconnects, partial streams).
+
+If a tradeoff is required, choose correctness and robustness over short-term convenience.
+
+## Maintainability
+Long term maintainability is a core priority. If you add new functionality, first check if there are shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
+
 ## Build/Test Permission
 - Do **not** run rebuilds, full builds, or test suites unless the user explicitly re-approves in the current session.
 - If validation is needed, prefer lightweight checks (for example, targeted syntax/transpile checks) unless build/test permission is granted.
