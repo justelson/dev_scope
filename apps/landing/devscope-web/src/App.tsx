@@ -70,12 +70,24 @@ function App() {
 
           <div className="flex flex-col items-center gap-2">
             <div className="flex flex-wrap justify-center gap-4 md:gap-6">
-              <a
-                href={isWindows ? "https://github.com/justelson/dev_scope/releases/latest" : "https://github.com/justelson/dev_scope.git"}
-                className="px-6 md:px-8 py-2.5 md:py-3 bg-white hover:bg-gray-100 text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-sm"
-              >
-                {isWindows ? 'Download now' : 'View on GitHub'}
-              </a>
+              {isWindows ? (
+                <a
+                  href="https://github.com/justelson/dev_scope/releases/latest/download/DevScope-Setup.exe"
+                  className="px-6 md:px-8 py-2.5 md:py-3 bg-white hover:bg-gray-100 text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-sm"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                  </svg>
+                  Download for Windows
+                </a>
+              ) : (
+                <a
+                  href="https://github.com/justelson/dev_scope.git"
+                  className="px-6 md:px-8 py-2.5 md:py-3 bg-white hover:bg-gray-100 text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-sm"
+                >
+                  View on GitHub
+                </a>
+              )}
             </div>
             {!isWindows && (
               <p className="text-xs text-white/40 mt-2">
