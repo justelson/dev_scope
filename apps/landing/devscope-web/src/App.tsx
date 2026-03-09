@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 
 function App() {
   const [isVisible, setIsVisible] = useState(false);
-  const [scrollScale, setScrollScale] = useState(0.95);
   
   // Detect platform once during initialization
   const [isWindows] = useState(() => {
@@ -17,17 +16,8 @@ function App() {
       setIsVisible(true);
     }, 0);
     
-    const handleScroll = () => {
-      const scrollY = window.scrollY;
-      const maxScroll = 300;
-      const scale = Math.min(0.95 + (scrollY / maxScroll) * 0.05, 1);
-      setScrollScale(scale);
-    };
-
-    window.addEventListener('scroll', handleScroll);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('scroll', handleScroll);
     };
   }, []);
 
@@ -36,9 +26,6 @@ function App() {
       {/* Animated Grid Background */}
       <div className="grid-container">
         <div className="grid-dots"></div>
-        <div className="grid-glow-1"></div>
-        <div className="grid-glow-2"></div>
-        <div className="grid-glow-3"></div>
       </div>
 
       {/* Navigation */}
@@ -102,16 +89,12 @@ function App() {
 
         {/* Ultra-Wide App Preview */}
         <div 
-          className={`w-full max-w-[1440px] rounded-md md:rounded-lg border border-white/20 md:border-2 bg-sparkle-card/20 backdrop-blur-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.95)] md:shadow-[0_0_150px_rgba(0,0,0,0.95)] delay-700 relative group ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
-          style={{ 
-            transform: `scale(${scrollScale})`,
-            transition: 'transform 0.1s ease-out, opacity 1s 0.7s, translate 1s 0.7s'
-          }}
+          className={`w-full max-w-[1440px] rounded-md md:rounded-lg border border-white/20 md:border-2 bg-sparkle-card/20 backdrop-blur-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.95)] md:shadow-[0_0_150px_rgba(0,0,0,0.95)] delay-700 relative group transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
         >
           <img
             src="/app-screenshot.png"
             alt="DevScope App Preview"
-            className="w-full h-auto transition-all duration-1000 ease-out"
+            className="w-full h-auto"
           />
         </div>
       </main>
