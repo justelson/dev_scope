@@ -7,6 +7,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 
 // Settings Types
 export type Theme = 'dark' | 'light' | 'purple' | 'green' | 'midnight' | 'ocean' | 'forest' | 'slate' | 'charcoal' | 'navy'
+export type DarkTheme = Exclude<Theme, 'light'>
 export type Shell = 'powershell' | 'cmd'
 export type CommitAIProvider = 'groq' | 'gemini'
 export type ScrollMode = 'smooth' | 'native'
@@ -55,6 +56,7 @@ export const THEMES = [
 export interface Settings {
     // Appearance
     theme: Theme
+    lastDarkTheme: DarkTheme
     accentColor: AccentColor
     compactMode: boolean
     sidebarCollapsed: boolean
@@ -100,6 +102,7 @@ export interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
     theme: 'dark',
+    lastDarkTheme: 'dark',
     accentColor: ACCENT_COLORS[0],
     compactMode: false,
     sidebarCollapsed: false,
@@ -135,6 +138,14 @@ const DEFAULT_SETTINGS: Settings = {
 
 const STORAGE_KEY = 'devscope-settings'
 
+function isTheme(value: unknown): value is Theme {
+    return typeof value === 'string' && ['dark', 'light', 'purple', 'green', 'midnight', 'ocean', 'forest', 'slate', 'charcoal', 'navy'].includes(value)
+}
+
+function isDarkTheme(value: unknown): value is DarkTheme {
+    return isTheme(value) && value !== 'light'
+}
+
 // Load settings from localStorage
 function loadSettings(): Settings {
     try {
@@ -144,8 +155,16 @@ function loadSettings(): Settings {
             const candidate = { ...DEFAULT_SETTINGS, ...parsed }
 
             // Keep only active settings keys to drop obsolete/dead fields from older app versions.
+            const theme = isTheme(candidate.theme) ? candidate.theme : DEFAULT_SETTINGS.theme
+            const lastDarkTheme = isDarkTheme(candidate.lastDarkTheme)
+                ? candidate.lastDarkTheme
+                : isDarkTheme(theme)
+                    ? theme
+                    : DEFAULT_SETTINGS.lastDarkTheme
+
             return {
-                theme: candidate.theme,
+                theme,
+                lastDarkTheme,
                 accentColor: candidate.accentColor,
                 compactMode: candidate.compactMode,
                 sidebarCollapsed: candidate.sidebarCollapsed,
@@ -236,7 +255,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }, [settings])
 
     const updateSettings = (partial: Partial<Settings>) => {
-        setSettings(prev => ({ ...prev, ...partial }))
+        setSettings(prev => {
+            const nextTheme = partial.theme ?? prev.theme
+            const nextLastDarkTheme = isDarkTheme(partial.lastDarkTheme)
+                ? partial.lastDarkTheme
+                : isDarkTheme(nextTheme)
+                    ? nextTheme
+                    : prev.lastDarkTheme
+
+            return {
+                ...prev,
+                ...partial,
+                theme: nextTheme,
+                lastDarkTheme: nextLastDarkTheme
+            }
+        })
     }
 
     const resetSettings = () => {

@@ -3,7 +3,16 @@
  */
 
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Download, ExternalLink, Github, Heart, Info, RefreshCw, Rocket } from 'lucide-react'
+import {
+    ArrowLeft,
+    Download,
+    ExternalLink,
+    Github,
+    Heart,
+    Info,
+    RefreshCw,
+    Rocket
+} from 'lucide-react'
 import { DevScopeLogoASCII } from '@/components/ui/DevScopeLogo'
 import { getUpdateActionLabel, useAppUpdates } from '@/lib/app-updates'
 import { cn } from '@/lib/utils'
@@ -23,9 +32,7 @@ export default function AboutSettings() {
 
     const isBusy = pendingAction !== null
     const updateSummary = getUpdateActionLabel(updateState)
-    const updateMessage = updateState?.message && updateState.message !== updateState.disabledReason
-        ? updateState.message
-        : null
+    const updateTone = resolveUpdateTone(updateState?.status)
 
     return (
         <div className="animate-fadeIn">
@@ -56,9 +63,6 @@ export default function AboutSettings() {
                         <div className="mb-6 overflow-x-auto max-w-full">
                             <DevScopeLogoASCII />
                         </div>
-
-                        <p className="text-sparkle-text-secondary mb-4 text-center">Developer Machine Status System</p>
-
                         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] text-sm font-medium">
                             {updateState?.currentDisplayVersion || 'Alpha 5 (v1.5.1)'}
                         </div>
@@ -67,115 +71,65 @@ export default function AboutSettings() {
                             {updateState?.currentVersion || '1.5.1-alpha.5'}
                             {updateState?.channel ? ` \u2022 ${updateState.channel} channel` : ''}
                         </p>
-                        <p className="text-xs text-sparkle-text-muted mt-2">by justelson</p>
+                        <a
+                            href="https://github.com/justelson"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-2 text-xs text-sparkle-text-muted transition-colors hover:text-[var(--accent-primary)]"
+                        >
+                            by justelson
+                        </a>
                     </div>
                 </div>
 
-                <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <h3 className="font-semibold text-sparkle-text">App Updates</h3>
-                            <p className="text-sm text-sparkle-text-secondary mt-1">
-                                {updateSummary}
-                            </p>
-                            {updateMessage && (
-                                <p className="text-xs text-amber-300 mt-2">{updateMessage}</p>
-                            )}
-                            {updateState?.disabledReason && (
-                                <p className="text-xs text-amber-300 mt-2">{updateState.disabledReason}</p>
-                            )}
-                            {updateState?.repository && (
-                                <p className="text-xs text-sparkle-text-muted mt-2">
-                                    GitHub Releases: {updateState.repository}
+                <div className="relative overflow-hidden rounded-xl border border-white/10 bg-sparkle-card">
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-[var(--accent-primary)]/12 via-white/[0.03] to-transparent" />
+                    <div className="relative p-5 md:p-6">
+                        <div className="flex flex-col gap-4 border-b border-white/5 pb-5 md:flex-row md:items-start md:justify-between">
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <h3 className="font-semibold text-sparkle-text">App Updates</h3>
+                                    <UpdateStatusPill
+                                        label={updateSummary}
+                                        tone={updateTone}
+                                    />
+                                </div>
+                                <p className="mt-2 max-w-2xl text-sm text-sparkle-text-secondary">
+                                    Manage update checks, downloads, and installs from one place without leaving the About page.
                                 </p>
-                            )}
-                            {updateState?.checkedAt && (
-                                <p className="text-xs text-sparkle-text-muted mt-1">
-                                    Last checked {new Date(updateState.checkedAt).toLocaleString()}
-                                </p>
-                            )}
-                        </div>
-                        <div className="flex flex-wrap justify-end gap-2">
-                            <button
-                                onClick={() => {
-                                    clearSkippedVersion()
-                                    void checkForUpdates()
-                                }}
-                                disabled={isBusy || !updateState?.enabled || updateState.status === 'checking'}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <RefreshCw size={16} className={cn(pendingAction === 'check' && 'animate-spin')} />
-                                {updateState?.status === 'checking' ? 'Checking...' : 'Check'}
-                            </button>
-                            <button
-                                onClick={() => { void downloadUpdate() }}
-                                disabled={isBusy || updateState?.status !== 'available'}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <Download size={16} />
-                                {pendingAction === 'download' ? 'Downloading...' : 'Download'}
-                            </button>
-                            <button
-                                onClick={() => { void installUpdate() }}
-                                disabled={isBusy || updateState?.status !== 'downloaded'}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-primary)]/12 border border-white/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/18 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <Rocket size={16} />
-                                {pendingAction === 'install' ? 'Restarting...' : 'Restart to Install'}
-                            </button>
-                            <button
-                                onClick={openModal}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 transition-colors"
-                            >
-                                <Rocket size={16} />
-                                Open Update Center
-                            </button>
-                            {updateState?.releasePageUrl && (
-                                <a
-                                    href={updateState.releasePageUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 transition-colors"
-                                >
-                                    <ExternalLink size={16} />
-                                    View Release Page
-                                </a>
-                            )}
-                        </div>
-                    </div>
-                    {updateState?.status === 'available' && (
-                        <div className="mt-4 flex items-center justify-end gap-2">
-                            <button
-                                onClick={skipAvailableVersion}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 transition-colors"
-                            >
-                                Skip This Version
-                            </button>
-                        </div>
-                    )}
-                    {updateState?.status === 'downloaded' && (
-                        <div className="mt-4 flex items-center justify-end gap-2">
-                            <button
-                                onClick={remindLater}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 transition-colors"
-                            >
-                                Do It Later
-                            </button>
-                        </div>
-                    )}
-                    {updateState?.status === 'downloading' && updateState.downloadPercent !== null && (
-                        <div className="mt-4">
-                            <div className="h-2 rounded-full bg-white/[0.05] overflow-hidden">
-                                <div
-                                    className="h-full bg-[var(--accent-primary)] transition-[width] duration-300"
-                                    style={{ width: `${Math.max(0, Math.min(100, updateState.downloadPercent))}%` }}
+                            </div>
+
+                            <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[360px]">
+                                <UpdateActionButton
+                                    onClick={() => {
+                                        clearSkippedVersion()
+                                        void checkForUpdates()
+                                    }}
+                                    disabled={isBusy || !updateState?.enabled || updateState.status === 'checking'}
+                                    icon={<RefreshCw size={16} className={cn(pendingAction === 'check' && 'animate-spin')} />}
+                                    label={updateState?.status === 'checking' ? 'Checking...' : 'Check for updates'}
+                                />
+                                <UpdateActionButton
+                                    onClick={() => { void downloadUpdate() }}
+                                    disabled={isBusy || updateState?.status !== 'available'}
+                                    icon={<Download size={16} />}
+                                    label={pendingAction === 'download' ? 'Downloading...' : 'Download update'}
+                                />
+                                <UpdateActionButton
+                                    onClick={() => { void installUpdate() }}
+                                    disabled={isBusy || updateState?.status !== 'downloaded'}
+                                    icon={<Rocket size={16} />}
+                                    label={pendingAction === 'install' ? 'Restarting...' : 'Restart to install'}
+                                    variant="accent"
+                                />
+                                <UpdateActionButton
+                                    onClick={openModal}
+                                    icon={<Rocket size={16} />}
+                                    label="Open Update Center"
                                 />
                             </div>
-                            <p className="text-xs text-sparkle-text-muted mt-2">
-                                {Math.round(updateState.downloadPercent)}% downloaded
-                            </p>
                         </div>
-                    )}
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -192,7 +146,14 @@ export default function AboutSettings() {
                         </div>
                         <div>
                             <p className="text-sm text-sparkle-text-secondary">Created by</p>
-                            <p className="font-semibold text-sparkle-text">justelson</p>
+                            <a
+                                href="https://github.com/justelson"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-semibold text-sparkle-text transition-colors hover:text-[var(--accent-primary)]"
+                            >
+                                justelson
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -200,6 +161,11 @@ export default function AboutSettings() {
                 <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
                     <h3 className="font-semibold text-sparkle-text mb-4">Links</h3>
                     <div className="space-y-2">
+                        <LinkRow
+                            icon={<Github size={18} />}
+                            label="Creator GitHub"
+                            href="https://github.com/justelson"
+                        />
                         <LinkRow
                             icon={<Github size={18} />}
                             label="Source Code"
@@ -228,6 +194,84 @@ export default function AboutSettings() {
                 </div>
             </div>
         </div>
+    )
+}
+
+function resolveUpdateTone(status: string | undefined): 'neutral' | 'checking' | 'available' | 'downloaded' | 'error' {
+    switch (status) {
+        case 'checking':
+        case 'downloading':
+            return 'checking'
+        case 'available':
+            return 'available'
+        case 'downloaded':
+            return 'downloaded'
+        case 'error':
+            return 'error'
+        default:
+            return 'neutral'
+    }
+}
+
+function UpdateStatusPill({
+    label,
+    tone
+}: {
+    label: string
+    tone: 'neutral' | 'checking' | 'available' | 'downloaded' | 'error'
+}) {
+    const toneClass = (() => {
+        switch (tone) {
+            case 'checking':
+                return 'border-sky-400/25 bg-sky-400/10 text-sky-200'
+            case 'available':
+                return 'border-amber-400/25 bg-amber-400/10 text-amber-200'
+            case 'downloaded':
+                return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200'
+            case 'error':
+                return 'border-red-400/25 bg-red-400/10 text-red-200'
+            default:
+                return 'border-white/10 bg-white/[0.04] text-sparkle-text-secondary'
+        }
+    })()
+
+    return (
+        <span className={cn(
+            'inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium',
+            toneClass
+        )}>
+            {label}
+        </span>
+    )
+}
+
+function UpdateActionButton({
+    onClick,
+    icon,
+    label,
+    disabled = false,
+    variant = 'default'
+}: {
+    onClick: () => void
+    icon: React.ReactNode
+    label: string
+    disabled?: boolean
+    variant?: 'default' | 'accent'
+}) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            className={cn(
+                'inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                variant === 'accent'
+                    ? 'border-white/10 bg-[var(--accent-primary)]/12 text-[var(--accent-primary)] hover:border-white/20 hover:bg-[var(--accent-primary)]/18'
+                    : 'border-white/10 bg-white/[0.03] text-sparkle-text hover:border-white/20 hover:bg-white/[0.06]'
+            )}
+        >
+            {icon}
+            <span>{label}</span>
+        </button>
     )
 }
 
