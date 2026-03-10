@@ -1,6 +1,6 @@
 {
     "name": "devscope-air-win",
-    "version": "1.5.0-alpha.4",
+    "version": "1.5.0-alpha.5",
     "description": "DevScope primary Windows desktop app for project scanning, Git workflows, and desktop updates",
     "main": "./out/main/index.js",
     "author": "DevScope",
@@ -67,6 +67,9 @@
         "productName": "DevScope Air",
         "artifactName": "DevScope-Air-Setup-${version}.${ext}",
         "icon": "resources/icon.png",
+        "files": [
+            "!dist/**"
+        ],
         "directories": {
             "output": "dist"
         },
