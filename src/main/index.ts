@@ -86,17 +86,14 @@ function isDevToolsShortcut(input: Electron.Input): boolean {
     return input.type === 'keyDown' && !!input.control && !!input.shift && key === 'i'
 }
 
-function getZoomShortcutAction(input: Electron.Input): 'in' | 'out' | 'reset' | null {
-    if (input.type !== 'keyDown' || (!input.control && !input.meta)) return null
+function lockWindowZoom(window: BrowserWindow): void {
+    const { webContents } = window
 
-    const key = input.key?.toLowerCase()
-    const code = String(input.code || '')
-
-    if (key === '-' || code === 'Minus' || code === 'NumpadSubtract') return 'out'
-    if (key === '+' || key === '=' || code === 'Equal' || code === 'NumpadAdd') return 'in'
-    if (key === '0' || code === 'Digit0' || code === 'Numpad0') return 'reset'
-
-    return null
+    // Keep the desktop app at a fixed 100% zoom so focus changes or shortcut
+    // noise cannot leave the whole UI in an inconsistent scaled state.
+    webContents.setZoomLevel(0)
+    webContents.setZoomFactor(1)
+    void webContents.setVisualZoomLevelLimits(1, 1).catch(() => {})
 }
 
 function shouldTreatAsAssociatedFile(arg: string): boolean {
@@ -167,6 +164,12 @@ function createWindow(showOnReady = true): BrowserWindow {
     window.on('ready-to-show', () => {
         if (showOnReady) window.show()
     })
+    window.on('focus', () => {
+        lockWindowZoom(window)
+    })
+    window.webContents.on('did-finish-load', () => {
+        lockWindowZoom(window)
+    })
 
     window.webContents.setWindowOpenHandler((details) => {
         shell.openExternal(details.url)
@@ -174,22 +177,6 @@ function createWindow(showOnReady = true): BrowserWindow {
     })
 
     window.webContents.on('before-input-event', (event, input) => {
-        const zoomAction = getZoomShortcutAction(input)
-        if (zoomAction) {
-            event.preventDefault()
-            const currentZoomLevel = window.webContents.getZoomLevel()
-
-            if (zoomAction === 'reset') {
-                window.webContents.setZoomLevel(0)
-                return
-            }
-
-            const delta = zoomAction === 'in' ? 0.5 : -0.5
-            const nextZoomLevel = Math.max(-3, Math.min(3, currentZoomLevel + delta))
-            window.webContents.setZoomLevel(nextZoomLevel)
-            return
-        }
-
         if (!isDevToolsShortcut(input)) return
 
         event.preventDefault()
@@ -200,6 +187,7 @@ function createWindow(showOnReady = true): BrowserWindow {
         }
     })
 
+    lockWindowZoom(window)
     loadRendererRoute(window, '/')
     registerUpdateWindow(window)
 
@@ -238,14 +226,21 @@ function createQuickPreviewWindow(filePath: string): BrowserWindow {
     })
 
     window.on('ready-to-show', () => window.show())
+    window.on('focus', () => {
+        lockWindowZoom(window)
+    })
     window.on('closed', () => {
         quickPreviewWindow = null
+    })
+    window.webContents.on('did-finish-load', () => {
+        lockWindowZoom(window)
     })
     window.webContents.setWindowOpenHandler((details) => {
         shell.openExternal(details.url)
         return { action: 'deny' }
     })
 
+    lockWindowZoom(window)
     loadRendererRoute(window, route)
     quickPreviewWindow = window
     return window

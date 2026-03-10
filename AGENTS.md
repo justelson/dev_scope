@@ -57,6 +57,9 @@ Long term maintainability is a core priority. If you add new functionality, firs
 
 ## Release Distribution Rules
 - Landing-page download buttons must resolve the newest GitHub release asset dynamically. Do **not** hardcode versioned `releases/download/...` URLs in the landing app.
+- GitHub release names must follow the established desktop pattern: `DevScope Air <package-version>`.
+  - Example: tag `v1.5.0-alpha.3` should publish as release name `DevScope Air 1.5.0-alpha.3`.
+  - Do not leave the release name as the raw tag unless that pattern has explicitly changed across existing releases.
 - Release artifacts must be organized by version:
   - Installers and update metadata go under `dist/releases/v<package-version>/`
   - Unpacked app bundles go under `dist/unpacked/v<package-version>/`

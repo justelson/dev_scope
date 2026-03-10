@@ -1,6 +1,6 @@
 {
     "name": "devscope-air-win",
-    "version": "1.5.0-alpha.3",
+    "version": "1.5.0-alpha.4",
     "description": "DevScope primary Windows desktop app for project scanning, Git workflows, and desktop updates",
     "main": "./out/main/index.js",
     "author": "DevScope",
@@ -17,7 +17,8 @@
         "build:win": "electron-vite build && node scripts/maint/package-win-release.mjs release",
         "build:unpack": "electron-vite build && node scripts/maint/package-win-release.mjs unpacked",
         "dist:organize": "node scripts/maint/organize-dist.mjs",
-        "brand:assets": "python scripts/maint/generate_branding_assets.py"
+        "brand:assets": "python scripts/maint/generate_branding_assets.py",
+        "release:publish:local": "node scripts/maint/publish-local-release.mjs"
     },
     "dependencies": {
         "@monaco-editor/react": "^4.7.0",

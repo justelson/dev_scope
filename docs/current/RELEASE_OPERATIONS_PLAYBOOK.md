@@ -55,6 +55,10 @@ Current packaging scripts:
   - writes unpacked bundle to `dist/unpacked/v<package-version>/`
 - `npm run dist:organize`
   - moves older flat `dist` artifacts into the versioned layout when possible
+- `npm run release:publish:local`
+  - local-only GitHub release publisher
+  - requires a clean `main` branch checkout, a local tag `v<package-version>`, and release assets already built in `dist/releases/v<package-version>/`
+  - pushes `main` and the version tag, creates or updates the GitHub release directly, and uploads `.exe`, `.blockmap`, and `latest.yml` without relying on GitHub Actions
 
 ## Release Verification Checklist
 
@@ -98,6 +102,14 @@ Manual recovery still requires:
 3. release object created on GitHub
 4. `.exe`, `.blockmap`, and `latest.yml` uploaded
 5. `latest.yml` verified against the actual uploaded installer filename
+
+The local publisher script can be used as the preferred recovery path when GitHub Actions is blocked but GitHub API access still works from the machine:
+
+1. build release artifacts locally
+2. ensure the intended release commit is on `main`
+3. ensure `v<package-version>` exists locally
+4. run `npm run release:publish:local`
+5. verify the GitHub release object and all required assets
 
 ## Local Lock / Cleanup Rules
 
