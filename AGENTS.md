@@ -60,6 +60,16 @@ Long term maintainability is a core priority. If you add new functionality, firs
 - GitHub release names must follow the established desktop pattern: `DevScope Air <package-version>`.
   - Example: tag `v1.5.0-alpha.3` should publish as release name `DevScope Air 1.5.0-alpha.3`.
   - Do not leave the release name as the raw tag unless that pattern has explicitly changed across existing releases.
+- When discussing or displaying prerelease versions, treat `alpha.<n>` / `beta.<n>` as the major preview iteration.
+  - The base `x.y.z` SemVer portion is the smaller refinement level attached to that preview step.
+  - Example: `1.5.0-alpha.5` should be understood as `Alpha 5 (v1.5.0)`, not as a channel inferred from the leading major number.
+- When choosing the next preview version:
+  - Small changes keep the same `alpha.<n>` / `beta.<n>` suffix and only bump the base version.
+  - Major preview changes increment the prerelease suffix and reset the base version to `1.0.0`.
+  - Do not reset the leading `1`.
+  - Example progression:
+    - `1.5.0-alpha.5` -> small change -> `1.5.1-alpha.5`
+    - `1.5.0-alpha.5` -> major preview change -> `1.0.0-alpha.6`
 - Release artifacts must be organized by version:
   - Installers and update metadata go under `dist/releases/v<package-version>/`
   - Unpacked app bundles go under `dist/unpacked/v<package-version>/`

@@ -44,6 +44,7 @@ type AutoUpdater = ElectronUpdaterModule['autoUpdater']
 
 let autoUpdaterRef: AutoUpdater | null = null
 let autoUpdaterLoadPromise: Promise<AutoUpdater> | null = null
+let updaterInitializationPromise: Promise<void> | null = null
 
 let trackedWindowIds = new Set<number>()
 let updatePollTimer: ReturnType<typeof setInterval> | null = null
@@ -130,6 +131,10 @@ function rejectAction(message: string): DevScopeUpdateActionResult {
     return buildActionResult(false, false)
 }
 
+function getUpdaterUnavailableMessage(): string {
+    return updateState.disabledReason || updateState.message || 'Updater is not ready in this build yet.'
+}
+
 export function registerUpdateWindow(window: BrowserWindow): void {
     const windowId = window.id
     trackedWindowIds.add(windowId)
@@ -147,7 +152,7 @@ export function getUpdateState(): DevScopeUpdateState {
     return updateState
 }
 
-export async function initializeUpdater(): Promise<void> {
+async function performUpdaterInitialization(): Promise<void> {
     if (updaterInitialized) return
     updaterInitialized = true
 
@@ -251,10 +256,19 @@ export async function initializeUpdater(): Promise<void> {
     updatePollTimer.unref()
 }
 
+export function initializeUpdater(): Promise<void> {
+    if (!updaterInitializationPromise) {
+        updaterInitializationPromise = performUpdaterInitialization()
+    }
+    return updaterInitializationPromise
+}
+
 export async function checkForAppUpdates(_reason: string = 'manual'): Promise<DevScopeUpdateActionResult> {
+    await initializeUpdater()
+
     if (!updaterConfigured || !autoUpdaterRef || updateCheckInFlight) {
         if (!updaterConfigured || !autoUpdaterRef) {
-            return rejectAction(updateState.disabledReason || 'Updater is not ready in this build yet.')
+            return rejectAction(getUpdaterUnavailableMessage())
         }
         return rejectAction('An update check is already in progress.')
     }
@@ -283,9 +297,11 @@ export async function checkForAppUpdates(_reason: string = 'manual'): Promise<De
 }
 
 export async function downloadAppUpdate(): Promise<DevScopeUpdateActionResult> {
+    await initializeUpdater()
+
     if (!updaterConfigured || !autoUpdaterRef || updateDownloadInFlight || updateState.status !== 'available') {
         if (!updaterConfigured || !autoUpdaterRef) {
-            return rejectAction(updateState.disabledReason || 'Updater is not ready in this build yet.')
+            return rejectAction(getUpdaterUnavailableMessage())
         }
         if (updateDownloadInFlight) {
             return rejectAction('An update download is already in progress.')
@@ -319,9 +335,11 @@ export async function downloadAppUpdate(): Promise<DevScopeUpdateActionResult> {
 }
 
 export async function installAppUpdate(): Promise<DevScopeUpdateActionResult> {
+    await initializeUpdater()
+
     if (!updaterConfigured || !autoUpdaterRef || isInstallingUpdate || updateState.status !== 'downloaded') {
         if (!updaterConfigured || !autoUpdaterRef) {
-            return rejectAction(updateState.disabledReason || 'Updater is not ready in this build yet.')
+            return rejectAction(getUpdaterUnavailableMessage())
         }
         if (isInstallingUpdate) {
             return rejectAction('Install is already in progress.')

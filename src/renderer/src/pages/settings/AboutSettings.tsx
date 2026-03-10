@@ -60,11 +60,11 @@ export default function AboutSettings() {
                         <p className="text-sparkle-text-secondary mb-4 text-center">Developer Machine Status System</p>
 
                         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] text-sm font-medium">
-                            {updateState?.currentDisplayVersion || 'v1.5 Alpha 5'}
+                            {updateState?.currentDisplayVersion || 'Alpha 5 (v1.5.1)'}
                         </div>
 
                         <p className="text-xs text-sparkle-text-muted mt-3">
-                            {updateState?.currentVersion || '1.5.0-alpha.5'}
+                            {updateState?.currentVersion || '1.5.1-alpha.5'}
                             {updateState?.channel ? ` \u2022 ${updateState.channel} channel` : ''}
                         </p>
                         <p className="text-xs text-sparkle-text-muted mt-2">by justelson</p>
