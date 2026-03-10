@@ -66,11 +66,18 @@ const getPreloadPath = (): string => {
 }
 
 const getAppIconPath = (): string | undefined => {
-    const candidates = [
-        join(process.resourcesPath, 'icon.png'),
-        join(app.getAppPath(), 'resources/icon.png'),
-        join(process.cwd(), 'resources/icon.png')
-    ]
+    const candidates = is.dev
+        ? [
+            join(process.cwd(), 'resources/branding/devscope-air-blueprint.png'),
+            join(process.cwd(), 'resources/icon.png'),
+            join(app.getAppPath(), 'resources/icon.png'),
+            join(process.resourcesPath, 'icon.png')
+        ]
+        : [
+            join(process.resourcesPath, 'icon.png'),
+            join(app.getAppPath(), 'resources/icon.png'),
+            join(process.cwd(), 'resources/icon.png')
+        ]
     return candidates.find((candidate) => existsSync(candidate))
 }
 
@@ -404,5 +411,4 @@ ipcMain.on('window:close', () => {
 ipcMain.handle('window:isMaximized', () => {
     return mainWindow?.isMaximized() ?? false
 })
-
 

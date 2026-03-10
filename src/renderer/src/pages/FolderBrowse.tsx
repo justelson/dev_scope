@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Folder, FolderTree, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
+import { AlertCircle, Folder, FolderTree, Settings as SettingsIcon } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ import { useTerminal } from '@/App'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { CreateFileTypeModal } from '@/components/ui/CreateFileTypeModal'
 import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
+import { LoadingSpinner } from '@/components/ui/LoadingState'
 import { PromptModal } from '@/components/ui/PromptModal'
 import { trackRecentProject } from '@/lib/recentProjects'
 import { useSettings } from '@/lib/settings'
@@ -778,13 +779,18 @@ export default function FolderBrowse() {
             )}
 
             {loading && (
-                <div className="flex items-center justify-center py-16">
-                    <RefreshCw size={24} className="text-yellow-400 animate-spin" />
-                </div>
+                <LoadingSpinner
+                    message="Loading folder contents..."
+                    detail={`Scanning ${folderName} and preparing files, folders, and projects.`}
+                    minHeightClassName="min-h-[28vh]"
+                    cardClassName="w-full max-w-md"
+                />
             )}
 
             {!loading && (
                 <FolderBrowseContent
+                    currentDirectoryPath={decodedPath}
+                    currentDirectoryName={folderName}
                     filteredFolders={filteredFolders}
                     gitRepos={gitRepos}
                     visibleFiles={displayedFiles}
@@ -813,6 +819,7 @@ export default function FolderBrowse() {
                     onEntryPaste={handleEntryPaste}
                     onEntryCreateFile={handleEntryCreateFile}
                     onEntryCreateFolder={handleEntryCreateFolder}
+                    onRefresh={() => { void loadContents(true) }}
                     hasFileClipboardItem={Boolean(fileClipboardItem)}
                     formatFileSize={formatFileSize}
                     getFileColor={getFileColor}

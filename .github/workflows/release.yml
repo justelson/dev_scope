@@ -52,6 +52,6 @@ jobs:
           prerelease: ${{ steps.release_meta.outputs.prerelease }}
           generate_release_notes: true
           files: |
-            dist/*.exe
-            dist/*.yml
-            dist/*.blockmap
+            dist/releases/**/*.exe
+            dist/releases/**/*.yml
+            dist/releases/**/*.blockmap

@@ -68,12 +68,12 @@ export function PromptModal({
                 </div>
             )}
             <div
-                className="w-full max-w-md rounded-2xl border border-sparkle-border bg-sparkle-card p-6 shadow-2xl animate-modal-in"
+                className="w-full max-w-md rounded-2xl border border-white/10 bg-sparkle-card p-6 shadow-2xl animate-modal-in"
                 onClick={(event) => event.stopPropagation()}
             >
-                <h3 className="text-base font-semibold text-sparkle-text">{title}</h3>
+                <h3 className="text-base font-semibold text-sparkle-text break-words">{title}</h3>
                 {message && (
-                    <p className="mt-2 text-sm text-sparkle-text-secondary">{message}</p>
+                    <p className="mt-2 text-sm text-sparkle-text-secondary break-words">{message}</p>
                 )}
                 <div className="relative mt-4">
                     <input
@@ -93,7 +93,7 @@ export function PromptModal({
                         placeholder={placeholder}
                         maxLength={maxLength}
                         className={cn(
-                            'w-full rounded-xl border border-sparkle-border bg-sparkle-bg px-3 py-2.5 text-sm text-sparkle-text outline-none transition-all focus:border-[var(--accent-primary)]/40 focus:ring-4 focus:ring-[var(--accent-primary)]/10',
+                            'w-full rounded-xl border border-white/10 bg-sparkle-bg px-3 py-2.5 text-sm text-sparkle-text outline-none transition-all focus:border-[var(--accent-primary)]/40 focus:ring-4 focus:ring-[var(--accent-primary)]/10 break-words',
                             valueSuffix && 'pr-20'
                         )}
                     />
@@ -107,7 +107,7 @@ export function PromptModal({
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="rounded-lg border border-sparkle-border px-3 py-1.5 text-sm text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                        className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-sparkle-text-secondary transition-colors hover:bg-white/[0.03] hover:border-white/20 hover:text-sparkle-text"
                     >
                         {cancelLabel}
                     </button>

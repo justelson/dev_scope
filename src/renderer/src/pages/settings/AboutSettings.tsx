@@ -23,6 +23,9 @@ export default function AboutSettings() {
 
     const isBusy = pendingAction !== null
     const updateSummary = getUpdateActionLabel(updateState)
+    const updateMessage = updateState?.message && updateState.message !== updateState.disabledReason
+        ? updateState.message
+        : null
 
     return (
         <div className="animate-fadeIn">
@@ -57,11 +60,11 @@ export default function AboutSettings() {
                         <p className="text-sparkle-text-secondary mb-4 text-center">Developer Machine Status System</p>
 
                         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] text-sm font-medium">
-                            {updateState?.currentDisplayVersion || 'v1.1 Alpha 3'}
+                            {updateState?.currentDisplayVersion || 'v1.5 Alpha 3'}
                         </div>
 
                         <p className="text-xs text-sparkle-text-muted mt-3">
-                            {updateState?.currentVersion || '1.1.0-alpha.3'}
+                            {updateState?.currentVersion || '1.5.0-alpha.3'}
                             {updateState?.channel ? ` \u2022 ${updateState.channel} channel` : ''}
                         </p>
                         <p className="text-xs text-sparkle-text-muted mt-2">by justelson</p>
@@ -75,8 +78,11 @@ export default function AboutSettings() {
                             <p className="text-sm text-sparkle-text-secondary mt-1">
                                 {updateSummary}
                             </p>
-                            {updateState?.message && (
-                                <p className="text-xs text-amber-300 mt-2">{updateState.message}</p>
+                            {updateMessage && (
+                                <p className="text-xs text-amber-300 mt-2">{updateMessage}</p>
+                            )}
+                            {updateState?.disabledReason && (
+                                <p className="text-xs text-amber-300 mt-2">{updateState.disabledReason}</p>
                             )}
                             {updateState?.repository && (
                                 <p className="text-xs text-sparkle-text-muted mt-2">
@@ -124,6 +130,17 @@ export default function AboutSettings() {
                                 <Rocket size={16} />
                                 Open Update Center
                             </button>
+                            {updateState?.releasePageUrl && (
+                                <a
+                                    href={updateState.releasePageUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text hover:bg-white/[0.06] hover:border-white/20 transition-colors"
+                                >
+                                    <ExternalLink size={16} />
+                                    View Release Page
+                                </a>
+                            )}
                         </div>
                     </div>
                     {updateState?.status === 'available' && (

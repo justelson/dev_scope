@@ -68,6 +68,7 @@ export interface GitCommit {
     additions: number
     deletions: number
     filesChanged: number
+    statsLoaded?: boolean
 }
 
 export interface GitStatusDetail {
@@ -83,6 +84,7 @@ export interface GitStatusDetail {
     stagedDeletions: number
     unstagedAdditions: number
     unstagedDeletions: number
+    statsLoaded?: boolean
 }
 
 export interface PendingScriptRun {

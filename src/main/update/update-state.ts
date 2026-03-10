@@ -24,7 +24,9 @@ export function formatDisplayVersion(version: string): string {
 export function createInitialUpdateState(
     currentVersion: string,
     repository: string,
-    enabled: boolean
+    enabled: boolean,
+    releasePageUrl: string,
+    disabledReason: string | null = null
 ): DevScopeUpdateState {
     return {
         enabled,
@@ -33,6 +35,8 @@ export function createInitialUpdateState(
         currentDisplayVersion: formatDisplayVersion(currentVersion),
         channel: resolveReleaseChannel(currentVersion),
         repository,
+        releasePageUrl,
+        disabledReason,
         availableVersion: null,
         availableDisplayVersion: null,
         downloadedVersion: null,

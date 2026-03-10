@@ -10,7 +10,9 @@ const unpackedDir = path.join(distDir, 'unpacked')
 
 const releaseArtifactMatchers = [
     /^DevScope Air Setup (?<version>\d+\.\d+\.\d+(?:-[\w.]+)?)\.exe$/,
-    /^DevScope Air Setup (?<version>\d+\.\d+\.\d+(?:-[\w.]+)?)\.exe\.blockmap$/
+    /^DevScope Air Setup (?<version>\d+\.\d+\.\d+(?:-[\w.]+)?)\.exe\.blockmap$/,
+    /^DevScope-Air-Setup-(?<version>\d+\.\d+\.\d+(?:-[\w.]+)?)\.exe$/,
+    /^DevScope-Air-Setup-(?<version>\d+\.\d+\.\d+(?:-[\w.]+)?)\.exe\.blockmap$/
 ]
 
 function extractVersionFromFileName(fileName) {

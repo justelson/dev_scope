@@ -343,7 +343,7 @@ export function countTrackedChanges(statusMap: GitStatusMap): number {
     return changed.size
 }
 
-export function parseCommitLog(stdout: string): GitCommit[] {
+export function parseCommitLog(stdout: string, options?: { statsIncluded?: boolean }): GitCommit[] {
     const recordSep = '\x1e'
     const fieldSep = '\x1f'
     const commits: GitCommit[] = []
@@ -386,7 +386,8 @@ export function parseCommitLog(stdout: string): GitCommit[] {
             message,
             additions,
             deletions,
-            filesChanged
+            filesChanged,
+            statsLoaded: options?.statsIncluded !== false
         })
     }
 

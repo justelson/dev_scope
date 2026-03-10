@@ -77,7 +77,9 @@ import {
     handleGenerateCustomGitignoreContent,
     handleGenerateGitignoreContent,
     handleGetCommitDiff,
+    handleGetGitCommitStats,
     handleGetGitHistory,
+    handleGetGitStatusEntryStats,
     handleGetGitSyncStatus,
     handleGetGitStatus,
     handleGetGitStatusDetailed,
@@ -189,11 +191,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getActivePorts', handleGetActivePorts)
 
     ipcMain.handle('devscope:getGitHistory', handleGetGitHistory)
+    ipcMain.handle('devscope:getGitCommitStats', handleGetGitCommitStats)
     ipcMain.handle('devscope:getCommitDiff', handleGetCommitDiff)
     ipcMain.handle('devscope:getWorkingDiff', handleGetWorkingDiff)
     ipcMain.handle('devscope:getWorkingChangesForAI', handleGetWorkingChangesForAI)
     ipcMain.handle('devscope:getGitStatus', handleGetGitStatus)
     ipcMain.handle('devscope:getGitStatusDetailed', handleGetGitStatusDetailed)
+    ipcMain.handle('devscope:getGitStatusEntryStats', handleGetGitStatusEntryStats)
     ipcMain.handle('devscope:getGitSyncStatus', handleGetGitSyncStatus)
     ipcMain.handle('devscope:getIncomingCommits', handleGetIncomingCommits)
     ipcMain.handle('devscope:getUnpushedCommits', handleGetUnpushedCommits)

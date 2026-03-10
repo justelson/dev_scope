@@ -20,6 +20,10 @@ This repo is the active DevScope desktop app. The sibling `devscope-win` codebas
   - How to keep changes focused, layered correctly, and honestly reported.
 - `docs/current/RELEASE_OPERATIONS_PLAYBOOK.md`
   - Operational release checklist, verification steps, and recovery guidance.
+- `docs/current/BRANDING_ASSETS.md`
+  - Branding asset roles, generation flow, and Windows/runtime validation surfaces.
+- `docs/current/UPDATE_TESTING_PLAYBOOK.md`
+  - Layered updater/release testing flow that avoids repeated public release churn.
 - `docs/platform/README.md`
   - Multi-client architecture docs for CLI, IDE extension, and additional UIs.
 

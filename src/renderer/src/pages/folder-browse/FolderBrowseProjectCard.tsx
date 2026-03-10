@@ -1,4 +1,5 @@
 import { Clock, ExternalLink, FolderOpen, Pencil, Trash2 } from 'lucide-react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import ProjectIcon, { FrameworkBadge } from '@/components/ui/ProjectIcon'
 import { cn } from '@/lib/utils'
 import { getProjectTypeById, type Project, type ViewMode } from './types'
@@ -12,6 +13,7 @@ interface FolderBrowseProjectCardProps {
     onOpenProjectInExplorer: (path: string) => void
     onProjectRename: (project: Project) => void | Promise<void>
     onProjectDelete: (project: Project) => void | Promise<void>
+    onProjectContextMenu?: (event: ReactMouseEvent<HTMLDivElement>, project: Project) => void
     formatRelativeTime: (timestamp?: number) => string
 }
 
@@ -22,6 +24,7 @@ export function FolderBrowseProjectCard({
     onOpenProjectInExplorer,
     onProjectRename,
     onProjectDelete,
+    onProjectContextMenu,
     formatRelativeTime
 }: FolderBrowseProjectCardProps) {
     const typeInfo = getProjectTypeById(project.type)
@@ -30,6 +33,7 @@ export function FolderBrowseProjectCard({
     return (
         <div
             onClick={() => onProjectClick(project)}
+            onContextMenu={(event) => onProjectContextMenu?.(event, project)}
             className={cn(
                 'group relative cursor-pointer overflow-hidden border border-white/5 transition-all duration-300',
                 'hover:-translate-y-1 hover:border-white/10',
@@ -86,10 +90,6 @@ export function FolderBrowseProjectCard({
                                 size={32}
                             />
                         </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-white/30">
-                            <Clock size={12} />
-                            <span>{formatRelativeTime(project.lastModified)}</span>
-                        </div>
                         <FileActionsMenu
                             buttonClassName="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                             items={[
@@ -121,7 +121,7 @@ export function FolderBrowseProjectCard({
                         )}
                     </div>
 
-                    <div className="relative z-10 flex items-center gap-2">
+                    <div className="relative z-10 flex items-center justify-between gap-2">
                         <button
                             onClick={(event) => {
                                 event.stopPropagation()
@@ -132,6 +132,10 @@ export function FolderBrowseProjectCard({
                             <ExternalLink size={14} />
                             <span>Open</span>
                         </button>
+                        <div className="flex items-center gap-1.5 text-[10px] text-white/30">
+                            <Clock size={12} />
+                            <span>{formatRelativeTime(project.lastModified)}</span>
+                        </div>
                     </div>
 
                     <div

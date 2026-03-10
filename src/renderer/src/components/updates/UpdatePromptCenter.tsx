@@ -5,6 +5,7 @@ import {
     CheckCircle2,
     Clock3,
     Download,
+    ExternalLink,
     RefreshCw,
     Rocket,
     X
@@ -62,6 +63,31 @@ function resolveStatusOrb(statusTone: ReturnType<typeof useAppUpdates>['statusTo
     }
 }
 
+function ExternalReleaseButton({
+    href,
+    label,
+    className
+}: {
+    href: string
+    label: string
+    className?: string
+}) {
+    return (
+        <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+                'inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-white/80 transition-colors hover:border-white/20 hover:bg-white/[0.06]',
+                className
+            )}
+        >
+            <ExternalLink size={15} />
+            {label}
+        </a>
+    )
+}
+
 function UpdateActionRow() {
     const {
         updateState,
@@ -79,6 +105,13 @@ function UpdateActionRow() {
     const isBusy = pendingAction !== null
 
     switch (updateState.status) {
+        case 'disabled':
+            return (
+                <ExternalReleaseButton
+                    href={updateState.releasePageUrl}
+                    label="Open latest release"
+                />
+            )
         case 'available':
             return (
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -98,6 +131,10 @@ function UpdateActionRow() {
                         <Download size={15} />
                         {pendingAction === 'download' ? 'Downloading...' : 'Download update'}
                     </button>
+                    <ExternalReleaseButton
+                        href={updateState.releasePageUrl}
+                        label="Release page"
+                    />
                 </div>
             )
         case 'downloading':
@@ -138,7 +175,7 @@ function UpdateActionRow() {
         case 'error':
             return (
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                    {updateState.availableVersion && updateState.status !== 'downloaded' && (
+                    {updateState.availableVersion && (
                         <button
                             type="button"
                             disabled={isBusy}
@@ -170,22 +207,32 @@ function UpdateActionRow() {
                         <RefreshCw size={15} className={cn(pendingAction === 'check' && 'animate-spin')} />
                         Check again
                     </button>
+                    <ExternalReleaseButton
+                        href={updateState.releasePageUrl}
+                        label="Open latest release"
+                    />
                 </div>
             )
         default:
             return (
-                <button
-                    type="button"
-                    disabled={isBusy || !updateState.enabled}
-                    onClick={() => {
-                        clearSkippedVersion()
-                        void checkForUpdates()
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-white/80 transition-colors hover:border-white/20 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                    <RefreshCw size={15} className={cn(pendingAction === 'check' && 'animate-spin')} />
-                    {updateState.status === 'up-to-date' ? 'Check again' : 'Check for updates'}
-                </button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    <button
+                        type="button"
+                        disabled={isBusy || !updateState.enabled}
+                        onClick={() => {
+                            clearSkippedVersion()
+                            void checkForUpdates()
+                        }}
+                        className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-white/80 transition-colors hover:border-white/20 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        <RefreshCw size={15} className={cn(pendingAction === 'check' && 'animate-spin')} />
+                        {updateState.status === 'up-to-date' ? 'Check again' : 'Check for updates'}
+                    </button>
+                    <ExternalReleaseButton
+                        href={updateState.releasePageUrl}
+                        label="Release page"
+                    />
+                </div>
             )
     }
 }
@@ -221,6 +268,9 @@ export function UpdatePromptCenter() {
     const statusAccent = resolveStatusAccent(statusTone)
     const statusOrb = resolveStatusOrb(statusTone)
     const downloadPercent = Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))
+    const detailMessage = updateState.message && updateState.message !== updateState.disabledReason
+        ? updateState.message
+        : null
 
     const prompt = shouldShowPrompt ? (
         <div className="fixed bottom-4 right-4 z-[140] w-full max-w-md rounded-2xl border border-white/10 bg-sparkle-card/95 p-4 shadow-2xl backdrop-blur-xl">
@@ -370,7 +420,9 @@ export function UpdatePromptCenter() {
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <p className="text-sm font-semibold text-sparkle-text">
-                                        {updateState.status === 'downloaded'
+                                        {updateState.status === 'disabled'
+                                            ? 'Automatic updates are unavailable in this build.'
+                                            : updateState.status === 'downloaded'
                                             ? 'The update package is ready on this machine.'
                                             : updateState.status === 'available'
                                                 ? 'A newer build is available for download.'
@@ -384,9 +436,14 @@ export function UpdatePromptCenter() {
                                                                 ? 'The updater hit an error.'
                                                                 : 'Check GitHub Releases for new builds from here.'}
                                     </p>
-                                    {updateState.message && (
+                                    {updateState.disabledReason && (
                                         <p className="mt-2 text-sm text-amber-300">
-                                            {updateState.message}
+                                            {updateState.disabledReason}
+                                        </p>
+                                    )}
+                                    {detailMessage && (
+                                        <p className="mt-2 text-sm text-amber-300">
+                                            {detailMessage}
                                         </p>
                                     )}
                                     <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-sparkle-text-muted">
@@ -396,6 +453,9 @@ export function UpdatePromptCenter() {
                                         )}
                                         {updateState.availableDisplayVersion && (
                                             <span>Available: {updateState.availableDisplayVersion}</span>
+                                        )}
+                                        {!updateState.enabled && (
+                                            <span>Manual fallback available via GitHub Releases</span>
                                         )}
                                     </div>
                                 </div>

@@ -32,16 +32,105 @@ async function yieldToBrowserPaint(): Promise<void> {
     })
 }
 
-const HISTORY_COMMIT_LIMIT = 80
 const INCOMING_COMMITS_LIMIT = 50
 
-type GitRefreshMode = 'working' | 'unpushed' | 'pulls' | 'full'
+type GitRefreshMode = 'working' | 'history' | 'unpushed' | 'pulls' | 'full'
 
 function getRefreshModeForGitView(gitView: 'changes' | 'history' | 'unpushed' | 'pulls' | 'manage'): GitRefreshMode {
     if (gitView === 'changes') return 'working'
+    if (gitView === 'history') return 'history'
     if (gitView === 'unpushed') return 'unpushed'
     if (gitView === 'pulls') return 'pulls'
     return 'full'
+}
+
+function hasFocusedGitDataForView(input: {
+    gitView: 'changes' | 'history' | 'unpushed' | 'pulls' | 'manage'
+    isGitRepo: boolean | null
+    gitStatusDetails: GitStatusDetail[]
+    gitHistory: GitCommit[]
+    incomingCommits: GitCommit[]
+    unpushedCommits: GitCommit[]
+    gitUser: { name: string; email: string } | null
+    repoOwner: string | null
+    hasRemote: boolean | null
+    gitSyncStatus: GitSyncStatus | null
+    branches: GitBranchSummary[]
+    remotes: GitRemoteSummary[]
+    tags: GitTagSummary[]
+    stashes: GitStashSummary[]
+}): boolean {
+    if (input.gitView === 'history') return input.gitHistory.length > 0
+    if (input.gitView === 'changes') return input.gitStatusDetails.length > 0
+    if (input.gitView === 'unpushed') {
+        return input.unpushedCommits.length > 0 || input.gitSyncStatus !== null || input.hasRemote === false
+    }
+    if (input.gitView === 'pulls') {
+        return input.incomingCommits.length > 0 || input.gitSyncStatus !== null || input.hasRemote === false
+    }
+
+    return hasVisibleGitData({
+        isGitRepo: input.isGitRepo,
+        gitStatusDetails: input.gitStatusDetails,
+        gitHistory: input.gitHistory,
+        incomingCommits: input.incomingCommits,
+        unpushedCommits: input.unpushedCommits,
+        gitUser: input.gitUser,
+        repoOwner: input.repoOwner,
+        hasRemote: input.hasRemote,
+        gitSyncStatus: input.gitSyncStatus,
+        branches: input.branches,
+        remotes: input.remotes,
+        tags: input.tags,
+        stashes: input.stashes
+    })
+}
+
+function mergeHistoryCommitStats(previousCommits: GitCommit[], nextCommits: GitCommit[]): GitCommit[] {
+    if (previousCommits.length === 0 || nextCommits.length === 0) {
+        return nextCommits
+    }
+
+    const previousByHash = new Map(previousCommits.map((commit) => [commit.hash, commit]))
+    return nextCommits.map((commit) => {
+        const previous = previousByHash.get(commit.hash)
+        if (!previous || previous.statsLoaded !== true) {
+            return commit
+        }
+
+        return {
+            ...commit,
+            additions: previous.additions,
+            deletions: previous.deletions,
+            filesChanged: previous.filesChanged,
+            statsLoaded: true
+        }
+    })
+}
+
+function mergeGitStatusDetailStats(previousDetails: GitStatusDetail[], nextDetails: GitStatusDetail[]): GitStatusDetail[] {
+    if (previousDetails.length === 0 || nextDetails.length === 0) {
+        return nextDetails
+    }
+
+    const previousByPath = new Map(previousDetails.map((detail) => [detail.path.replace(/\\/g, '/'), detail]))
+    return nextDetails.map((detail) => {
+        const previous = previousByPath.get(detail.path.replace(/\\/g, '/'))
+        if (!previous || previous.statsLoaded !== true) {
+            return detail
+        }
+
+        return {
+            ...detail,
+            additions: previous.additions,
+            deletions: previous.deletions,
+            stagedAdditions: previous.stagedAdditions,
+            stagedDeletions: previous.stagedDeletions,
+            unstagedAdditions: previous.unstagedAdditions,
+            unstagedDeletions: previous.unstagedDeletions,
+            statsLoaded: true
+        }
+    })
 }
 
 function hasVisibleGitData(input: {
@@ -94,6 +183,7 @@ interface UseProjectDataLifecycleParams {
     remotes: GitRemoteSummary[]
     tags: GitTagSummary[]
     stashes: GitStashSummary[]
+    historyLimit: number
     autoRefreshGitOnProjectOpen: boolean
     showInitModal: boolean
     gitignoreTemplate: string
@@ -159,6 +249,7 @@ export function useProjectDataLifecycle({
     remotes,
     tags,
     stashes,
+    historyLimit,
     autoRefreshGitOnProjectOpen,
     showInitModal,
     gitignoreTemplate,
@@ -209,6 +300,11 @@ export function useProjectDataLifecycle({
     const refreshFilesRequestRef = useRef(0)
     const fileTreeRef = useRef(fileTree)
     const gitSensorTokenRef = useRef<string | null>(null)
+    const previousGitTabStateRef = useRef({
+        activeTab,
+        decodedPath,
+        gitView
+    })
 
     useEffect(() => {
         fileTreeRef.current = fileTree
@@ -371,31 +467,22 @@ export function useProjectDataLifecycle({
             )
             : visibleRequestId !== refreshGitForegroundRequestRef.current
         const cachedGitSnapshot = getCachedProjectGitSnapshot(decodedPath)
-        const hasVisibleFocusedData = (
-            gitView === 'history'
-                ? gitHistory.length > 0
-                : gitView === 'changes'
-                    ? gitStatusDetails.length > 0
-                    : gitView === 'unpushed'
-                        ? unpushedCommits.length > 0 || gitSyncStatus !== null || hasRemote === false
-                        : gitView === 'pulls'
-                            ? incomingCommits.length > 0 || gitSyncStatus !== null || hasRemote === false
-                            : hasVisibleGitData({
-                                isGitRepo,
-                                gitStatusDetails,
-                                gitHistory,
-                                incomingCommits,
-                                unpushedCommits,
-                                gitUser,
-                                repoOwner,
-                                hasRemote,
-                                gitSyncStatus,
-                                branches,
-                                remotes,
-                                tags,
-                                stashes
-                            })
-        )
+        const hasVisibleFocusedData = hasFocusedGitDataForView({
+            gitView,
+            isGitRepo,
+            gitStatusDetails,
+            gitHistory,
+            incomingCommits,
+            unpushedCommits,
+            gitUser,
+            repoOwner,
+            hasRemote,
+            gitSyncStatus,
+            branches,
+            remotes,
+            tags,
+            stashes
+        })
         const hasWarmGitData = hasVisibleGitData({
             isGitRepo,
             gitStatusDetails,
@@ -467,8 +554,9 @@ export function useProjectDataLifecycle({
             }
 
             const applyDetailedStatus = (details: GitStatusDetail[]) => {
+                const mergedDetails = mergeGitStatusDetailStats(gitStatusDetails, details)
                 const statusMap: Record<string, FileTreeNode['gitStatus']> = {}
-                for (const detail of details) {
+                for (const detail of mergedDetails) {
                     statusMap[detail.path] = detail.status
                     statusMap[detail.path.replace(/\//g, '\\')] = detail.status
                     if (detail.previousPath) {
@@ -476,163 +564,207 @@ export function useProjectDataLifecycle({
                         statusMap[detail.previousPath.replace(/\//g, '\\')] = 'renamed'
                     }
                 }
-                setGitStatusDetails(details)
+                setGitStatusDetails(mergedDetails)
                 setGitStatusMap(statusMap)
             }
 
             setIsGitRepo(true)
 
-            const includeStatusStats = activeTab === 'git' && gitView === 'changes'
-
-            try {
-                const statusResult = await window.devscope.getGitStatusDetailed(decodedPath, {
-                    includeStats: includeStatusStats
-                })
-                if (isStaleRefresh()) return
-                if (statusResult?.success) {
-                    applyDetailedStatus((statusResult.entries || []) as GitStatusDetail[])
-                } else {
-                    appendError('status', statusResult?.error || 'request failed')
-                }
-            } catch (error) {
-                if (isStaleRefresh()) return
-                appendError('status', error)
-            }
+            const includeStatusStats = false
 
             if (mode === 'working') {
+                try {
+                    const statusResult = await window.devscope.getGitStatusDetailed(decodedPath, {
+                        includeStats: includeStatusStats
+                    })
+                    if (isStaleRefresh()) return
+                    if (statusResult?.success) {
+                        applyDetailedStatus((statusResult.entries || []) as GitStatusDetail[])
+                    } else {
+                        appendError('status', statusResult?.error || 'request failed')
+                    }
+                } catch (error) {
+                    if (isStaleRefresh()) return
+                    appendError('status', error)
+                }
+
                 setGitError(readErrors.length > 0 ? readErrors.join(' | ') : null)
                 return
             }
 
             const shouldLoadIdentity = mode === 'full'
             const shouldLoadManageMetadata = mode === 'full' && (activeTab !== 'git' || gitView === 'manage')
-            const shouldLoadSync = mode !== 'working'
-            const shouldLoadRemoteState = mode === 'full' || mode === 'unpushed' || mode === 'pulls'
+            const shouldLoadSync = true
             const shouldLoadUnpushed = mode === 'full' || mode === 'unpushed'
-            const shouldLoadHistory = mode === 'full'
+            const shouldLoadHistory = mode === 'full' || mode === 'history'
             const shouldLoadIncomingCommits = mode === 'pulls' || (mode === 'full' && activeTab === 'git' && (gitView === 'pulls' || gitView === 'manage'))
-
-            const loadSequential = async <T,>(label: string, task: () => Promise<T>, onSuccess: (value: T) => void) => {
-                try {
-                    const result = await task()
-                    if (isStaleRefresh()) return false
-                    onSuccess(result)
-                    return true
-                } catch (error) {
-                    if (isStaleRefresh()) return false
-                    appendError(label, error)
-                    return true
+            const tasks: Array<{
+                label: string
+                task: Promise<any>
+                apply: (result: any) => void
+            }> = [
+                {
+                    label: 'status',
+                    task: window.devscope.getGitStatusDetailed(decodedPath, {
+                        includeStats: includeStatusStats
+                    }),
+                    apply: (result) => {
+                        if (result?.success) {
+                            applyDetailedStatus((result.entries || []) as GitStatusDetail[])
+                            return
+                        }
+                        appendError('status', result?.error || 'request failed')
+                    }
                 }
+            ]
+
+            if (shouldLoadSync) {
+                tasks.push({
+                    label: 'sync',
+                    task: window.devscope.getGitSyncStatus(decodedPath),
+                    apply: (result) => {
+                        if (result?.success) {
+                            setGitSyncStatus(result.sync || null)
+                            setHasRemote(result.sync?.hasRemote ?? false)
+                            gitSensorTokenRef.current = result.sync?.statusToken || null
+                            return
+                        }
+                        appendError('sync', result?.error || 'request failed')
+                    }
+                })
             }
 
             if (shouldLoadIdentity) {
-                if (!(await loadSequential('user', () => window.devscope.getGitUser(decodedPath), (result) => {
-                    if (result?.success) {
-                        setGitUser(result.user || null)
-                    } else {
+                tasks.push({
+                    label: 'user',
+                    task: window.devscope.getGitUser(decodedPath),
+                    apply: (result) => {
+                        if (result?.success) {
+                            setGitUser(result.user || null)
+                            return
+                        }
                         appendError('user', result?.error || 'request failed')
                     }
-                }))) return
-
-                if (!(await loadSequential('owner', () => window.devscope.getRepoOwner(decodedPath), (result) => {
-                    if (result?.success) {
-                        setRepoOwner(result.owner || null)
-                    } else {
+                })
+                tasks.push({
+                    label: 'owner',
+                    task: window.devscope.getRepoOwner(decodedPath),
+                    apply: (result) => {
+                        if (result?.success) {
+                            setRepoOwner(result.owner || null)
+                            return
+                        }
                         appendError('owner', result?.error || 'request failed')
                     }
-                }))) return
-            }
-
-            if (shouldLoadSync) {
-                if (!(await loadSequential('sync', () => window.devscope.getGitSyncStatus(decodedPath), (result) => {
-                    if (result?.success) {
-                        setGitSyncStatus(result.sync || null)
-                        setHasRemote(result.sync?.hasRemote ?? false)
-                        gitSensorTokenRef.current = result.sync?.statusToken || null
-                    } else {
-                        appendError('sync', result?.error || 'request failed')
-                    }
-                }))) return
-            }
-
-            if (shouldLoadRemoteState) {
-                if (!(await loadSequential('remote', () => window.devscope.hasRemoteOrigin(decodedPath), (result) => {
-                    if (result?.success) {
-                        setHasRemote(result.hasRemote)
-                    } else {
-                        appendError('remote', result?.error || 'request failed')
-                    }
-                }))) return
-            }
-
-            if (shouldLoadManageMetadata) {
-                if (!(await loadSequential('branches', () => window.devscope.listBranches(decodedPath), (result) => {
-                    if (result?.success) {
-                        setBranches(result.branches || [])
-                    } else {
-                        appendError('branches', result?.error || 'request failed')
-                    }
-                }))) return
-
-                if (!(await loadSequential('remotes', () => window.devscope.listRemotes(decodedPath), (result) => {
-                    if (result?.success) {
-                        setRemotes(result.remotes || [])
-                    } else {
-                        appendError('remotes', result?.error || 'request failed')
-                    }
-                }))) return
+                })
             }
 
             if (shouldLoadUnpushed) {
-                if (!(await loadSequential('unpushed', () => window.devscope.getUnpushedCommits(decodedPath), (result) => {
-                    if (result?.success) {
-                        setUnpushedCommits(result.commits || [])
-                    } else {
+                tasks.push({
+                    label: 'unpushed',
+                    task: window.devscope.getUnpushedCommits(decodedPath),
+                    apply: (result) => {
+                        if (result?.success) {
+                            setUnpushedCommits(result.commits || [])
+                            return
+                        }
                         appendError('unpushed', result?.error || 'request failed')
                     }
-                }))) return
+                })
             }
 
             if (shouldLoadHistory) {
-                if (!(await loadSequential('history', () => window.devscope.getGitHistory(decodedPath, HISTORY_COMMIT_LIMIT, {
-                    all: false,
-                    includeStats: true
-                }), (result) => {
-                    if (result?.success) {
-                        setGitHistory(result.commits || [])
-                    } else {
+                tasks.push({
+                    label: 'history',
+                    task: window.devscope.getGitHistory(decodedPath, historyLimit, {
+                        all: false,
+                        includeStats: false
+                    }),
+                    apply: (result) => {
+                        if (result?.success) {
+                            setGitHistory((prev) => mergeHistoryCommitStats(prev, result.commits || []))
+                            return
+                        }
                         appendError('history', result?.error || 'request failed')
                     }
-                }))) return
+                })
             }
 
             if (shouldLoadIncomingCommits) {
-                if (!(await loadSequential('incoming', () => window.devscope.getIncomingCommits(decodedPath, INCOMING_COMMITS_LIMIT), (result) => {
-                    if (result?.success) {
-                        setIncomingCommits(result.commits || [])
-                    } else {
+                tasks.push({
+                    label: 'incoming',
+                    task: window.devscope.getIncomingCommits(decodedPath, INCOMING_COMMITS_LIMIT),
+                    apply: (result) => {
+                        if (result?.success) {
+                            setIncomingCommits(result.commits || [])
+                            return
+                        }
                         appendError('incoming', result?.error || 'request failed')
                     }
-                }))) return
+                })
             }
 
             if (shouldLoadManageMetadata) {
-                if (!(await loadSequential('tags', () => window.devscope.listTags(decodedPath), (result) => {
-                    if (result?.success) {
-                        setTags(result.tags || [])
-                    } else {
-                        appendError('tags', result?.error || 'request failed')
+                tasks.push(
+                    {
+                        label: 'branches',
+                        task: window.devscope.listBranches(decodedPath),
+                        apply: (result) => {
+                            if (result?.success) {
+                                setBranches(result.branches || [])
+                                return
+                            }
+                            appendError('branches', result?.error || 'request failed')
+                        }
+                    },
+                    {
+                        label: 'remotes',
+                        task: window.devscope.listRemotes(decodedPath),
+                        apply: (result) => {
+                            if (result?.success) {
+                                setRemotes(result.remotes || [])
+                                return
+                            }
+                            appendError('remotes', result?.error || 'request failed')
+                        }
+                    },
+                    {
+                        label: 'tags',
+                        task: window.devscope.listTags(decodedPath),
+                        apply: (result) => {
+                            if (result?.success) {
+                                setTags(result.tags || [])
+                                return
+                            }
+                            appendError('tags', result?.error || 'request failed')
+                        }
+                    },
+                    {
+                        label: 'stashes',
+                        task: window.devscope.listStashes(decodedPath),
+                        apply: (result) => {
+                            if (result?.success) {
+                                setStashes(result.stashes || [])
+                                return
+                            }
+                            appendError('stashes', result?.error || 'request failed')
+                        }
                     }
-                }))) return
-
-                if (!(await loadSequential('stashes', () => window.devscope.listStashes(decodedPath), (result) => {
-                    if (result?.success) {
-                        setStashes(result.stashes || [])
-                    } else {
-                        appendError('stashes', result?.error || 'request failed')
-                    }
-                }))) return
+                )
             }
+
+            const settledTasks = await Promise.allSettled(tasks.map((entry) => entry.task))
+            if (isStaleRefresh()) return
+
+            unstable_batchedUpdates(() => {
+                settledTasks.forEach((result, index) => {
+                    if (result.status === 'rejected') {
+                        appendError(tasks[index].label, result.reason)
+                        return
+                    }
+                    tasks[index].apply(result.value)
+                })
+            })
 
             if (readErrors.length > 0) {
                 const preview = readErrors.slice(0, 3).join(' | ')
@@ -680,6 +812,7 @@ export function useProjectDataLifecycle({
         setTags,
         setStashes,
         fileTree,
+        historyLimit,
         refreshFileTree
     ])
 
@@ -821,8 +954,43 @@ export function useProjectDataLifecycle({
     }, [autoRefreshGitOnProjectOpen, decodedPath, refreshGitData])
 
     useEffect(() => {
+        const previous = previousGitTabStateRef.current
+        const enteringGitTab = previous.activeTab !== 'git' || previous.decodedPath !== decodedPath
+        const switchingGitView = previous.activeTab === 'git'
+            && previous.decodedPath === decodedPath
+            && previous.gitView !== gitView
+
+        previousGitTabStateRef.current = {
+            activeTab,
+            decodedPath,
+            gitView
+        }
+
         if (activeTab !== 'git' || !decodedPath) return
-        void refreshGitData(false, { mode: getRefreshModeForGitView(gitView) })
+
+        const mode = getRefreshModeForGitView(gitView)
+        const hasFocusedData = hasFocusedGitDataForView({
+            gitView,
+            isGitRepo,
+            gitStatusDetails,
+            gitHistory,
+            incomingCommits,
+            unpushedCommits,
+            gitUser,
+            repoOwner,
+            hasRemote,
+            gitSyncStatus,
+            branches,
+            remotes,
+            tags,
+            stashes
+        })
+
+        if (switchingGitView && hasFocusedData) {
+            return
+        }
+
+        void refreshGitData(false, hasFocusedData && enteringGitTab ? { quiet: true, mode } : { mode })
     }, [activeTab, decodedPath, gitView, refreshGitData])
 
     useEffect(() => {

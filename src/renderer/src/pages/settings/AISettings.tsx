@@ -22,6 +22,21 @@ const PROVIDER_MODELS: Record<CommitAIProvider, string> = {
     gemini: 'auto (Gemini Flash)'
 }
 
+const PROVIDER_COLORS: Record<CommitAIProvider, { primary: string; bg: string; border: string; icon: string }> = {
+    groq: {
+        primary: '#F55036',
+        bg: 'bg-[#F55036]/10',
+        border: 'border-[#F55036]/30',
+        icon: 'text-[#F55036]'
+    },
+    gemini: {
+        primary: '#4285F4',
+        bg: 'bg-[#4285F4]/10',
+        border: 'border-[#4285F4]/30',
+        icon: 'text-[#4285F4]'
+    }
+}
+
 function Card({
     title,
     description,
@@ -134,6 +149,7 @@ export default function AISettings() {
     const hasAnyKey = Boolean(settings.groqApiKey || settings.geminiApiKey)
     const activeProvider = settings.commitAIProvider
     const activeModel = PROVIDER_MODELS[activeProvider]
+    const activeColors = PROVIDER_COLORS[activeProvider]
 
     return (
         <div className="animate-fadeIn">
@@ -162,30 +178,36 @@ export default function AISettings() {
 
             <div className="space-y-6">
                 <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] via-white/[0.02] to-transparent p-6">
-                    <div className="absolute right-0 top-0 h-32 w-32 -translate-y-1/2 translate-x-1/2 rounded-full bg-[var(--accent-primary)]/10 blur-3xl" />
+                    <div 
+                        className="absolute right-0 top-0 h-32 w-32 -translate-y-1/2 translate-x-1/2 rounded-full blur-3xl" 
+                        style={{ backgroundColor: `${activeColors.primary}20` }}
+                    />
                     <div className="relative">
                         <div className="mb-3 flex items-center gap-2">
-                            <Sparkles className="text-[var(--accent-primary)]" size={18} />
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-primary)]">
+                            <Zap className={activeColors.icon} size={18} />
+                            <p className={cn('text-xs font-semibold uppercase tracking-[0.18em]', activeColors.icon)}>
                                 Active AI Configuration
                             </p>
                         </div>
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
-                                    <Wand2 className="text-[var(--accent-primary)]" size={20} />
+                            <div className="flex items-center gap-4">
+                                <div className={cn('rounded-xl border p-3', activeColors.border, activeColors.bg)}>
+                                    <Wand2 className={activeColors.icon} size={20} />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-semibold text-sparkle-text">
+                                    <p className="text-base font-semibold text-sparkle-text">
                                         {activeProvider === 'groq' ? 'Groq' : 'Google Gemini'}
                                     </p>
-                                    <code className="text-xs text-sparkle-text-secondary">{activeModel}</code>
+                                    <code className={cn('text-xs font-mono', activeColors.icon)}>{activeModel}</code>
                                 </div>
                             </div>
                             <div className="hidden h-8 w-px bg-white/5 lg:block" />
-                            <div className="grid gap-2 text-xs text-sparkle-text-secondary sm:grid-cols-2 lg:min-w-[360px]">
-                                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                                    Commit AI key: {hasAnyKey ? 'Configured' : 'Missing'}
+                            <div className="flex items-center gap-2">
+                                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5">
+                                    <span className="text-xs text-sparkle-text-secondary">API Key: </span>
+                                    <span className={cn('text-xs font-medium', hasAnyKey ? 'text-green-400' : 'text-red-400')}>
+                                        {hasAnyKey ? 'Configured' : 'Missing'}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -196,30 +218,54 @@ export default function AISettings() {
                     title="Commit Message Provider"
                     description="Choose the default AI provider for commit message generation in DevScope Git flows."
                 >
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         {(['groq', 'gemini'] as CommitAIProvider[]).map((provider) => {
                             const selected = settings.commitAIProvider === provider
+                            const colors = PROVIDER_COLORS[provider]
                             return (
                                 <button
                                     key={provider}
                                     type="button"
                                     onClick={() => setProvider(provider)}
                                     className={cn(
-                                        'rounded-xl border px-4 py-3 text-left transition-all',
+                                        'group relative rounded-xl border px-5 py-4 text-left transition-all',
                                         selected
-                                            ? 'border-white/20 bg-[var(--accent-primary)]/10'
-                                            : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.04]'
+                                            ? `${colors.border} ${colors.bg} shadow-lg`
+                                            : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]'
                                     )}
                                 >
-                                    <p className="text-sm font-medium text-sparkle-text">
-                                        {provider === 'groq' ? 'Groq' : 'Google Gemini'}
-                                    </p>
-                                    <p className="mt-1 text-xs text-sparkle-text-secondary">
+                                    {selected && (
+                                        <div className="absolute right-3 top-3">
+                                            <div className={cn('rounded-full p-1', colors.bg)}>
+                                                <Check size={14} className={colors.icon} />
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className={cn(
+                                            'rounded-lg p-2 transition-colors',
+                                            selected ? colors.bg : 'bg-white/[0.05] group-hover:bg-white/[0.08]'
+                                        )}>
+                                            <Zap size={18} className={selected ? colors.icon : 'text-sparkle-text-secondary'} />
+                                        </div>
+                                        <p className={cn(
+                                            'text-base font-semibold transition-colors',
+                                            selected ? colors.icon : 'text-sparkle-text'
+                                        )}>
+                                            {provider === 'groq' ? 'Groq' : 'Google Gemini'}
+                                        </p>
+                                    </div>
+                                    <p className="text-sm text-sparkle-text-secondary mb-2">
                                         {provider === 'groq' ? 'Very fast inference' : 'Gemini API models'}
                                     </p>
-                                    <p className="mt-1 text-[11px] text-sparkle-text-muted font-mono">
+                                    <div className={cn(
+                                        'rounded-lg px-2.5 py-1.5 text-[11px] font-mono',
+                                        selected 
+                                            ? `${colors.bg} ${colors.icon}` 
+                                            : 'bg-white/[0.05] text-sparkle-text-muted'
+                                    )}>
                                         {PROVIDER_MODELS[provider]}
-                                    </p>
+                                    </div>
                                 </button>
                             )
                         })}
@@ -255,17 +301,20 @@ export default function AISettings() {
                 </div>
 
                 {hasAnyKey && (
-                    <button
-                        type="button"
-                        onClick={() => {
-                            updateSettings({ groqApiKey: '', geminiApiKey: '' })
-                            setTestStatus({ groq: 'idle', gemini: 'idle' })
-                            setTestError({ groq: '', gemini: '' })
-                        }}
-                        className="text-sm text-red-400 transition-colors hover:text-red-300"
-                    >
-                        Clear all commit AI keys
-                    </button>
+                    <div className="flex justify-center pt-2">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                updateSettings({ groqApiKey: '', geminiApiKey: '' })
+                                setTestStatus({ groq: 'idle', gemini: 'idle' })
+                                setTestError({ groq: '', gemini: '' })
+                            }}
+                            className="inline-flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/15"
+                        >
+                            <Trash2 size={14} />
+                            Clear all commit AI keys
+                        </button>
+                    </div>
                 )}
             </div>
         </div>
@@ -296,34 +345,47 @@ function ProviderKeyCard({
     docsUrl: string
 }) {
     const isGroq = provider === 'groq'
+    const colors = PROVIDER_COLORS[provider]
 
     return (
-        <section className="rounded-2xl border border-white/10 bg-sparkle-card p-6">
-            <div className="mb-1 flex items-center gap-2">
-                <h3 className="font-medium text-sparkle-text">
-                    {isGroq ? 'Groq API Key' : 'Gemini API Key'}
-                </h3>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-xs text-sparkle-text-secondary">
-                    {isGroq ? 'gsk_*' : 'AIza*'}
-                </span>
+        <section className={cn(
+            'rounded-2xl border p-6 transition-all',
+            'border-white/10 bg-sparkle-card hover:border-white/15'
+        )}>
+            <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className={cn('rounded-lg p-2', colors.bg)}>
+                        <Zap size={18} className={colors.icon} />
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-sparkle-text">
+                            {isGroq ? 'Groq API Key' : 'Gemini API Key'}
+                        </h3>
+                        <p className="text-xs text-sparkle-text-secondary mt-0.5">
+                            {isGroq ? 'gsk_*' : 'AIza*'}
+                        </p>
+                    </div>
+                </div>
             </div>
-            <p className="mb-4 text-sm text-sparkle-text-secondary">
+            
+            <p className="mb-3 text-sm text-sparkle-text-secondary leading-relaxed">
                 {isGroq
                     ? 'Used for low-latency commit message generation with Groq-hosted models.'
                     : 'Used for commit message generation through Google Gemini models.'}
             </p>
-            <p className="mb-4 font-mono text-[11px] text-sparkle-text-muted">
-                Active model: {model}
-            </p>
+            
+            <div className={cn('mb-4 rounded-lg px-3 py-2 text-xs font-mono', colors.bg, colors.icon)}>
+                Model: {model}
+            </div>
 
-            <div className="mb-4 flex items-center gap-3">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row">
                 <div className="relative flex-1">
                     <input
                         type={showKey ? 'text' : 'password'}
                         value={value}
                         onChange={(event) => onChange(event.target.value)}
                         placeholder={isGroq ? 'gsk_xxxxxxxxxxxx...' : 'AIzaSyxxxxxxxxxxxx...'}
-                        className="w-full rounded-xl border border-white/10 bg-black/10 px-4 py-3 pr-12 text-sm font-mono text-sparkle-text placeholder:text-sparkle-text-muted focus:border-white/20 focus:outline-none"
+                        className="w-full rounded-xl border border-white/10 bg-black/10 px-4 py-3 pr-12 text-sm font-mono text-sparkle-text placeholder:text-sparkle-text-muted focus:border-white/20 focus:outline-none transition-colors"
                     />
                     <button
                         type="button"
@@ -339,7 +401,13 @@ function ProviderKeyCard({
                     type="button"
                     onClick={onTest}
                     disabled={!value || status === 'testing'}
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[var(--accent-primary)] px-4 py-3 text-sm font-medium text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className={cn(
+                        'inline-flex items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-medium text-white transition-all',
+                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        'hover:opacity-90 active:scale-[0.98]',
+                        colors.border
+                    )}
+                    style={{ backgroundColor: colors.primary }}
                 >
                     {status === 'testing' ? (
                         <>
@@ -352,22 +420,25 @@ function ProviderKeyCard({
                             Connected
                         </>
                     ) : (
-                        'Test Connection'
+                        <>
+                            <Zap size={16} />
+                            Test Connection
+                        </>
                     )}
                 </button>
             </div>
 
             {status === 'success' && (
-                <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-green-500/10 px-3 py-2 text-sm text-green-300">
-                    <Check size={16} />
-                    API key is valid and connection succeeded.
+                <div className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm text-green-300">
+                    <Check size={16} className="shrink-0" />
+                    <span>API key is valid and connection succeeded.</span>
                 </div>
             )}
 
             {status === 'error' && (
-                <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                    <AlertCircle size={16} />
-                    {error}
+                <div className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                    <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                    <span>{error}</span>
                 </div>
             )}
 
@@ -376,7 +447,10 @@ function ProviderKeyCard({
                     href={docsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm text-[var(--accent-primary)] hover:underline"
+                    className={cn(
+                        'inline-flex items-center gap-2 text-sm transition-colors hover:underline',
+                        colors.icon
+                    )}
                 >
                     <ExternalLink size={14} />
                     {isGroq ? 'Get a Groq API key' : 'Get a Gemini API key'}

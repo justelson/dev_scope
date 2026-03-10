@@ -3,12 +3,17 @@
  */
 
 import { useState, useEffect } from 'react'
+import { cn } from '@/lib/utils'
 
 interface LoadingStateProps {
     message?: string
+    detail?: string
+    className?: string
+    cardClassName?: string
+    minHeightClassName?: string
 }
 
-export function LoadingSpinner({ message = 'Loading...' }: LoadingStateProps) {
+function useElapsedTime() {
     const [elapsed, setElapsed] = useState(0)
 
     useEffect(() => {
@@ -19,49 +24,88 @@ export function LoadingSpinner({ message = 'Loading...' }: LoadingStateProps) {
         return () => clearInterval(interval)
     }, [])
 
-    const formatTime = (ms: number) => {
-        const seconds = Math.floor(ms / 1000)
-        const tenths = Math.floor((ms % 1000) / 100)
-        return `${seconds}.${tenths}s`
-    }
+    return elapsed
+}
 
+function formatTime(ms: number) {
+    const seconds = Math.floor(ms / 1000)
+    const tenths = Math.floor((ms % 1000) / 100)
+    return `${seconds}.${tenths}s`
+}
+
+function LoadingCard({
+    message,
+    detail,
+    elapsed,
+    cardClassName
+}: {
+    message: string
+    detail?: string
+    elapsed: number
+    cardClassName?: string
+}) {
     return (
-        <div className="flex items-center justify-center h-[60vh] flex-col gap-5">
-            <div className="animate-spin inline-block w-8 h-8 border-[3px] border-current border-t-transparent text-sparkle-primary rounded-full" />
+        <div
+            className={cn(
+                'flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-sparkle-card/85 px-8 py-7 shadow-[0_18px_48px_rgba(0,0,0,0.22)] backdrop-blur-sm',
+                cardClassName
+            )}
+        >
+            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
+                <div className="absolute inset-0 rounded-2xl bg-[var(--accent-primary)]/10 blur-md" />
+                <div className="relative inline-block h-8 w-8 animate-spin rounded-full border-[3px] border-current border-t-transparent text-[var(--accent-primary)]" />
+            </div>
             <div className="text-center">
-                <p className="text-sparkle-text-secondary">{message}</p>
-                <p className="text-sparkle-text-muted text-sm font-mono mt-1">{formatTime(elapsed)}</p>
+                <p className="text-base font-medium text-sparkle-text">{message}</p>
+                {detail && (
+                    <p className="mt-1 text-sm text-sparkle-text-secondary">{detail}</p>
+                )}
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-mono text-sparkle-text-muted">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-primary)]" />
+                    Elapsed {formatTime(elapsed)}
+                </div>
             </div>
         </div>
     )
 }
 
-export function LoadingOverlay({ message = 'Loading...' }: LoadingStateProps) {
-    const [elapsed, setElapsed] = useState(0)
-
-    useEffect(() => {
-        const start = Date.now()
-        const interval = setInterval(() => {
-            setElapsed(Date.now() - start)
-        }, 100)
-        return () => clearInterval(interval)
-    }, [])
-
-    const formatTime = (ms: number) => {
-        const seconds = Math.floor(ms / 1000)
-        const tenths = Math.floor((ms % 1000) / 100)
-        return `${seconds}.${tenths}s`
-    }
+export function LoadingSpinner({
+    message = 'Loading...',
+    detail,
+    className,
+    cardClassName,
+    minHeightClassName = 'min-h-[52vh]'
+}: LoadingStateProps) {
+    const elapsed = useElapsedTime()
 
     return (
-        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <div className="flex flex-col items-center gap-4 bg-sparkle-bg/80 backdrop-blur-sm px-8 py-6 rounded-2xl border border-white/10 shadow-2xl">
-                <div className="animate-spin inline-block w-10 h-10 border-[3px] border-current border-t-transparent text-sparkle-primary rounded-full" />
-                <div className="text-center">
-                    <p className="text-white font-medium">{message}</p>
-                    <p className="text-sparkle-text-muted text-sm font-mono mt-1">{formatTime(elapsed)}</p>
-                </div>
-            </div>
+        <div className={cn('flex items-center justify-center px-4 py-10', minHeightClassName, className)}>
+            <LoadingCard
+                message={message}
+                detail={detail}
+                elapsed={elapsed}
+                cardClassName={cardClassName}
+            />
+        </div>
+    )
+}
+
+export function LoadingOverlay({
+    message = 'Loading...',
+    detail,
+    className,
+    cardClassName
+}: LoadingStateProps) {
+    const elapsed = useElapsedTime()
+
+    return (
+        <div className={cn('absolute inset-0 z-10 flex items-center justify-center pointer-events-none px-4', className)}>
+            <LoadingCard
+                message={message}
+                detail={detail}
+                elapsed={elapsed}
+                cardClassName={cardClassName}
+            />
         </div>
     )
 }

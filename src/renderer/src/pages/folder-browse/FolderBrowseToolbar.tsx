@@ -1,6 +1,7 @@
-import { Filter, Grid3x3, LayoutGrid, Search } from 'lucide-react'
+import { ChevronDown, Filter, Grid3x3, LayoutGrid, List, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getProjectTypeById, type ContentLayout, type ViewMode } from './types'
+import { useState, useRef, useEffect } from 'react'
 
 interface FolderBrowseToolbarProps {
     isCondensedLayout?: boolean
@@ -15,9 +16,18 @@ interface FolderBrowseToolbarProps {
     onContentLayoutChange: (value: ContentLayout) => void
 }
 
-const VIEW_MODES: Array<{ id: ViewMode; icon: typeof LayoutGrid }> = [
-    { id: 'finder', icon: Grid3x3 },
-    { id: 'grid', icon: LayoutGrid }
+type ViewOption = {
+    viewMode: ViewMode
+    contentLayout: ContentLayout
+    label: string
+    icon: typeof LayoutGrid
+}
+
+const VIEW_OPTIONS: ViewOption[] = [
+    { viewMode: 'finder', contentLayout: 'grouped', label: 'Finder - Grouped', icon: Grid3x3 },
+    { viewMode: 'finder', contentLayout: 'explorer', label: 'Finder - Explorer', icon: Grid3x3 },
+    { viewMode: 'grid', contentLayout: 'grouped', label: 'Grid - Grouped', icon: LayoutGrid },
+    { viewMode: 'grid', contentLayout: 'explorer', label: 'Grid - Explorer', icon: LayoutGrid }
 ]
 
 export function FolderBrowseToolbar({
@@ -32,6 +42,32 @@ export function FolderBrowseToolbar({
     onViewModeChange,
     onContentLayoutChange
 }: FolderBrowseToolbarProps) {
+    const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false)
+    const dropdownRef = useRef<HTMLDivElement>(null)
+
+    const currentView = VIEW_OPTIONS.find(
+        opt => opt.viewMode === viewMode && opt.contentLayout === contentLayout
+    ) || VIEW_OPTIONS[1]
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsViewDropdownOpen(false)
+            }
+        }
+
+        if (isViewDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside)
+            return () => document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [isViewDropdownOpen])
+
+    const handleViewChange = (option: ViewOption) => {
+        onViewModeChange(option.viewMode)
+        onContentLayoutChange(option.contentLayout)
+        // Don't close dropdown - let user click outside to close
+    }
+
     return (
         <div className={cn(
             'sticky z-20 -mx-6 bg-sparkle-bg/90 px-6 backdrop-blur-2xl transition-[padding,margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
@@ -55,12 +91,14 @@ export function FolderBrowseToolbar({
                             placeholder="Search in folder..."
                             value={searchQuery}
                             onChange={(event) => onSearchQueryChange(event.target.value)}
-                            className="w-full bg-sparkle-card border border-sparkle-border rounded-2xl py-3 pl-11 pr-4 text-sm text-sparkle-text focus:outline-none focus:border-sparkle-primary/50 focus:ring-4 focus:ring-sparkle-primary/10 transition-all placeholder:text-sparkle-text-muted shadow-sm"
+                            className="w-full bg-sparkle-card border border-white/10 rounded-xl py-2.5 pl-11 pr-4 text-sm text-sparkle-text focus:outline-none focus:border-sparkle-primary/50 focus:ring-4 focus:ring-sparkle-primary/10 transition-all placeholder:text-sparkle-text-muted shadow-sm"
                         />
                     </div>
+                </div>
 
+                <div className={cn('flex items-center gap-2', isCondensedLayout && 'self-end xl:self-auto')}>
                     {projectTypes.length > 0 && (
-                        <div className={cn('relative group/filter', isCondensedLayout ? 'min-w-[160px] lg:w-[220px]' : 'min-w-[180px]')}>
+                        <div className={cn('relative group/filter', isCondensedLayout ? 'min-w-[160px] lg:w-[220px]' : 'w-[220px]')}>
                             <Filter
                                 className="absolute left-4 top-1/2 -translate-y-1/2 text-sparkle-text-secondary pointer-events-none group-focus-within/filter:text-sparkle-primary transition-colors"
                                 size={16}
@@ -68,7 +106,7 @@ export function FolderBrowseToolbar({
                             <select
                                 value={filterType}
                                 onChange={(event) => onFilterTypeChange(event.target.value)}
-                                className="w-full appearance-none bg-sparkle-card border border-sparkle-border rounded-2xl py-3 pl-11 pr-10 text-sm text-sparkle-text focus:outline-none focus:border-sparkle-primary/50 focus:ring-4 focus:ring-sparkle-primary/10 transition-all cursor-pointer shadow-sm"
+                                className="w-full appearance-none bg-sparkle-card border border-white/10 rounded-xl py-2.5 pl-11 pr-10 text-sm text-sparkle-text focus:outline-none focus:border-sparkle-primary/50 focus:ring-4 focus:ring-sparkle-primary/10 transition-all cursor-pointer shadow-sm"
                             >
                                 <option value="all">All Types</option>
                                 {projectTypes.map((type) => {
@@ -82,54 +120,81 @@ export function FolderBrowseToolbar({
                             </select>
                         </div>
                     )}
-                </div>
-
-                <div className={cn('flex items-center gap-2', isCondensedLayout && 'self-end xl:self-auto')}>
-                    <div className={cn(
-                        'flex items-center gap-1.5 rounded-xl border border-sparkle-border bg-sparkle-card p-1',
-                        isCondensedLayout && 'shrink-0'
-                    )}>
+                    
+                    <div ref={dropdownRef} className="relative">
                         <button
-                            onClick={() => onContentLayoutChange('grouped')}
+                            onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
                             className={cn(
-                                'rounded-lg text-xs font-medium transition-all duration-200',
-                                isCondensedLayout ? 'px-2.5 py-1.5' : 'px-3 py-2',
-                                contentLayout === 'grouped'
-                                    ? 'bg-sparkle-card-hover text-sparkle-text'
-                                    : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'
+                                'flex items-center gap-2 rounded-xl border border-white/10 bg-sparkle-card px-4 py-2.5 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.03] w-[220px]',
+                                isViewDropdownOpen && 'border-white/20 bg-white/[0.03]'
                             )}
                         >
-                            Grouped
+                            <currentView.icon size={16} className="shrink-0" />
+                            <span className="font-medium flex-1 text-left">{currentView.label}</span>
+                            <ChevronDown size={14} className={cn('transition-transform shrink-0', isViewDropdownOpen && 'rotate-180')} />
                         </button>
-                        <button
-                            onClick={() => onContentLayoutChange('explorer')}
-                            className={cn(
-                                'rounded-lg text-xs font-medium transition-all duration-200',
-                                isCondensedLayout ? 'px-2.5 py-1.5' : 'px-3 py-2',
-                                contentLayout === 'explorer'
-                                    ? 'bg-sparkle-card-hover text-sparkle-text'
-                                    : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'
-                            )}
-                        >
-                            Explorer
-                        </button>
-                    </div>
 
-                    <div className="flex items-center gap-1 rounded-xl border border-sparkle-border bg-sparkle-card p-1">
-                        {VIEW_MODES.map(({ id, icon: Icon }) => (
-                            <button
-                                key={id}
-                                onClick={() => onViewModeChange(id)}
-                                className={cn(
-                                    'p-2 rounded-lg transition-all duration-200',
-                                    viewMode === id
-                                        ? 'bg-sparkle-card-hover text-sparkle-text'
-                                        : 'text-sparkle-text-muted hover:text-sparkle-text-secondary hover:bg-sparkle-card-hover'
-                                )}
-                            >
-                                <Icon size={16} />
-                            </button>
-                        ))}
+                        {isViewDropdownOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-[220px] rounded-xl border border-white/10 bg-sparkle-card shadow-xl overflow-hidden">
+                                <div className="p-2">
+                                    <div className="px-3 py-2 text-xs font-semibold text-white/40 uppercase tracking-wider">
+                                        Finder View
+                                    </div>
+                                    {VIEW_OPTIONS.filter(opt => opt.viewMode === 'finder').map((option) => {
+                                        const isSelected = option.viewMode === viewMode && option.contentLayout === contentLayout
+                                        return (
+                                            <button
+                                                key={`${option.viewMode}-${option.contentLayout}`}
+                                                onClick={() => handleViewChange(option)}
+                                                className={cn(
+                                                    'w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm transition-all',
+                                                    isSelected
+                                                        ? 'bg-white/[0.08] text-sparkle-text'
+                                                        : 'text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <option.icon size={16} />
+                                                    <span>{option.contentLayout === 'grouped' ? 'Grouped' : 'Explorer'}</span>
+                                                </div>
+                                                {isSelected && (
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)]" />
+                                                )}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                                
+                                <div className="border-t border-white/5 p-2">
+                                    <div className="px-3 py-2 text-xs font-semibold text-white/40 uppercase tracking-wider">
+                                        Grid View
+                                    </div>
+                                    {VIEW_OPTIONS.filter(opt => opt.viewMode === 'grid').map((option) => {
+                                        const isSelected = option.viewMode === viewMode && option.contentLayout === contentLayout
+                                        return (
+                                            <button
+                                                key={`${option.viewMode}-${option.contentLayout}`}
+                                                onClick={() => handleViewChange(option)}
+                                                className={cn(
+                                                    'w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm transition-all',
+                                                    isSelected
+                                                        ? 'bg-white/[0.08] text-sparkle-text'
+                                                        : 'text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <option.icon size={16} />
+                                                    <span>{option.contentLayout === 'grouped' ? 'Grouped' : 'Explorer'}</span>
+                                                </div>
+                                                {isSelected && (
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)]" />
+                                                )}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

@@ -16,6 +16,7 @@ import {
 import type {
     GitCommit,
     GitStatusDetail,
+    GitStatusEntryStats,
     GitHistoryResult,
     GitStatusMap,
     GitFileStatus,
@@ -25,6 +26,31 @@ import type {
 
 interface GitStatusDetailedOptions {
     includeStats?: boolean
+}
+
+function applyStatusStats(
+    target: {
+        path: string
+        additions: number
+        deletions: number
+        stagedAdditions: number
+        stagedDeletions: number
+        unstagedAdditions: number
+        unstagedDeletions: number
+        statsLoaded?: boolean
+    },
+    stagedNumstat: Map<string, { additions: number; deletions: number }>,
+    unstagedNumstat: Map<string, { additions: number; deletions: number }>
+) {
+    const stagedStats = stagedNumstat.get(target.path) || { additions: 0, deletions: 0 }
+    const unstagedStats = unstagedNumstat.get(target.path) || { additions: 0, deletions: 0 }
+    target.additions = stagedStats.additions + unstagedStats.additions
+    target.deletions = stagedStats.deletions + unstagedStats.deletions
+    target.stagedAdditions = stagedStats.additions
+    target.stagedDeletions = stagedStats.deletions
+    target.unstagedAdditions = unstagedStats.additions
+    target.unstagedDeletions = unstagedStats.deletions
+    target.statsLoaded = true
 }
 
 interface GitHistoryOptions {
@@ -126,7 +152,8 @@ function parseStatusEntries(stdout: string, projectRelativeToRepo: string): GitS
             stagedAdditions: 0,
             stagedDeletions: 0,
             unstagedAdditions: 0,
-            unstagedDeletions: 0
+            unstagedDeletions: 0,
+            statsLoaded: false
         })
     }
 
@@ -153,14 +180,7 @@ export async function getGitStatusDetailed(
             const unstagedNumstat = parseNumstat(unstagedNumstatRaw, repoContext.projectRelativeToRepo)
 
             for (const detail of details) {
-                const stagedStats = stagedNumstat.get(detail.path) || { additions: 0, deletions: 0 }
-                const unstagedStats = unstagedNumstat.get(detail.path) || { additions: 0, deletions: 0 }
-                detail.additions = stagedStats.additions + unstagedStats.additions
-                detail.deletions = stagedStats.deletions + unstagedStats.deletions
-                detail.stagedAdditions = stagedStats.additions
-                detail.stagedDeletions = stagedStats.deletions
-                detail.unstagedAdditions = unstagedStats.additions
-                detail.unstagedDeletions = unstagedStats.deletions
+                applyStatusStats(detail, stagedNumstat, unstagedNumstat)
             }
         }
 
@@ -206,10 +226,93 @@ export async function getGitHistory(
             ...limitArgs
         ])
 
-        return { commits: parseCommitLog(stdout) }
+        return { commits: parseCommitLog(stdout, { statsIncluded: options?.includeStats !== false }) }
     } catch (err) {
         log.error('Failed to get git history', err)
         throw toError(err, 'Failed to get git history')
+    }
+}
+
+export async function getGitStatusEntryStats(projectPath: string, filePaths: string[]): Promise<GitStatusEntryStats[]> {
+    try {
+        const uniquePaths = Array.from(
+            new Set(
+                filePaths
+                    .filter((path) => typeof path === 'string')
+                    .map((path) => normalizeGitPath(path).trim())
+                    .filter(Boolean)
+            )
+        )
+
+        if (uniquePaths.length === 0) {
+            return []
+        }
+
+        const projectGit = createGit(projectPath)
+        const repoContext = await getRepoContext(projectGit, projectPath)
+        const repoGit = createGit(repoContext.repoRoot)
+        const pathSpecs = await Promise.all(
+            uniquePaths.map((path) => toPathSpec(repoGit, projectPath, path, repoContext))
+        )
+
+        const diffArgs = pathSpecs.length > 0 ? ['--', ...pathSpecs] : []
+        const [stagedNumstatRaw, unstagedNumstatRaw] = await Promise.all([
+            repoGit.raw(['diff', '--cached', '--numstat', ...diffArgs]).catch(() => ''),
+            repoGit.raw(['diff', '--numstat', ...diffArgs]).catch(() => '')
+        ])
+
+        const stagedNumstat = parseNumstat(stagedNumstatRaw, repoContext.projectRelativeToRepo)
+        const unstagedNumstat = parseNumstat(unstagedNumstatRaw, repoContext.projectRelativeToRepo)
+
+        return uniquePaths.map((path) => {
+            const entry: GitStatusEntryStats = {
+                path,
+                additions: 0,
+                deletions: 0,
+                stagedAdditions: 0,
+                stagedDeletions: 0,
+                unstagedAdditions: 0,
+                unstagedDeletions: 0,
+                statsLoaded: true
+            }
+            applyStatusStats(entry, stagedNumstat, unstagedNumstat)
+            return entry
+        })
+    } catch (err) {
+        log.error('Failed to get git status entry stats', err)
+        throw toError(err, 'Failed to get git status entry stats')
+    }
+}
+
+export async function getGitCommitStats(projectPath: string, commitHashes: string[]): Promise<GitCommit[]> {
+    try {
+        const uniqueHashes = Array.from(
+            new Set(
+                commitHashes
+                    .filter((hash) => typeof hash === 'string')
+                    .map((hash) => hash.trim())
+                    .filter(Boolean)
+            )
+        )
+
+        if (uniqueHashes.length === 0) {
+            return []
+        }
+
+        const git = createGit(projectPath)
+        const stdout = await git.raw([
+            'log',
+            '--no-walk=unsorted',
+            '--date=iso',
+            '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
+            '--numstat',
+            ...uniqueHashes
+        ])
+
+        return parseCommitLog(stdout, { statsIncluded: true })
+    } catch (err) {
+        log.error('Failed to get git commit stats', err)
+        throw toError(err, 'Failed to get git commit stats')
     }
 }
 
