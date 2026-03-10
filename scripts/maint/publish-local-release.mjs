@@ -40,7 +40,7 @@ function log(message) {
 
 function runCommand(command, commandArgs, options = {}) {
     return new Promise((resolve, reject) => {
-        const { input, ...spawnOptions } = options
+        const { input, quiet = false, ...spawnOptions } = options
         const child = spawn(command, commandArgs, {
             cwd: rootDir,
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -54,13 +54,13 @@ function runCommand(command, commandArgs, options = {}) {
         child.stdout?.on('data', (chunk) => {
             const text = String(chunk)
             stdout += text
-            process.stdout.write(text)
+            if (!quiet) process.stdout.write(text)
         })
 
         child.stderr?.on('data', (chunk) => {
             const text = String(chunk)
             stderr += text
-            process.stderr.write(text)
+            if (!quiet) process.stderr.write(text)
         })
 
         child.on('error', reject)
@@ -152,7 +152,8 @@ function getTokenFromEnv() {
 async function getTokenFromGitCredential() {
     const helperInput = 'protocol=https\nhost=github.com\n\n'
     const { stdout } = await runCommand('git', ['credential', 'fill'], {
-        input: helperInput
+        input: helperInput,
+        quiet: true
     })
     const fields = new Map()
     for (const line of stdout.split(/\r?\n/)) {
