@@ -4,7 +4,9 @@ import {
     generateCustomGitignoreContent,
     generateGitignoreContent,
     getCommitDiff,
+    getGitCommitStats,
     getGitHistory,
+    getGitStatusEntryStats,
     getGitSyncStatus,
     getGitStatus,
     getGitStatusDetailed,
@@ -111,6 +113,34 @@ export async function handleGetGitUser(_event: Electron.IpcMainInvokeEvent, proj
         return { success: true, user }
     } catch (err: any) {
         log.error('Failed to get git user:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetGitStatusEntryStats(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    filePaths: string[]
+) {
+    try {
+        const entries = await getGitStatusEntryStats(projectPath, filePaths)
+        return { success: true, entries }
+    } catch (err: any) {
+        log.error('Failed to get git status entry stats:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetGitCommitStats(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    commitHashes: string[]
+) {
+    try {
+        const commits = await getGitCommitStats(projectPath, commitHashes)
+        return { success: true, commits }
+    } catch (err: any) {
+        log.error('Failed to get git commit stats:', err)
         return { success: false, error: err.message }
     }
 }

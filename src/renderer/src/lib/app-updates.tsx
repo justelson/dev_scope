@@ -126,8 +126,13 @@ export function AppUpdatesProvider({ children }: { children: ReactNode }) {
         setPendingAction(action)
         try {
             const result = await callback()
+            setUpdateState(result.state)
+            if (!result.accepted || !result.completed) {
+                setIsModalOpen(true)
+            }
             return result
         } catch {
+            setIsModalOpen(true)
             return null
         } finally {
             setPendingAction(null)
@@ -229,7 +234,10 @@ export function useAppUpdateState(): DevScopeUpdateState | null {
 }
 
 export function getUpdateActionLabel(updateState: DevScopeUpdateState | null): string {
-    if (!updateState || !updateState.enabled) return 'Updates unavailable'
+    if (!updateState) return 'Updates unavailable'
+    if (!updateState.enabled) {
+        return 'Automatic updates unavailable'
+    }
     switch (updateState.status) {
         case 'checking':
             return 'Checking for updates...'

@@ -37,6 +37,7 @@ const releaseRepository =
     process.env.DEVSCOPE_DESKTOP_UPDATE_REPOSITORY?.trim()
     || process.env.GITHUB_REPOSITORY?.trim()
     || DEFAULT_RELEASE_REPOSITORY
+const releasePageUrl = `https://github.com/${releaseRepository}/releases`
 
 type ElectronUpdaterModule = typeof import('electron-updater')
 type AutoUpdater = ElectronUpdaterModule['autoUpdater']
@@ -52,7 +53,16 @@ let updateDownloadInFlight = false
 let isInstallingUpdate = false
 let updaterConfigured = false
 let updaterInitialized = false
-let updateState: DevScopeUpdateState = createInitialUpdateState(app.getVersion(), releaseRepository, false)
+let updateState: DevScopeUpdateState = createInitialUpdateState(
+    app.getVersion(),
+    releaseRepository,
+    false,
+    releasePageUrl,
+    getAutoUpdateDisabledReason({
+        isPackaged: app.isPackaged,
+        disabledByEnv: process.env.DEVSCOPE_DISABLE_AUTO_UPDATE === '1'
+    })
+)
 
 async function loadAutoUpdater(): Promise<AutoUpdater> {
     if (autoUpdaterRef) return autoUpdaterRef
@@ -111,6 +121,15 @@ function buildActionResult(accepted: boolean, completed: boolean): DevScopeUpdat
     }
 }
 
+function rejectAction(message: string): DevScopeUpdateActionResult {
+    setUpdateState({
+        ...updateState,
+        message,
+        canRetry: updateState.status === 'error' ? updateState.canRetry : false
+    })
+    return buildActionResult(false, false)
+}
+
 export function registerUpdateWindow(window: BrowserWindow): void {
     const windowId = window.id
     trackedWindowIds.add(windowId)
@@ -137,7 +156,13 @@ export async function initializeUpdater(): Promise<void> {
         disabledByEnv: process.env.DEVSCOPE_DISABLE_AUTO_UPDATE === '1'
     })
     const enabled = disabledReason === null
-    updateState = createInitialUpdateState(app.getVersion(), releaseRepository, enabled)
+    updateState = createInitialUpdateState(
+        app.getVersion(),
+        releaseRepository,
+        enabled,
+        releasePageUrl,
+        disabledReason
+    )
 
     if (!enabled) {
         if (disabledReason) {
@@ -228,10 +253,17 @@ export async function initializeUpdater(): Promise<void> {
 
 export async function checkForAppUpdates(_reason: string = 'manual'): Promise<DevScopeUpdateActionResult> {
     if (!updaterConfigured || !autoUpdaterRef || updateCheckInFlight) {
-        return buildActionResult(false, false)
+        if (!updaterConfigured || !autoUpdaterRef) {
+            return rejectAction(updateState.disabledReason || 'Updater is not ready in this build yet.')
+        }
+        return rejectAction('An update check is already in progress.')
     }
     if (updateState.status === 'downloading' || updateState.status === 'downloaded') {
-        return buildActionResult(false, false)
+        return rejectAction(
+            updateState.status === 'downloaded'
+                ? 'An update is already downloaded. Install it before checking again.'
+                : 'An update is already downloading.'
+        )
     }
 
     updateCheckInFlight = true
@@ -252,7 +284,22 @@ export async function checkForAppUpdates(_reason: string = 'manual'): Promise<De
 
 export async function downloadAppUpdate(): Promise<DevScopeUpdateActionResult> {
     if (!updaterConfigured || !autoUpdaterRef || updateDownloadInFlight || updateState.status !== 'available') {
-        return buildActionResult(false, false)
+        if (!updaterConfigured || !autoUpdaterRef) {
+            return rejectAction(updateState.disabledReason || 'Updater is not ready in this build yet.')
+        }
+        if (updateDownloadInFlight) {
+            return rejectAction('An update download is already in progress.')
+        }
+        if (updateState.status === 'downloaded') {
+            return rejectAction('This update is already downloaded and ready to install.')
+        }
+        if (updateState.status === 'downloading') {
+            return rejectAction('An update is already downloading.')
+        }
+        if (updateState.status === 'checking') {
+            return rejectAction('Wait for the current update check to finish first.')
+        }
+        return rejectAction('No downloadable update is available yet.')
     }
 
     updateDownloadInFlight = true
@@ -273,7 +320,19 @@ export async function downloadAppUpdate(): Promise<DevScopeUpdateActionResult> {
 
 export async function installAppUpdate(): Promise<DevScopeUpdateActionResult> {
     if (!updaterConfigured || !autoUpdaterRef || isInstallingUpdate || updateState.status !== 'downloaded') {
-        return buildActionResult(false, false)
+        if (!updaterConfigured || !autoUpdaterRef) {
+            return rejectAction(updateState.disabledReason || 'Updater is not ready in this build yet.')
+        }
+        if (isInstallingUpdate) {
+            return rejectAction('Install is already in progress.')
+        }
+        if (updateState.status === 'available') {
+            return rejectAction('Download the update before trying to install it.')
+        }
+        if (updateState.status === 'downloading') {
+            return rejectAction('Wait for the current download to finish before installing.')
+        }
+        return rejectAction('No downloaded update is ready to install.')
     }
 
     isInstallingUpdate = true

@@ -17,6 +17,18 @@ export interface GitStatusDetail {
     stagedDeletions: number
     unstagedAdditions: number
     unstagedDeletions: number
+    statsLoaded?: boolean
+}
+
+export interface GitStatusEntryStats {
+    path: string
+    additions: number
+    deletions: number
+    stagedAdditions: number
+    stagedDeletions: number
+    unstagedAdditions: number
+    unstagedDeletions: number
+    statsLoaded: boolean
 }
 
 export interface ProjectGitOverview {
@@ -84,6 +96,7 @@ export interface GitCommit {
     additions: number
     deletions: number
     filesChanged: number
+    statsLoaded?: boolean
 }
 
 export interface GitHistoryResult {

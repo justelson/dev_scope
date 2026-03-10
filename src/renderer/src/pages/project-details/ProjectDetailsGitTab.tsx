@@ -14,6 +14,7 @@ interface ProjectDetailsGitTabProps {
 
 function getRefreshModeForGitView(gitView: 'changes' | 'history' | 'unpushed' | 'pulls' | 'manage') {
     if (gitView === 'changes') return 'working'
+    if (gitView === 'history') return 'history'
     if (gitView === 'unpushed') return 'unpushed'
     if (gitView === 'pulls') return 'pulls'
     return 'full'
@@ -46,6 +47,9 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         commitPage,
         setCommitPage,
         gitHistory,
+        historyHasMore,
+        loadingMoreHistory,
+        loadMoreGitHistory,
         commitMessage,
         setCommitMessage,
         handleGenerateCommitMessage,
@@ -57,6 +61,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         handleUnstageFile,
         handleStageAll,
         handleUnstageAll,
+        ensureStatsForPaths,
         hasRemote,
         setInitStep,
         setShowInitModal,
@@ -86,16 +91,11 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         () => visibleHistorySource.slice(historyPageStart, historyPageEnd),
         [visibleHistorySource, historyPageStart, historyPageEnd]
     )
-    const visibleLaneSourceCommits = useMemo(
-        () => visibleHistorySource.slice(0, Math.min(visibleHistorySource.length, historyPageEnd)),
-        [visibleHistorySource, historyPageEnd]
-    )
-    const isLargeHistory = visibleHistorySource.length > COMMITS_PER_PAGE * 8
+    const totalHistoryPages = Math.max(1, Math.ceil(visibleHistorySource.length / COMMITS_PER_PAGE))
     const gitCountsLoading = loadingGit && !gitError
     const unpushedStatsLoading = gitCountsLoading && unpushedCommits.length === 0
     const incomingStatsLoading = gitCountsLoading && incomingCommits.length === 0 && !gitSyncStatus
     const historyLoading = loadingGitHistory && !gitError
-    const historyRefreshing = historyLoading && visibleHistorySource.length > 0
     const hasFetchedSinceLastPull = Boolean(
         props.lastFetched
         && (!props.lastPulled || props.lastFetched > props.lastPulled)
@@ -105,6 +105,21 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         () => incomingCommits.slice((pullsPage - 1) * ITEMS_PER_PAGE, pullsPage * ITEMS_PER_PAGE),
         [incomingCommits, pullsPage, ITEMS_PER_PAGE]
     )
+    const handleNextHistoryPage = async () => {
+        if (commitPage < totalHistoryPages) {
+            setCommitPage((p: number) => Math.min(totalHistoryPages, p + 1))
+            return
+        }
+
+        if (!historyHasMore || loadingMoreHistory) {
+            return
+        }
+
+        const loadedMore = await loadMoreGitHistory?.()
+        if (loadedMore) {
+            setCommitPage((p: number) => p + 1)
+        }
+    }
 
     return (
         <div className="flex flex-col h-full">
@@ -230,6 +245,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         handleUnstageFile={handleUnstageFile}
                         handleStageAll={handleStageAll}
                         handleUnstageAll={handleUnstageAll}
+                        ensureStatsForPaths={ensureStatsForPaths}
                     />
                 ) : gitView === 'unpushed' ? (
                     <>
@@ -501,23 +517,12 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                             </div>
                         ) : visibleHistorySource.length > 0 ? (
                         <>
-                            {historyRefreshing && (
-                                <div className="mb-4 flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs text-white/55">
-                                    <RefreshCw size={12} className="animate-spin text-[var(--accent-primary)]" />
-                                    Refreshing history...
-                                </div>
-                            )}
-                            {isLargeHistory && (
-                                <div className="mb-4 rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-xs text-white/45">
-                                    Rendering the graph with page-local history context to keep large repositories smooth.
-                                </div>
-                            )}
                             <GitGraph
                                 commits={visibleHistoryCommits}
-                                laneSourceCommits={visibleLaneSourceCommits}
+                                laneSourceCommits={visibleHistorySource}
                                 onCommitClick={handleCommitClick}
                             />
-                            {visibleHistorySource.length > COMMITS_PER_PAGE && (
+                            {(visibleHistorySource.length > COMMITS_PER_PAGE || historyHasMore || loadingMoreHistory) && (
                                 <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/5">
                                     <span className="text-xs text-white/40">
                                         Showing {((commitPage - 1) * COMMITS_PER_PAGE) + 1}-{Math.min(commitPage * COMMITS_PER_PAGE, visibleHistorySource.length)} of {visibleHistorySource.length}
@@ -531,15 +536,23 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                                             Previous
                                         </button>
                                         <span className="text-xs text-white/60 px-2">
-                                            {commitPage} / {Math.ceil(visibleHistorySource.length / COMMITS_PER_PAGE)}
+                                            {commitPage} / {totalHistoryPages}
                                         </span>
                                         <button
-                                            onClick={() => setCommitPage((p: number) => Math.min(Math.ceil(visibleHistorySource.length / COMMITS_PER_PAGE), p + 1))}
-                                            disabled={commitPage >= Math.ceil(visibleHistorySource.length / COMMITS_PER_PAGE)}
+                                            onClick={() => { void handleNextHistoryPage() }}
+                                            disabled={loadingMoreHistory || (!historyHasMore && commitPage >= totalHistoryPages)}
                                             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                         >
-                                            Next
+                                            {loadingMoreHistory ? 'Loading…' : commitPage >= totalHistoryPages && historyHasMore ? 'Load More' : 'Next'}
                                         </button>
+                                    </div>
+                                </div>
+                            )}
+                            {loadingMoreHistory && (
+                                <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-white/55">
+                                    <div className="flex items-center gap-2">
+                                        <RefreshCw size={12} className="animate-spin text-[var(--accent-primary)]" />
+                                        <span>Loading more history...</span>
                                     </div>
                                 </div>
                             )}

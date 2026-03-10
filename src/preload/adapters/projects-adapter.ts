@@ -27,6 +27,8 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:getFileTree', projectPath, options),
         getGitHistory: (projectPath: string, limit?: number, options?: { all?: boolean; includeStats?: boolean }) =>
             ipcRenderer.invoke('devscope:getGitHistory', projectPath, limit, options),
+        getGitCommitStats: (projectPath: string, commitHashes: string[]) =>
+            ipcRenderer.invoke('devscope:getGitCommitStats', projectPath, commitHashes),
         getCommitDiff: (projectPath: string, commitHash: string) => ipcRenderer.invoke('devscope:getCommitDiff', projectPath, commitHash),
         getWorkingDiff: (
             projectPath: string,
@@ -37,6 +39,8 @@ export function createProjectsAdapter() {
         getGitStatus: (projectPath: string) => ipcRenderer.invoke('devscope:getGitStatus', projectPath),
         getGitStatusDetailed: (projectPath: string, options?: { includeStats?: boolean }) =>
             ipcRenderer.invoke('devscope:getGitStatusDetailed', projectPath, options),
+        getGitStatusEntryStats: (projectPath: string, filePaths: string[]) =>
+            ipcRenderer.invoke('devscope:getGitStatusEntryStats', projectPath, filePaths),
         getGitSyncStatus: (projectPath: string) => ipcRenderer.invoke('devscope:getGitSyncStatus', projectPath),
         getIncomingCommits: (projectPath: string, limit?: number) =>
             ipcRenderer.invoke('devscope:getIncomingCommits', projectPath, limit),

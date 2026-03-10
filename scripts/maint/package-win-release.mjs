@@ -25,7 +25,7 @@ await new Promise((resolve, reject) => {
     const child = spawn(command, builderArgs, {
         cwd: rootDir,
         stdio: 'inherit',
-        shell: false
+        shell: process.platform === 'win32'
     })
 
     child.on('exit', (code) => {

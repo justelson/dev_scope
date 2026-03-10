@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import {
     AppWindow, ClipboardPaste, Copy, ExternalLink, ChevronRight, Code, File,
-    FileCode, FilePlus, FileText, Folder, FolderOpen, FolderPlus, Github, Pencil, Trash2
+    FileCode, FilePlus, FileText, Folder, FolderOpen, FolderPlus, Github, Pencil, RefreshCw, Trash2
 } from 'lucide-react'
 import ProjectIcon from '@/components/ui/ProjectIcon'
 import { cn } from '@/lib/utils'
@@ -27,6 +27,8 @@ interface FileActionsMenuItem {
 }
 
 interface FolderBrowseContentProps {
+    currentDirectoryPath: string
+    currentDirectoryName: string
     filteredFolders: FolderItem[]
     gitRepos: Project[]
     visibleFiles: FileItem[]
@@ -55,6 +57,7 @@ interface FolderBrowseContentProps {
     onEntryPaste: (entry: EntryActionTarget) => void | Promise<void>
     onEntryCreateFile: (entry: EntryActionTarget) => void | Promise<void>
     onEntryCreateFolder: (entry: EntryActionTarget) => void | Promise<void>
+    onRefresh: () => void | Promise<void>
     hasFileClipboardItem: boolean
     formatFileSize: (bytes: number) => string
     getFileColor: (ext: string) => string
@@ -62,6 +65,8 @@ interface FolderBrowseContentProps {
 }
 
 export function FolderBrowseContent({
+    currentDirectoryPath,
+    currentDirectoryName,
     filteredFolders,
     gitRepos,
     visibleFiles,
@@ -90,6 +95,7 @@ export function FolderBrowseContent({
     onEntryPaste,
     onEntryCreateFile,
     onEntryCreateFolder,
+    onRefresh,
     hasFileClipboardItem,
     formatFileSize,
     getFileColor,
@@ -101,6 +107,12 @@ export function FolderBrowseContent({
         title: string
         items: FileActionsMenuItem[]
     } | null>(null)
+
+    const currentDirectoryEntry = useMemo<EntryActionTarget>(() => ({
+        path: currentDirectoryPath,
+        name: currentDirectoryName,
+        type: 'directory'
+    }), [currentDirectoryName, currentDirectoryPath])
 
     const buildEntryActions = (entry: EntryActionTarget): FileActionsMenuItem[] => [
         {
@@ -136,25 +148,6 @@ export function FolderBrowseContent({
             onSelect: () => onEntryCopy(entry)
         },
         {
-            id: 'paste',
-            label: 'Paste',
-            icon: <ClipboardPaste size={13} />,
-            disabled: !hasFileClipboardItem,
-            onSelect: () => onEntryPaste(entry)
-        },
-        {
-            id: 'new-file',
-            label: 'New File',
-            icon: <FilePlus size={13} />,
-            onSelect: () => onEntryCreateFile(entry)
-        },
-        {
-            id: 'new-folder',
-            label: 'New Folder',
-            icon: <FolderPlus size={13} />,
-            onSelect: () => onEntryCreateFolder(entry)
-        },
-        {
             id: 'rename',
             label: 'Rename',
             icon: <Pencil size={13} />,
@@ -169,6 +162,34 @@ export function FolderBrowseContent({
         }
     ]
 
+    const buildEmptySpaceActions = (): FileActionsMenuItem[] => [
+        {
+            id: 'refresh',
+            label: 'Refresh',
+            icon: <RefreshCw size={13} />,
+            onSelect: () => onRefresh()
+        },
+        {
+            id: 'paste',
+            label: 'Paste',
+            icon: <ClipboardPaste size={13} />,
+            disabled: !hasFileClipboardItem,
+            onSelect: () => onEntryPaste(currentDirectoryEntry)
+        },
+        {
+            id: 'new-file',
+            label: 'New File',
+            icon: <FilePlus size={13} />,
+            onSelect: () => onEntryCreateFile(currentDirectoryEntry)
+        },
+        {
+            id: 'new-folder',
+            label: 'New Folder',
+            icon: <FolderPlus size={13} />,
+            onSelect: () => onEntryCreateFolder(currentDirectoryEntry)
+        }
+    ]
+
     const openEntryContextMenu = (event: ReactMouseEvent<HTMLElement>, entry: EntryActionTarget) => {
         event.preventDefault()
         event.stopPropagation()
@@ -177,6 +198,18 @@ export function FolderBrowseContent({
             y: event.clientY,
             title: `${entry.name} actions`,
             items: buildEntryActions(entry)
+        })
+    }
+
+    const openEmptySpaceContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
+        if (event.target !== event.currentTarget) return
+        event.preventDefault()
+        event.stopPropagation()
+        setContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            title: `${currentDirectoryName} actions`,
+            items: buildEmptySpaceActions()
         })
     }
 
@@ -310,7 +343,7 @@ export function FolderBrowseContent({
             <>
                 <div className="space-y-8">
                     {totalExplorerCount > 0 ? (
-                        <div>
+                        <div onContextMenu={openEmptySpaceContextMenu}>
                         <SectionHeader icon={Folder} iconClassName="text-yellow-400/70" title="All Items" count={totalExplorerCount} />
                         <div
                             className={cn(
@@ -320,6 +353,7 @@ export function FolderBrowseContent({
                                     : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 auto-rows-fr'
                             )}
                             style={isFinderMode ? pressuredFinderGridStyle : pressuredExplorerGridStyle}
+                            onContextMenu={openEmptySpaceContextMenu}
                         >
                             {explorerEntries.map((entry) => {
                                 if (entry.kind === 'project') {
@@ -335,6 +369,13 @@ export function FolderBrowseContent({
                                                 onOpenProjectInExplorer={onOpenProjectInExplorer}
                                                 onProjectRename={onProjectRename}
                                                 onProjectDelete={onProjectDelete}
+                                                onProjectContextMenu={(event, selectedProject) => {
+                                                    openEntryContextMenu(event, {
+                                                        path: selectedProject.path,
+                                                        name: selectedProject.name,
+                                                        type: 'directory'
+                                                    })
+                                                }}
                                                 formatRelativeTime={formatRelativeTime}
                                             />
                                         )
@@ -505,7 +546,10 @@ export function FolderBrowseContent({
                         )}
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-16 bg-sparkle-card rounded-xl border border-sparkle-border">
+                    <div
+                        className="flex flex-col items-center justify-center py-16 bg-sparkle-card rounded-xl border border-sparkle-border"
+                        onContextMenu={openEmptySpaceContextMenu}
+                    >
                         <FileCode size={48} className="text-sparkle-text-muted mb-4" />
                         <h3 className="text-lg font-medium text-sparkle-text mb-2">
                             {searchQuery ? 'No Matching Items' : 'Empty Folder'}
@@ -525,9 +569,9 @@ export function FolderBrowseContent({
 
     return (
         <>
-            <div className="space-y-8">
+            <div className="space-y-8" onContextMenu={openEmptySpaceContextMenu}>
             {filteredFolders.length > 0 && (
-                <div>
+                <div onContextMenu={openEmptySpaceContextMenu}>
                     <SectionHeader icon={Folder} iconClassName="text-yellow-400/70" title="Folders" count={filteredFolders.length} />
                     <div className={cn(
                         "grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
@@ -535,7 +579,8 @@ export function FolderBrowseContent({
                             ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10"
                             : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2"
                     )}
-                    style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredExplorerGridStyle}>
+                    style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredExplorerGridStyle}
+                    onContextMenu={openEmptySpaceContextMenu}>
                         {filteredFolders.map((folder) => (
                             viewMode === 'finder' ? (
                                 <div
@@ -569,7 +614,7 @@ export function FolderBrowseContent({
             )}
 
             {gitRepos.length > 0 && (
-                <div>
+                <div onContextMenu={openEmptySpaceContextMenu}>
                     <SectionHeader icon={Github} iconClassName="text-white/70" title="Git Repositories" count={gitRepos.length} />
                     <div className={cn(
                         "grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
@@ -577,7 +622,8 @@ export function FolderBrowseContent({
                             ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10"
                             : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2"
                     )}
-                    style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredExplorerGridStyle}>
+                    style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredExplorerGridStyle}
+                    onContextMenu={openEmptySpaceContextMenu}>
                         {gitRepos.map((repo) => (
                             viewMode === 'finder' ? (
                                 <div
@@ -617,7 +663,7 @@ export function FolderBrowseContent({
             )}
 
             {totalFilteredFiles > 0 && (
-                <div>
+                <div onContextMenu={openEmptySpaceContextMenu}>
                     <SectionHeader icon={File} iconClassName="text-blue-400/70" title="Files" count={totalFilteredFiles} />
                     <div className={cn(
                         "grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
@@ -625,7 +671,8 @@ export function FolderBrowseContent({
                             ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10"
                             : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2"
                     )}
-                    style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredFileGridStyle}>
+                    style={viewMode === 'finder' ? pressuredFinderGridStyle : pressuredFileGridStyle}
+                    onContextMenu={openEmptySpaceContextMenu}>
                         {visibleFiles.map((file) => {
                             const iconColor = getFileColor(file.extension)
                             const isText = file.extension === 'md' || file.extension === 'txt'
@@ -686,7 +733,7 @@ export function FolderBrowseContent({
             )}
 
             {displayedProjects.length > 0 && (
-                <div>
+                <div onContextMenu={openEmptySpaceContextMenu}>
                     <SectionHeader icon={Code} iconClassName="text-sparkle-accent" title="Projects" count={displayedProjects.length} />
 
                     <div
@@ -706,6 +753,13 @@ export function FolderBrowseContent({
                                 onOpenProjectInExplorer={onOpenProjectInExplorer}
                                 onProjectRename={onProjectRename}
                                 onProjectDelete={onProjectDelete}
+                                onProjectContextMenu={(event, selectedProject) => {
+                                    openEntryContextMenu(event, {
+                                        path: selectedProject.path,
+                                        name: selectedProject.name,
+                                        type: 'directory'
+                                    })
+                                }}
                                 formatRelativeTime={formatRelativeTime}
                             />
                         ))}
@@ -714,7 +768,10 @@ export function FolderBrowseContent({
             )}
 
             {displayedProjects.length === 0 && filteredFolders.length === 0 && gitRepos.length === 0 && totalFilteredFiles === 0 && !error && (
-                <div className="flex flex-col items-center justify-center py-16 bg-sparkle-card rounded-xl border border-sparkle-border">
+                <div
+                    className="flex flex-col items-center justify-center py-16 bg-sparkle-card rounded-xl border border-sparkle-border"
+                    onContextMenu={openEmptySpaceContextMenu}
+                >
                     <FileCode size={48} className="text-sparkle-text-muted mb-4" />
                     <h3 className="text-lg font-medium text-sparkle-text mb-2">
                         {searchQuery ? 'No Matching Items' : 'Empty Folder'}

@@ -19,6 +19,18 @@ export type DevScopeGitStatusDetail = {
     stagedDeletions: number
     unstagedAdditions: number
     unstagedDeletions: number
+    statsLoaded?: boolean
+}
+
+export type DevScopeGitStatusEntryStats = {
+    path: string
+    additions: number
+    deletions: number
+    stagedAdditions: number
+    stagedDeletions: number
+    unstagedAdditions: number
+    unstagedDeletions: number
+    statsLoaded: boolean
 }
 
 export type DevScopeProject = {
@@ -99,6 +111,7 @@ export type DevScopeGitCommit = {
     additions: number
     deletions: number
     filesChanged: number
+    statsLoaded?: boolean
 }
 
 export type DevScopeGitBranchSummary = {
@@ -274,6 +287,8 @@ export type DevScopeUpdateState = {
     currentDisplayVersion: string
     channel: DevScopeReleaseChannel
     repository: string
+    releasePageUrl: string
+    disabledReason: string | null
     availableVersion: string | null
     availableDisplayVersion: string | null
     downloadedVersion: string | null
@@ -381,6 +396,10 @@ export interface DevScopeApi {
         limit?: number,
         options?: { all?: boolean; includeStats?: boolean }
     ) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
+    getGitCommitStats: (
+        projectPath: string,
+        commitHashes: string[]
+    ) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
     getCommitDiff: (projectPath: string, commitHash: string) => Promise<DevScopeResult<{ diff: string }>>
     getWorkingDiff: (
         projectPath: string,
@@ -393,6 +412,10 @@ export interface DevScopeApi {
         projectPath: string,
         options?: { includeStats?: boolean }
     ) => Promise<DevScopeResult<{ entries: DevScopeGitStatusDetail[] }>>
+    getGitStatusEntryStats: (
+        projectPath: string,
+        filePaths: string[]
+    ) => Promise<DevScopeResult<{ entries: DevScopeGitStatusEntryStats[] }>>
     getGitSyncStatus: (projectPath: string) => Promise<DevScopeResult<{ sync: DevScopeGitSyncStatus }>>
     getIncomingCommits: (projectPath: string, limit?: number) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
     getUnpushedCommits: (projectPath: string) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>

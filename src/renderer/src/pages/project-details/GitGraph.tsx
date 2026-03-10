@@ -186,7 +186,12 @@ export function GitGraph({
                                     </div>
                                 </div>
                                 <div className="shrink-0">
-                                    <DiffStats additions={commit.additions} deletions={commit.deletions} compact />
+                                    <DiffStats
+                                        additions={commit.additions}
+                                        deletions={commit.deletions}
+                                        compact
+                                        loading={commit.statsLoaded === false}
+                                    />
                                 </div>
                             </div>
                         </div>

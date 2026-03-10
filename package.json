@@ -1,6 +1,6 @@
 {
     "name": "devscope-air-win",
-    "version": "1.1.0-alpha.3",
+    "version": "1.5.0-alpha.3",
     "description": "DevScope primary Windows desktop app for project scanning, Git workflows, and desktop updates",
     "main": "./out/main/index.js",
     "author": "DevScope",
@@ -16,7 +16,8 @@
         "postinstall": "echo DevScope Air: skipping native terminal rebuild",
         "build:win": "electron-vite build && node scripts/maint/package-win-release.mjs release",
         "build:unpack": "electron-vite build && node scripts/maint/package-win-release.mjs unpacked",
-        "dist:organize": "node scripts/maint/organize-dist.mjs"
+        "dist:organize": "node scripts/maint/organize-dist.mjs",
+        "brand:assets": "python scripts/maint/generate_branding_assets.py"
     },
     "dependencies": {
         "@monaco-editor/react": "^4.7.0",
@@ -63,6 +64,7 @@
     "build": {
         "appId": "com.devscope.air.win",
         "productName": "DevScope Air",
+        "artifactName": "DevScope-Air-Setup-${version}.${ext}",
         "icon": "resources/icon.png",
         "directories": {
             "output": "dist"

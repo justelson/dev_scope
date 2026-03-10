@@ -17,7 +17,9 @@ export type {
 export {
     getGitStatus,
     getGitStatusDetailed,
+    getGitStatusEntryStats,
     getGitHistory,
+    getGitCommitStats,
     getCommitDiff,
     getWorkingDiff,
     getWorkingChangesForAI,

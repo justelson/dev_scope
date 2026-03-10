@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, AlertTriangle, CheckCircle2, Command, ExternalLink, HelpCircle, Loader2, Package, Play, Search, X } from 'lucide-react'
 
 export function ScriptCatalogModal({
@@ -185,6 +185,9 @@ type DependencyInstallStatus = {
     reason?: string
 }
 
+const DEPENDENCY_ROW_HEIGHT = 72
+const DEPENDENCY_OVERSCAN = 8
+
 export function DependenciesModal({
     projectName,
     projectPath,
@@ -206,6 +209,9 @@ export function DependenciesModal({
     const [installing, setInstalling] = useState(false)
     const [installFeedbackTone, setInstallFeedbackTone] = useState<'idle' | 'progress' | 'success' | 'error'>('idle')
     const [installFeedbackMessage, setInstallFeedbackMessage] = useState<string>('')
+    const listRef = useRef<HTMLDivElement | null>(null)
+    const [scrollTop, setScrollTop] = useState(0)
+    const [viewportHeight, setViewportHeight] = useState(0)
     const deferredSearch = useDeferredValue(search)
     const searchValue = deferredSearch.toLowerCase()
     const allDependencies = useMemo(() => {
@@ -228,6 +234,20 @@ export function DependenciesModal({
     const filtered = useMemo(() => allDependencies.filter(({ name }) =>
         name.toLowerCase().includes(searchValue)
     ), [allDependencies, searchValue])
+    const visibleRange = useMemo(() => {
+        const safeViewportHeight = viewportHeight || 480
+        const startIndex = Math.max(0, Math.floor(scrollTop / DEPENDENCY_ROW_HEIGHT) - DEPENDENCY_OVERSCAN)
+        const visibleCount = Math.ceil(safeViewportHeight / DEPENDENCY_ROW_HEIGHT) + (DEPENDENCY_OVERSCAN * 2)
+        const endIndex = Math.min(filtered.length, startIndex + visibleCount)
+        return { startIndex, endIndex }
+    }, [filtered.length, scrollTop, viewportHeight])
+    const visibleDependencies = useMemo(
+        () => filtered.slice(visibleRange.startIndex, visibleRange.endIndex),
+        [filtered, visibleRange.endIndex, visibleRange.startIndex]
+    )
+    const totalDependencyHeight = filtered.length * DEPENDENCY_ROW_HEIGHT
+    const topSpacerHeight = visibleRange.startIndex * DEPENDENCY_ROW_HEIGHT
+    const bottomSpacerHeight = Math.max(0, totalDependencyHeight - (visibleRange.endIndex * DEPENDENCY_ROW_HEIGHT))
 
     const missingDependencySet = useMemo(() => (
         new Set((dependencyInstallStatus?.missingDependencies || []).map((name) => name.toLowerCase()))
@@ -313,6 +333,33 @@ export function DependenciesModal({
             setInstalling(false)
         }
     }
+
+    useEffect(() => {
+        const container = listRef.current
+        if (!container) return
+
+        const syncViewportHeight = () => {
+            setViewportHeight(container.clientHeight)
+        }
+
+        syncViewportHeight()
+
+        const resizeObserver = new ResizeObserver(() => {
+            syncViewportHeight()
+        })
+        resizeObserver.observe(container)
+
+        return () => {
+            resizeObserver.disconnect()
+        }
+    }, [])
+
+    useEffect(() => {
+        const container = listRef.current
+        if (!container) return
+        container.scrollTop = 0
+        setScrollTop(0)
+    }, [searchValue, projectPath])
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
@@ -449,17 +496,29 @@ export function DependenciesModal({
                             <p className="mt-2 text-xs text-white/45">{filtered.length}/{allDependencies.length} shown</p>
                         </div>
 
-                        <div className="min-h-0 overflow-y-auto p-2 custom-scrollbar flex-1 bg-black/10">
+                        <div
+                            ref={listRef}
+                            className="min-h-0 overflow-y-auto p-2 custom-scrollbar flex-1 bg-black/10"
+                            onScroll={(event) => {
+                                setScrollTop(event.currentTarget.scrollTop)
+                            }}
+                        >
                             {filtered.length > 0 ? (
-                                <div className="grid grid-cols-1 gap-2">
-                                    {filtered.map(({ name, version, scope }) => {
+                                <div style={{ height: totalDependencyHeight > 0 ? `${totalDependencyHeight}px` : undefined }}>
+                                    <div style={{ height: `${topSpacerHeight}px` }} />
+                                    <div className="grid grid-cols-1 gap-2">
+                                    {visibleDependencies.map(({ name, version, scope }) => {
                                         const isMissing = missingDependencySet.has(name.toLowerCase())
                                         const presenceTone = dependencyInstallStatus?.checked
                                             ? isMissing ? 'missing' : 'installed'
                                             : 'unknown'
 
                                         return (
-                                            <div key={`${scope}:${name}`} className="flex items-center justify-between p-3 hover:bg-white/5 rounded-xl group transition-all border border-transparent hover:border-white/5">
+                                            <div
+                                                key={`${scope}:${name}`}
+                                                className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-3"
+                                                style={{ minHeight: `${DEPENDENCY_ROW_HEIGHT - 8}px` }}
+                                            >
                                                 <div className="min-w-0 flex-1">
                                                     <span className="text-sm text-white/80 font-mono font-medium block truncate" title={name}>{name}</span>
                                                     <div className="mt-1 flex items-center gap-1.5">
@@ -485,7 +544,7 @@ export function DependenciesModal({
                                                         href={`https://www.npmjs.com/package/${name}`}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="opacity-0 group-hover:opacity-100 text-[var(--accent-primary)] hover:brightness-125 transition-all p-1.5 hover:bg-[var(--accent-primary)]/10 rounded-lg"
+                                                        className="rounded-lg p-1.5 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/10"
                                                         title="View on npm"
                                                     >
                                                         <ExternalLink size={14} />
@@ -494,6 +553,8 @@ export function DependenciesModal({
                                             </div>
                                         )
                                     })}
+                                    </div>
+                                    <div style={{ height: `${bottomSpacerHeight}px` }} />
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center py-16 text-white/30">

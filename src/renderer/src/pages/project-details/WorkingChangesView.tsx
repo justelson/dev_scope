@@ -21,6 +21,7 @@ export interface WorkingChangeItem {
     gitStatus?: 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown'
     additions: number
     deletions: number
+    statsLoaded?: boolean
 }
 
 type DiffMode = 'staged' | 'unstaged'
@@ -86,6 +87,7 @@ function Section({
     onViewDiff,
     onActionFile,
     onActionAll,
+    onEnsureStats,
     setCopiedPath,
     onSetPendingActionPath
 }: {
@@ -100,6 +102,7 @@ function Section({
     onViewDiff: (file: WorkingChangeItem, mode: DiffMode) => Promise<void>
     onActionFile: (path: string) => Promise<void>
     onActionAll: () => Promise<void>
+    onEnsureStats?: (paths: string[]) => void
     setCopiedPath: Dispatch<SetStateAction<string | null>>
     onSetPendingActionPath: (path: string | null) => void
 }) {
@@ -123,8 +126,23 @@ function Section({
         setCurrentPage((page) => Math.min(page, totalPages))
     }, [totalPages])
 
+    useEffect(() => {
+        const missingStatsPaths = paginatedFiles
+            .filter((file) => file.statsLoaded !== true)
+            .map((file) => file.path)
+
+        if (missingStatsPaths.length > 0) {
+            onEnsureStats?.(missingStatsPaths)
+        }
+    }, [onEnsureStats, paginatedFiles])
+
     const pageStart = files.length === 0 ? 0 : ((currentPage - 1) * PAGE_SIZE) + 1
     const pageEnd = files.length === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, files.length)
+    const loadedStatsCount = useMemo(
+        () => files.filter((file) => file.statsLoaded === true).length,
+        [files]
+    )
+    const hasPartialStats = loadedStatsCount < files.length
 
     const handleCopyPath = (path: string, e: MouseEvent) => {
         e.stopPropagation()
@@ -145,11 +163,13 @@ function Section({
                             </span>
                         </div>
                         <p className="text-[11px] text-white/45">
-                            Totals across all files: {totalLineChanges} lines changed
+                            {hasPartialStats
+                                ? `Counting visible file changes... ${loadedStatsCount}/${files.length} files resolved`
+                                : `Totals across all files: ${totalLineChanges} lines changed`}
                         </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                        <DiffStats additions={sectionAdditions} deletions={sectionDeletions} />
+                        <DiffStats additions={sectionAdditions} deletions={sectionDeletions} loading={hasPartialStats} />
                         <button
                             onClick={() => { void onActionAll() }}
                             disabled={files.length === 0 || pendingActionPath === '__all__'}
@@ -198,7 +218,12 @@ function Section({
                             </div>
 
                             <div className="flex items-center justify-end gap-2 shrink-0 min-w-[220px]">
-                                <DiffStats additions={file.additions} deletions={file.deletions} compact />
+                                <DiffStats
+                                    additions={file.additions}
+                                    deletions={file.deletions}
+                                    compact
+                                    loading={file.statsLoaded !== true}
+                                />
                                 <button
                                     onClick={() => { void onViewDiff(file, diffMode) }}
                                     disabled={isLoadingDiff}
@@ -262,7 +287,8 @@ export function WorkingChangesView({
     handleStageFile,
     handleUnstageFile,
     handleStageAll,
-    handleUnstageAll
+    handleUnstageAll,
+    ensureStatsForPaths
 }: {
     stagedFiles: WorkingChangeItem[]
     unstagedFiles: WorkingChangeItem[]
@@ -278,6 +304,7 @@ export function WorkingChangesView({
     handleUnstageFile: (path: string) => Promise<void>
     handleStageAll: () => Promise<void>
     handleUnstageAll: () => Promise<void>
+    ensureStatsForPaths?: (paths: string[]) => void
 }) {
     const [fileDiffs, setFileDiffs] = useState<Map<string, string>>(new Map())
     const [loadingDiffKeys, setLoadingDiffKeys] = useState<Set<string>>(new Set())
@@ -386,6 +413,7 @@ export function WorkingChangesView({
                         await handleUnstageAll()
                         setPendingActionPath(null)
                     }}
+                    onEnsureStats={ensureStatsForPaths}
                     setCopiedPath={setCopiedPath}
                     onSetPendingActionPath={setPendingActionPath}
                 />
@@ -406,6 +434,7 @@ export function WorkingChangesView({
                         await handleStageAll()
                         setPendingActionPath(null)
                     }}
+                    onEnsureStats={ensureStatsForPaths}
                     setCopiedPath={setCopiedPath}
                     onSetPendingActionPath={setPendingActionPath}
                 />
