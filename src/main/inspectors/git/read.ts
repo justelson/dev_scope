@@ -15,6 +15,7 @@ import {
 } from './core'
 import type {
     GitCommit,
+    GitHistoryCountResult,
     GitStatusDetail,
     GitStatusEntryStats,
     GitHistoryResult,
@@ -230,6 +231,28 @@ export async function getGitHistory(
     } catch (err) {
         log.error('Failed to get git history', err)
         throw toError(err, 'Failed to get git history')
+    }
+}
+
+export async function getGitHistoryCount(
+    projectPath: string,
+    options?: { all?: boolean }
+): Promise<GitHistoryCountResult> {
+    try {
+        const git = createGit(projectPath)
+        const stdout = await git.raw([
+            'rev-list',
+            '--count',
+            ...(options?.all === false ? ['HEAD'] : ['--all'])
+        ])
+
+        const totalCount = Number.parseInt(String(stdout || '').trim(), 10)
+        return {
+            totalCount: Number.isNaN(totalCount) ? 0 : Math.max(0, totalCount)
+        }
+    } catch (err) {
+        log.error('Failed to get git history count', err)
+        throw toError(err, 'Failed to get git history count')
     }
 }
 

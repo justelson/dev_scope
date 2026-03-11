@@ -26,6 +26,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
         setInitStep,
         unpushedCommits,
         gitHistory,
+        gitHistoryTotalCount,
         setGitView,
         remotes,
         tags,
@@ -126,7 +127,8 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                     const hasWorkingChanges = changedFiles.length > 0
                     const hasUnpushedCommits = unpushedCommits.length > 0
                     const hasIncomingCommits = (gitSyncStatus?.behind || 0) > 0 || incomingCommits.length > 0
-                    const hasRecentCommits = gitHistory.length > 0
+                    const effectiveHistoryTotalCount = Math.max(gitHistoryTotalCount || 0, gitHistory.length)
+                    const hasRecentCommits = effectiveHistoryTotalCount > 0
                     const visibleSummaryCards =
                         (hasWorkingChanges ? 1 : 0) +
                         (hasIncomingCommits ? 1 : 0) +
@@ -220,7 +222,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="text-sm font-medium text-white/80">Recent Commits</h4>
                                         <span className="text-xs bg-white/10 text-white/60 px-2 py-0.5 rounded-full">
-                                            {loadingCounts ? '...' : gitHistory.length}
+                                            {loadingCounts ? '...' : effectiveHistoryTotalCount}
                                         </span>
                                     </div>
                                     <div className="space-y-1">
@@ -231,12 +233,12 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                                         <span className="font-mono text-white/40">{commit.shortHash}</span> {commit.message}
                                                     </div>
                                                     <div className="shrink-0">
-                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact loading={loadingCounts} />
+                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact loading={commit.statsLoaded === false} />
                                                     </div>
                                                 </div>
                                             </div>
                                         ))}
-                                        {gitHistory.length > 3 && (
+                                        {effectiveHistoryTotalCount > 3 && (
                                             <button onClick={() => setGitView('history')} className="text-xs text-[var(--accent-primary)] hover:underline">
                                                 View all...
                                             </button>

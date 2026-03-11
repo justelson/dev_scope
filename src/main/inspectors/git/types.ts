@@ -103,6 +103,10 @@ export interface GitHistoryResult {
     commits: GitCommit[]
 }
 
+export interface GitHistoryCountResult {
+    totalCount: number
+}
+
 export interface GitignorePattern {
     id: string
     label: string

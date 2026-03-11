@@ -52,6 +52,7 @@ function sanitizeGitSnapshotValue(value: unknown): GitSnapshotLike | null {
         isGitRepo: typeof input.isGitRepo === 'boolean' ? input.isGitRepo : null,
         gitStatusDetails: asArray(input.gitStatusDetails),
         gitHistory: asArray(input.gitHistory),
+        gitHistoryTotalCount: typeof input.gitHistoryTotalCount === 'number' ? input.gitHistoryTotalCount : 0,
         incomingCommits: asArray(input.incomingCommits),
         unpushedCommits: asArray(input.unpushedCommits),
         gitUser: input.gitUser && typeof input.gitUser === 'object' ? input.gitUser : null,

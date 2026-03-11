@@ -80,6 +80,7 @@ import {
     handleGetCommitDiff,
     handleGetGitCommitStats,
     handleGetGitHistory,
+    handleGetGitHistoryCount,
     handleGetGitStatusEntryStats,
     handleGetGitSyncStatus,
     handleGetGitStatus,
@@ -194,6 +195,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getActivePorts', handleGetActivePorts)
 
     ipcMain.handle('devscope:getGitHistory', handleGetGitHistory)
+    ipcMain.handle('devscope:getGitHistoryCount', handleGetGitHistoryCount)
     ipcMain.handle('devscope:getGitCommitStats', handleGetGitCommitStats)
     ipcMain.handle('devscope:getCommitDiff', handleGetCommitDiff)
     ipcMain.handle('devscope:getWorkingDiff', handleGetWorkingDiff)

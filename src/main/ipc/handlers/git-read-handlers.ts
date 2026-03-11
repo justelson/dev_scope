@@ -6,6 +6,7 @@ import {
     getCommitDiff,
     getGitCommitStats,
     getGitHistory,
+    getGitHistoryCount,
     getGitStatusEntryStats,
     getGitSyncStatus,
     getGitStatus,
@@ -34,6 +35,20 @@ export async function handleGetGitHistory(
         return { success: true, ...result }
     } catch (err: any) {
         log.error('Failed to get git history:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetGitHistoryCount(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    options?: { all?: boolean }
+) {
+    try {
+        const result = await getGitHistoryCount(projectPath, options)
+        return { success: true, ...result }
+    } catch (err: any) {
+        log.error('Failed to get git history count:', err)
         return { success: false, error: err.message }
     }
 }

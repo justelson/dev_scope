@@ -116,6 +116,10 @@ export type DevScopeGitCommit = {
     statsLoaded?: boolean
 }
 
+export type DevScopeGitHistoryCount = {
+    totalCount: number
+}
+
 export type DevScopeGitBranchSummary = {
     name: string
     current: boolean
@@ -399,6 +403,10 @@ export interface DevScopeApi {
         limit?: number,
         options?: { all?: boolean; includeStats?: boolean }
     ) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
+    getGitHistoryCount: (
+        projectPath: string,
+        options?: { all?: boolean }
+    ) => Promise<DevScopeResult<DevScopeGitHistoryCount>>
     getGitCommitStats: (
         projectPath: string,
         commitHashes: string[]

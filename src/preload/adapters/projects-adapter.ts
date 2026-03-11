@@ -28,6 +28,8 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:getFileTree', projectPath, options),
         getGitHistory: (projectPath: string, limit?: number, options?: { all?: boolean; includeStats?: boolean }) =>
             ipcRenderer.invoke('devscope:getGitHistory', projectPath, limit, options),
+        getGitHistoryCount: (projectPath: string, options?: { all?: boolean }) =>
+            ipcRenderer.invoke('devscope:getGitHistoryCount', projectPath, options),
         getGitCommitStats: (projectPath: string, commitHashes: string[]) =>
             ipcRenderer.invoke('devscope:getGitCommitStats', projectPath, commitHashes),
         getCommitDiff: (projectPath: string, commitHash: string) => ipcRenderer.invoke('devscope:getCommitDiff', projectPath, commitHash),

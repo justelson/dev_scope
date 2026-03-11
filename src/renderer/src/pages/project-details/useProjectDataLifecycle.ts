@@ -49,6 +49,7 @@ function hasFocusedGitDataForView(input: {
     isGitRepo: boolean | null
     gitStatusDetails: GitStatusDetail[]
     gitHistory: GitCommit[]
+    gitHistoryTotalCount: number
     incomingCommits: GitCommit[]
     unpushedCommits: GitCommit[]
     gitUser: { name: string; email: string } | null
@@ -60,7 +61,7 @@ function hasFocusedGitDataForView(input: {
     tags: GitTagSummary[]
     stashes: GitStashSummary[]
 }): boolean {
-    if (input.gitView === 'history') return input.gitHistory.length > 0
+    if (input.gitView === 'history') return input.gitHistoryTotalCount > 0 || input.gitHistory.length > 0
     if (input.gitView === 'changes') return input.gitStatusDetails.length > 0
     if (input.gitView === 'unpushed') {
         return input.unpushedCommits.length > 0 || input.gitSyncStatus !== null || input.hasRemote === false
@@ -73,6 +74,7 @@ function hasFocusedGitDataForView(input: {
         isGitRepo: input.isGitRepo,
         gitStatusDetails: input.gitStatusDetails,
         gitHistory: input.gitHistory,
+        gitHistoryTotalCount: input.gitHistoryTotalCount,
         incomingCommits: input.incomingCommits,
         unpushedCommits: input.unpushedCommits,
         gitUser: input.gitUser,
@@ -86,7 +88,7 @@ function hasFocusedGitDataForView(input: {
     })
 }
 
-function mergeHistoryCommitStats(previousCommits: GitCommit[], nextCommits: GitCommit[]): GitCommit[] {
+function mergeCommitStats(previousCommits: GitCommit[], nextCommits: GitCommit[]): GitCommit[] {
     if (previousCommits.length === 0 || nextCommits.length === 0) {
         return nextCommits
     }
@@ -137,6 +139,7 @@ function hasVisibleGitData(input: {
     isGitRepo: boolean | null
     gitStatusDetails: GitStatusDetail[]
     gitHistory: GitCommit[]
+    gitHistoryTotalCount: number
     incomingCommits: GitCommit[]
     unpushedCommits: GitCommit[]
     gitUser: { name: string; email: string } | null
@@ -151,6 +154,7 @@ function hasVisibleGitData(input: {
     return input.isGitRepo === false
         || input.gitStatusDetails.length > 0
         || input.gitHistory.length > 0
+        || input.gitHistoryTotalCount > 0
         || input.incomingCommits.length > 0
         || input.unpushedCommits.length > 0
         || input.gitUser !== null
@@ -194,6 +198,7 @@ interface UseProjectDataLifecycleParams {
     isGitRepo: boolean | null
     gitStatusDetails: GitStatusDetail[]
     gitHistory: GitCommit[]
+    gitHistoryTotalCount: number
     incomingCommits: GitCommit[]
     unpushedCommits: GitCommit[]
     gitUser: { name: string; email: string } | null
@@ -224,6 +229,7 @@ interface UseProjectDataLifecycleParams {
     setIsGitRepo: Dispatch<SetStateAction<boolean | null>>
     setGitStatusDetails: Dispatch<SetStateAction<GitStatusDetail[]>>
     setGitHistory: Dispatch<SetStateAction<GitCommit[]>>
+    setGitHistoryTotalCount: Dispatch<SetStateAction<number>>
     setIncomingCommits: Dispatch<SetStateAction<GitCommit[]>>
     setUnpushedCommits: Dispatch<SetStateAction<GitCommit[]>>
     setGitUser: Dispatch<SetStateAction<{ name: string; email: string } | null>>
@@ -260,6 +266,7 @@ export function useProjectDataLifecycle({
     isGitRepo,
     gitStatusDetails,
     gitHistory,
+    gitHistoryTotalCount,
     incomingCommits,
     unpushedCommits,
     gitUser,
@@ -290,6 +297,7 @@ export function useProjectDataLifecycle({
     setIsGitRepo,
     setGitStatusDetails,
     setGitHistory,
+    setGitHistoryTotalCount,
     setIncomingCommits,
     setUnpushedCommits,
     setGitUser,
@@ -500,6 +508,7 @@ export function useProjectDataLifecycle({
             isGitRepo,
             gitStatusDetails,
             gitHistory,
+            gitHistoryTotalCount,
             incomingCommits,
             unpushedCommits,
             gitUser,
@@ -515,6 +524,7 @@ export function useProjectDataLifecycle({
             isGitRepo,
             gitStatusDetails,
             gitHistory,
+            gitHistoryTotalCount,
             incomingCommits,
             unpushedCommits,
             gitUser,
@@ -561,6 +571,7 @@ export function useProjectDataLifecycle({
                     gitStatusDetailsRef.current = []
                     setGitStatusDetails([])
                     setGitHistory([])
+                    setGitHistoryTotalCount(0)
                     setIncomingCommits([])
                     setUnpushedCommits([])
                     setGitUser(null)
@@ -627,6 +638,7 @@ export function useProjectDataLifecycle({
             const shouldLoadSync = true
             const shouldLoadUnpushed = mode === 'full' || mode === 'unpushed'
             const shouldLoadHistory = mode === 'full' || mode === 'history'
+            const shouldLoadHistoryCount = mode === 'full' || mode === 'history'
             const shouldLoadIncomingCommits = mode === 'pulls' || (mode === 'full' && activeTab === 'git' && (gitView === 'pulls' || gitView === 'manage'))
             const tasks: Array<{
                 label: string
@@ -684,7 +696,7 @@ export function useProjectDataLifecycle({
                     task: window.devscope.getUnpushedCommits(decodedPath),
                     apply: (result) => {
                         if (result?.success) {
-                            setUnpushedCommits(result.commits || [])
+                            setUnpushedCommits((prev) => mergeCommitStats(prev, result.commits || []))
                             return
                         }
                         appendError('unpushed', result?.error || 'request failed')
@@ -701,10 +713,24 @@ export function useProjectDataLifecycle({
                     }),
                     apply: (result) => {
                         if (result?.success) {
-                            setGitHistory((prev) => mergeHistoryCommitStats(prev, result.commits || []))
+                            setGitHistory((prev) => mergeCommitStats(prev, result.commits || []))
                             return
                         }
                         appendError('history', result?.error || 'request failed')
+                    }
+                })
+            }
+
+            if (shouldLoadHistoryCount) {
+                tasks.push({
+                    label: 'history-count',
+                    task: window.devscope.getGitHistoryCount(decodedPath, { all: false }),
+                    apply: (result) => {
+                        if (result?.success) {
+                            setGitHistoryTotalCount(typeof result.totalCount === 'number' ? Math.max(0, result.totalCount) : 0)
+                            return
+                        }
+                        appendError('history-count', result?.error || 'request failed')
                     }
                 })
             }
@@ -816,6 +842,7 @@ export function useProjectDataLifecycle({
         decodedPath,
         gitView,
         gitHistory,
+        gitHistoryTotalCount,
         setLoadingGit,
         setLoadingGitHistory,
         setGitError,
@@ -823,6 +850,7 @@ export function useProjectDataLifecycle({
         setIsGitRepo,
         setGitStatusDetails,
         setGitHistory,
+        setGitHistoryTotalCount,
         setIncomingCommits,
         setUnpushedCommits,
         setGitUser,
@@ -873,6 +901,7 @@ export function useProjectDataLifecycle({
             setIsGitRepo(typeof cachedGit.isGitRepo === 'boolean' ? cachedGit.isGitRepo : null)
             setGitStatusDetails(Array.isArray(cachedGit.gitStatusDetails) ? cachedGit.gitStatusDetails : [])
             setGitHistory(Array.isArray(cachedGit.gitHistory) ? cachedGit.gitHistory : [])
+            setGitHistoryTotalCount(typeof cachedGit.gitHistoryTotalCount === 'number' ? cachedGit.gitHistoryTotalCount : 0)
             setIncomingCommits(Array.isArray(cachedGit.incomingCommits) ? cachedGit.incomingCommits : [])
             setUnpushedCommits(Array.isArray(cachedGit.unpushedCommits) ? cachedGit.unpushedCommits : [])
             setGitUser(cachedGit.gitUser || null)
@@ -889,6 +918,7 @@ export function useProjectDataLifecycle({
             setLoadingGitHistory(false)
         } else {
             setGitHistory([])
+            setGitHistoryTotalCount(0)
             setIncomingCommits([])
             setUnpushedCommits([])
             setGitUser(null)
@@ -916,6 +946,7 @@ export function useProjectDataLifecycle({
         decodedPath,
         setBranches,
         setGitHistory,
+        setGitHistoryTotalCount,
         setIncomingCommits,
         setGitStatusDetails,
         setGitStatusMap,
@@ -945,6 +976,7 @@ export function useProjectDataLifecycle({
             isGitRepo,
             gitStatusDetails,
             gitHistory,
+            gitHistoryTotalCount,
             incomingCommits,
             unpushedCommits,
             gitUser,
@@ -962,6 +994,7 @@ export function useProjectDataLifecycle({
         isGitRepo,
         gitStatusDetails,
         gitHistory,
+        gitHistoryTotalCount,
         incomingCommits,
         unpushedCommits,
         gitUser,
@@ -1002,6 +1035,7 @@ export function useProjectDataLifecycle({
             isGitRepo,
             gitStatusDetails,
             gitHistory,
+            gitHistoryTotalCount,
             incomingCommits,
             unpushedCommits,
             gitUser,
@@ -1019,7 +1053,7 @@ export function useProjectDataLifecycle({
         }
 
         void refreshGitData(false, hasFocusedData && enteringGitTab ? { quiet: true, mode } : { mode })
-    }, [activeTab, decodedPath, gitView, refreshGitData])
+    }, [activeTab, decodedPath, gitHistoryTotalCount, gitView, refreshGitData])
 
     useEffect(() => {
         if (!decodedPath || !autoRefreshGitOnProjectOpen) return

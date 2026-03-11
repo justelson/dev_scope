@@ -266,6 +266,7 @@ export default function ProjectDetailsPage() {
     const [isProjectLive, setIsProjectLive] = useState(false)
     const [activePorts, setActivePorts] = useState<number[]>([])
     const [gitHistory, setGitHistory] = useState<GitCommit[]>([])
+    const [gitHistoryTotalCount, setGitHistoryTotalCount] = useState(0)
     const [loadingGit, setLoadingGit] = useState(false)
     const [loadingGitHistory, setLoadingGitHistory] = useState(false)
     const [gitError, setGitError] = useState<string | null>(null)
@@ -428,12 +429,20 @@ export default function ProjectDetailsPage() {
         setPullsPage((prev) => Math.min(prev, totalPages))
     }, [incomingCommits.length, ITEMS_PER_PAGE])
     useEffect(() => {
-        if (activeTab !== 'git' || gitView !== 'history' || gitHistory.length === 0) return
+        if (activeTab !== 'git' || gitHistory.length === 0) return
 
-        const pageStart = Math.max(0, (commitPage - 1) * COMMITS_PER_PAGE)
-        const pageEnd = Math.max(pageStart, commitPage * COMMITS_PER_PAGE)
-        const missingStatsHashes = gitHistory
-            .slice(pageStart, pageEnd)
+        const targetCommits = gitView === 'history'
+            ? gitHistory.slice(
+                Math.max(0, (commitPage - 1) * COMMITS_PER_PAGE),
+                Math.max(Math.max(0, (commitPage - 1) * COMMITS_PER_PAGE), commitPage * COMMITS_PER_PAGE)
+            )
+            : gitView === 'manage'
+                ? gitHistory.slice(0, 3)
+                : []
+
+        if (targetCommits.length === 0) return
+
+        const missingStatsHashes = targetCommits
             .filter((commit) => commit.statsLoaded !== true)
             .map((commit) => commit.hash)
 
@@ -449,17 +458,32 @@ export default function ProjectDetailsPage() {
             const statsByHash = new Map(result.commits.map((commit) => [commit.hash, commit]))
             if (statsByHash.size === 0) return
 
-            setGitHistory((prev) => prev.map((commit) => {
-                const stats = statsByHash.get(commit.hash)
-                if (!stats) return commit
-                return {
-                    ...commit,
-                    additions: stats.additions,
-                    deletions: stats.deletions,
-                    filesChanged: stats.filesChanged,
-                    statsLoaded: true
-                }
-            }))
+            setGitHistory((prev) => {
+                let changed = false
+                const next = prev.map((commit) => {
+                    const stats = statsByHash.get(commit.hash)
+                    if (!stats) return commit
+
+                    const shouldUpdate =
+                        commit.statsLoaded !== true
+                        || commit.additions !== stats.additions
+                        || commit.deletions !== stats.deletions
+                        || commit.filesChanged !== stats.filesChanged
+
+                    if (!shouldUpdate) return commit
+
+                    changed = true
+                    return {
+                        ...commit,
+                        additions: stats.additions,
+                        deletions: stats.deletions,
+                        filesChanged: stats.filesChanged,
+                        statsLoaded: true
+                    }
+                })
+
+                return changed ? next : prev
+            })
         })
     }, [activeTab, commitPage, decodedPath, gitHistory, gitView, COMMITS_PER_PAGE])
     useEffect(() => {
@@ -484,17 +508,32 @@ export default function ProjectDetailsPage() {
             const statsByHash = new Map(result.commits.map((commit) => [commit.hash, commit]))
             if (statsByHash.size === 0) return
 
-            setUnpushedCommits((prev) => prev.map((commit) => {
-                const stats = statsByHash.get(commit.hash)
-                if (!stats) return commit
-                return {
-                    ...commit,
-                    additions: stats.additions,
-                    deletions: stats.deletions,
-                    filesChanged: stats.filesChanged,
-                    statsLoaded: true
-                }
-            }))
+            setUnpushedCommits((prev) => {
+                let changed = false
+                const next = prev.map((commit) => {
+                    const stats = statsByHash.get(commit.hash)
+                    if (!stats) return commit
+
+                    const shouldUpdate =
+                        commit.statsLoaded !== true
+                        || commit.additions !== stats.additions
+                        || commit.deletions !== stats.deletions
+                        || commit.filesChanged !== stats.filesChanged
+
+                    if (!shouldUpdate) return commit
+
+                    changed = true
+                    return {
+                        ...commit,
+                        additions: stats.additions,
+                        deletions: stats.deletions,
+                        filesChanged: stats.filesChanged,
+                        statsLoaded: true
+                    }
+                })
+
+                return changed ? next : prev
+            })
         })
     }, [activeTab, decodedPath, ITEMS_PER_PAGE, unpushedCommits, unpushedPage])
     useEffect(() => {
@@ -591,6 +630,7 @@ export default function ProjectDetailsPage() {
         isGitRepo,
         gitStatusDetails,
         gitHistory,
+        gitHistoryTotalCount,
         incomingCommits,
         unpushedCommits,
         gitUser,
@@ -621,6 +661,7 @@ export default function ProjectDetailsPage() {
         setIsGitRepo,
         setGitStatusDetails,
         setGitHistory,
+        setGitHistoryTotalCount,
         setIncomingCommits,
         setUnpushedCommits,
         setGitUser,
@@ -647,9 +688,10 @@ export default function ProjectDetailsPage() {
         setActivePorts,
         setLoadingFiles
     })
-    const historyHasMore = gitHistory.length >= historyLimit && gitHistory.length > 0
+    const historyHasMore = gitHistoryTotalCount > gitHistory.length
     const loadMoreGitHistory = useCallback(async () => {
         if (!decodedPath || loadingMoreHistory) return false
+        if (gitHistoryTotalCount > 0 && gitHistory.length >= gitHistoryTotalCount) return false
 
         const nextLimit = historyLimit + HISTORY_CHUNK_SIZE
         setLoadingMoreHistory(true)
@@ -675,7 +717,7 @@ export default function ProjectDetailsPage() {
         } finally {
             setLoadingMoreHistory(false)
         }
-    }, [decodedPath, gitHistory.length, historyLimit, loadingMoreHistory])
+    }, [decodedPath, gitHistory.length, gitHistoryTotalCount, historyLimit, loadingMoreHistory])
     const {
         changedFiles,
         allFolderPathsSet,
@@ -1398,6 +1440,7 @@ export default function ProjectDetailsPage() {
                 lastFetched={lastFetched}
                 lastPulled={lastPulled}
                 gitHistory={gitHistory}
+                gitHistoryTotalCount={gitHistoryTotalCount}
                 historyHasMore={historyHasMore}
                 loadingMoreHistory={loadingMoreHistory}
                 loadMoreGitHistory={loadMoreGitHistory}

@@ -9,6 +9,7 @@ export type {
     CheckoutBranchOptions,
     CheckoutBranchResult,
     GitCommit,
+    GitHistoryCountResult,
     GitHistoryResult,
     GitignorePattern,
     GitSyncStatus
@@ -19,6 +20,7 @@ export {
     getGitStatusDetailed,
     getGitStatusEntryStats,
     getGitHistory,
+    getGitHistoryCount,
     getGitCommitStats,
     getCommitDiff,
     getWorkingDiff,

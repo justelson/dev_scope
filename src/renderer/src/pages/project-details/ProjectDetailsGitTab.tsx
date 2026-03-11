@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils'
 import { WorkingChangesView } from './WorkingChangesView'
 import { GitGraph } from './GitGraph'
 import { ProjectDetailsGitManageView } from './ProjectDetailsGitManageView'
-import { DiffStats } from './DiffStats'
 import type { GitCommit } from './types'
 import { buildPushRangeSummary, PushRangeConfirmModal, PushRangeSelector } from './PushRangeConfirmModal'
 
@@ -40,8 +39,6 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         gitError,
         decodedPath,
         handleCommitClick,
-        unpushedPage,
-        setUnpushedPage,
         pullsPage,
         setPullsPage,
         ITEMS_PER_PAGE,
@@ -49,6 +46,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         commitPage,
         setCommitPage,
         gitHistory,
+        gitHistoryTotalCount,
         historyHasMore,
         loadingMoreHistory,
         loadMoreGitHistory,
@@ -93,7 +91,8 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         () => visibleHistorySource.slice(historyPageStart, historyPageEnd),
         [visibleHistorySource, historyPageStart, historyPageEnd]
     )
-    const totalHistoryPages = Math.max(1, Math.ceil(visibleHistorySource.length / COMMITS_PER_PAGE))
+    const effectiveHistoryTotalCount = Math.max(gitHistoryTotalCount || 0, visibleHistorySource.length)
+    const totalHistoryPages = Math.max(1, Math.ceil(effectiveHistoryTotalCount / COMMITS_PER_PAGE))
     const gitCountsLoading = loadingGit && !gitError
     const unpushedStatsLoading = gitCountsLoading && unpushedCommits.length === 0
     const incomingStatsLoading = gitCountsLoading && incomingCommits.length === 0 && !gitSyncStatus
@@ -325,14 +324,14 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                             <div className="bg-black/20 rounded-xl border border-white/5 p-4 mb-4">
                                 <h3 className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
                                     <GitPullRequest size={16} />
-                                    {currentBranchNeedsPublish ? 'Publish Branch' : 'Push to Remote'}
+                                    {currentBranchNeedsPublish ? 'Publish Branch' : 'Push All Commits'}
                                 </h3>
                                 <p className="text-xs text-white/50 mb-3">
                                     {currentBranchNeedsPublish
                                         ? `Current branch "${currentBranch}" has no upstream branch on origin yet.`
                                         : unpushedStatsLoading
                                             ? 'Loading unpushed commit summary...'
-                                            : `You have ${unpushedCommits.length} unpushed ${unpushedCommits.length === 1 ? 'commit' : 'commits'}.`}
+                                            : `Send all ${unpushedCommits.length} unpushed ${unpushedCommits.length === 1 ? 'commit' : 'commits'} on ${currentBranch || 'this branch'} to origin.`}
                                 </p>
                                 <button
                                     onClick={() => { void handlePush(currentBranchNeedsPublish ? 'publish' : 'push') }}
@@ -347,7 +346,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                                     ) : (
                                         <>
                                             <GitPullRequest size={16} />
-                                            {currentBranchNeedsPublish ? 'Publish Branch' : 'Push Commits'}
+                                            {currentBranchNeedsPublish ? 'Publish Branch' : 'Push All Commits'}
                                         </>
                                     )}
                                 </button>
@@ -362,6 +361,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                                             commits={unpushedCommits}
                                             activeCommitHash={activePushCommitHash}
                                             onActiveCommitChange={setActivePushCommitHash}
+                                            onCommitClick={handleCommitClick}
                                         />
                                         {activePushSummary && activePushCommit && (
                                             <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
@@ -548,10 +548,10 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                                 hasRemote={hasRemote}
                                 remoteHeadCommitHash={remoteHeadCommitHash}
                             />
-                            {(visibleHistorySource.length > COMMITS_PER_PAGE || historyHasMore || loadingMoreHistory) && (
+                            {(effectiveHistoryTotalCount > COMMITS_PER_PAGE || historyHasMore || loadingMoreHistory) && (
                                 <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/5">
                                     <span className="text-xs text-white/40">
-                                        Showing {((commitPage - 1) * COMMITS_PER_PAGE) + 1}-{Math.min(commitPage * COMMITS_PER_PAGE, visibleHistorySource.length)} of {visibleHistorySource.length}
+                                        Showing {((commitPage - 1) * COMMITS_PER_PAGE) + 1}-{Math.min(commitPage * COMMITS_PER_PAGE, effectiveHistoryTotalCount)} of {effectiveHistoryTotalCount}
                                     </span>
                                     <div className="flex items-center gap-2">
                                         <button
