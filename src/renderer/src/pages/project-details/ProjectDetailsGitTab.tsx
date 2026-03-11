@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, ArrowDownCircle, GitBranch, GitCommitHorizontal, GitPullRequest, Link, Plus, RefreshCw, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSettings } from '@/lib/settings'
 import { WorkingChangesView } from './WorkingChangesView'
 import { GitGraph } from './GitGraph'
 import { ProjectDetailsGitManageView } from './ProjectDetailsGitManageView'
@@ -22,6 +23,7 @@ function getRefreshModeForGitView(gitView: 'changes' | 'history' | 'unpushed' | 
 }
 
 export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
+    const { updateSettings } = useSettings()
     const {
         gitUser,
         repoOwner,
@@ -168,6 +170,17 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
             commitHash: commitToPush.hash,
             commitMessage: commitToPush.message
         })
+    }
+    const handleRequestPushRange = (commit: GitCommit) => {
+        if (settings.gitConfirmPartialPushRange === false) {
+            void handlePush('push', {
+                commitHash: commit.hash,
+                commitMessage: commit.message
+            })
+            return
+        }
+
+        setPendingPushCommit(commit)
     }
 
     return (
@@ -371,7 +384,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                                                     </p>
                                                 </div>
                                                 <button
-                                                    onClick={() => setPendingPushCommit(activePushCommit)}
+                                                    onClick={() => handleRequestPushRange(activePushCommit)}
                                                     disabled={isPushing}
                                                     className="shrink-0 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-200 transition-all hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-40"
                                                 >
@@ -595,6 +608,8 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                 isOpen={pendingPushCommit !== null}
                 summary={pendingPushSummary}
                 isPushing={isPushing}
+                dontShowAgain={!settings.gitConfirmPartialPushRange}
+                setDontShowAgain={(value: boolean) => updateSettings({ gitConfirmPartialPushRange: !value })}
                 onCancel={() => setPendingPushCommit(null)}
                 onConfirm={() => { void handleApprovePushRange() }}
             />

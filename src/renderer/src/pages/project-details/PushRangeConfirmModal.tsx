@@ -30,6 +30,8 @@ type PushRangeConfirmModalProps = {
     isOpen: boolean
     summary: PushRangeSummary | null
     isPushing?: boolean
+    dontShowAgain: boolean
+    setDontShowAgain: (value: boolean) => void
     onCancel: () => void
     onConfirm: () => void
 }
@@ -114,7 +116,8 @@ function getRoleTone(role: 'retained' | 'selected' | 'included') {
             dotClassName: RETAINED_COLOR,
             lineClassName: 'bg-amber-400/60',
             badgeClassName: 'border border-amber-400/20 bg-amber-400/12 text-amber-200',
-            badgeLabel: 'Stays local'
+            badgeLabel: 'Stays local',
+            rowClassName: 'border border-amber-400/15 bg-amber-400/6 hover:bg-amber-400/10'
         }
     }
 
@@ -123,7 +126,8 @@ function getRoleTone(role: 'retained' | 'selected' | 'included') {
             dotClassName: SELECTED_COLOR,
             lineClassName: 'bg-blue-400/70',
             badgeClassName: 'border border-blue-400/20 bg-blue-400/12 text-blue-100',
-            badgeLabel: 'Push target'
+            badgeLabel: 'Push target',
+            rowClassName: 'border border-blue-400/20 bg-blue-400/8 hover:bg-blue-400/12'
         }
     }
 
@@ -131,7 +135,8 @@ function getRoleTone(role: 'retained' | 'selected' | 'included') {
         dotClassName: INCLUDED_COLOR,
         lineClassName: 'bg-emerald-400/60',
         badgeClassName: 'border border-emerald-400/20 bg-emerald-400/12 text-emerald-100',
-        badgeLabel: 'Included'
+        badgeLabel: 'Included',
+        rowClassName: 'border border-emerald-400/15 bg-emerald-400/5 hover:bg-emerald-400/10'
     }
 }
 
@@ -147,7 +152,7 @@ function PushRangeGraph({
     )
 
     return (
-        <div className={cn('rounded-xl border border-white/10 bg-white/[0.03] p-3', className)}>
+        <div className={cn('rounded-xl border border-white/10 bg-sparkle-card p-3', className)}>
             <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                     <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Push Range</p>
@@ -157,7 +162,7 @@ function PushRangeGraph({
                         {formatCommitCount(summary.newerLocalCommits.length, 'commit')} stays local.
                     </p>
                 </div>
-                <div className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-white/60">
+                <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/60">
                     origin
                 </div>
             </div>
@@ -173,7 +178,7 @@ function PushRangeGraph({
                                     <div className="h-2 w-2 rounded-full bg-amber-400/75" />
                                     {!isLastRow && <div className="mt-1 h-7 w-px bg-amber-400/35" />}
                                 </div>
-                                <div className="min-w-0 flex-1 rounded-lg border border-white/8 bg-black/20 px-3 py-2 text-[11px] text-white/50">
+                                <div className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] text-white/50">
                                     +{row.count} newer local {row.count === 1 ? 'commit' : 'commits'}
                                 </div>
                             </div>
@@ -187,7 +192,7 @@ function PushRangeGraph({
                                     <div className="h-2 w-2 rounded-full bg-emerald-400/75" />
                                     {!isLastRow && <div className="mt-1 h-7 w-px bg-emerald-400/35" />}
                                 </div>
-                                <div className="min-w-0 flex-1 rounded-lg border border-white/8 bg-black/20 px-3 py-2 text-[11px] text-white/50">
+                                <div className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] text-white/50">
                                     +{row.count} more included {row.count === 1 ? 'commit' : 'commits'}
                                 </div>
                             </div>
@@ -202,7 +207,7 @@ function PushRangeGraph({
                                         <Cloud size={10} />
                                     </div>
                                 </div>
-                                <div className="min-w-0 flex-1 rounded-lg border border-emerald-400/15 bg-emerald-400/8 px-3 py-2 text-[11px] text-emerald-100/85">
+                                <div className="min-w-0 flex-1 rounded-lg border border-emerald-400/20 bg-emerald-400/8 px-3 py-2 text-[11px] text-emerald-100/85">
                                     Origin catches up here after this push.
                                 </div>
                             </div>
@@ -217,26 +222,30 @@ function PushRangeGraph({
                                 <div className={cn('h-2.5 w-2.5 rounded-full', tone.dotClassName)} />
                                 {!isLastRow && <div className={cn('mt-1 h-9 w-px', tone.lineClassName)} />}
                             </div>
-                            <div className="min-w-0 flex-1 rounded-lg border border-white/8 bg-black/20 px-3 py-2.5">
+                            <div className={cn('group min-w-0 flex-1 rounded-xl pl-3 pr-2 py-2.5 transition-colors', tone.rowClassName)}>
                                 <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <div className="mb-1 flex items-center gap-2">
+                                    <div className="min-w-0 pr-4">
+                                        <div className="mb-0.5 flex items-center gap-2">
                                             <GitCommitHorizontal size={12} className="shrink-0 text-white/40" />
-                                            <span className="truncate text-xs font-medium text-white/88">{row.commit.message}</span>
+                                            <span className="truncate text-sm font-medium text-white">{row.commit.message}</span>
                                             <span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium', tone.badgeClassName)}>
                                                 {tone.badgeLabel}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-[11px] text-white/45">
-                                            <span className="font-mono text-white/50">{row.commit.shortHash}</span>
+                                        <div className="flex items-center gap-3 text-[11px] text-white/40">
+                                            <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/50">{row.commit.shortHash}</span>
                                             <span>{row.commit.author}</span>
+                                            {!compact && <span>{new Date(row.commit.date).toLocaleDateString()}</span>}
                                         </div>
                                     </div>
-                                    {!compact && (
-                                        <div className="shrink-0 text-[11px] text-white/35">
-                                            {new Date(row.commit.date).toLocaleDateString()}
-                                        </div>
-                                    )}
+                                    <div className="shrink-0">
+                                        <DiffStats
+                                            additions={row.commit.additions}
+                                            deletions={row.commit.deletions}
+                                            compact
+                                            loading={row.commit.statsLoaded === false}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -499,6 +508,8 @@ export function PushRangeConfirmModal({
     isOpen,
     summary,
     isPushing = false,
+    dontShowAgain,
+    setDontShowAgain,
     onCancel,
     onConfirm
 }: PushRangeConfirmModalProps) {
@@ -524,14 +535,14 @@ export function PushRangeConfirmModal({
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[140] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-md"
+            className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-md"
             onClick={onCancel}
         >
             <div
-                className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#07090d]/96 shadow-2xl"
+                className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
                 onClick={(event) => event.stopPropagation()}
             >
-                <div className="border-b border-white/10 px-6 py-5">
+                <div className="border-b border-white/10 bg-white/[0.02] px-6 py-5">
                     <div className="flex items-start justify-between gap-4">
                         <div>
                             <p className="text-[11px] uppercase tracking-[0.2em] text-white/35">Confirm Partial Push</p>
@@ -540,21 +551,21 @@ export function PushRangeConfirmModal({
                                 This will send {formatCommitCount(summary.commitsToPush.length, 'commit')} to origin and leave {formatCommitCount(summary.newerLocalCommits.length, 'newer local commit', 'newer local commits')} on this device.
                             </p>
                         </div>
-                        <div className="shrink-0 rounded-xl border border-blue-400/15 bg-blue-400/8 px-3 py-2 text-right">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-blue-100/55">Target</p>
-                            <p className="mt-1 text-sm font-medium text-blue-50">{summary.selectedCommit.shortHash}</p>
+                        <div className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-right">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Target</p>
+                            <p className="mt-1 text-sm font-medium text-white/90">{summary.selectedCommit.shortHash}</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="project-surface-scrollbar flex-1 overflow-y-auto px-6 py-5">
                     <div className="mb-4 grid gap-3 md:grid-cols-3">
-                        <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/8 p-4">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-100/55">Will Push</p>
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Will Push</p>
                             <p className="mt-2 text-2xl font-semibold text-emerald-100">{summary.commitsToPush.length}</p>
                         </div>
-                        <div className="rounded-xl border border-amber-400/15 bg-amber-400/8 p-4">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-100/55">Stays Local</p>
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Stays Local</p>
                             <p className="mt-2 text-2xl font-semibold text-amber-100">{summary.newerLocalCommits.length}</p>
                         </div>
                         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -580,22 +591,33 @@ export function PushRangeConfirmModal({
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 border-t border-white/10 px-6 py-4">
-                    <button
-                        type="button"
-                        onClick={onCancel}
-                        className="rounded-lg border border-white/10 px-3.5 py-2 text-sm text-white/65 transition-all hover:border-white/20 hover:bg-white/[0.04] hover:text-white"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onConfirm}
-                        disabled={isPushing}
-                        className="rounded-lg border border-blue-400/25 bg-blue-400/12 px-4 py-2 text-sm font-medium text-blue-100 transition-all hover:bg-blue-400/20 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                        {isPushing ? 'Pushing...' : 'Approve Push Range'}
-                    </button>
+                <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-white/[0.02] px-6 py-4">
+                    <label className="inline-flex cursor-pointer items-center gap-3 text-sm text-white/70">
+                        <input
+                            type="checkbox"
+                            checked={dontShowAgain}
+                            onChange={(event) => setDontShowAgain(event.target.checked)}
+                            className="h-4 w-4 rounded border border-white/20 bg-transparent accent-[var(--accent-primary)]"
+                        />
+                        <span>Don't show again</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            className="rounded-lg border border-white/10 px-3.5 py-2 text-sm text-white/65 transition-all hover:border-white/20 hover:bg-white/[0.04] hover:text-white"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onConfirm}
+                            disabled={isPushing}
+                            className="rounded-lg border border-blue-400/25 bg-blue-400/12 px-4 py-2 text-sm font-medium text-blue-100 transition-all hover:bg-blue-400/20 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            {isPushing ? 'Pushing...' : 'Approve Push Range'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>,

@@ -94,6 +94,7 @@ export interface Settings {
     gitInitCreateGitignore: boolean
     gitInitCreateInitialCommit: boolean
     gitWarnOnAuthorMismatch: boolean
+    gitConfirmPartialPushRange: boolean
     gitBulkActionScope: GitBulkActionScope
 
     // AI
@@ -134,6 +135,7 @@ const DEFAULT_SETTINGS: Settings = {
     gitInitCreateGitignore: true,
     gitInitCreateInitialCommit: false,
     gitWarnOnAuthorMismatch: true,
+    gitConfirmPartialPushRange: true,
     gitBulkActionScope: 'repo',
     groqApiKey: '',
     geminiApiKey: '',
@@ -202,6 +204,7 @@ function loadSettings(): Settings {
                 gitInitCreateGitignore: candidate.gitInitCreateGitignore !== false,
                 gitInitCreateInitialCommit: !!candidate.gitInitCreateInitialCommit,
                 gitWarnOnAuthorMismatch: candidate.gitWarnOnAuthorMismatch !== false,
+                gitConfirmPartialPushRange: candidate.gitConfirmPartialPushRange !== false,
                 gitBulkActionScope: candidate.gitBulkActionScope === 'project' ? 'project' : 'repo',
                 groqApiKey: candidate.groqApiKey,
                 geminiApiKey: candidate.geminiApiKey,
