@@ -58,6 +58,11 @@ const PREVIEWABLE_EXTENSIONS = new Set([
 const PREVIEWABLE_FILE_NAMES = new Set([
     'dockerfile', 'makefile', '.gitignore', '.gitattributes', '.editorconfig', '.npmrc', '.eslintrc', '.prettierrc'
 ])
+const WORKING_CHANGE_STATS_CHUNK_SIZE = 120
+
+function normalizeWorkingChangePath(path: string): string {
+    return String(path || '').replace(/\\/g, '/').trim()
+}
 
 function getParentFolderPath(currentPath: string): string | null {
     const raw = String(currentPath || '').trim().replace(/[\\/]+$/, '')
@@ -124,7 +129,31 @@ function validateCreateName(name: string): string | null {
 }
 
 const PROJECT_ACTIVE_TAB_STORAGE_PREFIX = 'devscope:project-details:active-tab:'
+const PROJECT_GIT_VIEW_STORAGE_PREFIX = 'devscope:project-details:git-view:'
 const PROJECT_GIT_ACTIVITY_STORAGE_PREFIX = 'devscope:project-details:git-activity:'
+
+function readStoredProjectGitView(projectPath: string): 'changes' | 'history' | 'unpushed' | 'pulls' | 'manage' | null {
+    try {
+        const key = `${PROJECT_GIT_VIEW_STORAGE_PREFIX}${projectPath}`
+        const raw = (window.localStorage.getItem(key) || '').trim()
+        if (raw === 'changes' || raw === 'history' || raw === 'unpushed' || raw === 'pulls' || raw === 'manage') return raw
+    } catch {
+        // ignore storage access issues
+    }
+    return null
+}
+
+function writeStoredProjectGitView(
+    projectPath: string,
+    gitView: 'changes' | 'history' | 'unpushed' | 'pulls' | 'manage'
+): void {
+    try {
+        const key = `${PROJECT_GIT_VIEW_STORAGE_PREFIX}${projectPath}`
+        window.localStorage.setItem(key, gitView)
+    } catch {
+        // ignore storage access issues
+    }
+}
 
 function readStoredProjectActiveTab(projectPath: string): 'readme' | 'files' | 'git' | null {
     try {
@@ -241,7 +270,9 @@ export default function ProjectDetailsPage() {
     const [loadingGitHistory, setLoadingGitHistory] = useState(false)
     const [gitError, setGitError] = useState<string | null>(null)
     const [loadingFiles, setLoadingFiles] = useState(true)
-    const [gitView, setGitView] = useState<'changes' | 'history' | 'unpushed' | 'pulls' | 'manage'>('manage')
+    const [gitView, setGitView] = useState<'changes' | 'history' | 'unpushed' | 'pulls' | 'manage'>(() => (
+        readStoredProjectGitView(decodedPath) || 'manage'
+    ))
     const [commitPage, setCommitPage] = useState(1)
     const [unpushedPage, setUnpushedPage] = useState(1)
     const [pullsPage, setPullsPage] = useState(1)
@@ -308,6 +339,7 @@ export default function ProjectDetailsPage() {
     const historyStatsRequestRef = useRef(0)
     const {
         previewFile,
+        previewMediaItems,
         previewContent,
         loadingPreview,
         previewTruncated,
@@ -329,6 +361,7 @@ export default function ProjectDetailsPage() {
     const [fileSearch, setFileSearch] = useState('')
     const [fileClipboardItem, setFileClipboardItem] = useState<FileSystemClipboardItem | null>(null)
     const workingStatsPendingPathsRef = useRef<Set<string>>(new Set())
+    const workingStatsPrefetchVersionRef = useRef(0)
     const [renameTarget, setRenameTarget] = useState<FileTreeNode | null>(null)
     const [renameDraft, setRenameDraft] = useState('')
     const [renameExtensionSuffix, setRenameExtensionSuffix] = useState('')
@@ -374,8 +407,10 @@ export default function ProjectDetailsPage() {
     useEffect(() => {
         if (!decodedPath) return
         const storedTab = readStoredProjectActiveTab(decodedPath)
+        const storedGitView = readStoredProjectGitView(decodedPath)
         const storedGitActivity = readStoredProjectGitActivity(decodedPath)
         setActiveTab(storedTab || 'readme')
+        setGitView(storedGitView || 'manage')
         setLastFetched(storedGitActivity.lastFetched)
         setLastPulled(storedGitActivity.lastPulled)
         setPullsPage(1)
@@ -452,6 +487,10 @@ export default function ProjectDetailsPage() {
         if (!decodedPath) return
         writeStoredProjectActiveTab(decodedPath, activeTab)
     }, [decodedPath, activeTab])
+    useEffect(() => {
+        if (!decodedPath) return
+        writeStoredProjectGitView(decodedPath, gitView)
+    }, [decodedPath, gitView])
     const loadInstalledIdes = async () => {
         setLoadingInstalledIdes(true)
         try {
@@ -625,7 +664,7 @@ export default function ProjectDetailsPage() {
         gitStatusDetails
             .filter((item) => item.staged)
             .map((item) => {
-                const normalizedPath = item.path.replace(/\\/g, '/')
+                const normalizedPath = normalizeWorkingChangePath(item.path)
                 const segments = normalizedPath.split('/').filter(Boolean)
                 const name = segments[segments.length - 1] || normalizedPath
                 return { ...item, path: normalizedPath, name, gitStatus: item.status }
@@ -636,20 +675,27 @@ export default function ProjectDetailsPage() {
         gitStatusDetails
             .filter((item) => item.unstaged)
             .map((item) => {
-                const normalizedPath = item.path.replace(/\\/g, '/')
+                const normalizedPath = normalizeWorkingChangePath(item.path)
                 const segments = normalizedPath.split('/').filter(Boolean)
                 const name = segments[segments.length - 1] || normalizedPath
                 return { ...item, path: normalizedPath, name, gitStatus: item.status }
             })
             .sort((a, b) => a.path.localeCompare(b.path))
     ), [gitStatusDetails])
+    const gitStatusStatsLoadedMap = useMemo(() => {
+        const next = new Map<string, boolean>()
+        for (const detail of gitStatusDetails) {
+            next.set(normalizeWorkingChangePath(detail.path), detail.statsLoaded === true)
+        }
+        return next
+    }, [gitStatusDetails])
     const ensureWorkingChangeStats = useCallback(async (paths: string[]) => {
         if (!decodedPath || paths.length === 0) return
 
         const normalizedPaths = Array.from(
             new Set(
                 paths
-                    .map((path) => String(path || '').replace(/\\/g, '/').trim())
+                    .map((path) => normalizeWorkingChangePath(path))
                     .filter(Boolean)
             )
         )
@@ -659,8 +705,7 @@ export default function ProjectDetailsPage() {
         const pendingPaths = workingStatsPendingPathsRef.current
         const missingPaths = normalizedPaths.filter((path) => {
             if (pendingPaths.has(path)) return false
-            const detail = gitStatusDetails.find((item) => item.path.replace(/\\/g, '/') === path)
-            return detail?.statsLoaded !== true
+            return gitStatusStatsLoadedMap.get(path) !== true
         })
 
         if (missingPaths.length === 0) return
@@ -670,11 +715,12 @@ export default function ProjectDetailsPage() {
         try {
             const result = await window.devscope.getGitStatusEntryStats(decodedPath, missingPaths)
             const statsEntries = result?.success ? result.entries || [] : []
-            const statsByPath = new Map(statsEntries.map((entry) => [entry.path.replace(/\\/g, '/'), entry]))
+            const statsByPath = new Map(statsEntries.map((entry) => [normalizeWorkingChangePath(entry.path), entry]))
+            const missingPathSet = new Set(missingPaths)
 
             setGitStatusDetails((prev) => prev.map((detail) => {
-                const normalizedPath = detail.path.replace(/\\/g, '/')
-                if (!missingPaths.includes(normalizedPath)) return detail
+                const normalizedPath = normalizeWorkingChangePath(detail.path)
+                if (!missingPathSet.has(normalizedPath)) return detail
 
                 const stats = statsByPath.get(normalizedPath)
                 if (!stats) {
@@ -698,7 +744,44 @@ export default function ProjectDetailsPage() {
         } finally {
             missingPaths.forEach((path) => pendingPaths.delete(path))
         }
-    }, [decodedPath, gitStatusDetails])
+    }, [decodedPath, gitStatusStatsLoadedMap])
+    useEffect(() => {
+        if (activeTab !== 'git' || gitView !== 'changes' || !decodedPath) return
+
+        const missingPaths = gitStatusDetails
+            .filter((detail) => detail.statsLoaded !== true)
+            .map((detail) => normalizeWorkingChangePath(detail.path))
+            .filter(Boolean)
+
+        if (missingPaths.length === 0) return
+
+        const runId = ++workingStatsPrefetchVersionRef.current
+
+        void (async () => {
+            for (let index = 0; index < missingPaths.length; index += WORKING_CHANGE_STATS_CHUNK_SIZE) {
+                if (workingStatsPrefetchVersionRef.current !== runId) {
+                    return
+                }
+
+                const chunk = missingPaths.slice(index, index + WORKING_CHANGE_STATS_CHUNK_SIZE)
+                await ensureWorkingChangeStats(chunk)
+
+                if (workingStatsPrefetchVersionRef.current !== runId) {
+                    return
+                }
+
+                if (index + WORKING_CHANGE_STATS_CHUNK_SIZE < missingPaths.length) {
+                    await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
+                }
+            }
+        })()
+
+        return () => {
+            if (workingStatsPrefetchVersionRef.current === runId) {
+                workingStatsPrefetchVersionRef.current += 1
+            }
+        }
+    }, [activeTab, decodedPath, ensureWorkingChangeStats, gitStatusDetails, gitView])
     const handleCopyPath = async () => {
         if (projectRootPath) {
             try {
@@ -1322,6 +1405,7 @@ export default function ProjectDetailsPage() {
                 closeScriptRunModal={closeScriptRunModal}
                 handleConfirmScriptRun={handleConfirmScriptRun}
                 previewFile={previewFile}
+                previewMediaItems={previewMediaItems}
                 previewContent={previewContent}
                 loadingPreview={loadingPreview}
                 previewTruncated={previewTruncated}

@@ -354,8 +354,10 @@ export async function pullUpdates(projectPath: string): Promise<void> {
 export async function listBranches(projectPath: string): Promise<GitBranchSummary[]> {
     try {
         const git = createGit(projectPath)
-        const local = await git.branchLocal()
-        const remote = await git.branch(['-r'])
+        const [local, remote] = await Promise.all([
+            git.branchLocal(),
+            git.branch(['-r'])
+        ])
         const remoteSet = new Set(remote.all.map((name) => name.trim()))
 
         const localSummaries: GitBranchSummary[] = local.all.map((name) => ({

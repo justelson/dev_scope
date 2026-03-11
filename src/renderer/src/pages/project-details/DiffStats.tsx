@@ -6,6 +6,7 @@ interface DiffStatsProps {
     compact?: boolean
     className?: string
     loading?: boolean
+    preserveValuesWhileLoading?: boolean
 }
 
 export function DiffStats({
@@ -13,7 +14,8 @@ export function DiffStats({
     deletions = 0,
     compact = false,
     className,
-    loading = false
+    loading = false,
+    preserveValuesWhileLoading = false
 }: DiffStatsProps) {
     const safeAdditions = Math.max(0, additions)
     const safeDeletions = Math.max(0, deletions)
@@ -21,7 +23,7 @@ export function DiffStats({
     const addRatio = total > 0 ? (safeAdditions / total) * 100 : 0
     const delRatio = total > 0 ? (safeDeletions / total) * 100 : 0
 
-    if (loading) {
+    if (loading && !preserveValuesWhileLoading) {
         return (
             <div className={cn('flex items-center gap-2', className)} aria-label="Loading diff stats">
                 <span className={cn(compact ? 'text-[10px]' : 'text-xs', 'font-mono text-white/35 animate-pulse')}>
@@ -39,13 +41,25 @@ export function DiffStats({
 
     return (
         <div className={cn('flex items-center gap-2', className)}>
-            <span className={cn(compact ? 'text-[10px]' : 'text-xs', 'font-mono text-emerald-400')}>
+            <span className={cn(
+                compact ? 'text-[10px]' : 'text-xs',
+                'font-mono text-emerald-400',
+                loading && preserveValuesWhileLoading && 'opacity-85'
+            )}>
                 +{safeAdditions}
             </span>
-            <span className={cn(compact ? 'text-[10px]' : 'text-xs', 'font-mono text-rose-400')}>
+            <span className={cn(
+                compact ? 'text-[10px]' : 'text-xs',
+                'font-mono text-rose-400',
+                loading && preserveValuesWhileLoading && 'opacity-85'
+            )}>
                 -{safeDeletions}
             </span>
-            <div className={cn(compact ? 'h-1.5 w-16' : 'h-2 w-24', 'overflow-hidden rounded-none bg-white/10 border border-white/10')}>
+            <div className={cn(
+                compact ? 'h-1.5 w-16' : 'h-2 w-24',
+                'overflow-hidden rounded-none bg-white/10 border border-white/10',
+                loading && preserveValuesWhileLoading && 'relative'
+            )}>
                 {total > 0 ? (
                     <div className="flex h-full w-full">
                         <div className="h-full bg-emerald-500/90" style={{ width: `${addRatio}%` }} />
@@ -54,6 +68,9 @@ export function DiffStats({
                 ) : (
                     <div className="h-full w-full bg-white/15" />
                 )}
+                {loading && preserveValuesWhileLoading ? (
+                    <div className="pointer-events-none absolute inset-0 animate-pulse bg-white/8" />
+                ) : null}
             </div>
         </div>
     )

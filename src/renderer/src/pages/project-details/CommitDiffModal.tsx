@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent, type WheelEvent } from 'react'
 import {
     Calendar,
     Check,
@@ -67,6 +67,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
     const [parsedDiff, setParsedDiff] = useState<FileDiffSummary[]>([])
     const [isPreparingDiff, setIsPreparingDiff] = useState(false)
     const [currentPage, setCurrentPage] = useState(1)
+    const filesScrollRef = useRef<HTMLDivElement | null>(null)
 
     const handleCopyPath = (path: string, e: MouseEvent) => {
         e.stopPropagation()
@@ -174,6 +175,10 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
         setCurrentPage(1)
     }, [commit.hash])
 
+    useEffect(() => {
+        filesScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+    }, [currentPage, commit.hash])
+
     const copyCommitHash = async () => {
         const value = commitMeta.fullHash || commit.hash
         try {
@@ -189,10 +194,32 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
         }
     }
 
+    const handleModalWheelCapture = (event: WheelEvent<HTMLDivElement>) => {
+        event.stopPropagation()
+    }
+
+    const handleModalTouchMoveCapture = (event: TouchEvent<HTMLDivElement>) => {
+        event.stopPropagation()
+    }
+
+    useEffect(() => {
+        const previousOverflow = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+
+        return () => {
+            document.body.style.overflow = previousOverflow
+        }
+    }, [])
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center overscroll-none bg-black/60 backdrop-blur-md animate-fadeIn"
+            onClick={onClose}
+            onWheelCapture={handleModalWheelCapture}
+            onTouchMoveCapture={handleModalTouchMoveCapture}
+        >
             <div
-                className="relative bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col m-4 overflow-hidden"
+                className="relative w-full max-w-6xl max-h-[85vh] m-4 flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl overscroll-none"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-start justify-between p-5 border-b border-white/5 bg-white/5">
@@ -212,56 +239,6 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                                 <Calendar size={12} /> {new Date(commit.date).toLocaleString()}
                             </span>
                         </div>
-
-                        {!loading && !isPreparingDiff && (
-                            <div className="mt-3 space-y-2">
-                                <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                                    <span className="px-2 py-1 rounded bg-white/5 border border-white/10 text-white/70">
-                                        {commitMeta.isMerge ? 'Merge Commit' : 'Regular Commit'}
-                                    </span>
-                                    <span className="px-2 py-1 rounded bg-white/5 border border-white/10 text-white/70">
-                                        {parsedDiff.length} {parsedDiff.length === 1 ? 'file' : 'files'} changed
-                                    </span>
-                                    <span className="px-2 py-1 rounded bg-green-500/10 border border-green-500/20 text-green-300">
-                                        +{totalAdditions}
-                                    </span>
-                                    <span className="px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-300">
-                                        -{totalDeletions}
-                                    </span>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                                    <div className="rounded-lg bg-black/25 border border-white/10 px-3 py-2">
-                                        <div className="text-white/40 mb-1">Commit Hash</div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-mono text-white/80 break-all">{commitMeta.fullHash}</span>
-                                            <button
-                                                onClick={copyCommitHash}
-                                                className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors shrink-0"
-                                                title="Copy full hash"
-                                            >
-                                                {copiedHash ? <Check size={12} /> : <Copy size={12} />}
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="rounded-lg bg-black/25 border border-white/10 px-3 py-2">
-                                        <div className="text-white/40 mb-1">Author</div>
-                                        <div className="text-white/80">{commitMeta.authorName}</div>
-                                        {commitMeta.authorEmail && (
-                                            <div className="text-white/50 font-mono text-[11px]">{commitMeta.authorEmail}</div>
-                                        )}
-                                    </div>
-                                    <div className="rounded-lg bg-black/25 border border-white/10 px-3 py-2">
-                                        <div className="text-white/40 mb-1">Authored</div>
-                                        <div className="text-white/80">{new Date(commitMeta.authorDate).toLocaleString()}</div>
-                                    </div>
-                                    <div className="rounded-lg bg-black/25 border border-white/10 px-3 py-2">
-                                        <div className="text-white/40 mb-1">Committed</div>
-                                        <div className="text-white/80">{new Date(commitMeta.commitDate).toLocaleString()}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                     <div className="flex items-center gap-2 ml-4 shrink-0">
                         {!loading && (
@@ -292,88 +269,162 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                                 -{totalDeletions}
                             </span>
                         </div>
-                        <span className="text-xs text-white/40">Open any file to view its full diff</span>
                     </div>
                 )}
 
-                <div className="overflow-y-auto p-4 custom-scrollbar flex-1 bg-black/10">
-                    {loading || isPreparingDiff ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-white/30">
-                            <RefreshCw size={32} className="mb-4 animate-spin" />
-                            <p className="text-sm">{loading ? 'Loading diff...' : 'Preparing diff...'}</p>
-                        </div>
-                    ) : parsedDiff.length > 0 ? (
-                        <>
-                            <div className="space-y-2">
-                                {paginatedFiles.map((file) => {
-                                    return (
-                                        <div key={file.path} className="group rounded-xl border border-white/5 bg-black/30 p-3 transition-all hover:border-white/10">
-                                            <div className="flex items-center justify-between gap-3">
-                                                <div className="flex items-start gap-3 flex-1 min-w-0">
-                                                    {getFileIcon(file.path.split('/').pop() || '', false)}
-                                                    <div className="min-w-0">
-                                                        <p className="text-sm font-mono text-white/80 truncate">{file.path}</p>
-                                                        {file.previousPath && (
-                                                            <p className="text-[11px] text-blue-300/80 truncate">from {file.previousPath}</p>
-                                                        )}
-                                                        <p className="text-xs text-white/45">{file.totalLines} diff lines</p>
-                                                    </div>
-                                                    <button
-                                                        onClick={(e) => handleCopyPath(file.path, e)}
-                                                        className={cn(
-                                                            'p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100',
-                                                            copiedPath === file.path
-                                                                ? 'text-emerald-400 bg-emerald-400/10'
-                                                                : 'text-white/40 hover:text-white hover:bg-white/10'
-                                                        )}
-                                                        title={copiedPath === file.path ? 'Copied!' : `Copy path: ${file.path}`}
-                                                    >
-                                                        {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
-                                                    </button>
-                                                </div>
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                    <DiffStats additions={file.additions} deletions={file.deletions} compact />
-                                                    <button
-                                                        onClick={() => setSelectedFilePath(file.path)}
-                                                        className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/75 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white"
-                                                    >
-                                                        View Diff
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
+                <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)] overflow-hidden bg-black/10">
+                    <aside className="min-h-0 overflow-y-auto scroll-smooth border-b border-white/5 bg-black/20 p-4 [scrollbar-gutter:stable] lg:border-b-0 lg:border-r lg:border-r-white/10">
+                        <div className="space-y-3">
+                            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                                <p className="text-[11px] uppercase tracking-wide text-white/40">Commit Summary</p>
+                                <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                                    <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-white/70">
+                                        {commitMeta.isMerge ? 'Merge Commit' : 'Regular Commit'}
+                                    </span>
+                                    <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-white/70">
+                                        {parsedDiff.length} {parsedDiff.length === 1 ? 'file' : 'files'}
+                                    </span>
+                                </div>
+                                <div className="mt-3">
+                                    <DiffStats additions={totalAdditions} deletions={totalDeletions} />
+                                </div>
                             </div>
-                            {parsedDiff.length > FILES_PER_PAGE && (
-                                <div className="mt-4 flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/55">
-                                    <span>Showing {pageStart}-{pageEnd} of {parsedDiff.length}</span>
-                                    <div className="flex items-center gap-1.5">
-                                        <button
-                                            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                                            disabled={currentPage <= 1}
-                                            className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
-                                        >
-                                            Prev
-                                        </button>
-                                        <span className="min-w-[54px] text-center text-white/65">{currentPage}/{totalPages}</span>
-                                        <button
-                                            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                                            disabled={currentPage >= totalPages}
-                                            className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
-                                        >
-                                            Next
-                                        </button>
+
+                            <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                                <div className="mb-1 text-[11px] uppercase tracking-wide text-white/40">Commit Hash</div>
+                                <div className="flex items-start gap-2">
+                                    <span className="min-w-0 break-all font-mono text-xs text-white/80">{commitMeta.fullHash}</span>
+                                    <button
+                                        onClick={copyCommitHash}
+                                        className="shrink-0 rounded p-1 text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+                                        title="Copy full hash"
+                                    >
+                                        {copiedHash ? <Check size={12} /> : <Copy size={12} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                                    <div className="mb-1 text-[11px] uppercase tracking-wide text-white/40">Author</div>
+                                    <div className="text-sm text-white/85">{commitMeta.authorName}</div>
+                                    {commitMeta.authorEmail && (
+                                        <div className="mt-1 break-all font-mono text-[11px] text-white/50">{commitMeta.authorEmail}</div>
+                                    )}
+                                </div>
+                                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                                    <div className="mb-1 text-[11px] uppercase tracking-wide text-white/40">Authored</div>
+                                    <div className="text-sm text-white/80">{new Date(commitMeta.authorDate).toLocaleString()}</div>
+                                </div>
+                                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                                    <div className="mb-1 text-[11px] uppercase tracking-wide text-white/40">Committed</div>
+                                    <div className="text-sm text-white/80">{new Date(commitMeta.commitDate).toLocaleString()}</div>
+                                </div>
+                                {commit.parents.length > 0 && (
+                                    <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                                        <div className="mb-2 text-[11px] uppercase tracking-wide text-white/40">Parents</div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {commit.parents.map(parent => (
+                                                <span key={parent} className="rounded bg-white/5 px-2 py-0.5 font-mono text-[11px] text-white/70 border border-white/10">
+                                                    {parent}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
+                                )}
+                            </div>
+
+                            <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                                <div className="mb-2 text-[11px] uppercase tracking-wide text-white/40">Message</div>
+                                <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-6 text-white/78">
+                                    {commitMeta.messageLines.length > 0 ? commitMeta.messageLines.join('\n') : commit.message}
+                                </pre>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <section className="min-h-0 flex flex-col overflow-hidden">
+                        <div ref={filesScrollRef} className="min-h-0 flex-1 overflow-y-scroll scroll-smooth px-4 py-4 [scrollbar-gutter:stable]">
+                            {loading || isPreparingDiff ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-white/30">
+                                    <RefreshCw size={32} className="mb-4 animate-spin" />
+                                    <p className="text-sm">{loading ? 'Loading diff...' : 'Preparing diff...'}</p>
+                                </div>
+                            ) : parsedDiff.length > 0 ? (
+                                <>
+                                    <div className="space-y-2">
+                                        {paginatedFiles.map((file) => {
+                                            return (
+                                                <div key={file.path} className="group rounded-xl border border-white/5 bg-black/30 p-3 transition-colors [content-visibility:auto] [contain-intrinsic-size:84px] hover:border-white/10">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                                                            {getFileIcon(file.path.split('/').pop() || '', false)}
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm font-mono text-white/80 truncate">{file.path}</p>
+                                                                {file.previousPath && (
+                                                                    <p className="text-[11px] text-blue-300/80 truncate">from {file.previousPath}</p>
+                                                                )}
+                                                                <p className="text-xs text-white/45">{file.totalLines} diff lines</p>
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => handleCopyPath(file.path, e)}
+                                                                className={cn(
+                                                                    'p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100',
+                                                                    copiedPath === file.path
+                                                                        ? 'text-emerald-400 bg-emerald-400/10'
+                                                                        : 'text-white/40 hover:text-white hover:bg-white/10'
+                                                                )}
+                                                                title={copiedPath === file.path ? 'Copied!' : `Copy path: ${file.path}`}
+                                                            >
+                                                                {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
+                                                            </button>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <DiffStats additions={file.additions} deletions={file.deletions} compact />
+                                                            <button
+                                                                onClick={() => setSelectedFilePath(file.path)}
+                                                                className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/75 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white"
+                                                            >
+                                                                View Diff
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-16 text-white/30">
+                                    <FileText size={48} className="mb-4 opacity-20" />
+                                    <p className="text-sm">No changes to display</p>
                                 </div>
                             )}
-                        </>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center py-16 text-white/30">
-                            <FileText size={48} className="mb-4 opacity-20" />
-                            <p className="text-sm">No changes to display</p>
                         </div>
-                    )}
+
+                        {!loading && !isPreparingDiff && (
+                            <div className="flex items-center justify-between border-t border-white/10 bg-black/25 px-4 py-3 text-[11px] text-white/55">
+                                <span>Showing {pageStart}-{pageEnd} of {parsedDiff.length}</span>
+                                <div className="flex items-center gap-1.5">
+                                    <button
+                                        onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                                        disabled={currentPage <= 1}
+                                        className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+                                    >
+                                        Prev
+                                    </button>
+                                    <span className="min-w-[54px] text-center text-white/65">{currentPage}/{totalPages}</span>
+                                    <button
+                                        onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                                        disabled={currentPage >= totalPages}
+                                        className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </section>
                 </div>
 
                 {showCommitInfo && (

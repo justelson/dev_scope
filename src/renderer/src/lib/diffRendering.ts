@@ -76,13 +76,14 @@ export function resolveFileDiffPath(fileDiff: FileDiffMetadata): string {
 export function summarizeFileDiff(fileDiff: FileDiffMetadata): FileDiffSummary {
     const additions = fileDiff.hunks.reduce((sum, hunk) => sum + hunk.additionLines, 0)
     const deletions = fileDiff.hunks.reduce((sum, hunk) => sum + hunk.deletionLines, 0)
+    const changedLines = additions + deletions
 
     return {
         path: resolveFileDiffPath(fileDiff),
         previousPath: fileDiff.prevName?.replace(/\\/g, '/'),
         additions,
         deletions,
-        totalLines: fileDiff.unifiedLineCount,
+        totalLines: changedLines,
         fileDiff
     }
 }

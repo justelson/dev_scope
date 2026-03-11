@@ -163,6 +163,28 @@ function hasVisibleGitData(input: {
         || input.stashes.length > 0
 }
 
+function parseRepoOwnerFromRemoteUrl(remoteUrl: string): string | null {
+    const trimmed = String(remoteUrl || '').trim()
+    if (!trimmed) return null
+
+    const sshScpMatch = trimmed.match(/^[^@]+@[^:]+:([^/]+)\/.+$/)
+    if (sshScpMatch?.[1]) return sshScpMatch[1]
+
+    try {
+        const url = new URL(trimmed)
+        const segments = url.pathname.split('/').filter(Boolean)
+        return segments[0] || null
+    } catch {
+        return null
+    }
+}
+
+function resolveRepoOwnerFromRemotes(remotes: GitRemoteSummary[]): string | null {
+    const origin = remotes.find((remote) => remote.name === 'origin')
+    const remoteUrl = origin?.fetchUrl || origin?.pushUrl || ''
+    return parseRepoOwnerFromRemoteUrl(remoteUrl)
+}
+
 interface UseProjectDataLifecycleParams {
     decodedPath: string
     activeTab: 'readme' | 'files' | 'git'
@@ -298,7 +320,9 @@ export function useProjectDataLifecycle({
     const refreshGitForegroundRequestRef = useRef(0)
     const refreshGitBackgroundRequestRef = useRef(0)
     const refreshFilesRequestRef = useRef(0)
+    const refreshGitDataRef = useRef<((refreshFilesToo?: boolean, options?: { quiet?: boolean; mode?: GitRefreshMode }) => Promise<void>) | null>(null)
     const fileTreeRef = useRef(fileTree)
+    const gitStatusDetailsRef = useRef(gitStatusDetails)
     const gitSensorTokenRef = useRef<string | null>(null)
     const previousGitTabStateRef = useRef({
         activeTab,
@@ -309,6 +333,10 @@ export function useProjectDataLifecycle({
     useEffect(() => {
         fileTreeRef.current = fileTree
     }, [fileTree])
+
+    useEffect(() => {
+        gitStatusDetailsRef.current = gitStatusDetails
+    }, [gitStatusDetails])
 
     const measureReadmeOverflow = useCallback(() => {
         const element = readmeContentRef.current
@@ -530,6 +558,7 @@ export function useProjectDataLifecycle({
                 unstable_batchedUpdates(() => {
                     setGitError(null)
                     setIsGitRepo(false)
+                    gitStatusDetailsRef.current = []
                     setGitStatusDetails([])
                     setGitHistory([])
                     setIncomingCommits([])
@@ -554,7 +583,7 @@ export function useProjectDataLifecycle({
             }
 
             const applyDetailedStatus = (details: GitStatusDetail[]) => {
-                const mergedDetails = mergeGitStatusDetailStats(gitStatusDetails, details)
+                const mergedDetails = mergeGitStatusDetailStats(gitStatusDetailsRef.current, details)
                 const statusMap: Record<string, FileTreeNode['gitStatus']> = {}
                 for (const detail of mergedDetails) {
                     statusMap[detail.path] = detail.status
@@ -564,13 +593,14 @@ export function useProjectDataLifecycle({
                         statusMap[detail.previousPath.replace(/\//g, '\\')] = 'renamed'
                     }
                 }
+                gitStatusDetailsRef.current = mergedDetails
                 setGitStatusDetails(mergedDetails)
                 setGitStatusMap(statusMap)
             }
 
             setIsGitRepo(true)
 
-            const includeStatusStats = false
+            const includeStatusStats = activeTab === 'git' && gitView === 'changes'
 
             if (mode === 'working') {
                 try {
@@ -593,7 +623,7 @@ export function useProjectDataLifecycle({
             }
 
             const shouldLoadIdentity = mode === 'full'
-            const shouldLoadManageMetadata = mode === 'full' && (activeTab !== 'git' || gitView === 'manage')
+            const shouldLoadManageMetadata = mode === 'full'
             const shouldLoadSync = true
             const shouldLoadUnpushed = mode === 'full' || mode === 'unpushed'
             const shouldLoadHistory = mode === 'full' || mode === 'history'
@@ -644,17 +674,6 @@ export function useProjectDataLifecycle({
                             return
                         }
                         appendError('user', result?.error || 'request failed')
-                    }
-                })
-                tasks.push({
-                    label: 'owner',
-                    task: window.devscope.getRepoOwner(decodedPath),
-                    apply: (result) => {
-                        if (result?.success) {
-                            setRepoOwner(result.owner || null)
-                            return
-                        }
-                        appendError('owner', result?.error || 'request failed')
                     }
                 })
             }
@@ -722,7 +741,11 @@ export function useProjectDataLifecycle({
                         task: window.devscope.listRemotes(decodedPath),
                         apply: (result) => {
                             if (result?.success) {
-                                setRemotes(result.remotes || [])
+                                const nextRemotes = result.remotes || []
+                                setRemotes(nextRemotes)
+                                if (shouldLoadIdentity) {
+                                    setRepoOwner(resolveRepoOwnerFromRemotes(nextRemotes))
+                                }
                                 return
                             }
                             appendError('remotes', result?.error || 'request failed')
@@ -815,6 +838,10 @@ export function useProjectDataLifecycle({
         historyLimit,
         refreshFileTree
     ])
+
+    useEffect(() => {
+        refreshGitDataRef.current = refreshGitData
+    }, [refreshGitData])
 
     useEffect(() => {
         void loadProjectDetails()
@@ -949,9 +976,10 @@ export function useProjectDataLifecycle({
     ])
 
     useEffect(() => {
-        if (!decodedPath || !autoRefreshGitOnProjectOpen) return
-        void refreshGitData(false, { quiet: true, mode: 'working' })
-    }, [autoRefreshGitOnProjectOpen, decodedPath, refreshGitData])
+        if (!decodedPath) return
+        if (activeTab === 'git') return
+        void refreshGitDataRef.current?.(false, { quiet: true, mode: 'full' })
+    }, [activeTab, decodedPath])
 
     useEffect(() => {
         const previous = previousGitTabStateRef.current
@@ -996,26 +1024,26 @@ export function useProjectDataLifecycle({
     useEffect(() => {
         if (!decodedPath || !autoRefreshGitOnProjectOpen) return
         const intervalId = window.setInterval(() => {
-            void refreshGitData(false, { quiet: true, mode: 'working' })
+            void refreshGitDataRef.current?.(false, { quiet: true, mode: 'working' })
         }, 12000)
         return () => window.clearInterval(intervalId)
-    }, [autoRefreshGitOnProjectOpen, decodedPath, refreshGitData])
+    }, [autoRefreshGitOnProjectOpen, decodedPath])
 
     useEffect(() => {
         if (!decodedPath || activeTab !== 'git' || gitView !== 'changes' || autoRefreshGitOnProjectOpen) return
         const intervalId = window.setInterval(() => {
-            void refreshGitData(false, { quiet: true, mode: 'working' })
+            void refreshGitDataRef.current?.(false, { quiet: true, mode: 'working' })
         }, 45000)
         return () => window.clearInterval(intervalId)
-    }, [activeTab, autoRefreshGitOnProjectOpen, decodedPath, gitView, refreshGitData])
+    }, [activeTab, autoRefreshGitOnProjectOpen, decodedPath, gitView])
 
     useEffect(() => {
         if (!decodedPath || activeTab !== 'git' || gitView === 'changes') return
         const intervalId = window.setInterval(() => {
-            void refreshGitData(false, { quiet: true, mode: getRefreshModeForGitView(gitView) })
+            void refreshGitDataRef.current?.(false, { quiet: true, mode: getRefreshModeForGitView(gitView) })
         }, 90000)
         return () => window.clearInterval(intervalId)
-    }, [activeTab, decodedPath, gitView, refreshGitData])
+    }, [activeTab, decodedPath, gitView])
 
     useEffect(() => {
         if (!decodedPath || !autoRefreshGitOnProjectOpen) return

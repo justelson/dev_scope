@@ -21,11 +21,29 @@ export interface WorkingChangeItem {
     gitStatus?: 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown'
     additions: number
     deletions: number
+    stagedAdditions?: number
+    stagedDeletions?: number
+    unstagedAdditions?: number
+    unstagedDeletions?: number
     statsLoaded?: boolean
 }
 
 type DiffMode = 'staged' | 'unstaged'
 const PAGE_SIZE = 10
+
+function getDiffCounts(file: WorkingChangeItem, mode: DiffMode) {
+    if (mode === 'staged') {
+        return {
+            additions: Math.max(0, Number(file.stagedAdditions) || 0),
+            deletions: Math.max(0, Number(file.stagedDeletions) || 0)
+        }
+    }
+
+    return {
+        additions: Math.max(0, Number(file.unstagedAdditions) || 0),
+        deletions: Math.max(0, Number(file.unstagedDeletions) || 0)
+    }
+}
 
 function getStatusBadge(status?: WorkingChangeItem['gitStatus']) {
     switch (status) {
@@ -108,12 +126,12 @@ function Section({
 }) {
     const [currentPage, setCurrentPage] = useState(1)
     const sectionAdditions = useMemo(
-        () => files.reduce((sum, file) => sum + Math.max(0, Number(file.additions) || 0), 0),
-        [files]
+        () => files.reduce((sum, file) => sum + getDiffCounts(file, diffMode).additions, 0),
+        [diffMode, files]
     )
     const sectionDeletions = useMemo(
-        () => files.reduce((sum, file) => sum + Math.max(0, Number(file.deletions) || 0), 0),
-        [files]
+        () => files.reduce((sum, file) => sum + getDiffCounts(file, diffMode).deletions, 0),
+        [diffMode, files]
     )
     const totalLineChanges = sectionAdditions + sectionDeletions
     const totalPages = Math.max(1, Math.ceil(files.length / PAGE_SIZE))
@@ -164,12 +182,17 @@ function Section({
                         </div>
                         <p className="text-[11px] text-white/45">
                             {hasPartialStats
-                                ? `Counting visible file changes... ${loadedStatsCount}/${files.length} files resolved`
+                                ? `Counting line changes... ${loadedStatsCount}/${files.length} files resolved`
                                 : `Totals across all files: ${totalLineChanges} lines changed`}
                         </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                        <DiffStats additions={sectionAdditions} deletions={sectionDeletions} loading={hasPartialStats} />
+                        <DiffStats
+                            additions={sectionAdditions}
+                            deletions={sectionDeletions}
+                            loading={hasPartialStats}
+                            preserveValuesWhileLoading
+                        />
                         <button
                             onClick={() => { void onActionAll() }}
                             disabled={files.length === 0 || pendingActionPath === '__all__'}
@@ -187,6 +210,7 @@ function Section({
                 const badge = getStatusBadge(file.gitStatus)
                 const diffKey = getDiffKey(diffMode, file.path)
                 const isLoadingDiff = loadingDiffKeys.has(diffKey)
+                const fileCounts = getDiffCounts(file, diffMode)
 
                 return (
                     <div key={file.path} className="group bg-black/30 rounded-xl border border-white/5 hover:border-white/15 p-3 transition-all">
@@ -219,8 +243,8 @@ function Section({
 
                             <div className="flex items-center justify-end gap-2 shrink-0 min-w-[220px]">
                                 <DiffStats
-                                    additions={file.additions}
-                                    deletions={file.deletions}
+                                    additions={fileCounts.additions}
+                                    deletions={fileCounts.deletions}
                                     compact
                                     loading={file.statsLoaded !== true}
                                 />
@@ -445,8 +469,8 @@ export function WorkingChangesView({
                 filePath={selectedDiffFile?.path || ''}
                 diff={selectedDiffContent}
                 loading={isDiffModalLoading}
-                additions={selectedDiffFile?.additions || 0}
-                deletions={selectedDiffFile?.deletions || 0}
+                additions={selectedDiffFile ? getDiffCounts(selectedDiffFile, selectedDiffMode).additions : 0}
+                deletions={selectedDiffFile ? getDiffCounts(selectedDiffFile, selectedDiffMode).deletions : 0}
                 status={selectedDiffFile?.gitStatus}
                 subtitle={selectedDiffFile ? `${selectedDiffMode === 'staged' ? 'Staged' : 'Unstaged'} change` : undefined}
                 onClose={() => {
