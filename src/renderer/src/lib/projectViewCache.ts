@@ -157,6 +157,7 @@ export function primeProjectDetailsCache(input: {
     name: string
     path: string
     type: string
+    projectIconPath?: string | null
     markers?: string[]
     frameworks?: string[]
     lastModified?: number
@@ -175,6 +176,7 @@ export function primeProjectDetailsCache(input: {
             displayName: input.name,
             path: input.path,
             type: input.type,
+            projectIconPath: typeof input.projectIconPath === 'string' ? input.projectIconPath : null,
             markers: Array.isArray(input.markers) ? input.markers : [],
             frameworks: Array.isArray(input.frameworks) ? input.frameworks : [],
             lastModified: typeof input.lastModified === 'number' ? input.lastModified : undefined

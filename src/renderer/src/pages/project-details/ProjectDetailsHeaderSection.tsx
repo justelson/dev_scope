@@ -308,7 +308,12 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                         )}
                         style={{ background: `${themeColor}15` }}
                     >
-                        <ProjectIcon projectType={project.type} framework={project.frameworks?.[0]} size={isCondensedLayout ? 28 : 32} />
+                        <ProjectIcon
+                            projectType={project.type}
+                            framework={project.frameworks?.[0]}
+                            customIconPath={project.projectIconPath}
+                            size={isCondensedLayout ? 28 : 32}
+                        />
                     </div>
 
                     <div className="flex-1 min-w-0">

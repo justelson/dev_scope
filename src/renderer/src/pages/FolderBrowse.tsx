@@ -14,6 +14,9 @@ import { CreateFileTypeModal } from '@/components/ui/CreateFileTypeModal'
 import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
 import { LoadingSpinner } from '@/components/ui/LoadingState'
 import { PromptModal } from '@/components/ui/PromptModal'
+import type { PreviewMediaSource } from '@/components/ui/file-preview/types'
+import { buildMediaPreviewSources, isMediaPreviewType, resolvePreviewType } from '@/components/ui/file-preview/utils'
+import { resolveExplorerHomePath, useDefaultExplorerHomePath } from '@/lib/explorerHome'
 import { trackRecentProject } from '@/lib/recentProjects'
 import { useSettings } from '@/lib/settings'
 import { ProjectsStatsModal } from './projects/ProjectsStatsModal'
@@ -26,6 +29,7 @@ import { getProjectTypeById, type FileItem, type FolderItem, type Project } from
 import { formatFileSize, formatRelativeTime, getFileColor, getProjectTypes } from './folder-browse/utils'
 
 const FILES_PAGE_SIZE = 300
+type FolderBrowseMode = 'projects' | 'explorer'
 
 type FileSystemClipboardItem = {
     path: string
@@ -146,25 +150,53 @@ function getParentFolderPathWithinRoot(currentPath: string, rootLimit: string | 
     return parent
 }
 
-export default function FolderBrowse() {
+function buildBrowseRoute(mode: FolderBrowseMode, path?: string): string {
+    const baseRoute = mode === 'explorer' ? '/explorer' : '/folder-browse'
+    if (!path) {
+        return mode === 'explorer' ? '/explorer' : '/projects'
+    }
+    return `${baseRoute}/${encodeURIComponent(path)}`
+}
+
+type FolderBrowseProps = {
+    mode?: FolderBrowseMode
+}
+
+export default function FolderBrowse({ mode = 'projects' }: FolderBrowseProps) {
     const { settings, updateSettings } = useSettings()
     const { openTerminal } = useTerminal()
     const { folderPath } = useParams<{ folderPath: string }>()
     const navigate = useNavigate()
+    const isExplorerMode = mode === 'explorer'
+    const defaultExplorerHomePath = useDefaultExplorerHomePath()
+    const isResolvingExplorerHomePath = isExplorerMode && !settings.explorerHomePath && defaultExplorerHomePath === null
+    const surfaceTitle = isExplorerMode ? 'Explorer' : 'Projects'
+    const emptyStateTitle = isExplorerMode ? 'Explorer home folder not set' : 'No Projects Folder Configured'
+    const emptyStateDescription = isExplorerMode
+        ? 'DevScope could not resolve your home folder. Choose a custom Explorer root in settings.'
+        : 'Set up a projects folder in settings to browse your projects.'
+    const settingsRoute = isExplorerMode ? '/settings/explorer' : '/settings/projects'
+    const settingsButtonLabel = isExplorerMode ? 'Open Explorer Settings' : 'Configure Projects Folder'
+    const browseRootPath = isExplorerMode
+        ? resolveExplorerHomePath(settings.explorerHomePath, defaultExplorerHomePath)
+        : settings.projectsFolder
+    const browseRoute = useCallback((path?: string) => buildBrowseRoute(mode, path), [mode])
 
     const decodedPath = useMemo(() => {
         const pathFromRoute = folderPath ? decodeURIComponent(folderPath) : ''
         if (pathFromRoute.trim()) return pathFromRoute
-        return String(settings.projectsFolder || '').trim()
-    }, [folderPath, settings.projectsFolder])
+        return String(browseRootPath || '').trim()
+    }, [browseRootPath, folderPath])
     const folderName = decodedPath.split(/[/\\]/).pop() || 'Folder'
     const folderHistoryRef = useRef<string[]>([])
     const configuredBrowseRoots = useMemo(() => (
-        Array.from(new Set([
-            settings.projectsFolder,
-            ...(settings.additionalFolders || [])
-        ].filter((path): path is string => typeof path === 'string' && path.trim().length > 0)))
-    ), [settings.projectsFolder, settings.additionalFolders])
+        isExplorerMode
+            ? []
+            : Array.from(new Set([
+                settings.projectsFolder,
+                ...(settings.additionalFolders || [])
+            ].filter((path): path is string => typeof path === 'string' && path.trim().length > 0)))
+    ), [isExplorerMode, settings.additionalFolders, settings.projectsFolder])
     const navigationRoot = useMemo(
         () => resolveNavigationRoot(decodedPath, configuredBrowseRoots),
         [decodedPath, configuredBrowseRoots]
@@ -201,6 +233,7 @@ export default function FolderBrowse() {
 
     const {
         previewFile,
+        previewMediaItems,
         previewContent,
         loadingPreview,
         previewTruncated,
@@ -303,10 +336,11 @@ export default function FolderBrowse() {
 
     const projectTypes = useMemo(() => getProjectTypes(projects), [projects])
     const isProjectsRootView = useMemo(() => {
+        if (isExplorerMode) return false
         const normalizedCurrent = normalizePath(decodedPath)
         const normalizedProjectsRoot = normalizePath(settings.projectsFolder || '')
         return Boolean(normalizedCurrent && normalizedProjectsRoot && normalizedCurrent === normalizedProjectsRoot)
-    }, [decodedPath, settings.projectsFolder])
+    }, [decodedPath, isExplorerMode, settings.projectsFolder])
     const statsScanKey = useMemo(() => normalizePath(decodedPath).toLowerCase(), [decodedPath])
     const statsModalController = useProjectStatsModal(projects, indexedTotals, indexedInventory, statsScanKey)
     const rootStats = useMemo(() => ({
@@ -390,9 +424,49 @@ export default function FolderBrowse() {
     const gitRepos = useMemo(() => projects.filter((project) => project.type === 'git'), [projects])
 
     const filteredFiles = useMemo(() => {
-        if (!deferredSearchQuery) return files
-        return files.filter((file) => fileNameMatchesQuery(file.name, parsedSearchQuery))
-    }, [files, deferredSearchQuery, parsedSearchQuery])
+        const matchingFiles = !deferredSearchQuery
+            ? files
+            : files.filter((file) => fileNameMatchesQuery(file.name, parsedSearchQuery))
+
+        const mediaSources = buildMediaPreviewSources(matchingFiles.map((file) => ({
+            name: file.name,
+            path: file.path,
+            extension: file.extension
+        })))
+        const mediaByPath = new Map(mediaSources.map((item) => [item.path.toLowerCase(), item]))
+        const albumArtPaths = new Set(
+            mediaSources
+                .filter((item) => item.type !== 'image' && item.thumbnailPath)
+                .map((item) => String(item.thumbnailPath || '').toLowerCase())
+                .filter(Boolean)
+        )
+
+        return matchingFiles
+            .filter((file) => !(file.extension && albumArtPaths.has(file.path.toLowerCase())))
+            .map((file) => {
+                const mediaItem = mediaByPath.get(file.path.toLowerCase())
+                if (mediaItem) {
+                    return {
+                        ...file,
+                        previewType: mediaItem.type,
+                        previewThumbnailPath: mediaItem.thumbnailPath ?? null,
+                        isAlbumArt: false
+                    }
+                }
+
+                const previewTarget = resolvePreviewType(file.name, file.extension)
+                if (previewTarget && isMediaPreviewType(previewTarget.type)) {
+                    return {
+                        ...file,
+                        previewType: previewTarget.type,
+                        previewThumbnailPath: previewTarget.type === 'image' ? file.path : null,
+                        isAlbumArt: false
+                    }
+                }
+
+                return file
+            })
+    }, [deferredSearchQuery, files, parsedSearchQuery])
 
     useEffect(() => {
         setVisibleFileCount(FILES_PAGE_SIZE)
@@ -404,6 +478,14 @@ export default function FolderBrowse() {
     )
 
     const hasMoreFiles = displayedFiles.length < filteredFiles.length
+    const mediaPreviewSources = useMemo<PreviewMediaSource[]>(
+        () => buildMediaPreviewSources(displayedFiles.map((file) => ({
+            name: file.name,
+            path: file.path,
+            extension: file.extension
+        }))),
+        [displayedFiles]
+    )
 
     const loadMoreFiles = useCallback(() => {
         setVisibleFileCount((current) => current + FILES_PAGE_SIZE)
@@ -414,7 +496,7 @@ export default function FolderBrowse() {
     }
 
     const handleFolderClick = (folder: FolderItem) => {
-        navigate(`/folder-browse/${encodeURIComponent(folder.path)}`)
+        navigate(browseRoute(folder.path))
     }
 
     const handleViewAsProject = () => {
@@ -428,7 +510,7 @@ export default function FolderBrowse() {
             while (history.length > 0) {
                 const previousFolder = history[history.length - 1]
                 if (!navigationRoot || isPathWithinRoot(previousFolder, navigationRoot)) {
-                    navigate(`/folder-browse/${encodeURIComponent(previousFolder)}`)
+                    navigate(browseRoute(previousFolder))
                     return
                 }
                 history.pop()
@@ -437,7 +519,7 @@ export default function FolderBrowse() {
 
         const parentPath = getParentFolderPathWithinRoot(decodedPath, navigationRoot)
         if (parentPath && parentPath !== decodedPath) {
-            navigate(`/folder-browse/${encodeURIComponent(parentPath)}`)
+            navigate(browseRoute(parentPath))
             return
         }
 
@@ -449,7 +531,7 @@ export default function FolderBrowse() {
         if (!parentPath || parentPath === decodedPath) {
             return
         }
-        navigate(`/folder-browse/${encodeURIComponent(parentPath)}`)
+        navigate(browseRoute(parentPath))
     }
 
     const copyTextToClipboard = useCallback(async (value: string): Promise<boolean> => {
@@ -482,14 +564,14 @@ export default function FolderBrowse() {
 
     const handleEntryOpen = useCallback(async (entry: FileSystemClipboardItem) => {
         if (entry.type === 'directory') {
-            navigate(`/folder-browse/${encodeURIComponent(entry.path)}`)
+            navigate(browseRoute(entry.path))
             return
         }
         const result = await window.devscope.openFile(entry.path)
         if (!result.success) {
             setError(result.error || `Failed to open "${entry.name}"`)
         }
-    }, [navigate])
+    }, [browseRoute, navigate])
 
     const handleEntryOpenWith = useCallback(async (entry: FileSystemClipboardItem) => {
         if (entry.type === 'directory') return
@@ -700,32 +782,91 @@ export default function FolderBrowse() {
         await loadContents(true)
     }, [deleteTarget, fileClipboardItem?.path, loadContents, showToast])
 
+    const handleSelectExplorerHome = useCallback(async () => {
+        try {
+            const result = await window.devscope.selectFolder()
+            if (!result.success || !result.folderPath) {
+                return
+            }
+
+            updateSettings({
+                explorerHomePath: result.folderPath,
+                explorerTabEnabled: true
+            })
+            navigate(buildBrowseRoute('explorer', result.folderPath), { replace: true })
+        } catch (err: any) {
+            setError(err?.message || 'Failed to choose an Explorer home folder.')
+        }
+    }, [navigate, updateSettings])
+
     if (!decodedPath) {
+        if (isResolvingExplorerHomePath) {
+            return (
+                <div className="animate-fadeIn">
+                    <div className="mb-8">
+                        <div className="mb-2 flex items-center gap-3">
+                            <div className="rounded-lg bg-amber-500/10 p-2">
+                                <FolderTree className="text-amber-300" size={24} />
+                            </div>
+                            <h1 className="text-2xl font-semibold text-sparkle-text">{surfaceTitle}</h1>
+                        </div>
+                        <p className="text-sparkle-text-secondary">
+                            A full-file browser layer for DevScope, available only when you opt in.
+                        </p>
+                    </div>
+
+                    <LoadingSpinner
+                        message="Preparing Explorer..."
+                        detail="Resolving your OS home folder so Explorer starts from your own root, not the Projects tab root."
+                        minHeightClassName="min-h-[28vh]"
+                        cardClassName="w-full max-w-md"
+                    />
+                </div>
+            )
+        }
+
         return (
             <div className="animate-fadeIn">
                 <div className="mb-8">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 rounded-lg bg-indigo-500/10">
-                            <FolderTree className="text-indigo-400" size={24} />
+                        <div className={cn(
+                            'p-2 rounded-lg',
+                            isExplorerMode ? 'bg-amber-500/10' : 'bg-indigo-500/10'
+                        )}>
+                            <FolderTree className={isExplorerMode ? 'text-amber-300' : 'text-indigo-400'} size={24} />
                         </div>
-                        <h1 className="text-2xl font-semibold text-sparkle-text">Projects</h1>
+                        <h1 className="text-2xl font-semibold text-sparkle-text">{surfaceTitle}</h1>
                     </div>
-                    <p className="text-sparkle-text-secondary">Your coding projects in one place</p>
+                    <p className="text-sparkle-text-secondary">
+                        {isExplorerMode ? 'A full-file browser layer for DevScope, available only when you opt in.' : 'Your coding projects in one place'}
+                    </p>
                 </div>
 
-                <div className="flex flex-col items-center justify-center py-16 bg-sparkle-card rounded-xl border border-sparkle-border">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-sparkle-card py-16">
                     <Folder size={48} className="text-sparkle-text-muted mb-4" />
-                    <h3 className="text-lg font-medium text-sparkle-text mb-2">No Projects Folder Configured</h3>
+                    <h3 className="mb-2 text-lg font-medium text-sparkle-text">{emptyStateTitle}</h3>
                     <p className="text-sparkle-text-secondary text-center max-w-md mb-6">
-                        Set up a projects folder in settings to browse your projects.
+                        {emptyStateDescription}
                     </p>
-                    <Link
-                        to="/settings/projects"
-                        className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-primary)] text-white rounded-lg hover:bg-[var(--accent-primary)]/90 transition-colors"
-                    >
-                        <SettingsIcon size={16} />
-                        <span>Configure Projects Folder</span>
-                    </Link>
+                    <div className="flex flex-wrap justify-center gap-3">
+                        {isExplorerMode && (
+                            <button
+                                type="button"
+                                onClick={() => { void handleSelectExplorerHome() }}
+                                className="flex items-center gap-2 rounded-lg bg-[var(--accent-primary)] px-4 py-2 text-white transition-colors hover:bg-[var(--accent-primary)]/90"
+                            >
+                                <FolderTree size={16} />
+                                <span>Choose Explorer Home</span>
+                            </button>
+                        )}
+                        <Link
+                            to={settingsRoute}
+                            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2 text-sparkle-text transition-colors hover:border-white/20 hover:bg-white/[0.05]"
+                        >
+                            <SettingsIcon size={16} />
+                            <span>{settingsButtonLabel}</span>
+                        </Link>
+                    </div>
                 </div>
             </div>
         )
@@ -751,7 +892,7 @@ export default function FolderBrowse() {
                 onCopyPath={handleCopyPath}
                 copiedPath={copiedPath}
                 onOpenStats={(key) => statsModalController.setStatsModal(key)}
-                onOpenProjectsSettings={() => navigate('/settings/projects')}
+                onOpenProjectsSettings={isExplorerMode ? undefined : () => navigate('/settings/projects')}
                 onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}
                 onRefresh={() => { void loadContents(true) }}
                 onCreateFile={(presetExtension) => handleCreateInCurrentFolder('file', presetExtension)}
@@ -780,8 +921,10 @@ export default function FolderBrowse() {
 
             {loading && (
                 <LoadingSpinner
-                    message="Loading folder contents..."
-                    detail={`Scanning ${folderName} and preparing files, folders, and projects.`}
+                    message={isExplorerMode ? 'Loading explorer contents...' : 'Loading folder contents...'}
+                    detail={isExplorerMode
+                        ? `Scanning ${folderName} and preparing folders, files, and detected repositories.`
+                        : `Scanning ${folderName} and preparing files, folders, and projects.`}
                     minHeightClassName="min-h-[28vh]"
                     cardClassName="w-full max-w-md"
                 />
@@ -807,7 +950,7 @@ export default function FolderBrowse() {
                     onProjectClick={handleProjectClick}
                     onProjectRename={handleProjectRename}
                     onProjectDelete={handleProjectDelete}
-                    onOpenFilePreview={(file) => openPreview(file, file.extension)}
+                    onOpenFilePreview={(file) => openPreview(file, file.extension, { mediaItems: mediaPreviewSources })}
                     onOpenProjectInExplorer={(path) => window.devscope.openInExplorer?.(path)}
                     onEntryOpen={handleEntryOpen}
                     onEntryOpenWith={handleEntryOpenWith}
@@ -838,6 +981,7 @@ export default function FolderBrowse() {
                     modifiedAt={previewModifiedAt}
                     projectPath={decodedPath}
                     onOpenLinkedPreview={openPreview}
+                    mediaItems={previewMediaItems}
                     onSaved={async () => {
                         await loadContents(true)
                     }}

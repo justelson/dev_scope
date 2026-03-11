@@ -28,6 +28,7 @@ import {
 } from './handlers/settings-ai-handlers'
 import {
     handleCopyToClipboard,
+    handleGetUserHomePath,
     handleIndexAllFolders,
     handleOpenFile,
     handleOpenInExplorer,
@@ -157,6 +158,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:clearAiDebugLogs', handleClearAiDebugLogs)
 
     ipcMain.handle('devscope:selectFolder', handleSelectFolder)
+    ipcMain.handle('devscope:getUserHomePath', handleGetUserHomePath)
     ipcMain.handle('devscope:scanProjects', handleScanProjects)
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
     ipcMain.handle('devscope:openInExplorer', handleOpenInExplorer)

@@ -12,6 +12,7 @@ export function createProjectsAdapter() {
 
     return {
         selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),
+        getUserHomePath: () => ipcRenderer.invoke('devscope:getUserHomePath'),
         scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) =>
             ipcRenderer.invoke('devscope:scanProjects', folderPath, options),
         openInExplorer: (path: string) => ipcRenderer.invoke('devscope:openInExplorer', path),

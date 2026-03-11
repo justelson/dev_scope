@@ -23,6 +23,7 @@ export interface ProjectDetails {
     displayName: string
     path: string
     type: string
+    projectIconPath?: string | null
     typeInfo?: ProjectTypeDefinition
     markers: string[]
     frameworks: string[]

@@ -11,6 +11,7 @@ import {
     type FrameworkDefinition
 } from '../project-detection'
 import { appendTaskLog, completeTask, createTask } from '../task-manager'
+import { resolveProjectIconPath } from '../../services/project-icon-resolver'
 
 const execAsync = promisify(exec)
 
@@ -27,6 +28,37 @@ type DependencyInstallStatus = {
 }
 
 type DependencyInstallManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
+
+function getPreferredReadmeFile(entries: string[]): string | null {
+    const readmeCandidates = entries.filter((entry) => {
+        const normalized = entry.toLowerCase()
+        return normalized.startsWith('readme')
+            && (normalized.endsWith('.md') || normalized.endsWith('.txt') || !normalized.includes('.'))
+    })
+
+    if (readmeCandidates.length === 0) return null
+
+    const scoreReadmeCandidate = (entry: string): number => {
+        const normalized = entry.toLowerCase()
+
+        if (/^readme(?:[._-]en(?:[-_][a-z]{2})?)?\.md$/i.test(normalized)) return 1000
+        if (/^readme(?:[._-]en(?:[-_][a-z]{2})?)?\.txt$/i.test(normalized)) return 950
+        if (/^readme(?:[._-]en(?:[-_][a-z]{2})?)$/i.test(normalized)) return 900
+        if (normalized === 'readme.md') return 850
+        if (normalized === 'readme.txt') return 800
+        if (normalized === 'readme') return 750
+        if (/^readme[._-][a-z]{2}(?:[-_][a-z]{2})?\.md$/i.test(normalized)) return 500
+        if (/^readme[._-][a-z]{2}(?:[-_][a-z]{2})?\.txt$/i.test(normalized)) return 450
+        return 100
+    }
+
+    return [...readmeCandidates]
+        .sort((left, right) => {
+            const scoreDiff = scoreReadmeCandidate(right) - scoreReadmeCandidate(left)
+            if (scoreDiff !== 0) return scoreDiff
+            return left.localeCompare(right)
+        })[0] || null
+}
 
 async function pathExists(path: string): Promise<boolean> {
     try {
@@ -307,10 +339,7 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
         let frameworks: FrameworkDefinition[] = []
         let dependencyInstallStatus: DependencyInstallStatus | null = null
 
-        const readmeFile = entries.find((entry) =>
-            entry.toLowerCase().startsWith('readme')
-            && (entry.endsWith('.md') || entry.endsWith('.txt') || !entry.includes('.'))
-        )
+        const readmeFile = getPreferredReadmeFile(entries)
         if (readmeFile) {
             try {
                 readme = await readFile(join(projectPath, readmeFile), 'utf-8')
@@ -345,6 +374,7 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
 
         const stats = await stat(projectPath)
         const folderName = projectPath.split(/[\\/]/).pop() || 'Unknown'
+        const projectIconPath = await resolveProjectIconPath(projectPath, entries, packageJson)
 
         return {
             success: true,
@@ -353,6 +383,7 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
                 displayName: packageJson?.name || folderName,
                 path: projectPath,
                 type: projectType?.id || 'unknown',
+                projectIconPath,
                 typeInfo: projectType,
                 markers,
                 frameworks: frameworks.map((framework) => framework.id),

@@ -37,6 +37,7 @@ export type DevScopeProject = {
     name: string
     path: string
     type: string
+    projectIconPath?: string | null
     markers: string[]
     frameworks: string[]
     lastModified?: number
@@ -63,6 +64,7 @@ export type DevScopeProjectDetails = {
     displayName: string
     path: string
     type: string
+    projectIconPath?: string | null
     markers: string[]
     frameworks: string[]
     readme?: string
@@ -361,6 +363,7 @@ export interface DevScopeApi {
 
     // Projects + Git
     selectFolder: () => Promise<DevScopeResult<{ folderPath?: string; cancelled?: boolean }>>
+    getUserHomePath: () => Promise<DevScopeResult<{ path: string }>>
     scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) => Promise<DevScopeResult<{ projects: DevScopeProject[]; folders: DevScopeFolderItem[]; files: DevScopeFileItem[]; cached?: boolean; cachedAt?: number }>>
     openInExplorer: (path: string) => Promise<DevScopeResult>
     openInTerminal: (path: string, preferredShell?: 'powershell' | 'cmd', initialCommand?: string) => Promise<DevScopeResult>

@@ -5,7 +5,7 @@
 import { Link } from 'react-router-dom'
 import {
     Palette, RefreshCw, Info,
-    ChevronRight, Settings as SettingsIcon, FolderOpen, Sparkles, Terminal
+    ChevronRight, Settings as SettingsIcon, FolderOpen, FolderTree, Sparkles, Terminal
 } from 'lucide-react'
 import { useAppUpdateState } from '@/lib/app-updates'
 import { useSettings } from '@/lib/settings'
@@ -96,6 +96,19 @@ export default function Settings() {
                 />
 
                 <SettingsCard
+                    to="/settings/explorer"
+                    icon={<FolderTree className="text-amber-300" size={24} />}
+                    iconBg="bg-amber-500/10"
+                    title="Explorer"
+                    description="Optional file-browser tab for browsing any folder"
+                    preview={
+                        settings.explorerTabEnabled
+                            ? `Enabled${settings.explorerHomePath ? ` \u2022 ${getPathTail(settings.explorerHomePath)}` : ' \u2022 Home (~)'}`
+                            : 'Disabled'
+                    }
+                />
+
+                <SettingsCard
                     to="/settings/ai"
                     icon={<Sparkles className="text-violet-400" size={24} />}
                     iconBg="bg-violet-500/10"
@@ -124,6 +137,13 @@ export default function Settings() {
             </div>
         </div>
     )
+}
+
+function getPathTail(path: string): string {
+    const normalized = String(path || '').trim().replace(/[\\/]+$/, '')
+    if (!normalized) return ''
+    const parts = normalized.split(/[/\\]/)
+    return parts[parts.length - 1] || normalized
 }
 
 

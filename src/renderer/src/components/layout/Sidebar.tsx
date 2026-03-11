@@ -3,7 +3,7 @@
  */
 
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Activity } from 'lucide-react'
+import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Activity, FolderTree } from 'lucide-react'
 import { useAppUpdateState } from '@/lib/app-updates'
 import { cn } from '@/lib/utils'
 import { createContext, useCallback, useEffect, useContext, type ReactNode } from 'react'
@@ -50,11 +50,13 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
     { id: 'home', label: 'Home', path: '/home', icon: House },
     { id: 'projects', label: 'Projects', path: '/projects', icon: FolderOpen },
+    { id: 'explorer', label: 'Explorer', path: '/explorer', icon: FolderTree },
     { id: 'tasks', label: 'Tasks', path: '/tasks', icon: Activity },
     { id: 'settings', label: 'Settings', path: '/settings', icon: Settings }
 ]
 
 const LAST_PROJECTS_ROUTE_KEY = 'devscope:last-projects-route:v1'
+const LAST_EXPLORER_ROUTE_KEY = 'devscope:last-explorer-route:v1'
 
 function isProjectsAreaPath(pathname: string): boolean {
     return (
@@ -62,6 +64,10 @@ function isProjectsAreaPath(pathname: string): boolean {
         || pathname.startsWith('/projects/')
         || pathname.startsWith('/folder-browse/')
     )
+}
+
+function isExplorerAreaPath(pathname: string): boolean {
+    return pathname === '/explorer' || pathname.startsWith('/explorer/')
 }
 
 function getProjectsRestorePath(): string {
@@ -74,15 +80,27 @@ function getProjectsRestorePath(): string {
     return '/projects'
 }
 
+function getExplorerRestorePath(): string {
+    try {
+        const stored = localStorage.getItem(LAST_EXPLORER_ROUTE_KEY)
+        if (stored && isExplorerAreaPath(stored)) return stored
+    } catch {
+        // Ignore storage read errors.
+    }
+    return '/explorer'
+}
+
 export default function Sidebar() {
     const location = useLocation()
     const navigate = useNavigate()
     const { isCollapsed, setIsCollapsed } = useSidebar()
     const { settings } = useSettings()
     const updateState = useAppUpdateState()
-    const visibleNavItems = settings.tasksPageEnabled
-        ? NAV_ITEMS
-        : NAV_ITEMS.filter((item) => item.id !== 'tasks')
+    const visibleNavItems = NAV_ITEMS.filter((item) => {
+        if (item.id === 'tasks') return settings.tasksPageEnabled
+        if (item.id === 'explorer') return settings.explorerTabEnabled
+        return true
+    })
 
     useEffect(() => {
         if (!isProjectsAreaPath(location.pathname)) return
@@ -93,9 +111,22 @@ export default function Sidebar() {
         }
     }, [location.pathname])
 
+    useEffect(() => {
+        if (!isExplorerAreaPath(location.pathname)) return
+        try {
+            localStorage.setItem(LAST_EXPLORER_ROUTE_KEY, location.pathname)
+        } catch {
+            // Ignore storage write errors.
+        }
+    }, [location.pathname])
+
     const handleNavClick = useCallback((item: NavItem) => {
         if (item.id === 'projects') {
             navigate(getProjectsRestorePath())
+            return
+        }
+        if (item.id === 'explorer') {
+            navigate(getExplorerRestorePath())
             return
         }
         navigate(item.path)
@@ -110,6 +141,8 @@ export default function Sidebar() {
                 {visibleNavItems.map((item) => {
                     const isActive = item.id === 'projects'
                         ? isProjectsAreaPath(location.pathname)
+                        : item.id === 'explorer'
+                            ? isExplorerAreaPath(location.pathname)
                         : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
                     const Icon = item.icon
 

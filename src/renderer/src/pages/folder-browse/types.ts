@@ -2,6 +2,7 @@ export interface Project {
     name: string
     path: string
     type: string
+    projectIconPath?: string | null
     markers: string[]
     frameworks: string[]
     lastModified?: number
@@ -21,6 +22,9 @@ export interface FileItem {
     size: number
     lastModified?: number
     extension: string
+    previewType?: 'image' | 'video' | 'audio'
+    previewThumbnailPath?: string | null
+    isAlbumArt?: boolean
 }
 
 export type ViewMode = 'grid' | 'finder'

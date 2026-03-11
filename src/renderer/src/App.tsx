@@ -17,6 +17,7 @@ const Home = lazy(() => import('./pages/Home'))
 const Tasks = lazy(() => import('./pages/Tasks'))
 const ProjectDetails = lazy(() => import('./pages/ProjectDetails'))
 const FolderBrowse = lazy(() => import('./pages/FolderBrowse'))
+const Explorer = lazy(() => import('./pages/Explorer'))
 const QuickOpen = lazy(() => import('./pages/QuickOpen'))
 
 // Settings sub-pages
@@ -24,10 +25,12 @@ const AppearanceSettings = lazy(() => import('./pages/settings/AppearanceSetting
 const BehaviorSettings = lazy(() => import('./pages/settings/BehaviorSettings'))
 const AboutSettings = lazy(() => import('./pages/settings/AboutSettings'))
 const ProjectsSettings = lazy(() => import('./pages/settings/ProjectsSettings'))
+const ExplorerSettings = lazy(() => import('./pages/settings/ExplorerSettings'))
 const AISettings = lazy(() => import('./pages/settings/AISettings'))
 const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
 const LAST_MAIN_TAB_KEY = 'devscope:last-main-tab:v1'
+const LAST_APP_ROUTE_KEY = 'devscope:last-app-route:v1'
 
 // Terminal Context
 interface TerminalContextType {
@@ -62,22 +65,28 @@ function isProjectsAreaPath(pathname: string): boolean {
     )
 }
 
+function isExplorerAreaPath(pathname: string): boolean {
+    return pathname === '/explorer' || pathname.startsWith('/explorer/')
+}
+
 function resolveMainTabPath(
     pathname: string,
-    options?: { allowTasks?: boolean }
-): '/home' | '/projects' | '/settings' | '/tasks' | null {
+    options?: { allowTasks?: boolean; allowExplorer?: boolean }
+): '/home' | '/projects' | '/settings' | '/tasks' | '/explorer' | null {
     const allowTasks = options?.allowTasks !== false
+    const allowExplorer = options?.allowExplorer === true
     if (pathname === '/home' || pathname.startsWith('/home/')) return '/home'
     if (allowTasks && (pathname === '/tasks' || pathname.startsWith('/tasks/'))) return '/tasks'
+    if (allowExplorer && isExplorerAreaPath(pathname)) return '/explorer'
     if (pathname === '/settings' || pathname.startsWith('/settings/')) return '/settings'
     if (isProjectsAreaPath(pathname)) return '/projects'
     return null
 }
 
-function readLastMainTabPath(allowTasks: boolean): '/home' | '/projects' | '/settings' | '/tasks' {
+function readLastMainTabPath(allowTasks: boolean, allowExplorer: boolean): '/home' | '/projects' | '/settings' | '/tasks' | '/explorer' {
     try {
         const stored = String(localStorage.getItem(LAST_MAIN_TAB_KEY) || '').trim()
-        const resolved = resolveMainTabPath(stored, { allowTasks })
+        const resolved = resolveMainTabPath(stored, { allowTasks, allowExplorer })
         if (resolved) return resolved
     } catch {
         // Ignore storage read errors.
@@ -85,9 +94,41 @@ function readLastMainTabPath(allowTasks: boolean): '/home' | '/projects' | '/set
     return '/home'
 }
 
+function normalizeRestorableRoute(
+    pathname: string,
+    options?: { allowTasks?: boolean; allowExplorer?: boolean }
+): string | null {
+    const trimmed = String(pathname || '').trim()
+    if (!trimmed || trimmed === '/' || trimmed === '/quick-open') return null
+
+    const allowTasks = options?.allowTasks !== false
+    const allowExplorer = options?.allowExplorer === true
+
+    if (trimmed === '/home' || trimmed.startsWith('/home/')) return '/home'
+    if (trimmed === '/projects' || trimmed.startsWith('/projects/')) return trimmed
+    if (trimmed.startsWith('/folder-browse/')) return trimmed
+    if (trimmed === '/settings' || trimmed.startsWith('/settings/')) return trimmed
+    if (allowTasks && (trimmed === '/tasks' || trimmed.startsWith('/tasks/'))) return trimmed
+    if (allowExplorer && (trimmed === '/explorer' || trimmed.startsWith('/explorer/'))) return trimmed
+
+    return null
+}
+
+function readLastLaunchRoute(allowTasks: boolean, allowExplorer: boolean): string {
+    try {
+        const stored = String(localStorage.getItem(LAST_APP_ROUTE_KEY) || '').trim()
+        const resolved = normalizeRestorableRoute(stored, { allowTasks, allowExplorer })
+        if (resolved) return resolved
+    } catch {
+        // Ignore storage read errors.
+    }
+
+    return readLastMainTabPath(allowTasks, allowExplorer)
+}
+
 function LaunchRedirect() {
     const { settings } = useSettings()
-    return <Navigate to={readLastMainTabPath(settings.tasksPageEnabled)} replace />
+    return <Navigate to={readLastLaunchRoute(settings.tasksPageEnabled, settings.explorerTabEnabled)} replace />
 }
 
 function PageLoader() {
@@ -99,7 +140,6 @@ function MainContent() {
     const location = useLocation()
     const navigate = useNavigate()
     const isSettingsRoute = location.pathname.startsWith('/settings')
-    const isProjectsAreaRoute = isProjectsAreaPath(location.pathname)
     const { isCollapsed } = useSidebar()
     const { settings } = useSettings()
 
@@ -124,20 +164,43 @@ function MainContent() {
     }, [location.pathname])
 
     useEffect(() => {
-        const mainTabPath = resolveMainTabPath(location.pathname, { allowTasks: settings.tasksPageEnabled })
+        const mainTabPath = resolveMainTabPath(location.pathname, {
+            allowTasks: settings.tasksPageEnabled,
+            allowExplorer: settings.explorerTabEnabled
+        })
         if (!mainTabPath) return
         try {
             localStorage.setItem(LAST_MAIN_TAB_KEY, mainTabPath)
         } catch {
             // Ignore storage write errors.
         }
-    }, [location.pathname, settings.tasksPageEnabled])
+    }, [location.pathname, settings.explorerTabEnabled, settings.tasksPageEnabled])
+
+    useEffect(() => {
+        const restorableRoute = normalizeRestorableRoute(location.pathname, {
+            allowTasks: settings.tasksPageEnabled,
+            allowExplorer: settings.explorerTabEnabled
+        })
+        if (!restorableRoute) return
+
+        try {
+            localStorage.setItem(LAST_APP_ROUTE_KEY, restorableRoute)
+        } catch {
+            // Ignore storage write errors.
+        }
+    }, [location.pathname, settings.explorerTabEnabled, settings.tasksPageEnabled])
 
     useEffect(() => {
         if (settings.tasksPageEnabled) return
         if (!location.pathname.startsWith('/tasks')) return
         navigate('/home', { replace: true })
     }, [settings.tasksPageEnabled, location.pathname, navigate])
+
+    useEffect(() => {
+        if (settings.explorerTabEnabled) return
+        if (!isExplorerAreaPath(location.pathname)) return
+        navigate('/home', { replace: true })
+    }, [settings.explorerTabEnabled, location.pathname, navigate])
 
     return (
         <main
@@ -151,6 +214,14 @@ function MainContent() {
                     <Route path="/home" element={<Home />} />
                     <Route path="/projects" element={<FolderBrowse />} />
                     <Route
+                        path="/explorer"
+                        element={settings.explorerTabEnabled ? <Explorer /> : <Navigate to="/home" replace />}
+                    />
+                    <Route
+                        path="/explorer/:folderPath"
+                        element={settings.explorerTabEnabled ? <Explorer /> : <Navigate to="/home" replace />}
+                    />
+                    <Route
                         path="/tasks"
                         element={settings.tasksPageEnabled ? <Tasks /> : <Navigate to="/home" replace />}
                     />
@@ -162,6 +233,7 @@ function MainContent() {
                     <Route path="/settings/data" element={<Navigate to="/settings" replace />} />
                     <Route path="/settings/about" element={<AboutSettings />} />
                     <Route path="/settings/projects" element={<ProjectsSettings />} />
+                    <Route path="/settings/explorer" element={<ExplorerSettings />} />
                     <Route path="/settings/ai" element={<AISettings />} />
                     <Route path="/settings/git" element={<Navigate to="/settings" replace />} />
                     <Route path="/settings/terminal" element={<TerminalSettings />} />

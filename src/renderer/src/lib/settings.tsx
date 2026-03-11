@@ -60,6 +60,8 @@ export interface Settings {
     accentColor: AccentColor
     compactMode: boolean
     sidebarCollapsed: boolean
+    explorerTabEnabled: boolean
+    explorerHomePath: string
 
     // Terminal
     defaultShell: Shell
@@ -106,6 +108,8 @@ const DEFAULT_SETTINGS: Settings = {
     accentColor: ACCENT_COLORS[0],
     compactMode: false,
     sidebarCollapsed: false,
+    explorerTabEnabled: false,
+    explorerHomePath: '',
     defaultShell: 'powershell',
     startMinimized: false,
     startWithWindows: false,
@@ -168,6 +172,8 @@ function loadSettings(): Settings {
                 accentColor: candidate.accentColor,
                 compactMode: candidate.compactMode,
                 sidebarCollapsed: candidate.sidebarCollapsed,
+                explorerTabEnabled: candidate.explorerTabEnabled === true,
+                explorerHomePath: typeof candidate.explorerHomePath === 'string' ? candidate.explorerHomePath : '',
                 defaultShell: candidate.defaultShell,
                 startMinimized: candidate.startMinimized,
                 startWithWindows: candidate.startWithWindows,
