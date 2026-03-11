@@ -2,7 +2,7 @@
  * DevScope - Behavior Settings Page
  */
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, useRef, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
     Activity,
@@ -17,7 +17,9 @@ import {
     PanelLeft,
     PanelRight,
     Power,
-    TerminalSquare
+    TerminalSquare,
+    Play,
+    X
 } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
@@ -26,6 +28,7 @@ export default function BehaviorSettings() {
     const { settings, updateSettings } = useSettings()
     const [startupStatus, setStartupStatus] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'startup' | 'preview' | 'tasks'>('startup')
+    const [showScrollPreview, setShowScrollPreview] = useState(false)
 
     useEffect(() => {
         let isMounted = true
@@ -151,21 +154,31 @@ export default function BehaviorSettings() {
                             title="Scroll Feel"
                             description="Pick the scroll behavior that should be used across the app."
                         >
-                            <SettingRow
-                                icon={<Mouse size={20} className="text-sparkle-text-secondary" />}
-                                title={settings.scrollMode === 'smooth' ? 'Buttery smooth scroll' : 'Native platform scroll'}
-                                description="This affects long pages, settings views, and dense panels."
-                                control={(
-                                    <SegmentedControl
-                                        activeKey={settings.scrollMode}
-                                        options={[
-                                            { key: 'smooth', label: 'Buttery' },
-                                            { key: 'native', label: 'Native' }
-                                        ]}
-                                        onChange={(value) => updateSettings({ scrollMode: value as 'smooth' | 'native' })}
-                                    />
-                                )}
-                            />
+                            <div className="space-y-4">
+                                <SettingRow
+                                    icon={<Mouse size={20} className="text-sparkle-text-secondary" />}
+                                    title={settings.scrollMode === 'smooth' ? 'Buttery smooth scroll' : 'Native platform scroll'}
+                                    description="This affects long pages, settings views, and dense panels."
+                                    control={(
+                                        <SegmentedControl
+                                            activeKey={settings.scrollMode}
+                                            options={[
+                                                { key: 'smooth', label: 'Buttery' },
+                                                { key: 'native', label: 'Native' }
+                                            ]}
+                                            onChange={(value) => updateSettings({ scrollMode: value as 'smooth' | 'native' })}
+                                        />
+                                    )}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowScrollPreview(true)}
+                                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.05]"
+                                >
+                                    <Play size={16} />
+                                    Preview Scroll Behaviors
+                                </button>
+                            </div>
                         </SettingsSection>
                     </div>
                 )}
@@ -296,6 +309,17 @@ export default function BehaviorSettings() {
                     </div>
                 )}
             </div>
+
+            {showScrollPreview && (
+                <ScrollPreviewModal
+                    currentMode={settings.scrollMode}
+                    onClose={() => setShowScrollPreview(false)}
+                    onApply={(mode) => {
+                        updateSettings({ scrollMode: mode })
+                        setShowScrollPreview(false)
+                    }}
+                />
+            )}
         </div>
     )
 }
@@ -431,5 +455,277 @@ function ToggleSwitch({
                 )}
             />
         </button>
+    )
+}
+
+function ScrollPreviewModal({
+    currentMode,
+    onClose,
+    onApply
+}: {
+    currentMode: 'smooth' | 'native'
+    onClose: () => void
+    onApply: (mode: 'smooth' | 'native') => void
+}) {
+    const [previewMode, setPreviewMode] = useState<'smooth' | 'native'>(currentMode)
+    const smoothScrollRef = useRef<HTMLDivElement>(null)
+    const nativeScrollRef = useRef<HTMLDivElement>(null)
+
+    // Smooth scroll implementation
+    useEffect(() => {
+        const container = smoothScrollRef.current
+        if (!container) return
+
+        let targetScrollTop = container.scrollTop
+        let currentScrollTop = container.scrollTop
+        let animationFrameId: number
+
+        const smoothScroll = () => {
+            const diff = targetScrollTop - currentScrollTop
+            if (Math.abs(diff) > 0.5) {
+                currentScrollTop += diff * 0.1
+                container.scrollTop = currentScrollTop
+                animationFrameId = requestAnimationFrame(smoothScroll)
+            }
+        }
+
+        const handleWheel = (e: WheelEvent) => {
+            e.preventDefault()
+            targetScrollTop = Math.max(
+                0,
+                Math.min(
+                    container.scrollHeight - container.clientHeight,
+                    targetScrollTop + e.deltaY
+                )
+            )
+            cancelAnimationFrame(animationFrameId)
+            animationFrameId = requestAnimationFrame(smoothScroll)
+        }
+
+        container.addEventListener('wheel', handleWheel, { passive: false })
+
+        return () => {
+            container.removeEventListener('wheel', handleWheel)
+            cancelAnimationFrame(animationFrameId)
+        }
+    }, [])
+
+    const sampleContent = Array.from({ length: 30 }, (_, i) => {
+        const categories = ['Project', 'Task', 'File', 'Component', 'Module', 'Service']
+        const statuses = ['Active', 'Pending', 'Completed', 'In Progress', 'Review', 'Draft']
+        const category = categories[i % categories.length]
+        const status = statuses[i % statuses.length]
+        
+        return {
+            id: i + 1,
+            title: `${category} #${i + 1}`,
+            status,
+            description: `${status} ${category.toLowerCase()} with various properties and metadata. Scroll through this list to experience the ${previewMode} scroll behavior in action.`,
+            timestamp: `${Math.floor(Math.random() * 24)}h ago`
+        }
+    })
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+            <div className="relative w-full max-w-5xl mx-4 rounded-xl border border-white/10 bg-sparkle-bg shadow-2xl">
+                <div className="flex items-center justify-between border-b border-white/10 p-4">
+                    <div>
+                        <h2 className="text-lg font-semibold text-sparkle-text">Scroll Behavior Preview</h2>
+                        <p className="text-sm text-sparkle-text-secondary">Try scrolling in each panel to compare</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-lg p-2 text-sparkle-text-secondary transition-colors hover:bg-white/[0.03] hover:text-sparkle-text"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="p-6">
+                    <div className="mb-6 flex flex-col items-center gap-3">
+                        <span className="text-sm text-sparkle-text-secondary">Select mode to preview:</span>
+                        <div className="inline-flex items-center rounded-lg border border-white/10 bg-sparkle-card p-1">
+                            <button
+                                type="button"
+                                onClick={() => setPreviewMode('smooth')}
+                                className={cn(
+                                    'rounded-md px-6 py-2 text-sm font-medium transition-colors',
+                                    previewMode === 'smooth'
+                                        ? 'bg-[var(--accent-primary)] text-white'
+                                        : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
+                                )}
+                            >
+                                Buttery
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPreviewMode('native')}
+                                className={cn(
+                                    'rounded-md px-6 py-2 text-sm font-medium transition-colors',
+                                    previewMode === 'native'
+                                        ? 'bg-[var(--accent-primary)] text-white'
+                                        : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
+                                )}
+                            >
+                                Native
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className={cn(
+                            "rounded-xl border overflow-hidden transition-all duration-300",
+                            previewMode === 'smooth' 
+                                ? "border-purple-500/50 shadow-lg shadow-purple-500/20 ring-2 ring-purple-500/30" 
+                                : "border-white/10"
+                        )}>
+                            <div className={cn(
+                                "border-b p-3 transition-colors",
+                                previewMode === 'smooth'
+                                    ? "bg-gradient-to-br from-purple-500/20 to-purple-600/10 border-purple-500/30"
+                                    : "bg-white/[0.03] border-white/10"
+                            )}>
+                                <div className="flex items-center gap-2">
+                                    <div className={cn(
+                                        "h-2.5 w-2.5 rounded-full transition-all duration-300",
+                                        previewMode === 'smooth' 
+                                            ? "bg-purple-400 shadow-lg shadow-purple-400/50 animate-pulse" 
+                                            : "bg-white/20"
+                                    )} />
+                                    <h3 className={cn(
+                                        "text-sm font-semibold transition-colors",
+                                        previewMode === 'smooth' ? "text-purple-300" : "text-sparkle-text"
+                                    )}>Buttery Smooth</h3>
+                                </div>
+                                <p className="mt-1 text-xs text-sparkle-text-secondary">Eased, interpolated scrolling</p>
+                            </div>
+                            <div
+                                ref={smoothScrollRef}
+                                className={cn(
+                                    "h-[400px] overflow-y-auto p-4 space-y-3 transition-colors",
+                                    previewMode === 'smooth' ? "bg-purple-500/5" : "bg-sparkle-card"
+                                )}
+                                style={{ scrollBehavior: 'auto' }}
+                            >
+                                {sampleContent.map((item) => (
+                                    <div
+                                        key={item.id}
+                                        className={cn(
+                                            "rounded-lg border p-4 transition-all",
+                                            previewMode === 'smooth'
+                                                ? "border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 hover:border-purple-500/30"
+                                                : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
+                                        )}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-sm font-semibold text-sparkle-text">{item.title}</h4>
+                                                <p className="mt-1.5 text-xs text-sparkle-text-secondary leading-relaxed">{item.description}</p>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1 shrink-0">
+                                                <span className={cn(
+                                                    "text-xs px-2 py-0.5 rounded-full",
+                                                    item.status === 'Active' && "bg-green-500/20 text-green-400",
+                                                    item.status === 'Pending' && "bg-yellow-500/20 text-yellow-400",
+                                                    item.status === 'Completed' && "bg-blue-500/20 text-blue-400",
+                                                    item.status === 'In Progress' && "bg-purple-500/20 text-purple-400",
+                                                    item.status === 'Review' && "bg-orange-500/20 text-orange-400",
+                                                    item.status === 'Draft' && "bg-gray-500/20 text-gray-400"
+                                                )}>{item.status}</span>
+                                                <span className="text-xs text-sparkle-text-secondary">{item.timestamp}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className={cn(
+                            "rounded-xl border overflow-hidden transition-all duration-300",
+                            previewMode === 'native' 
+                                ? "border-blue-500/50 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/30" 
+                                : "border-white/10"
+                        )}>
+                            <div className={cn(
+                                "border-b p-3 transition-colors",
+                                previewMode === 'native'
+                                    ? "bg-gradient-to-br from-blue-500/20 to-blue-600/10 border-blue-500/30"
+                                    : "bg-white/[0.03] border-white/10"
+                            )}>
+                                <div className="flex items-center gap-2">
+                                    <div className={cn(
+                                        "h-2.5 w-2.5 rounded-full transition-all duration-300",
+                                        previewMode === 'native' 
+                                            ? "bg-blue-400 shadow-lg shadow-blue-400/50 animate-pulse" 
+                                            : "bg-white/20"
+                                    )} />
+                                    <h3 className={cn(
+                                        "text-sm font-semibold transition-colors",
+                                        previewMode === 'native' ? "text-blue-300" : "text-sparkle-text"
+                                    )}>Native Platform</h3>
+                                </div>
+                                <p className="mt-1 text-xs text-sparkle-text-secondary">Direct, instant scrolling</p>
+                            </div>
+                            <div
+                                ref={nativeScrollRef}
+                                className={cn(
+                                    "h-[400px] overflow-y-auto p-4 space-y-3 transition-colors",
+                                    previewMode === 'native' ? "bg-blue-500/5" : "bg-sparkle-card"
+                                )}
+                            >
+                                {sampleContent.map((item) => (
+                                    <div
+                                        key={item.id}
+                                        className={cn(
+                                            "rounded-lg border p-4 transition-all",
+                                            previewMode === 'native'
+                                                ? "border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 hover:border-blue-500/30"
+                                                : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
+                                        )}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-sm font-semibold text-sparkle-text">{item.title}</h4>
+                                                <p className="mt-1.5 text-xs text-sparkle-text-secondary leading-relaxed">{item.description}</p>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1 shrink-0">
+                                                <span className={cn(
+                                                    "text-xs px-2 py-0.5 rounded-full",
+                                                    item.status === 'Active' && "bg-green-500/20 text-green-400",
+                                                    item.status === 'Pending' && "bg-yellow-500/20 text-yellow-400",
+                                                    item.status === 'Completed' && "bg-blue-500/20 text-blue-400",
+                                                    item.status === 'In Progress' && "bg-purple-500/20 text-purple-400",
+                                                    item.status === 'Review' && "bg-orange-500/20 text-orange-400",
+                                                    item.status === 'Draft' && "bg-gray-500/20 text-gray-400"
+                                                )}>{item.status}</span>
+                                                <span className="text-xs text-sparkle-text-secondary">{item.timestamp}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 border-t border-white/10 p-4">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-lg border border-white/10 bg-sparkle-card px-4 py-2 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.03]"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onApply(previewMode)}
+                        className="rounded-lg bg-[var(--accent-primary)] px-4 py-2 text-sm text-white transition-all hover:opacity-90"
+                    >
+                        Apply {previewMode === 'smooth' ? 'Buttery' : 'Native'} Mode
+                    </button>
+                </div>
+            </div>
+        </div>
     )
 }

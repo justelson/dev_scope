@@ -1,13 +1,99 @@
 import type { Components } from 'react-markdown'
-import type { HTMLAttributes } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { Children, Fragment, cloneElement, isValidElement, type HTMLAttributes, type ReactNode } from 'react'
+import { AlertTriangle, ExternalLink, Info, Lightbulb, ShieldAlert, Siren } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CodeBlock, InlineCode } from './CodeElements'
 import { renderColorAwareChildren } from './colorTokens'
-import { resolveImageSrc } from './paths'
+import { resolveImageSrc, resolveImageSrcSet } from './paths'
 import { resolveMarkdownLinkTarget } from './linkNavigation'
 
 type DivProps = HTMLAttributes<HTMLDivElement> & { align?: string }
+type SourceProps = HTMLAttributes<HTMLSourceElement> & { src?: string; srcSet?: string }
+type ParagraphProps = HTMLAttributes<HTMLParagraphElement> & { align?: string }
+type HeadingProps = HTMLAttributes<HTMLHeadingElement> & { align?: string }
+
+type MarkdownAlertType = 'tip' | 'note' | 'important' | 'warning' | 'caution'
+
+const MARKDOWN_ALERT_META: Record<MarkdownAlertType, {
+    label: string
+    icon: typeof Lightbulb
+    className: string
+}> = {
+    tip: {
+        label: 'Tip',
+        icon: Lightbulb,
+        className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+    },
+    note: {
+        label: 'Note',
+        icon: Info,
+        className: 'border-sky-500/30 bg-sky-500/10 text-sky-100'
+    },
+    important: {
+        label: 'Important',
+        icon: ShieldAlert,
+        className: 'border-violet-500/30 bg-violet-500/10 text-violet-100'
+    },
+    warning: {
+        label: 'Warning',
+        icon: AlertTriangle,
+        className: 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+    },
+    caution: {
+        label: 'Caution',
+        icon: Siren,
+        className: 'border-rose-500/30 bg-rose-500/10 text-rose-100'
+    }
+}
+
+function flattenNodeText(node: ReactNode): string {
+    if (typeof node === 'string' || typeof node === 'number') return String(node)
+    if (!node) return ''
+    if (Array.isArray(node)) return node.map(flattenNodeText).join('')
+    if (isValidElement(node)) return flattenNodeText(node.props.children)
+    return ''
+}
+
+function detectMarkdownAlert(children: ReactNode): {
+    type: MarkdownAlertType
+    children: ReactNode
+} | null {
+    const childArray = Children.toArray(children)
+    if (childArray.length === 0) return null
+
+    const firstMeaningfulIndex = childArray.findIndex((child) => flattenNodeText(child).trim().length > 0)
+    if (firstMeaningfulIndex < 0) return null
+
+    const firstChild = childArray[firstMeaningfulIndex]
+    const firstChildText = flattenNodeText(firstChild).trim()
+    const match = firstChildText.match(/^\[!(TIP|NOTE|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i)
+    if (!match) return null
+
+    const type = match[1].toLowerCase() as MarkdownAlertType
+    const remainder = match[2]?.trim() || ''
+    const nextChildren = [...childArray]
+
+    if (remainder && isValidElement(firstChild)) {
+        nextChildren[firstMeaningfulIndex] = cloneElement(firstChild, firstChild.props, remainder)
+    } else if (remainder) {
+        nextChildren[firstMeaningfulIndex] = remainder
+    } else {
+        nextChildren.splice(firstMeaningfulIndex, 1)
+    }
+
+    return {
+        type,
+        children: nextChildren
+    }
+}
+
+function getAlignmentClass(align?: string): string | null {
+    const normalized = String(align || '').trim().toLowerCase()
+    if (normalized === 'center') return 'text-center items-center'
+    if (normalized === 'right') return 'text-right items-end'
+    if (normalized === 'left') return 'text-left items-start'
+    return null
+}
 
 export function createMarkdownComponents(
     filePath?: string,
@@ -17,30 +103,30 @@ export function createMarkdownComponents(
     }
 ): Components {
     return {
-        h1: ({ children }) => (
-            <h1 className="text-2xl font-bold text-sparkle-text pb-2 mb-4 border-b border-sparkle-border first:mt-0 mt-8">
+        h1: ({ children, className, align, ...props }: HeadingProps) => (
+            <h1 className={cn('mt-8 mb-4 border-b border-white/10 pb-2 text-2xl font-bold text-sparkle-text first:mt-0', getAlignmentClass(align), className)} {...props}>
                 {children}
             </h1>
         ),
         div: ({ className, ...props }: DivProps) => {
-            const isCenter = props.align === 'center'
-            return <div className={cn(className, isCenter && 'flex flex-col items-center text-center')} {...props} />
+            const alignmentClass = getAlignmentClass(props.align)
+            return <div className={cn(className, alignmentClass && 'flex flex-col', alignmentClass)} {...props} />
         },
-        h2: ({ children }) => (
-            <h2 className="text-xl font-semibold text-sparkle-text pb-2 mb-3 border-b border-sparkle-border mt-8 first:mt-0">
+        h2: ({ children, className, align, ...props }: HeadingProps) => (
+            <h2 className={cn('mt-8 mb-3 border-b border-white/10 pb-2 text-xl font-semibold text-sparkle-text first:mt-0', getAlignmentClass(align), className)} {...props}>
                 {children}
             </h2>
         ),
-        h3: ({ children }) => (
-            <h3 className="text-lg font-semibold text-sparkle-text mt-6 mb-3 first:mt-0">{children}</h3>
+        h3: ({ children, className, align, ...props }: HeadingProps) => (
+            <h3 className={cn('text-lg font-semibold text-sparkle-text mt-6 mb-3 first:mt-0', getAlignmentClass(align), className)} {...props}>{children}</h3>
         ),
-        h4: ({ children }) => <h4 className="text-base font-semibold text-sparkle-text mt-4 mb-2">{children}</h4>,
-        h5: ({ children }) => <h5 className="text-sm font-semibold text-sparkle-text mt-4 mb-2">{children}</h5>,
-        h6: ({ children }) => (
-            <h6 className="text-sm font-semibold text-sparkle-text-dark mt-4 mb-2">{children}</h6>
+        h4: ({ children, className, align, ...props }: HeadingProps) => <h4 className={cn('text-base font-semibold text-sparkle-text mt-4 mb-2', getAlignmentClass(align), className)} {...props}>{children}</h4>,
+        h5: ({ children, className, align, ...props }: HeadingProps) => <h5 className={cn('text-sm font-semibold text-sparkle-text mt-4 mb-2', getAlignmentClass(align), className)} {...props}>{children}</h5>,
+        h6: ({ children, className, align, ...props }: HeadingProps) => (
+            <h6 className={cn('text-sm font-semibold text-sparkle-text-dark mt-4 mb-2', getAlignmentClass(align), className)} {...props}>{children}</h6>
         ),
-        p: ({ children }) => (
-            <p className="text-sparkle-text-dark leading-relaxed mb-4 last:mb-0 break-words [overflow-wrap:anywhere]">
+        p: ({ children, className, align, ...props }: ParagraphProps) => (
+            <p className={cn('text-sparkle-text-dark leading-relaxed mb-4 last:mb-0 break-words [overflow-wrap:anywhere]', getAlignmentClass(align), className)} {...props}>
                 {renderColorAwareChildren(children, 'p')}
             </p>
         ),
@@ -113,11 +199,18 @@ export function createMarkdownComponents(
                 </CodeBlock>
             )
         },
-        pre: ({ children, ...props }) => (
-            <pre className="whitespace-pre overflow-x-auto font-mono text-sm leading-none" {...props}>
-                {children}
-            </pre>
-        ),
+        pre: ({ children, ...props }) => {
+            const childArray = Children.toArray(children)
+            if (childArray.length === 1 && isValidElement(childArray[0])) {
+                return <Fragment>{children}</Fragment>
+            }
+
+            return (
+                <pre className="overflow-x-auto whitespace-pre rounded-lg border border-white/10 bg-sparkle-card p-4 font-mono text-sm leading-none" {...props}>
+                    {children}
+                </pre>
+            )
+        },
         ul: ({ children }) => (
             <ul className="list-disc list-outside ml-6 mb-4 space-y-1 text-sparkle-text-dark">{children}</ul>
         ),
@@ -125,18 +218,38 @@ export function createMarkdownComponents(
             <ol className="list-decimal list-outside ml-6 mb-4 space-y-1 text-sparkle-text-dark">{children}</ol>
         ),
         li: ({ children }) => <li className="leading-relaxed pl-1 break-words [overflow-wrap:anywhere]">{renderColorAwareChildren(children, 'li')}</li>,
-        blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-blue-500/50 pl-4 py-1 my-4 bg-blue-500/5 rounded-r-lg text-sparkle-text-secondary italic">
-                {renderColorAwareChildren(children, 'blockquote')}
-            </blockquote>
-        ),
-        hr: () => <hr className="border-sparkle-border my-6" />,
+        blockquote: ({ children }) => {
+            const alert = detectMarkdownAlert(children)
+            if (alert) {
+                const meta = MARKDOWN_ALERT_META[alert.type]
+                const Icon = meta.icon
+
+                return (
+                    <blockquote className={cn('my-4 rounded-xl border px-4 py-3', meta.className)}>
+                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                            <Icon size={16} />
+                            <span>{meta.label}</span>
+                        </div>
+                        <div className="space-y-3 text-sm leading-relaxed text-white/88">
+                            {renderColorAwareChildren(alert.children, 'blockquote')}
+                        </div>
+                    </blockquote>
+                )
+            }
+
+            return (
+                <blockquote className="my-4 rounded-r-lg border-l-4 border-blue-500/50 bg-blue-500/5 py-1 pl-4 text-sparkle-text-secondary italic">
+                    {renderColorAwareChildren(children, 'blockquote')}
+                </blockquote>
+            )
+        },
+        hr: () => <hr className="my-6 border-white/10" />,
         img: ({ src, alt }) => (
             <span className="inline-flex flex-col items-center align-bottom mr-2 mb-2">
                 <img
                     src={resolveImageSrc(src || '', filePath)}
                     alt={alt || ''}
-                    className="max-w-full h-auto rounded-lg border border-sparkle-border"
+                    className="h-auto max-w-full rounded-lg border border-white/10"
                 />
                 {alt && (
                     <span className="hidden text-center text-sm text-sparkle-text-secondary mt-2 group-hover:block">
@@ -145,25 +258,37 @@ export function createMarkdownComponents(
                 )}
             </span>
         ),
+        picture: ({ children }) => (
+            <span className="inline-flex max-w-full flex-col items-center align-bottom mr-2 mb-2">
+                {children}
+            </span>
+        ),
+        source: ({ src, srcSet, ...props }: SourceProps) => (
+            <source
+                {...props}
+                src={src ? resolveImageSrc(src, filePath) : undefined}
+                srcSet={srcSet ? resolveImageSrcSet(srcSet, filePath) : undefined}
+            />
+        ),
         table: ({ children }) => (
-            <div className="overflow-x-auto my-4 rounded-lg border border-sparkle-border">
+            <div className="my-4 overflow-x-auto rounded-lg border border-white/10">
                 <table className="w-full border-collapse text-sm">{children}</table>
             </div>
         ),
         thead: ({ children }) => <thead className="bg-sparkle-accent">{children}</thead>,
         tbody: ({ children }) => <tbody>{children}</tbody>,
         tr: ({ children }) => (
-            <tr className="border-b border-sparkle-border last:border-0 hover:bg-sparkle-accent transition-colors">
+            <tr className="border-b border-white/10 transition-colors last:border-0 hover:bg-sparkle-accent">
                 {children}
             </tr>
         ),
         th: ({ children }) => (
-            <th className="px-4 py-3 text-left font-semibold text-sparkle-text border-r border-sparkle-border last:border-r-0">
+            <th className="border-r border-white/10 px-4 py-3 text-left font-semibold text-sparkle-text last:border-r-0">
                 {renderColorAwareChildren(children, 'th')}
             </th>
         ),
         td: ({ children }) => (
-            <td className="px-4 py-3 text-sparkle-text-dark border-r border-sparkle-border last:border-r-0 break-words [overflow-wrap:anywhere]">
+            <td className="border-r border-white/10 px-4 py-3 text-sparkle-text-dark last:border-r-0 break-words [overflow-wrap:anywhere]">
                 {renderColorAwareChildren(children, 'td')}
             </td>
         ),
@@ -175,7 +300,7 @@ export function createMarkdownComponents(
                     type="checkbox"
                     checked={checked}
                     readOnly
-                    className="mr-2 rounded border-sparkle-border bg-transparent checked:bg-blue-500 checked:border-blue-500"
+                    className="mr-2 rounded border-white/10 bg-transparent checked:border-blue-500 checked:bg-blue-500"
                 />
             )
         },

@@ -1,3 +1,5 @@
+import type { PreviewOpenOptions } from '../file-preview/types'
+
 type MarkdownPathTarget = {
     path: string
     anchor?: string
@@ -10,7 +12,7 @@ type MarkdownLinkNavigationOptions = {
     openPreview?: (
         file: { name: string; path: string },
         ext: string,
-        options?: { startInEditMode?: boolean }
+        options?: PreviewOpenOptions
     ) => Promise<void>
 }
 

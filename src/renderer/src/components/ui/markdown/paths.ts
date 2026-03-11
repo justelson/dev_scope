@@ -1,16 +1,14 @@
 function getFileUrl(path: string): string {
-    if (path.startsWith('http') || path.startsWith('data:')) return path
+    if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('devscope://')) return path
 
     const normalizedPath = path.replace(/\\/g, '/')
-    const encodedPath = normalizedPath
-        .split('/')
-        .map((part) => {
-            if (part.endsWith(':')) return part
-            return encodeURIComponent(part)
-        })
-        .join('/')
+    const isUncPath = normalizedPath.startsWith('//')
+    const trimmed = isUncPath
+        ? normalizedPath.slice(2)
+        : normalizedPath.startsWith('/') ? normalizedPath.slice(1) : normalizedPath
+    const encodedPath = encodeURI(trimmed).replace(/#/g, '%23').replace(/\?/g, '%3F')
 
-    return `file:///${encodedPath}`
+    return isUncPath ? `devscope://${encodedPath}` : `devscope:///${encodedPath}`
 }
 
 export function resolveImageSrc(src: string, filePath?: string): string {
@@ -41,4 +39,27 @@ export function resolveImageSrc(src: string, filePath?: string): string {
     }
 
     return getFileUrl(parts.join('/'))
+}
+
+export function resolveImageSrcSet(srcSet: string, filePath?: string): string {
+    const raw = String(srcSet || '').trim()
+    if (!raw) return raw
+
+    return raw
+        .split(',')
+        .map((candidate) => {
+            const trimmed = candidate.trim()
+            if (!trimmed) return trimmed
+
+            const firstWhitespace = trimmed.search(/\s/)
+            if (firstWhitespace < 0) {
+                return resolveImageSrc(trimmed, filePath)
+            }
+
+            const src = trimmed.slice(0, firstWhitespace)
+            const descriptor = trimmed.slice(firstWhitespace).trim()
+            const resolvedSrc = resolveImageSrc(src, filePath)
+            return descriptor ? `${resolvedSrc} ${descriptor}` : resolvedSrc
+        })
+        .join(', ')
 }

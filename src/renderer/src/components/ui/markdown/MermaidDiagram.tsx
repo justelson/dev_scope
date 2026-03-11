@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 
 mermaid.initialize({
@@ -31,8 +31,35 @@ function hashString(input: string): string {
 }
 
 export const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: string }) {
+    const containerRef = useRef<HTMLDivElement | null>(null)
     const [svg, setSvg] = useState<string>(() => mermaidSvgCache.get(chart) || '')
     const [error, setError] = useState('')
+    const [isNearViewport, setIsNearViewport] = useState<boolean>(() => Boolean(mermaidSvgCache.get(chart)))
+
+    useEffect(() => {
+        if (svg) {
+            setIsNearViewport(true)
+            return
+        }
+
+        const node = containerRef.current
+        if (!node) return
+
+        const observer = new IntersectionObserver((entries) => {
+            const [entry] = entries
+            if (!entry?.isIntersecting) return
+            setIsNearViewport(true)
+            observer.disconnect()
+        }, {
+            rootMargin: '480px 0px'
+        })
+
+        observer.observe(node)
+
+        return () => {
+            observer.disconnect()
+        }
+    }, [svg, chart])
 
     useEffect(() => {
         const cachedSvg = mermaidSvgCache.get(chart)
@@ -42,7 +69,10 @@ export const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: s
             return
         }
 
+        if (!isNearViewport) return
+
         let cancelled = false
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
         setSvg('')
         setError('')
 
@@ -62,16 +92,32 @@ export const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: s
             }
         }
 
-        renderDiagram()
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            const idleId = window.requestIdleCallback(() => {
+                void renderDiagram()
+            }, { timeout: 300 })
+
+            return () => {
+                cancelled = true
+                window.cancelIdleCallback(idleId)
+            }
+        }
+
+        timeoutId = window.setTimeout(() => {
+            void renderDiagram()
+        }, 16)
 
         return () => {
             cancelled = true
+            if (timeoutId !== null) {
+                window.clearTimeout(timeoutId)
+            }
         }
-    }, [chart])
+    }, [chart, isNearViewport])
 
     if (error) {
         return (
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+            <div ref={containerRef} className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
                 <strong>Mermaid Error:</strong> {error}
             </div>
         )
@@ -79,15 +125,19 @@ export const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: s
 
     if (!svg) {
         return (
-            <div className="p-4 bg-sparkle-card rounded-lg text-sparkle-text-secondary text-sm">
-                Rendering diagram...
+            <div
+                ref={containerRef}
+                className="flex min-h-[220px] items-center justify-center rounded-lg border border-white/10 bg-sparkle-card p-4 text-sm text-sparkle-text-secondary"
+            >
+                {isNearViewport ? 'Rendering diagram...' : 'Diagram will render when you scroll here'}
             </div>
         )
     }
 
     return (
         <div
-            className="mermaid-diagram flex justify-center items-center p-4 bg-sparkle-card rounded-lg overflow-x-auto"
+            ref={containerRef}
+            className="mermaid-diagram flex items-center justify-center overflow-x-auto rounded-lg border border-white/10 bg-sparkle-card p-4 [content-visibility:auto]"
             dangerouslySetInnerHTML={{ __html: svg }}
         />
     )

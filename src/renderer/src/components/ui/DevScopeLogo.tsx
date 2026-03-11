@@ -12,7 +12,6 @@ interface DevScopeLogoProps {
     className?: string
 }
 
-// Theme-specific logo colors
 const THEME_COLORS = {
     dark: { primary: '#22d3ee', secondary: '#06b6d4', glow: 'cyan' },
     midnight: { primary: '#6366f1', secondary: '#4f46e5', glow: 'indigo' },
@@ -23,18 +22,17 @@ const THEME_COLORS = {
     charcoal: { primary: '#fbbf24', secondary: '#f59e0b', glow: 'amber' },
     navy: { primary: '#60a5fa', secondary: '#3b82f6', glow: 'blue' },
     light: { primary: '#22d3ee', secondary: '#06b6d4', glow: 'cyan' },
-    green: { primary: '#34d399', secondary: '#10b981', glow: 'emerald' },
-}
+    green: { primary: '#34d399', secondary: '#10b981', glow: 'emerald' }
+} as const
 
-const README_ASCII_BANNER = `    ██
- ██████╗ ███████╗██╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗
- ██╔══██╗██╔════╝██║   ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
- ██║  ██║█████╗  ██║   ██║███████╗██║     ██║   ██║██████╔╝█████╗  
- ██║  ██║██╔══╝  ╚██╗ ██╔╝╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  
- ██████╔╝███████╗ ╚████╔╝ ███████║╚██████╗╚██████╔╝██║     ███████╗
- ╚═════╝ ╚══════╝  ╚═══╝  ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝`
-
-const CLEAN_README_ASCII_BANNER = README_ASCII_BANNER.split('\n').slice(1).join('\n')
+const CLEAN_README_ASCII_BANNER = [
+    '██████╗ ███████╗██╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗',
+    '██╔══██╗██╔════╝██║   ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝',
+    '██║  ██║█████╗  ██║   ██║███████╗██║     ██║   ██║██████╔╝█████╗  ',
+    '██║  ██║██╔══╝  ╚██╗ ██╔╝╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  ',
+    '██████╔╝███████╗ ╚████╔╝ ███████║╚██████╗╚██████╔╝██║     ███████╗',
+    '╚═════╝ ╚══════╝  ╚═══╝  ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝'
+].join('\n')
 
 export default function DevScopeLogo({ size = 'md', showText = false, className }: DevScopeLogoProps) {
     const { settings } = useSettings()
@@ -63,10 +61,10 @@ export default function DevScopeLogo({ size = 'md', showText = false, className 
                 />
 
                 <div
-                    className="relative w-full h-full rounded-lg bg-gradient-to-br from-[#0a1628] to-[#0c1a2e] border flex items-center justify-center overflow-hidden"
+                    className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border bg-gradient-to-br from-[#0a1628] to-[#0c1a2e]"
                     style={{ borderColor: `${themeColors.primary}4D` }}
                 >
-                    <svg viewBox="0 0 24 24" className="w-[70%] h-[70%]" fill="none">
+                    <svg viewBox="0 0 24 24" className="h-[70%] w-[70%]" fill="none">
                         <g style={{ color: themeColors.primary }}>
                             <rect x="4" y="4" width="3" height="2" fill="currentColor" opacity="0.9" />
                             <rect x="7" y="4" width="3" height="2" fill="currentColor" opacity="0.8" />
@@ -91,7 +89,7 @@ export default function DevScopeLogo({ size = 'md', showText = false, className 
                         <rect x="2" y="2" width="2" height="2" fill={themeColors.primary} opacity="0.8" />
                     </svg>
                     <div
-                        className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-transparent animate-pulse"
+                        className="absolute inset-0 animate-pulse bg-gradient-to-b from-transparent via-transparent to-transparent"
                         style={{
                             backgroundImage: `linear-gradient(to bottom, transparent, ${themeColors.primary}0D, transparent)`
                         }}
@@ -115,12 +113,12 @@ export function DevScopeLogoMini({ className }: { className?: string }) {
     return (
         <div className={cn('relative inline-flex', className)}>
             <div
-                className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#0a1628] to-[#0c1a2e] border flex items-center justify-center relative overflow-hidden"
+                className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg border bg-gradient-to-br from-[#0a1628] to-[#0c1a2e]"
                 style={{ borderColor: `${themeColors.primary}4D` }}
             >
-                <span className="font-bold text-sm relative z-10" style={{ color: themeColors.primary }}>D</span>
+                <span className="relative z-10 text-sm font-bold" style={{ color: themeColors.primary }}>D</span>
                 <div
-                    className="absolute top-0.5 left-0.5 w-1 h-1 rounded-full"
+                    className="absolute left-0.5 top-0.5 h-1 w-1 rounded-full"
                     style={{ backgroundColor: themeColors.primary }}
                 />
             </div>
@@ -135,7 +133,7 @@ export function DevScopeLogoASCII({ className }: { className?: string }) {
     return (
         <div className={cn('relative inline-block', className)}>
             <pre
-                className="text-[8px] leading-[1.1] font-mono select-none"
+                className="m-0 whitespace-pre text-[8px] leading-[1.1] font-mono select-none"
                 style={{ color: themeColors.primary }}
             >
                 {CLEAN_README_ASCII_BANNER}
@@ -151,7 +149,7 @@ export function DevScopeLogoASCIIMini({ className }: { className?: string }) {
     return (
         <div className={cn('relative inline-block', className)}>
             <pre
-                className="text-[4px] leading-[1] font-mono select-none"
+                className="m-0 whitespace-pre text-[4px] leading-[1] font-mono select-none"
                 style={{ color: themeColors.primary }}
             >
                 {CLEAN_README_ASCII_BANNER}
