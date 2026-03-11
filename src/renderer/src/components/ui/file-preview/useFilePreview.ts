@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { PreviewFile } from './types'
-import { resolvePreviewType } from './utils'
+import type { PreviewFile, PreviewMediaItem, PreviewMediaSource, PreviewOpenOptions } from './types'
+import { isMediaPreviewType, resolvePreviewType } from './utils'
 
 async function yieldToBrowserPaint(): Promise<void> {
     await new Promise<void>((resolve) => {
@@ -14,6 +14,7 @@ async function yieldToBrowserPaint(): Promise<void> {
 
 export interface UseFilePreviewReturn {
     previewFile: PreviewFile | null
+    previewMediaItems: PreviewMediaItem[]
     previewContent: string
     loadingPreview: boolean
     previewTruncated: boolean
@@ -23,7 +24,7 @@ export interface UseFilePreviewReturn {
     openPreview: (
         file: { name: string; path: string },
         ext: string,
-        options?: { startInEditMode?: boolean }
+        options?: PreviewOpenOptions
     ) => Promise<void>
     closePreview: () => void
     openFile: (filePath: string) => Promise<void>
@@ -42,8 +43,37 @@ function normalizePreviewContent(content: unknown): string {
     }
 }
 
+function normalizeMediaItems(items?: PreviewMediaSource[]): PreviewMediaItem[] {
+    if (!items?.length) return []
+
+    const deduped = new Map<string, PreviewMediaItem>()
+    for (const item of items) {
+        const name = String(item?.name || '').trim()
+        const path = String(item?.path || '').trim()
+        const extension = String(item?.extension || '').trim().toLowerCase()
+        if (!name || !path) continue
+
+        const previewTarget = resolvePreviewType(name, extension)
+        if (!previewTarget || !isMediaPreviewType(previewTarget.type)) continue
+
+        const dedupeKey = path.toLowerCase()
+        if (deduped.has(dedupeKey)) continue
+
+        deduped.set(dedupeKey, {
+            name,
+            path,
+            extension,
+            thumbnailPath: item.thumbnailPath ?? null,
+            type: previewTarget.type
+        })
+    }
+
+    return Array.from(deduped.values())
+}
+
 export function useFilePreview(): UseFilePreviewReturn {
     const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null)
+    const [previewMediaItems, setPreviewMediaItems] = useState<PreviewMediaItem[]>([])
     const [previewContent, setPreviewContent] = useState<string>('')
     const [loadingPreview, setLoadingPreview] = useState(false)
     const [previewTruncated, setPreviewTruncated] = useState(false)
@@ -72,9 +102,11 @@ export function useFilePreview(): UseFilePreviewReturn {
     const openPreview = async (
         file: { name: string; path: string },
         ext: string,
-        options?: { startInEditMode?: boolean }
+        options?: PreviewOpenOptions
     ) => {
         resetMeta()
+        setLoadingPreview(false)
+        setPreviewMediaItems(normalizeMediaItems(options?.mediaItems))
         const previewTarget = resolvePreviewType(file.name, ext)
 
         if (!previewTarget) {
@@ -82,7 +114,6 @@ export function useFilePreview(): UseFilePreviewReturn {
             return
         }
 
-        setLoadingPreview(true)
         setPreviewFile({
             name: file.name,
             path: file.path,
@@ -90,13 +121,14 @@ export function useFilePreview(): UseFilePreviewReturn {
             language: previewTarget.language,
             startInEditMode: options?.startInEditMode === true
         })
-        await yieldToBrowserPaint()
 
         if (!previewTarget.needsContent) {
             setPreviewContent('')
-            setLoadingPreview(false)
             return
         }
+
+        setLoadingPreview(true)
+        await yieldToBrowserPaint()
 
         try {
             const res = await window.devscope.readFileContent(file.path)
@@ -120,12 +152,14 @@ export function useFilePreview(): UseFilePreviewReturn {
 
     const closePreview = () => {
         setPreviewFile(null)
+        setPreviewMediaItems([])
         setPreviewContent('')
         resetMeta()
     }
 
     return {
         previewFile,
+        previewMediaItems,
         previewContent,
         loadingPreview,
         previewTruncated,

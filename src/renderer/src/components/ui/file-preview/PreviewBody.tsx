@@ -1,8 +1,9 @@
 import { RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import TextPreviewContent from './TextPreviewContent'
-import type { PreviewFile, PreviewMeta } from './types'
-import { formatPreviewBytes, getFileUrl, isTextLikeFileType } from './utils'
+import MediaPreviewContent from './MediaPreviewContent'
+import type { PreviewFile, PreviewMediaItem, PreviewMeta } from './types'
+import { formatPreviewBytes, getFileUrl, isMediaPreviewType, isTextLikeFileType } from './utils'
 import type { ViewportPreset, ViewportPresetConfig } from './viewport'
 import SyntaxPreview from './SyntaxPreview'
 import type { editor as MonacoEditor } from 'monaco-editor'
@@ -37,6 +38,8 @@ interface PreviewBodyProps {
     previewFocusLine?: number | null
     isExpanded?: boolean
     fullBleed?: boolean
+    mediaItems?: PreviewMediaItem[]
+    onSelectMedia?: (item: PreviewMediaItem) => Promise<void> | void
 }
 
 function resolveEditorLanguage(file: PreviewFile): string {
@@ -76,7 +79,9 @@ export default function PreviewBody({
     lineMarkersOverride,
     previewFocusLine,
     isExpanded = false,
-    fullBleed = false
+    fullBleed = false,
+    mediaItems,
+    onSelectMedia
 }: PreviewBodyProps) {
     const isTextLike = isTextLikeFileType(file.type)
     const useFullBleed = isExpanded || fullBleed
@@ -143,31 +148,14 @@ export default function PreviewBody({
         )
     }
 
-    if (file.type === 'image') {
+    if (isMediaPreviewType(file.type)) {
         return (
-            <div className="flex items-center justify-center p-4">
-                <img
-                    src={getFileUrl(file.path)}
-                    alt={file.name}
-                    className={cn(
-                        'max-w-full object-contain',
-                        useFullBleed ? 'h-full max-h-full w-full rounded-none shadow-none' : 'max-h-full rounded-lg shadow-2xl'
-                    )}
-                />
-            </div>
-        )
-    }
-
-    if (file.type === 'video') {
-        return (
-            <div className="flex items-center justify-center p-4 w-full">
-                <video
-                    src={getFileUrl(file.path)}
-                    controls
-                    className={cn(
-                        'max-w-full',
-                        useFullBleed ? 'h-full max-h-full w-full rounded-none shadow-none' : 'max-h-full rounded-lg shadow-2xl'
-                    )}
+            <div className={cn('w-full h-full min-h-0 overflow-hidden', useFullBleed ? '' : 'rounded-xl border border-white/5 bg-sparkle-card')}>
+                <MediaPreviewContent
+                    file={file}
+                    mediaItems={mediaItems}
+                    onSelectMedia={onSelectMedia}
+                    isExpanded={useFullBleed}
                 />
             </div>
         )

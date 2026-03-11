@@ -2,10 +2,11 @@ import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import {
     AppWindow, ClipboardPaste, Copy, ExternalLink, ChevronRight, Code, File,
-    FileCode, FilePlus, FileText, Folder, FolderOpen, FolderPlus, Github, Pencil, RefreshCw, Trash2
+    FileCode, FilePlus, FileText, Folder, FolderOpen, FolderPlus, Github, Music4, Pencil, Play, RefreshCw, Trash2
 } from 'lucide-react'
 import ProjectIcon from '@/components/ui/ProjectIcon'
 import { cn } from '@/lib/utils'
+import { getFileUrl } from '@/components/ui/file-preview/utils'
 import { getProjectTypeById, type ContentLayout, type FileItem, type FolderItem, type Project, type ViewMode } from './types'
 import { FinderItem, SectionHeader, WRAP_AND_CLAMP_2 } from '../shared/BrowseSectionPrimitives'
 import { FolderBrowseProjectCard } from './FolderBrowseProjectCard'
@@ -62,6 +63,66 @@ interface FolderBrowseContentProps {
     formatFileSize: (bytes: number) => string
     getFileColor: (ext: string) => string
     formatRelativeTime: (timestamp?: number) => string
+}
+
+function MediaFilePreview({ file, compact = false }: { file: FileItem; compact?: boolean }) {
+    const frameClassName = compact ? 'h-full w-full rounded-[14px]' : 'h-full w-full rounded-lg'
+
+    if (file.previewType === 'image') {
+        return (
+            <img
+                src={getFileUrl(file.previewThumbnailPath || file.path)}
+                alt={file.name}
+                className={cn(frameClassName, 'object-cover')}
+                loading="lazy"
+            />
+        )
+    }
+
+    if (file.previewType === 'video') {
+        return (
+            <div className={cn(frameClassName, 'relative overflow-hidden bg-black')}>
+                <video
+                    src={getFileUrl(file.path)}
+                    muted
+                    preload="metadata"
+                    playsInline
+                    className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                <div className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white shadow-lg">
+                    <Play size={11} className="translate-x-[1px]" />
+                </div>
+            </div>
+        )
+    }
+
+    if (file.previewType === 'audio') {
+        if (file.previewThumbnailPath) {
+            return (
+                <div className={cn(frameClassName, 'relative overflow-hidden bg-black')}>
+                    <img
+                        src={getFileUrl(file.previewThumbnailPath)}
+                        alt={`${file.name} artwork`}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
+                    <div className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white shadow-lg">
+                        <Music4 size={12} />
+                    </div>
+                </div>
+            )
+        }
+
+        return (
+            <div className={cn(frameClassName, 'flex items-center justify-center bg-[radial-gradient(circle_at_top,#1e293b,transparent_70%),linear-gradient(135deg,#0f172a,#111827)]')}>
+                <Music4 size={compact ? 24 : 18} className="text-sky-200" />
+            </div>
+        )
+    }
+
+    return null
 }
 
 export function FolderBrowseContent({
@@ -445,6 +506,7 @@ export function FolderBrowseContent({
                                     const file = entry.payload as FileItem
                                     const entryTarget: EntryActionTarget = { path: file.path, name: file.name, type: 'file' }
                                     const isText = file.extension === 'md' || file.extension === 'txt'
+                                    const isMedia = Boolean(file.previewType)
                                     const iconColor = getFileColor(file.extension)
                                     if (isFinderMode) {
                                         return (
@@ -455,7 +517,8 @@ export function FolderBrowseContent({
                                             >
                                                 <FinderItem
                                                     icon={isText ? FileText : FileCode}
-                                                    iconClassName="text-white/20"
+                                                    iconClassName={isMedia ? 'text-white/0' : 'text-white/20'}
+                                                    visual={isMedia ? <MediaFilePreview file={file} compact /> : undefined}
                                                     title={file.name}
                                                     subtitle={formatFileSize(file.size)}
                                                     tag={file.extension}
@@ -473,8 +536,15 @@ export function FolderBrowseContent({
                                             onClick={() => onOpenFilePreview(file)}
                                             onContextMenu={(event) => openEntryContextMenu(event, entryTarget)}
                                         >
-                                            <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
-                                                {isText ? <FileText size={16} style={{ color: iconColor }} /> : <FileCode size={16} style={{ color: iconColor }} />}
+                                            <div className={cn(
+                                                'mb-2 overflow-hidden rounded-lg border border-white/5 bg-sparkle-bg',
+                                                isMedia ? 'h-24 w-full' : 'inline-flex w-fit p-2'
+                                            )}>
+                                                {isMedia
+                                                    ? <MediaFilePreview file={file} />
+                                                    : isText
+                                                        ? <FileText size={16} style={{ color: iconColor }} />
+                                                        : <FileCode size={16} style={{ color: iconColor }} />}
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <p className={cn('text-sm text-white/80 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)} title={file.name}>{file.name}</p>
@@ -676,6 +746,7 @@ export function FolderBrowseContent({
                         {visibleFiles.map((file) => {
                             const iconColor = getFileColor(file.extension)
                             const isText = file.extension === 'md' || file.extension === 'txt'
+                            const isMedia = Boolean(file.previewType)
                             const entryTarget: EntryActionTarget = { path: file.path, name: file.name, type: 'file' }
                             return viewMode === 'finder' ? (
                                 <div
@@ -685,7 +756,8 @@ export function FolderBrowseContent({
                                 >
                                     <FinderItem
                                         icon={isText ? FileText : FileCode}
-                                        iconClassName="text-white/20"
+                                        iconClassName={isMedia ? 'text-white/0' : 'text-white/20'}
+                                        visual={isMedia ? <MediaFilePreview file={file} compact /> : undefined}
                                         title={file.name}
                                         subtitle={formatFileSize(file.size)}
                                         tag={file.extension}
@@ -701,16 +773,22 @@ export function FolderBrowseContent({
                                     className="relative flex items-center gap-2.5 p-2.5 bg-sparkle-card/50 rounded-lg border border-white/5 hover:border-blue-400/30 hover:bg-blue-400/5 transition-all group cursor-pointer"
                                     title={file.name}
                                 >
-                                    <div
-                                        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                                        style={{ backgroundColor: `${iconColor}15` }}
-                                    >
-                                        {isText ? (
-                                            <FileText size={16} style={{ color: iconColor }} />
-                                        ) : (
-                                            <FileCode size={16} style={{ color: iconColor }} />
-                                        )}
-                                    </div>
+                                    {isMedia ? (
+                                        <div className="h-12 w-12 overflow-hidden rounded-lg border border-white/10 bg-sparkle-bg flex-shrink-0">
+                                            <MediaFilePreview file={file} />
+                                        </div>
+                                    ) : (
+                                        <div
+                                            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                                            style={{ backgroundColor: `${iconColor}15` }}
+                                        >
+                                            {isText ? (
+                                                <FileText size={16} style={{ color: iconColor }} />
+                                            ) : (
+                                                <FileCode size={16} style={{ color: iconColor }} />
+                                            )}
+                                        </div>
+                                    )}
                                     <div className="flex-1 min-w-0">
                                         <p className={cn('text-sm text-white/80 group-hover:text-white transition-colors leading-5', WRAP_AND_CLAMP_2)}>{file.name}</p>
                                         <p className="text-[10px] text-white/30">{formatFileSize(file.size)}</p>

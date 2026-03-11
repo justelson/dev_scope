@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Code, Copy, Edit3, Expand, ExternalLink, Eye, FileJson, FileText, FileType, Film, Image as ImageIcon, Minimize, PanelLeft, PanelRight, Play, Save, Square, Table, Terminal, Trash2, Undo2, X } from 'lucide-react'
+import { Check, ChevronDown, Code, Copy, Edit3, Expand, ExternalLink, Eye, FileJson, FileText, FileType, Film, Image as ImageIcon, Minimize, Music4, PanelLeft, PanelRight, Play, Save, Square, Table, Terminal, Trash2, Undo2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { GitDiffSummary } from './gitDiff'
@@ -56,7 +56,27 @@ function PreviewFileIcon({ type }: { type: PreviewFile['type'] }) {
     if (type === 'code') return <Code size={18} className="text-cyan-300 shrink-0" />
     if (type === 'image') return <ImageIcon size={18} className="text-purple-400 shrink-0" />
     if (type === 'video') return <Film size={18} className="text-red-400 shrink-0" />
+    if (type === 'audio') return <Music4 size={18} className="text-sky-300 shrink-0" />
     return <FileType size={18} className="text-gray-400 shrink-0" />
+}
+
+function formatPreviewFileName(name: string, maxLength: number): string {
+    const raw = String(name || '').trim()
+    if (!raw || raw.length <= maxLength) return raw
+
+    const dotIndex = raw.lastIndexOf('.')
+    const hasExtension = dotIndex > 0 && dotIndex < raw.length - 1
+    const extension = hasExtension ? raw.slice(dotIndex) : ''
+    const baseName = hasExtension ? raw.slice(0, dotIndex) : raw
+    const budget = Math.max(8, maxLength - extension.length - 3)
+    const startLength = Math.max(4, Math.ceil(budget * 0.6))
+    const endLength = Math.max(3, budget - startLength)
+
+    if (baseName.length <= startLength + endLength + 3) {
+        return raw
+    }
+
+    return `${baseName.slice(0, startLength)}...${baseName.slice(-endLength)}${extension}`
 }
 
 export default function PreviewModalHeader({
@@ -100,6 +120,7 @@ export default function PreviewModalHeader({
 }: PreviewModalHeaderProps) {
     const isHtml = file.type === 'html'
     const isCsv = file.type === 'csv'
+    const isMediaFile = file.type === 'image' || file.type === 'video' || file.type === 'audio'
     const presetConfig = VIEWPORT_PRESETS[viewport]
     const containerRef = useRef<HTMLDivElement | null>(null)
     const pythonRunModeMenuRef = useRef<HTMLDivElement | null>(null)
@@ -147,6 +168,7 @@ export default function PreviewModalHeader({
     const isVeryCompactHtmlHeader = isHtml && headerWidth < 820
     const isUltraCompactHtmlHeader = isHtml && headerWidth < 680
     const isCompactHeader = headerWidth < 1240
+    const visibleFileName = formatPreviewFileName(file.name, headerWidth < 820 ? 28 : headerWidth < 1080 ? 40 : 56)
 
     const statusTone = !gitDiffSummary ? 'bg-white/10 text-white/60'
         : gitDiffSummary.status === 'added'
@@ -209,7 +231,9 @@ export default function PreviewModalHeader({
             <div className={cn('flex items-center gap-3 min-w-0', isCompactHeader ? 'flex-1 flex-wrap w-full' : '', isUltraCompactHtmlHeader ? 'w-full' : '')}>
                 <PreviewFileIcon type={file.type} />
                 <div className="min-w-0 flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-white truncate">{file.name}</h3>
+                    <h3 className="text-sm font-semibold text-white" title={file.name}>
+                        {visibleFileName}
+                    </h3>
                     <button
                         onClick={handleCopyPath}
                         className={cn(
@@ -223,39 +247,41 @@ export default function PreviewModalHeader({
                         {copied ? <Check size={14} /> : <Copy size={14} />}
                     </button>
                 </div>
-                <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1 shrink-0">
-                    <button
-                        onClick={() => onModeChange('preview')}
-                        className={cn(
-                            'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
-                            !isEditMode
-                                ? 'bg-white/15 text-white'
-                                : 'text-white/50 hover:text-white/80 hover:bg-white/10'
-                        )}
-                        title="Preview mode"
-                        aria-label="Preview mode"
-                    >
-                        <Eye size={13} />
-                        <span className="sr-only">Preview</span>
-                    </button>
-                    <button
-                        onClick={() => onModeChange('edit')}
-                        disabled={!isEditable || !!loadingEditableContent}
-                        className={cn(
-                            'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
-                            isEditMode
-                                ? 'bg-white/15 text-white'
-                                : 'text-white/50 hover:text-white/80 hover:bg-white/10',
-                            (!isEditable || !!loadingEditableContent) && 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-white/50'
-                        )}
-                        title={isEditable ? 'Edit mode' : 'This file type is preview-only'}
-                        aria-label={isEditable ? 'Edit mode' : 'This file type is preview-only'}
-                    >
-                        <Edit3 size={13} />
-                        <span className="sr-only">Edit</span>
-                    </button>
-                </div>
-                {(canUseTerminal || canRunPython) && (
+                {!isMediaFile && (
+                    <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1 shrink-0">
+                        <button
+                            onClick={() => onModeChange('preview')}
+                            className={cn(
+                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
+                                !isEditMode
+                                    ? 'bg-white/15 text-white'
+                                    : 'text-white/50 hover:text-white/80 hover:bg-white/10'
+                            )}
+                            title="Preview mode"
+                            aria-label="Preview mode"
+                        >
+                            <Eye size={13} />
+                            <span className="sr-only">Preview</span>
+                        </button>
+                        <button
+                            onClick={() => onModeChange('edit')}
+                            disabled={!isEditable || !!loadingEditableContent}
+                            className={cn(
+                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
+                                isEditMode
+                                    ? 'bg-white/15 text-white'
+                                    : 'text-white/50 hover:text-white/80 hover:bg-white/10',
+                                (!isEditable || !!loadingEditableContent) && 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-white/50'
+                            )}
+                            title={isEditable ? 'Edit mode' : 'This file type is preview-only'}
+                            aria-label={isEditable ? 'Edit mode' : 'This file type is preview-only'}
+                        >
+                            <Edit3 size={13} />
+                            <span className="sr-only">Edit</span>
+                        </button>
+                    </div>
+                )}
+                {!isMediaFile && (canUseTerminal || canRunPython) && (
                     <div className={controlGroupClass}>
                         {canUseTerminal && (
                             <button
@@ -297,7 +323,7 @@ export default function PreviewModalHeader({
                                     <ChevronDown size={12} />
                                 </button>
                                 {pythonRunModeMenuOpen && (
-                                    <div className="absolute right-0 top-9 z-40 w-44 rounded-lg border border-sparkle-border bg-sparkle-card p-1.5 shadow-2xl">
+                                    <div className="absolute right-0 top-9 z-40 w-44 rounded-lg border border-white/10 bg-sparkle-card p-1.5 shadow-2xl">
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -308,7 +334,7 @@ export default function PreviewModalHeader({
                                                 'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
                                                 pythonRunMode === 'terminal'
                                                     ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
-                                                    : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                                    : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
                                             )}
                                         >
                                             <span>Run in Terminal</span>
@@ -324,7 +350,7 @@ export default function PreviewModalHeader({
                                                 'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
                                                 pythonRunMode === 'output'
                                                     ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
-                                                    : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                                    : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
                                             )}
                                         >
                                             <span>Run in Output</span>
@@ -352,53 +378,55 @@ export default function PreviewModalHeader({
                         )}
                     </div>
                 )}
-                <div className={controlGroupClass}>
-                    <button
-                        onClick={onToggleExpanded}
-                        className={cn(
-                            iconButtonBaseClass,
-                            isExpanded
-                                ? 'border-sky-400/30 bg-sky-500/12 text-sky-200'
-                                : 'border-transparent text-white/55 hover:bg-white/10 hover:text-white'
+                {!isMediaFile && (
+                    <div className={controlGroupClass}>
+                        <button
+                            onClick={onToggleExpanded}
+                            className={cn(
+                                iconButtonBaseClass,
+                                isExpanded
+                                    ? 'border-sky-400/30 bg-sky-500/12 text-sky-200'
+                                    : 'border-transparent text-white/55 hover:bg-white/10 hover:text-white'
+                            )}
+                            title={isExpanded ? 'Collapse workspace' : 'Expand workspace'}
+                        >
+                            <span className="relative block h-4 w-4">
+                                <Expand
+                                    size={16}
+                                    className={cn(
+                                        'absolute inset-0 transition-all duration-250 ease-out',
+                                        isExpanded ? 'scale-75 -rotate-45 opacity-0' : 'scale-100 rotate-0 opacity-100'
+                                    )}
+                                />
+                                <Minimize
+                                    size={16}
+                                    className={cn(
+                                        'absolute inset-0 transition-all duration-250 ease-out',
+                                        isExpanded ? 'scale-100 rotate-0 opacity-100' : 'scale-75 rotate-45 opacity-0'
+                                    )}
+                                />
+                            </span>
+                        </button>
+                        {isExpanded && (
+                            <>
+                                <button
+                                    onClick={onToggleLeftPanel}
+                                    className={cn(leftPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
+                                    title={leftPanelOpen ? 'Hide left panel' : 'Show left panel'}
+                                >
+                                    <PanelLeft size={16} />
+                                </button>
+                                <button
+                                    onClick={onToggleRightPanel}
+                                    className={cn(rightPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
+                                    title={rightPanelOpen ? 'Hide right panel' : 'Show right panel'}
+                                >
+                                    <PanelRight size={16} />
+                                </button>
+                            </>
                         )}
-                        title={isExpanded ? 'Collapse workspace' : 'Expand workspace'}
-                    >
-                        <span className="relative block h-4 w-4">
-                            <Expand
-                                size={16}
-                                className={cn(
-                                    'absolute inset-0 transition-all duration-250 ease-out',
-                                    isExpanded ? 'scale-75 -rotate-45 opacity-0' : 'scale-100 rotate-0 opacity-100'
-                                )}
-                            />
-                            <Minimize
-                                size={16}
-                                className={cn(
-                                    'absolute inset-0 transition-all duration-250 ease-out',
-                                    isExpanded ? 'scale-100 rotate-0 opacity-100' : 'scale-75 rotate-45 opacity-0'
-                                )}
-                            />
-                        </span>
-                    </button>
-                    {isExpanded && (
-                        <>
-                            <button
-                                onClick={onToggleLeftPanel}
-                                className={cn(leftPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
-                                title={leftPanelOpen ? 'Hide left panel' : 'Show left panel'}
-                            >
-                                <PanelLeft size={16} />
-                            </button>
-                            <button
-                                onClick={onToggleRightPanel}
-                                className={cn(rightPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
-                                title={rightPanelOpen ? 'Hide right panel' : 'Show right panel'}
-                            >
-                                <PanelRight size={16} />
-                            </button>
-                        </>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {isHtml && !isEditMode && (
@@ -472,7 +500,7 @@ export default function PreviewModalHeader({
                 isCompactHeader ? 'w-full ml-auto' : '',
                 isUltraCompactHtmlHeader ? 'w-full justify-end' : ''
             )}>
-                {isEditMode && (
+                {!isMediaFile && isEditMode && (
                     <div className={controlGroupClass}>
                         <button
                             onClick={onRevert}
@@ -509,12 +537,12 @@ export default function PreviewModalHeader({
                 )}
 
                 <div className="flex items-center gap-1.5 min-w-0 flex-wrap justify-end">
-                    {canRunPython && (
+                    {!isMediaFile && canRunPython && (
                         <span className={cn('text-[10px] uppercase font-semibold px-2 py-1 rounded', pythonStatusTone)}>
                             {pythonStatusLabel}
                         </span>
                     )}
-                    {showGitSummary && (
+                    {!isMediaFile && showGitSummary && (
                         <div className="flex items-center gap-1.5">
                             <span className={cn('text-[10px] uppercase font-semibold px-2 py-1 rounded', statusTone)}>
                                 {statusLabel}
@@ -524,7 +552,7 @@ export default function PreviewModalHeader({
                             <span className="text-[10px] px-1.5 py-1 rounded bg-white/5 text-white/50">{totalFileLines} lines</span>
                         </div>
                     )}
-                    {showUnsavedDiffSummary && liveDiffPreview && (
+                    {!isMediaFile && showUnsavedDiffSummary && liveDiffPreview && (
                         <div className="flex items-center gap-1.5">
                             <span className="text-[10px] uppercase font-semibold px-2 py-1 rounded bg-sky-500/20 text-sky-300">
                                 Unsaved
@@ -533,13 +561,15 @@ export default function PreviewModalHeader({
                             <span className="text-[10px] px-1.5 py-1 rounded bg-red-500/10 text-red-300">-{liveDiffPreview.deletions}</span>
                         </div>
                     )}
-                    <span className="text-[10px] text-white/30 uppercase px-2 py-1 bg-white/5 rounded">
-                        {file.type}
-                        {isEditMode ? ' - edit' : ''}
-                        {isHtml && showDetailedFileMeta && ` - ${htmlViewMode}`}
-                        {isHtml && showDetailedFileMeta && !isVeryCompactHtmlHeader && htmlViewMode === 'rendered' && viewport !== 'responsive' && ` - ${presetConfig.width}x${presetConfig.height}`}
-                    </span>
-                    {showStandaloneUnsavedChip && (
+                    {!isMediaFile && (
+                        <span className="text-[10px] text-white/30 uppercase px-2 py-1 bg-white/5 rounded">
+                            {file.type}
+                            {isEditMode ? ' - edit' : ''}
+                            {isHtml && showDetailedFileMeta && ` - ${htmlViewMode}`}
+                            {isHtml && showDetailedFileMeta && !isVeryCompactHtmlHeader && htmlViewMode === 'rendered' && viewport !== 'responsive' && ` - ${presetConfig.width}x${presetConfig.height}`}
+                        </span>
+                    )}
+                    {!isMediaFile && showStandaloneUnsavedChip && (
                         <span className="text-[10px] px-1.5 py-1 rounded bg-amber-500/15 text-amber-200">Unsaved</span>
                     )}
                     {isHtml && !isEditMode && (

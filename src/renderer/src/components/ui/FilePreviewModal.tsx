@@ -13,10 +13,11 @@ import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import type { DevScopePreviewTerminalSessionSummary } from '@shared/contracts/devscope-api'
 import { summarizeGitDiff, type GitDiffSummary, type GitLineMarker } from './file-preview/gitDiff'
-import type { PreviewFile, PreviewMeta } from './file-preview/types'
+import type { PreviewFile, PreviewMediaItem, PreviewMeta, PreviewOpenOptions } from './file-preview/types'
 import PreviewBody from './file-preview/PreviewBody'
 import PreviewErrorBoundary from './file-preview/PreviewErrorBoundary'
 import PreviewModalHeader from './file-preview/PreviewModalHeader'
+import { isMediaPreviewType } from './file-preview/utils'
 import { VIEWPORT_PRESETS, type ViewportPreset } from './file-preview/viewport'
 import { useFilePreview } from './file-preview/useFilePreview'
 import { navigateMarkdownLink } from './markdown/linkNavigation'
@@ -29,8 +30,9 @@ interface FilePreviewModalProps extends PreviewMeta {
     onOpenLinkedPreview?: (
         file: { name: string; path: string },
         ext: string,
-        options?: { startInEditMode?: boolean }
+        options?: PreviewOpenOptions
     ) => Promise<void>
+    mediaItems?: PreviewMediaItem[]
     onSaved?: (filePath: string) => Promise<void> | void
     onClose: () => void
 }
@@ -198,6 +200,7 @@ export function FilePreviewModal({
     modifiedAt,
     projectPath,
     onOpenLinkedPreview,
+    mediaItems = [],
     onSaved,
     onClose
 }: FilePreviewModalProps) {
@@ -220,6 +223,16 @@ export function FilePreviewModal({
         )
     )
     const canUsePreviewTerminal = Boolean(projectPath || file.path)
+    const openMediaItem = useCallback(async (item: PreviewMediaItem) => {
+        if (!onOpenLinkedPreview) return
+        await onOpenLinkedPreview(
+            { name: item.name, path: item.path },
+            item.extension,
+            {
+                mediaItems: mediaItems.map(({ name, path, extension }) => ({ name, path, extension }))
+            }
+        )
+    }, [mediaItems, onOpenLinkedPreview])
 
     const [viewport, setViewport] = useState<ViewportPreset>('responsive')
     const [htmlViewMode, setHtmlViewMode] = useState<'rendered' | 'code'>('rendered')
@@ -297,6 +310,9 @@ export function FilePreviewModal({
     const shouldShowTerminalPanel = canUsePreviewTerminal && terminalVisible
     const renderTerminalPanel = terminalPanelPhase !== 'hidden'
     const currentTerminalSession = terminalSessions.find((session) => session.sessionId === terminalSessionId) || null
+    const previewResetKey = isMediaPreviewType(file.type)
+        ? `media:${viewport}:${htmlViewMode}:${mode}`
+        : `${file.path}:${file.type}:${viewport}:${htmlViewMode}:${mode}`
     const terminalTheme = useMemo(() => {
         const accent = readCssVariable('--accent-primary', settings.accentColor.primary || '#38bdf8')
         const card = readCssVariable('--color-card', '#0b1220')
@@ -1973,7 +1989,7 @@ export function FilePreviewModal({
                                     hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : '',
                                     centerHtmlRenderedPreview ? 'flex items-center justify-center' : ''
                                 )}>
-                                    <PreviewErrorBoundary resetKey={`${file.path}:${file.type}:${viewport}:${htmlViewMode}:${mode}`}>
+                                    <PreviewErrorBoundary resetKey={previewResetKey}>
                                         <PreviewBody
                                             file={file}
                                             content={sourceContent}
@@ -2004,6 +2020,8 @@ export function FilePreviewModal({
                                             lineMarkersOverride={localDiffPreview?.markers}
                                             previewFocusLine={focusLine}
                                             isExpanded={isExpanded}
+                                            mediaItems={mediaItems}
+                                            onSelectMedia={openMediaItem}
                                         />
                                     </PreviewErrorBoundary>
                                 </div>
@@ -2146,7 +2164,7 @@ export function FilePreviewModal({
                                 hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : '',
                                 centerHtmlRenderedPreview ? 'flex items-center justify-center' : ''
                             )}>
-                                <PreviewErrorBoundary resetKey={`${file.path}:${file.type}:${viewport}:${htmlViewMode}:${mode}`}>
+                                <PreviewErrorBoundary resetKey={previewResetKey}>
                                     <PreviewBody
                                         file={file}
                                         content={sourceContent}
@@ -2177,6 +2195,8 @@ export function FilePreviewModal({
                                         lineMarkersOverride={localDiffPreview?.markers}
                                         previewFocusLine={focusLine}
                                         isExpanded={false}
+                                        mediaItems={mediaItems}
+                                        onSelectMedia={openMediaItem}
                                     />
                                 </PreviewErrorBoundary>
                             </div>

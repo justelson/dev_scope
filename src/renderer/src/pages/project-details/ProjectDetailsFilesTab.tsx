@@ -5,6 +5,7 @@ import {
     ExternalLink, FileJson, FilePlus, FileText, FolderOpen, FolderPlus, Plus, Pencil, Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { buildMediaPreviewSources } from '@/components/ui/file-preview/utils'
 import { formatFileSize } from './fileTreeUtils'
 import { getFileIcon } from './fileIcons'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
@@ -393,7 +394,19 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                             })
                                         })
                                     } else {
-                                        openPreview({ name: node.name, path: node.path }, ext)
+                                        void openPreview(
+                                            { name: node.name, path: node.path },
+                                            ext,
+                                            {
+                                                mediaItems: buildMediaPreviewSources(visibleFileList
+                                                    .filter((entry: any) => !entry.isFolder)
+                                                    .map((entry: any) => ({
+                                                        name: entry.node.name,
+                                                        path: entry.node.path,
+                                                        extension: entry.ext
+                                                    })))
+                                            }
+                                        )
                                     }
                                 }}
                             >
