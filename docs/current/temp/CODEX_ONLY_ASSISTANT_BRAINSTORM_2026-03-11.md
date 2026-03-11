@@ -328,7 +328,32 @@ If a new chat starts with empty context, these files must be opened before imple
 
 Use this exact baseline in a new chat if needed:
 
-> Read `AGENTS.md` in this repo first. Then read `docs/current/README.md`, `docs/current/CURRENT_CODEBASE_ARCHITECTURE.md`, and `docs/current/temp/CODEX_ONLY_ASSISTANT_BRAINSTORM_2026-03-11.md`. This task is only for a new Codex-only assistant subsystem in DevScope Air. Do not touch or refactor the existing Groq/Gemini AI architecture. Before planning or coding, also inspect the listed `t3code` assistant-engine references in that brainstorm note. Treat `codex app-server` as the only assistant runtime and keep the design additive and isolated from current commit/PR AI flows.
+> Read `AGENTS.md` in this repo first. Then read `docs/current/README.md`, `docs/current/CURRENT_CODEBASE_ARCHITECTURE.md`, and `docs/current/temp/CODEX_ONLY_ASSISTANT_BRAINSTORM_2026-03-11.md`. Follow that brainstorm note as the source of truth.
+>
+> This task is only for a new Codex-only assistant subsystem in DevScope Air. `codex app-server` is the only assistant runtime. Do not touch, refactor, or broaden the existing Groq/Gemini AI architecture or the current commit-message / PR-draft flows unless the brainstorm note explicitly says to integrate later.
+>
+> Before planning or coding, inspect all mandatory references listed in the brainstorm note, including the `t3code` files. Respect the existing codebase architecture and boundaries:
+> - `src/main` owns assistant runtime, orchestration, persistence, and IPC
+> - `src/preload` stays a narrow bridge only
+> - `src/renderer/src` consumes projected state and renders UI
+> - `src/shared` holds contracts, types, and shared logic
+>
+> Implementation requirements:
+> - keep files easy to manage
+> - target a maximum of 500 LOC per file
+> - split into as many well-organized files/modules as needed
+> - prefer small focused modules over large mixed files
+> - preserve maintainability and predictable behavior under load and failure
+> - do not let the renderer own assistant truth from raw runtime events
+> - build additive, isolated assistant code only
+>
+> Start implementation immediately from phase 1 and proceed in a clean sequence. Keep changes organized, avoid unrelated edits, and call out any blocker before widening scope.
+
+## One-Line Handoff
+
+If a shorter new-chat handoff is needed, use this:
+
+> Read `docs/current/temp/CODEX_ONLY_ASSISTANT_BRAINSTORM_2026-03-11.md` and start implementing it exactly: Codex-only assistant, additive only, no Groq/Gemini changes, respect repo boundaries, and keep every file under 500 LOC by splitting into well-organized modules as needed.
 
 ## Recommendation For The Next Real Spec
 
@@ -345,4 +370,3 @@ It should define:
 - phased rollout order
 - what archived files can be reused visually only
 - what must not be copied from the old assistant bridge
-
