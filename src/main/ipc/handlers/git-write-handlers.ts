@@ -20,6 +20,7 @@ import {
     listTags,
     pullUpdates,
     pushCommits,
+    pushSingleCommit,
     removeRemote,
     setGlobalGitUser,
     setRemoteUrl,
@@ -119,6 +120,28 @@ export async function handlePushCommits(_event: Electron.IpcMainInvokeEvent, pro
     } catch (err: any) {
         log.error('Failed to push commits:', err)
         completeTask(task.id, 'failed', err?.message || 'Failed to push commits.')
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handlePushSingleCommit(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    commitHash: string
+) {
+    const task = createTask({
+        type: 'git.push',
+        title: 'Push single commit',
+        projectPath,
+        initialLog: `Pushing commit ${commitHash} for ${projectPath}`
+    })
+    try {
+        await pushSingleCommit(projectPath, commitHash)
+        completeTask(task.id, 'success', 'Single-commit push completed successfully.')
+        return { success: true }
+    } catch (err: any) {
+        log.error('Failed to push single commit:', err)
+        completeTask(task.id, 'failed', err?.message || 'Failed to push single commit.')
         return { success: false, error: err.message }
     }
 }

@@ -337,6 +337,7 @@ export default function ProjectDetailsPage() {
     const [selectedPatterns, setSelectedPatterns] = useState<Set<string>>(new Set())
     const [patternSearch, setPatternSearch] = useState('')
     const historyStatsRequestRef = useRef(0)
+    const unpushedStatsRequestRef = useRef(0)
     const {
         previewFile,
         previewMediaItems,
@@ -461,6 +462,41 @@ export default function ProjectDetailsPage() {
             }))
         })
     }, [activeTab, commitPage, decodedPath, gitHistory, gitView, COMMITS_PER_PAGE])
+    useEffect(() => {
+        if (activeTab !== 'git' || unpushedCommits.length === 0) return
+
+        const pageStart = Math.max(0, (unpushedPage - 1) * ITEMS_PER_PAGE)
+        const pageEnd = Math.max(pageStart, unpushedPage * ITEMS_PER_PAGE)
+        const missingStatsHashes = unpushedCommits
+            .slice(pageStart, pageEnd)
+            .filter((commit) => commit.statsLoaded !== true)
+            .map((commit) => commit.hash)
+
+        if (missingStatsHashes.length === 0) return
+
+        const requestId = ++unpushedStatsRequestRef.current
+
+        void window.devscope.getGitCommitStats(decodedPath, missingStatsHashes).then((result) => {
+            if (requestId !== unpushedStatsRequestRef.current || !result?.success || !Array.isArray(result.commits)) {
+                return
+            }
+
+            const statsByHash = new Map(result.commits.map((commit) => [commit.hash, commit]))
+            if (statsByHash.size === 0) return
+
+            setUnpushedCommits((prev) => prev.map((commit) => {
+                const stats = statsByHash.get(commit.hash)
+                if (!stats) return commit
+                return {
+                    ...commit,
+                    additions: stats.additions,
+                    deletions: stats.deletions,
+                    filesChanged: stats.filesChanged,
+                    statsLoaded: true
+                }
+            }))
+        })
+    }, [activeTab, decodedPath, ITEMS_PER_PAGE, unpushedCommits, unpushedPage])
     useEffect(() => {
         if (gitHistory.length === 0) return
 

@@ -40,6 +40,7 @@ export {
     setGlobalGitUser,
     createCommit,
     pushCommits,
+    pushSingleCommit,
     initGitRepo,
     createInitialCommit,
     addRemoteOrigin,

@@ -117,6 +117,7 @@ import {
     handleListTags,
     handlePullUpdates,
     handlePushCommits,
+    handlePushSingleCommit,
     handleRemoveRemote,
     handleSetRemoteUrl,
     handleSetGlobalGitUser,
@@ -216,6 +217,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:createCommit', handleCreateCommit)
     ipcMain.handle('devscope:setGlobalGitUser', handleSetGlobalGitUser)
     ipcMain.handle('devscope:pushCommits', handlePushCommits)
+    ipcMain.handle('devscope:pushSingleCommit', handlePushSingleCommit)
     ipcMain.handle('devscope:fetchUpdates', handleFetchUpdates)
     ipcMain.handle('devscope:pullUpdates', handlePullUpdates)
     ipcMain.handle('devscope:listBranches', handleListBranches)

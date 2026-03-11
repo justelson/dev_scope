@@ -187,7 +187,18 @@ export async function createCommit(projectPath: string, message: string): Promis
     }
 }
 
-export async function pushCommits(projectPath: string): Promise<void> {
+function parseUpstreamRef(upstreamRef: string): { remoteName: string; branchName: string } | null {
+    const normalized = String(upstreamRef || '').trim()
+    if (!normalized || !normalized.includes('/')) return null
+
+    const [remoteName, ...branchParts] = normalized.split('/')
+    const branchName = branchParts.join('/').trim()
+    if (!remoteName || !branchName) return null
+
+    return { remoteName, branchName }
+}
+
+async function pushCommitRange(projectPath: string, targetCommitHash?: string): Promise<void> {
     try {
         const hasRemote = await hasRemoteOrigin(projectPath)
         if (!hasRemote) {
@@ -196,11 +207,40 @@ export async function pushCommits(projectPath: string): Promise<void> {
 
         await withIndexLockRecovery(projectPath, 'push commits', async (git) => {
             const upstreamRef = (await git.raw([
-                'rev-parse',
-                '--abbrev-ref',
-                '--symbolic-full-name',
-                '@{u}'
-            ]).catch(() => '')).trim()
+            'rev-parse',
+            '--abbrev-ref',
+            '--symbolic-full-name',
+            '@{u}'
+        ]).catch(() => '')).trim()
+
+            const targetHash = String(targetCommitHash || '').trim()
+            if (targetHash) {
+                const branch = (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+                if (!branch || branch === 'HEAD') {
+                    throw new Error('Cannot push a single commit from detached HEAD')
+                }
+
+                await git.raw(['merge-base', '--is-ancestor', targetHash, 'HEAD']).catch(() => {
+                    throw new Error('Selected commit is not reachable from the current branch head')
+                })
+
+                const upstream = parseUpstreamRef(upstreamRef)
+                const remoteName = upstream?.remoteName || 'origin'
+                const remoteBranch = upstream?.branchName || branch
+                const remoteTrackingRef = upstreamRef || `${remoteName}/${remoteBranch}`
+
+                if (upstreamRef) {
+                    await git.raw(['merge-base', '--is-ancestor', remoteTrackingRef, targetHash]).catch(() => {
+                        throw new Error('Selected commit cannot be pushed by itself because it would not fast-forward the remote branch')
+                    })
+                }
+
+                const pushArgs = upstreamRef
+                    ? [remoteName, `${targetHash}:refs/heads/${remoteBranch}`]
+                    : ['-u', remoteName, `${targetHash}:refs/heads/${remoteBranch}`]
+                await git.push(pushArgs)
+                return
+            }
 
             if (upstreamRef) {
                 await git.push()
@@ -217,6 +257,20 @@ export async function pushCommits(projectPath: string): Promise<void> {
     } catch (err) {
         log.error('Failed to push commits', err)
         throw toError(err, 'Failed to push commits')
+    }
+}
+
+export async function pushCommits(projectPath: string): Promise<void> {
+    await pushCommitRange(projectPath)
+}
+
+export async function pushSingleCommit(projectPath: string, commitHash: string): Promise<void> {
+    try {
+        assertNonEmpty(commitHash, 'Commit hash')
+        await pushCommitRange(projectPath, commitHash.trim())
+    } catch (err) {
+        log.error('Failed to push single commit', err)
+        throw toError(err, 'Failed to push single commit')
     }
 }
 

@@ -116,20 +116,38 @@ function buildStatusMap(details: GitStatusDetail[]): Record<string, FileTreeNode
 }
 
 function toStagedDetail(detail: GitStatusDetail): GitStatusDetail {
+    const nextStagedAdditions = detail.stagedAdditions + detail.unstagedAdditions
+    const nextStagedDeletions = detail.stagedDeletions + detail.unstagedDeletions
     return {
         ...detail,
         status: detail.status === 'untracked' ? 'added' : detail.status,
         staged: true,
-        unstaged: false
+        unstaged: false,
+        additions: nextStagedAdditions,
+        deletions: nextStagedDeletions,
+        stagedAdditions: nextStagedAdditions,
+        stagedDeletions: nextStagedDeletions,
+        unstagedAdditions: 0,
+        unstagedDeletions: 0,
+        statsLoaded: detail.statsLoaded
     }
 }
 
 function toUnstagedDetail(detail: GitStatusDetail): GitStatusDetail {
+    const nextUnstagedAdditions = detail.stagedAdditions + detail.unstagedAdditions
+    const nextUnstagedDeletions = detail.stagedDeletions + detail.unstagedDeletions
     return {
         ...detail,
         status: detail.status === 'added' ? 'untracked' : detail.status,
         staged: false,
-        unstaged: true
+        unstaged: true,
+        additions: nextUnstagedAdditions,
+        deletions: nextUnstagedDeletions,
+        stagedAdditions: 0,
+        stagedDeletions: 0,
+        unstagedAdditions: nextUnstagedAdditions,
+        unstagedDeletions: nextUnstagedDeletions,
+        statsLoaded: detail.statsLoaded
     }
 }
 
@@ -360,17 +378,24 @@ export function createProjectGitActions(params: GitActionParams) {
         }
     }
 
-    const handlePush = async (mode: 'push' | 'publish' = 'push') => {
+    const handlePush = async (
+        mode: 'push' | 'publish' = 'push',
+        options?: { commitHash?: string; commitMessage?: string }
+    ) => {
         if (!params.decodedPath) return
         const hadUnpushedCommits = params.unpushedCommits.length > 0
+        const targetCommitHash = String(options?.commitHash || '').trim()
+        const targetCommitMessage = String(options?.commitMessage || '').trim()
 
         params.setIsPushing(true)
         try {
             let retriedAfterTransientError = false
             const runPush = async () => {
-                const pushResult = await window.devscope.pushCommits(params.decodedPath)
+                const pushResult = targetCommitHash
+                    ? await window.devscope.pushSingleCommit(params.decodedPath, targetCommitHash)
+                    : await window.devscope.pushCommits(params.decodedPath)
                 if (!pushResult?.success) {
-                    throw new Error(pushResult?.error || 'Failed to push commits')
+                    throw new Error(pushResult?.error || (targetCommitHash ? 'Failed to push selected commit' : 'Failed to push commits'))
                 }
             }
 
@@ -391,7 +416,9 @@ export function createProjectGitActions(params: GitActionParams) {
 
             await params.refreshGitData(false, { mode: 'unpushed' })
             if (!retriedAfterTransientError) {
-                if (mode === 'publish' || !hadUnpushedCommits) {
+                if (targetCommitHash) {
+                    params.showToast(`Pushed ${targetCommitMessage || targetCommitHash.slice(0, 7)} to remote.`)
+                } else if (mode === 'publish' || !hadUnpushedCommits) {
                     params.showToast(`Published branch "${params.currentBranch || 'current'}" to remote.`)
                 } else {
                     params.showToast('Pushed commits to remote.')

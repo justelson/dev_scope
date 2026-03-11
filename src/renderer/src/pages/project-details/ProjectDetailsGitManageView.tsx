@@ -175,7 +175,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                                         <span className="font-mono text-white/40">{commit.shortHash}</span> {commit.message}
                                                     </div>
                                                     <div className="shrink-0">
-                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact loading={loadingCounts} />
+                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} compact loading={commit.statsLoaded === false} />
                                                     </div>
                                                 </div>
                                             </div>

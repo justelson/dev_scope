@@ -445,6 +445,7 @@ export interface DevScopeApi {
     createCommit: (projectPath: string, message: string) => Promise<DevScopeResult>
     setGlobalGitUser: (user: { name: string; email: string }) => Promise<DevScopeResult>
     pushCommits: (projectPath: string) => Promise<DevScopeResult>
+    pushSingleCommit: (projectPath: string, commitHash: string) => Promise<DevScopeResult>
     fetchUpdates: (projectPath: string, remoteName?: string) => Promise<DevScopeResult>
     pullUpdates: (projectPath: string) => Promise<DevScopeResult>
     listBranches: (projectPath: string) => Promise<DevScopeResult<{ branches: DevScopeGitBranchSummary[] }>>

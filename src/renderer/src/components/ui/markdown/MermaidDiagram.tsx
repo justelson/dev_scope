@@ -72,7 +72,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: s
         if (!isNearViewport) return
 
         let cancelled = false
-        let timeoutId: ReturnType<typeof setTimeout> | null = null
+        let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null
         setSvg('')
         setError('')
 
@@ -103,14 +103,14 @@ export const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: s
             }
         }
 
-        timeoutId = window.setTimeout(() => {
+        timeoutId = globalThis.setTimeout(() => {
             void renderDiagram()
         }, 16)
 
         return () => {
             cancelled = true
             if (timeoutId !== null) {
-                window.clearTimeout(timeoutId)
+                globalThis.clearTimeout(timeoutId)
             }
         }
     }, [chart, isNearViewport])

@@ -548,16 +548,14 @@ export async function getUnpushedCommits(projectPath: string): Promise<GitCommit
                 'log',
                 `${upstreamRef}..HEAD`,
                 '--date=iso',
-                '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
-                '--numstat'
+                '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s'
             ]).catch(() => '')
         } else if (hasRemote && currentBranch !== 'HEAD') {
             stdout = await git.raw([
                 'log',
                 `origin/${currentBranch}..HEAD`,
                 '--date=iso',
-                '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
-                '--numstat'
+                '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s'
             ]).catch(() => '')
         } else {
             stdout = await git.raw([
@@ -565,14 +563,13 @@ export async function getUnpushedCommits(projectPath: string): Promise<GitCommit
                 'HEAD',
                 '--date=iso',
                 '--pretty=format:%x1e%H%x1f%P%x1f%an%x1f%ad%x1f%s',
-                '--numstat',
                 '-n',
                 '50'
             ]).catch(() => '')
         }
 
         if (!stdout.trim()) return []
-        return parseCommitLog(stdout)
+        return parseCommitLog(stdout, { statsIncluded: false })
     } catch (err) {
         log.error('Failed to get unpushed commits', err)
         throw toError(err, 'Failed to get unpushed commits')

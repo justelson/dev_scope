@@ -50,7 +50,7 @@ function flattenNodeText(node: ReactNode): string {
     if (typeof node === 'string' || typeof node === 'number') return String(node)
     if (!node) return ''
     if (Array.isArray(node)) return node.map(flattenNodeText).join('')
-    if (isValidElement(node)) return flattenNodeText(node.props.children)
+    if (isValidElement<{ children?: ReactNode }>(node)) return flattenNodeText(node.props.children)
     return ''
 }
 
@@ -73,8 +73,8 @@ function detectMarkdownAlert(children: ReactNode): {
     const remainder = match[2]?.trim() || ''
     const nextChildren = [...childArray]
 
-    if (remainder && isValidElement(firstChild)) {
-        nextChildren[firstMeaningfulIndex] = cloneElement(firstChild, firstChild.props, remainder)
+    if (remainder && isValidElement<{ children?: ReactNode }>(firstChild)) {
+        nextChildren[firstMeaningfulIndex] = cloneElement(firstChild, undefined, remainder)
     } else if (remainder) {
         nextChildren[firstMeaningfulIndex] = remainder
     } else {

@@ -69,6 +69,7 @@ export function createProjectsAdapter() {
         createCommit: (projectPath: string, message: string) => ipcRenderer.invoke('devscope:createCommit', projectPath, message),
         setGlobalGitUser: (user: { name: string; email: string }) => ipcRenderer.invoke('devscope:setGlobalGitUser', user),
         pushCommits: (projectPath: string) => ipcRenderer.invoke('devscope:pushCommits', projectPath),
+        pushSingleCommit: (projectPath: string, commitHash: string) => ipcRenderer.invoke('devscope:pushSingleCommit', projectPath, commitHash),
         fetchUpdates: (projectPath: string, remoteName?: string) => ipcRenderer.invoke('devscope:fetchUpdates', projectPath, remoteName),
         pullUpdates: (projectPath: string) => ipcRenderer.invoke('devscope:pullUpdates', projectPath),
         listBranches: (projectPath: string) => ipcRenderer.invoke('devscope:listBranches', projectPath),

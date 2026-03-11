@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, ArrowDownCircle, GitBranch, GitCommitHorizontal, GitPullRequest, Link, Plus, RefreshCw, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { WorkingChangesView } from './WorkingChangesView'
 import { GitGraph } from './GitGraph'
 import { ProjectDetailsGitManageView } from './ProjectDetailsGitManageView'
 import { DiffStats } from './DiffStats'
+import type { GitCommit } from './types'
+import { buildPushRangeSummary, PushRangeConfirmModal, PushRangeSelector } from './PushRangeConfirmModal'
 
 interface ProjectDetailsGitTabProps {
     lastFetched?: number
@@ -105,6 +107,42 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         () => incomingCommits.slice((pullsPage - 1) * ITEMS_PER_PAGE, pullsPage * ITEMS_PER_PAGE),
         [incomingCommits, pullsPage, ITEMS_PER_PAGE]
     )
+    const localOnlyCommitHashes = useMemo(
+        () => new Set<string>(unpushedCommits.map((commit: GitCommit) => commit.hash)),
+        [unpushedCommits]
+    )
+    const [pendingPushCommit, setPendingPushCommit] = useState<GitCommit | null>(null)
+    const [activePushCommitHash, setActivePushCommitHash] = useState<string | null>(null)
+    const remoteHeadCommitHash = useMemo(() => {
+        if (hasRemote !== true) {
+            return null
+        }
+
+        const firstRemoteCommit = visibleHistorySource.find((commit: GitCommit) => !localOnlyCommitHashes.has(commit.hash))
+        return firstRemoteCommit?.hash ?? null
+    }, [hasRemote, localOnlyCommitHashes, visibleHistorySource])
+    const pendingPushSummary = useMemo(
+        () => (pendingPushCommit ? buildPushRangeSummary(unpushedCommits, pendingPushCommit.hash) : null),
+        [pendingPushCommit, unpushedCommits]
+    )
+    const activePushSummary = useMemo(
+        () => (activePushCommitHash ? buildPushRangeSummary(unpushedCommits, activePushCommitHash) : null),
+        [activePushCommitHash, unpushedCommits]
+    )
+    const activePushCommit = useMemo(
+        () => (activePushCommitHash ? unpushedCommits.find((commit: GitCommit) => commit.hash === activePushCommitHash) ?? null : null),
+        [activePushCommitHash, unpushedCommits]
+    )
+    useEffect(() => {
+        if (unpushedCommits.length === 0) {
+            setActivePushCommitHash(null)
+            return
+        }
+
+        if (!activePushCommitHash || !unpushedCommits.some((commit: GitCommit) => commit.hash === activePushCommitHash)) {
+            setActivePushCommitHash(unpushedCommits[0]?.hash ?? null)
+        }
+    }, [activePushCommitHash, unpushedCommits])
     const handleNextHistoryPage = async () => {
         if (commitPage < totalHistoryPages) {
             setCommitPage((p: number) => Math.min(totalHistoryPages, p + 1))
@@ -119,6 +157,18 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         if (loadedMore) {
             setCommitPage((p: number) => p + 1)
         }
+    }
+    const handleApprovePushRange = async () => {
+        if (!pendingPushCommit) {
+            return
+        }
+
+        const commitToPush = pendingPushCommit
+        setPendingPushCommit(null)
+        await handlePush('push', {
+            commitHash: commitToPush.hash,
+            commitMessage: commitToPush.message
+        })
     }
 
     return (
@@ -306,57 +356,30 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
 
                         {unpushedCommits.length > 0 ? (
                             <>
-                                <div className="space-y-2">
-                                    {unpushedCommits.slice((unpushedPage - 1) * ITEMS_PER_PAGE, unpushedPage * ITEMS_PER_PAGE).map((commit: any) => (
-                                        <div
-                                            key={commit.hash}
-                                            onClick={() => handleCommitClick(commit)}
-                                            className="bg-black/30 rounded-xl border border-white/5 p-4 hover:bg-white/5 cursor-pointer transition-colors"
-                                        >
-                                            <div className="flex items-start gap-3">
-                                                <GitCommitHorizontal size={16} className="text-blue-400 mt-0.5" />
-                                                <div className="flex-1 min-w-0 flex items-start justify-between gap-3">
-                                                    <div className="min-w-0">
-                                                        <p className="text-sm font-medium text-white/90 mb-1 truncate">{commit.message}</p>
-                                                        <div className="flex items-center gap-3 text-xs text-white/40">
-                                                            <span className="font-mono">{commit.shortHash}</span>
-                                                            <span>{commit.author}</span>
-                                                            <span>{new Date(commit.date).toLocaleDateString()}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="shrink-0">
-                                                        <DiffStats additions={commit.additions} deletions={commit.deletions} loading={unpushedStatsLoading} />
-                                                    </div>
+                                {hasRemote === true && !currentBranchNeedsPublish && (
+                                    <>
+                                        <PushRangeSelector
+                                            commits={unpushedCommits}
+                                            activeCommitHash={activePushCommitHash}
+                                            onActiveCommitChange={setActivePushCommitHash}
+                                        />
+                                        {activePushSummary && activePushCommit && (
+                                            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-xs text-white/45">
+                                                        Pushing to <span className="font-mono text-white/60">{activePushCommit.shortHash}</span> sends {activePushSummary.commitsToPush.length} commit{activePushSummary.commitsToPush.length === 1 ? '' : 's'} and leaves {activePushSummary.newerLocalCommits.length} local.
+                                                    </p>
                                                 </div>
+                                                <button
+                                                    onClick={() => setPendingPushCommit(activePushCommit)}
+                                                    disabled={isPushing}
+                                                    className="shrink-0 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-200 transition-all hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-40"
+                                                >
+                                                    Push Up To Here
+                                                </button>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                {unpushedCommits.length > ITEMS_PER_PAGE && (
-                                    <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/5">
-                                        <span className="text-xs text-white/40">
-                                            Showing {((unpushedPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(unpushedPage * ITEMS_PER_PAGE, unpushedCommits.length)} of {unpushedCommits.length}
-                                        </span>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => setUnpushedPage((p: number) => Math.max(1, p - 1))}
-                                                disabled={unpushedPage === 1}
-                                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                                            >
-                                                Previous
-                                            </button>
-                                            <span className="text-xs text-white/60 px-2">
-                                                {unpushedPage} / {Math.ceil(unpushedCommits.length / ITEMS_PER_PAGE)}
-                                            </span>
-                                            <button
-                                                onClick={() => setUnpushedPage((p: number) => Math.min(Math.ceil(unpushedCommits.length / ITEMS_PER_PAGE), p + 1))}
-                                                disabled={unpushedPage >= Math.ceil(unpushedCommits.length / ITEMS_PER_PAGE)}
-                                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                                            >
-                                                Next
-                                            </button>
-                                        </div>
-                                    </div>
+                                        )}
+                                    </>
                                 )}
                             </>
                         ) : (
@@ -521,6 +544,9 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                                 commits={visibleHistoryCommits}
                                 laneSourceCommits={visibleHistorySource}
                                 onCommitClick={handleCommitClick}
+                                localOnlyCommitHashes={localOnlyCommitHashes}
+                                hasRemote={hasRemote}
+                                remoteHeadCommitHash={remoteHeadCommitHash}
                             />
                             {(visibleHistorySource.length > COMMITS_PER_PAGE || historyHasMore || loadingMoreHistory) && (
                                 <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/5">
@@ -563,8 +589,15 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                             <p>No commit history found</p>
                         </div>
                     )
-                ) : null}
+                    ) : null}
             </div>
+            <PushRangeConfirmModal
+                isOpen={pendingPushCommit !== null}
+                summary={pendingPushSummary}
+                isPushing={isPushing}
+                onCancel={() => setPendingPushCommit(null)}
+                onConfirm={() => { void handleApprovePushRange() }}
+            />
         </div>
     )
 }
