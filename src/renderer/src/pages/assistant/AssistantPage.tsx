@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
     ArrowDown,
     ArchiveRestore,
@@ -7,7 +7,6 @@ import {
     ChevronRight,
     Copy,
     Eye,
-    FolderOpen,
     Loader2,
     MoreHorizontal,
     PlugZap,
@@ -751,30 +750,30 @@ export default function AssistantPage() {
         }
     }
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const element = timelineScrollRef.current
         if (!element) return
         syncTimelineScrollState(element)
     }, [])
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const element = timelineScrollRef.current
         if (!element) return
-        
-        // Only scroll to bottom if we're already near the bottom or if this is a fresh load
+
+        // Anchor the timeline before paint so session switches don't visibly jump.
         const isNearBottom = isTimelineNearBottom(element)
         const hasNoScroll = element.scrollTop === 0 && element.scrollHeight > element.clientHeight
-        
+
         if (isNearBottom || hasNoScroll) {
             shouldAutoScrollRef.current = true
             setShowScrollToBottom(false)
             scrollTimelineToBottom('instant')
         }
-        
-        syncTimelineScrollState(element)
-    }, [controller.selectedSession?.id, controller.activeThread?.id])
 
-    useEffect(() => {
+        syncTimelineScrollState(element)
+    }, [controller.selectedSession?.id, controller.activeThread?.id, controller.loading])
+
+    useLayoutEffect(() => {
         const element = timelineScrollRef.current
         if (!element) return
 
@@ -834,15 +833,6 @@ export default function AssistantPage() {
                                 </div>
 
                                 <div ref={headerMenuRef} className="relative flex shrink-0 items-center gap-1.5">
-                                    <button
-                                        type="button"
-                                        onClick={() => void controller.chooseProjectPath()}
-                                        disabled={!controller.selectedSession || controller.commandPending}
-                                        className="rounded-lg border border-white/10 bg-sparkle-card p-1 text-sparkle-text-secondary transition-colors hover:border-white/20 hover:bg-white/[0.03] hover:text-sparkle-text disabled:opacity-60"
-                                        title="Choose project"
-                                    >
-                                        <FolderOpen size={14} />
-                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -923,7 +913,7 @@ export default function AssistantPage() {
                                         <div
                                             ref={timelineScrollRef}
                                             onScroll={(event) => syncTimelineScrollState(event.currentTarget)}
-                                            className="custom-scrollbar smooth-scroll h-full overflow-y-auto px-4 py-4"
+                                            className="custom-scrollbar h-full overflow-y-auto px-4 py-4"
                                         >
                                             <div className={cn('mx-auto w-full', ASSISTANT_CHAT_WIDTH_CLASS)}>
                                                 <AssistantTimeline
