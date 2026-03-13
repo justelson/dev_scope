@@ -1,5 +1,17 @@
 import type { SharedSystemMetrics } from '../system-metrics'
 import type { FullReport, ReadinessReport, SystemHealth, ToolingReport } from '../../main/inspectors/types'
+import type {
+    AssistantApprovalResponseInput,
+    AssistantClearLogsInput,
+    AssistantConnectOptions,
+    AssistantDeleteMessageInput,
+    AssistantEventStreamPayload,
+    AssistantModelInfo,
+    AssistantRuntimeStatus,
+    AssistantSendPromptOptions,
+    AssistantSnapshot,
+    AssistantUserInputResponseInput
+} from '../assistant/contracts'
 
 export type DevScopeOk<T = Record<string, unknown>> = { success: true } & T
 export type DevScopeErr = { success: false; error: string }
@@ -31,6 +43,20 @@ export type DevScopeGitStatusEntryStats = {
     unstagedAdditions: number
     unstagedDeletions: number
     statsLoaded: boolean
+}
+
+export type DevScopePullRequestDraft = {
+    title: string
+    body: string
+}
+
+export type DevScopePullRequestDraftInput = {
+    projectName?: string
+    currentBranch: string
+    targetBranch: string
+    scopeLabel: string
+    diff: string
+    guideText?: string
 }
 
 export type DevScopeProject = {
@@ -133,6 +159,34 @@ export type DevScopeGitRemoteSummary = {
     name: string
     fetchUrl: string
     pushUrl: string
+}
+
+export type DevScopeGitHubRepository = {
+    owner: string
+    repo: string
+    fullName: string
+    htmlUrl: string
+    cloneUrl: string
+    sshUrl: string
+    defaultBranch?: string
+    private: boolean
+    isFork: boolean
+    parentFullName?: string | null
+    permissions?: {
+        admin: boolean
+        maintain: boolean
+        push: boolean
+        triage: boolean
+        pull: boolean
+    }
+}
+
+export type DevScopeGitHubPublishContext = {
+    isGitHubRemote: boolean
+    remoteName?: string | null
+    upstream?: DevScopeGitHubRepository | null
+    canOpenPullRequest: boolean
+    summaryLines: string[]
 }
 
 export type DevScopeGitSyncStatus = {
@@ -343,6 +397,31 @@ export interface DevScopeAgentScopeApi {
     [method: string]: (...args: any[]) => any
 }
 
+export interface DevScopeAssistantApi {
+    subscribe: () => Promise<DevScopeResult>
+    unsubscribe: () => Promise<DevScopeResult>
+    getSnapshot: () => Promise<AssistantSnapshot>
+    getStatus: () => Promise<AssistantRuntimeStatus>
+    listModels: (forceRefresh?: boolean) => Promise<DevScopeResult<{ models: AssistantModelInfo[] }>>
+    connect: (options?: AssistantConnectOptions) => Promise<DevScopeResult<{ threadId: string }>>
+    disconnect: (sessionId?: string) => Promise<DevScopeResult>
+    createSession: (title?: string) => Promise<DevScopeResult<{ sessionId: string }>>
+    selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string }>>
+    renameSession: (sessionId: string, title: string) => Promise<DevScopeResult>
+    archiveSession: (sessionId: string, archived?: boolean) => Promise<DevScopeResult>
+    deleteSession: (sessionId: string) => Promise<DevScopeResult>
+    deleteMessage: (input: AssistantDeleteMessageInput) => Promise<DevScopeResult>
+    clearLogs: (input?: AssistantClearLogsInput) => Promise<DevScopeResult>
+    setSessionProjectPath: (sessionId: string, projectPath: string | null) => Promise<DevScopeResult>
+    newThread: (sessionId?: string) => Promise<DevScopeResult<{ threadId: string }>>
+    sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) =>
+        Promise<DevScopeResult<{ sessionId: string; threadId: string; turnId: string }>>
+    interruptTurn: (turnId?: string, sessionId?: string) => Promise<DevScopeResult>
+    respondApproval: (input: AssistantApprovalResponseInput) => Promise<DevScopeResult>
+    respondUserInput: (input: AssistantUserInputResponseInput) => Promise<DevScopeResult>
+    onEvent: (callback: (event: AssistantEventStreamPayload) => void) => () => void
+}
+
 export interface DevScopeApi {
     // System
     getSystemOverview: () => Promise<SystemHealth>
@@ -353,7 +432,7 @@ export interface DevScopeApi {
     system: DevScopeSystemApi
 
     // Capabilities disabled in Air
-    getAIRuntimeStatus: () => Promise<DevScopeResult>
+    getAIRuntimeStatus: () => Promise<DevScopeResult<{ status: AssistantRuntimeStatus }>>
     getAIAgents: () => Promise<DevScopeResult<{ agents: unknown[] }>>
 
     // Settings + AI
@@ -364,9 +443,15 @@ export interface DevScopeApi {
     testGroqConnection: (apiKey: string) => Promise<DevScopeResult>
     testGeminiConnection: (apiKey: string) => Promise<DevScopeResult>
     generateCommitMessage: (provider: 'groq' | 'gemini', apiKey: string, diff: string) => Promise<DevScopeResult<{ message: string }>>
+    generatePullRequestDraft: (
+        provider: 'groq' | 'gemini',
+        apiKey: string,
+        input: DevScopePullRequestDraftInput
+    ) => Promise<DevScopeResult<DevScopePullRequestDraft>>
 
     // Projects + Git
     selectFolder: () => Promise<DevScopeResult<{ folderPath?: string; cancelled?: boolean }>>
+    selectMarkdownFile: () => Promise<DevScopeResult<{ filePath?: string; cancelled?: boolean }>>
     getUserHomePath: () => Promise<DevScopeResult<{ path: string }>>
     scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) => Promise<DevScopeResult<{ projects: DevScopeProject[]; folders: DevScopeFolderItem[]; files: DevScopeFileItem[]; cached?: boolean; cachedAt?: number }>>
     openInExplorer: (path: string) => Promise<DevScopeResult>
@@ -433,6 +518,9 @@ export interface DevScopeApi {
     getGitUser: (projectPath: string) => Promise<DevScopeResult<{ user: { name: string; email: string } | null }>>
     getGlobalGitUser: () => Promise<DevScopeResult<{ user: { name: string; email: string } | null }>>
     getRepoOwner: (projectPath: string) => Promise<DevScopeResult<{ owner: string | null }>>
+    getGitHubPublishContext: (
+        projectPath: string
+    ) => Promise<DevScopeResult<{ context: DevScopeGitHubPublishContext }>>
     hasRemoteOrigin: (projectPath: string) => Promise<DevScopeResult<{ hasRemote: boolean }>>
     getProjectsGitOverview: (projectPaths: string[]) => Promise<DevScopeResult<{ items: DevScopeProjectGitOverviewItem[] }>>
     stageFiles: (
@@ -452,14 +540,29 @@ export interface DevScopeApi {
     ) => Promise<DevScopeResult>
     createCommit: (projectPath: string, message: string) => Promise<DevScopeResult>
     setGlobalGitUser: (user: { name: string; email: string }) => Promise<DevScopeResult>
-    pushCommits: (projectPath: string) => Promise<DevScopeResult>
-    pushSingleCommit: (projectPath: string, commitHash: string) => Promise<DevScopeResult>
+    pushCommits: (
+        projectPath: string,
+        options?: { remoteName?: string; branchName?: string }
+    ) => Promise<DevScopeResult>
+    pushSingleCommit: (
+        projectPath: string,
+        commitHash: string,
+        options?: { remoteName?: string; branchName?: string }
+    ) => Promise<DevScopeResult>
     fetchUpdates: (projectPath: string, remoteName?: string) => Promise<DevScopeResult>
-    pullUpdates: (projectPath: string) => Promise<DevScopeResult>
+    pullUpdates: (
+        projectPath: string,
+        options?: {
+            remoteName?: string
+            branchName?: string
+            pushRemoteName?: string
+        }
+    ) => Promise<DevScopeResult>
     listBranches: (projectPath: string) => Promise<DevScopeResult<{ branches: DevScopeGitBranchSummary[] }>>
     createBranch: (projectPath: string, branchName: string, checkout?: boolean) => Promise<DevScopeResult>
     checkoutBranch: (projectPath: string, branchName: string, options?: { autoStash?: boolean; autoCleanupLock?: boolean }) => Promise<DevScopeResult<{ stashed: boolean; cleanedLock?: boolean; stashRef?: string; stashMessage?: string }>>
     deleteBranch: (projectPath: string, branchName: string, force?: boolean) => Promise<DevScopeResult>
+    addRemote: (projectPath: string, remoteName: string, remoteUrl: string) => Promise<DevScopeResult>
     listRemotes: (projectPath: string) => Promise<DevScopeResult<{ remotes: DevScopeGitRemoteSummary[] }>>
     setRemoteUrl: (projectPath: string, remoteName: string, remoteUrl: string) => Promise<DevScopeResult>
     removeRemote: (projectPath: string, remoteName: string) => Promise<DevScopeResult>
@@ -525,6 +628,7 @@ export interface DevScopeApi {
     getFileSystemRoots: () => Promise<DevScopeResult<{ roots: string[] }>>
 
     terminal: DevScopeTerminalApi
+    assistant: DevScopeAssistantApi
     agentscope: DevScopeAgentScopeApi
     updates: DevScopeUpdatesApi
     window: DevScopeWindowApi

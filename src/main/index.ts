@@ -9,6 +9,7 @@ import { existsSync, statSync } from 'fs'
 import { electronApp, is } from './utils'
 import log from 'electron-log'
 import { registerIpcHandlers } from './ipc'
+import { disposeAssistantService } from './assistant'
 import { disposeSystemMetricsBridge } from './system-metrics/manager'
 import { disposeUpdater, initializeUpdater, registerUpdateWindow } from './update/manager'
 
@@ -372,6 +373,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+    disposeAssistantService()
     disposeSystemMetricsBridge()
     disposeUpdater()
     if (process.platform !== 'darwin') {
@@ -380,6 +382,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+    disposeAssistantService()
     disposeUpdater()
 })
 

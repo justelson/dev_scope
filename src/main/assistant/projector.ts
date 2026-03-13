@@ -1,0 +1,45 @@
+import type { AssistantSnapshot } from '../../shared/assistant/contracts'
+import { applyAssistantDomainEvent, createDefaultAssistantSnapshot } from '../../shared/assistant/projector'
+import {
+    clearResolvedApprovals,
+    clearResolvedUserInputs,
+    nowIso,
+    runtimeStateAfterRestore,
+    settleRunningTurn,
+    sortThreadsNewestFirst
+} from './utils'
+
+function cloneSnapshot(snapshot: AssistantSnapshot): AssistantSnapshot {
+    return JSON.parse(JSON.stringify(snapshot)) as AssistantSnapshot
+}
+
+export function createDefaultSnapshot(): AssistantSnapshot {
+    return createDefaultAssistantSnapshot()
+}
+
+export const applyDomainEvent = applyAssistantDomainEvent
+
+export function recoverPersistedSnapshot(snapshot: AssistantSnapshot): AssistantSnapshot {
+    const recovered = cloneSnapshot(snapshot)
+    const recoveredAt = nowIso()
+
+    for (const session of recovered.sessions) {
+        session.updatedAt = session.updatedAt || recoveredAt
+        session.threadIds = sortThreadsNewestFirst(session.threadIds || [], session.threads || [])
+        if (!session.threadIds.includes(session.activeThreadId || '')) {
+            session.activeThreadId = session.threadIds[0] || null
+        }
+        for (const thread of session.threads) {
+            thread.state = runtimeStateAfterRestore(thread.state)
+            thread.pendingApprovals = clearResolvedApprovals(thread.pendingApprovals || [])
+            thread.pendingUserInputs = clearResolvedUserInputs(thread.pendingUserInputs || [])
+            thread.latestTurn = settleRunningTurn(thread.latestTurn, recoveredAt)
+        }
+    }
+
+    if (recovered.selectedSessionId && !recovered.sessions.some((session) => session.id === recovered.selectedSessionId)) {
+        recovered.selectedSessionId = recovered.sessions[0]?.id || null
+    }
+
+    return recovered
+}

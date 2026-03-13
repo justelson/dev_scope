@@ -22,10 +22,35 @@ import {
     handleGenerateCommitMessage,
     handleGetAiDebugLogs,
     handleGetStartupSettings,
+    handleGeneratePullRequestDraft,
     handleSetStartupSettings,
     handleTestGeminiConnection,
     handleTestGroqConnection
 } from './handlers/settings-ai-handlers'
+import {
+    handleAssistantArchiveSession,
+    handleAssistantClearLogs,
+    handleAssistantConnect,
+    handleAssistantCreateSession,
+    handleAssistantDeleteMessage,
+    handleAssistantDeleteSession,
+    handleAssistantDisconnect,
+    handleAssistantGetSnapshot,
+    handleAssistantGetStatus,
+    handleAssistantInterruptTurn,
+    handleAssistantListModels,
+    handleAssistantNewThread,
+    handleAssistantRenameSession,
+    handleAssistantRespondApproval,
+    handleAssistantRespondUserInput,
+    handleAssistantSelectSession,
+    handleAssistantSendPrompt,
+    handleAssistantSetSessionProjectPath,
+    handleAssistantSubscribe,
+    handleAssistantUnsubscribe
+} from './handlers/assistant-handlers'
+import { ASSISTANT_IPC } from '../../shared/assistant/contracts'
+import { peekAssistantService } from '../assistant'
 import {
     handleCopyToClipboard,
     handleGetUserHomePath,
@@ -36,7 +61,8 @@ import {
     handleOpenWith,
     handleListInstalledIdes,
     handleScanProjects,
-    handleSelectFolder
+    handleSelectFolder,
+    handleSelectMarkdownFile
 } from './handlers/project-discovery-handlers'
 import {
     handleGetActivePorts,
@@ -85,6 +111,7 @@ import {
     handleGetGitSyncStatus,
     handleGetGitStatus,
     handleGetGitStatusDetailed,
+    handleGetGitHubPublishContext,
     handleGetGlobalGitUser,
     handleGetGitUser,
     handleGetGitignorePatterns,
@@ -98,6 +125,7 @@ import {
     handleHasRemoteOrigin
 } from './handlers/git-read-handlers'
 import {
+    handleAddRemote,
     handleAddRemoteOrigin,
     handleApplyStash,
     handleCheckoutBranch,
@@ -156,10 +184,32 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:testGroqConnection', handleTestGroqConnection)
     ipcMain.handle('devscope:testGeminiConnection', handleTestGeminiConnection)
     ipcMain.handle('devscope:generateCommitMessage', handleGenerateCommitMessage)
+    ipcMain.handle('devscope:generatePullRequestDraft', handleGeneratePullRequestDraft)
     ipcMain.handle('devscope:getAiDebugLogs', handleGetAiDebugLogs)
     ipcMain.handle('devscope:clearAiDebugLogs', handleClearAiDebugLogs)
+    ipcMain.handle(ASSISTANT_IPC.subscribe, handleAssistantSubscribe)
+    ipcMain.handle(ASSISTANT_IPC.unsubscribe, handleAssistantUnsubscribe)
+    ipcMain.handle(ASSISTANT_IPC.getSnapshot, handleAssistantGetSnapshot)
+    ipcMain.handle(ASSISTANT_IPC.getStatus, handleAssistantGetStatus)
+    ipcMain.handle(ASSISTANT_IPC.listModels, handleAssistantListModels)
+    ipcMain.handle(ASSISTANT_IPC.connect, handleAssistantConnect)
+    ipcMain.handle(ASSISTANT_IPC.disconnect, handleAssistantDisconnect)
+    ipcMain.handle(ASSISTANT_IPC.createSession, handleAssistantCreateSession)
+    ipcMain.handle(ASSISTANT_IPC.selectSession, handleAssistantSelectSession)
+    ipcMain.handle(ASSISTANT_IPC.renameSession, handleAssistantRenameSession)
+    ipcMain.handle(ASSISTANT_IPC.archiveSession, handleAssistantArchiveSession)
+    ipcMain.handle(ASSISTANT_IPC.deleteSession, handleAssistantDeleteSession)
+    ipcMain.handle(ASSISTANT_IPC.deleteMessage, handleAssistantDeleteMessage)
+    ipcMain.handle(ASSISTANT_IPC.clearLogs, handleAssistantClearLogs)
+    ipcMain.handle(ASSISTANT_IPC.setSessionProjectPath, handleAssistantSetSessionProjectPath)
+    ipcMain.handle(ASSISTANT_IPC.newThread, handleAssistantNewThread)
+    ipcMain.handle(ASSISTANT_IPC.sendPrompt, handleAssistantSendPrompt)
+    ipcMain.handle(ASSISTANT_IPC.interruptTurn, handleAssistantInterruptTurn)
+    ipcMain.handle(ASSISTANT_IPC.respondApproval, handleAssistantRespondApproval)
+    ipcMain.handle(ASSISTANT_IPC.respondUserInput, handleAssistantRespondUserInput)
 
     ipcMain.handle('devscope:selectFolder', handleSelectFolder)
+    ipcMain.handle('devscope:selectMarkdownFile', handleSelectMarkdownFile)
     ipcMain.handle('devscope:getUserHomePath', handleGetUserHomePath)
     ipcMain.handle('devscope:scanProjects', handleScanProjects)
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
@@ -209,6 +259,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getGitUser', handleGetGitUser)
     ipcMain.handle('devscope:getGlobalGitUser', handleGetGlobalGitUser)
     ipcMain.handle('devscope:getRepoOwner', handleGetRepoOwner)
+    ipcMain.handle('devscope:getGitHubPublishContext', handleGetGitHubPublishContext)
     ipcMain.handle('devscope:hasRemoteOrigin', handleHasRemoteOrigin)
     ipcMain.handle('devscope:getProjectsGitOverview', handleGetProjectsGitOverview)
     ipcMain.handle('devscope:checkIsGitRepo', handleCheckIsGitRepo)
@@ -226,6 +277,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:createBranch', handleCreateBranch)
     ipcMain.handle('devscope:checkoutBranch', handleCheckoutBranch)
     ipcMain.handle('devscope:deleteBranch', handleDeleteBranch)
+    ipcMain.handle('devscope:addRemote', handleAddRemote)
     ipcMain.handle('devscope:listRemotes', handleListRemotes)
     ipcMain.handle('devscope:setRemoteUrl', handleSetRemoteUrl)
     ipcMain.handle('devscope:removeRemote', handleRemoveRemote)
@@ -268,5 +320,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     mainWindow.webContents.once('destroyed', () => {
         systemMetricsBridge.unsubscribe(mainWindow.webContents.id)
+        peekAssistantService()?.unsubscribe(mainWindow.webContents.id)
     })
 }
