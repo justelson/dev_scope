@@ -3,7 +3,7 @@
  */
 
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Activity, FolderTree } from 'lucide-react'
+import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Activity, FolderTree, Bot } from 'lucide-react'
 import { useAppUpdateState } from '@/lib/app-updates'
 import { cn } from '@/lib/utils'
 import { createContext, useCallback, useEffect, useContext, type ReactNode } from 'react'
@@ -51,6 +51,7 @@ const NAV_ITEMS: NavItem[] = [
     { id: 'home', label: 'Home', path: '/home', icon: House },
     { id: 'projects', label: 'Projects', path: '/projects', icon: FolderOpen },
     { id: 'explorer', label: 'Explorer', path: '/explorer', icon: FolderTree },
+    { id: 'assistant', label: 'Assistant', path: '/assistant', icon: Bot },
     { id: 'tasks', label: 'Tasks', path: '/tasks', icon: Activity },
     { id: 'settings', label: 'Settings', path: '/settings', icon: Settings }
 ]
@@ -68,6 +69,10 @@ function isProjectsAreaPath(pathname: string): boolean {
 
 function isExplorerAreaPath(pathname: string): boolean {
     return pathname === '/explorer' || pathname.startsWith('/explorer/')
+}
+
+function isAssistantAreaPath(pathname: string): boolean {
+    return pathname === '/assistant' || pathname.startsWith('/assistant/')
 }
 
 function getProjectsRestorePath(): string {
@@ -143,6 +148,8 @@ export default function Sidebar() {
                         ? isProjectsAreaPath(location.pathname)
                         : item.id === 'explorer'
                             ? isExplorerAreaPath(location.pathname)
+                            : item.id === 'assistant'
+                                ? isAssistantAreaPath(location.pathname)
                         : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
                     const Icon = item.icon
 

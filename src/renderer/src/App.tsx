@@ -19,6 +19,7 @@ const ProjectDetails = lazy(() => import('./pages/ProjectDetails'))
 const FolderBrowse = lazy(() => import('./pages/FolderBrowse'))
 const Explorer = lazy(() => import('./pages/Explorer'))
 const QuickOpen = lazy(() => import('./pages/QuickOpen'))
+const Assistant = lazy(() => import('./pages/Assistant'))
 
 // Settings sub-pages
 const AppearanceSettings = lazy(() => import('./pages/settings/AppearanceSettings'))
@@ -27,6 +28,7 @@ const AboutSettings = lazy(() => import('./pages/settings/AboutSettings'))
 const ProjectsSettings = lazy(() => import('./pages/settings/ProjectsSettings'))
 const ExplorerSettings = lazy(() => import('./pages/settings/ExplorerSettings'))
 const AISettings = lazy(() => import('./pages/settings/AISettings'))
+const GitSettings = lazy(() => import('./pages/settings/GitSettings'))
 const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
 const LAST_MAIN_TAB_KEY = 'devscope:last-main-tab:v1'
@@ -69,21 +71,26 @@ function isExplorerAreaPath(pathname: string): boolean {
     return pathname === '/explorer' || pathname.startsWith('/explorer/')
 }
 
+function isAssistantAreaPath(pathname: string): boolean {
+    return pathname === '/assistant' || pathname.startsWith('/assistant/')
+}
+
 function resolveMainTabPath(
     pathname: string,
     options?: { allowTasks?: boolean; allowExplorer?: boolean }
-): '/home' | '/projects' | '/settings' | '/tasks' | '/explorer' | null {
+): '/home' | '/projects' | '/settings' | '/tasks' | '/explorer' | '/assistant' | null {
     const allowTasks = options?.allowTasks !== false
     const allowExplorer = options?.allowExplorer === true
     if (pathname === '/home' || pathname.startsWith('/home/')) return '/home'
     if (allowTasks && (pathname === '/tasks' || pathname.startsWith('/tasks/'))) return '/tasks'
     if (allowExplorer && isExplorerAreaPath(pathname)) return '/explorer'
+    if (isAssistantAreaPath(pathname)) return '/assistant'
     if (pathname === '/settings' || pathname.startsWith('/settings/')) return '/settings'
     if (isProjectsAreaPath(pathname)) return '/projects'
     return null
 }
 
-function readLastMainTabPath(allowTasks: boolean, allowExplorer: boolean): '/home' | '/projects' | '/settings' | '/tasks' | '/explorer' {
+function readLastMainTabPath(allowTasks: boolean, allowExplorer: boolean): '/home' | '/projects' | '/settings' | '/tasks' | '/explorer' | '/assistant' {
     try {
         const stored = String(localStorage.getItem(LAST_MAIN_TAB_KEY) || '').trim()
         const resolved = resolveMainTabPath(stored, { allowTasks, allowExplorer })
@@ -110,6 +117,7 @@ function normalizeRestorableRoute(
     if (trimmed === '/settings' || trimmed.startsWith('/settings/')) return trimmed
     if (allowTasks && (trimmed === '/tasks' || trimmed.startsWith('/tasks/'))) return trimmed
     if (allowExplorer && (trimmed === '/explorer' || trimmed.startsWith('/explorer/'))) return trimmed
+    if (trimmed === '/assistant' || trimmed.startsWith('/assistant/')) return trimmed
 
     return null
 }
@@ -235,13 +243,13 @@ function MainContent() {
                     <Route path="/settings/projects" element={<ProjectsSettings />} />
                     <Route path="/settings/explorer" element={<ExplorerSettings />} />
                     <Route path="/settings/ai" element={<AISettings />} />
-                    <Route path="/settings/git" element={<Navigate to="/settings" replace />} />
+                    <Route path="/settings/git" element={<GitSettings />} />
                     <Route path="/settings/terminal" element={<TerminalSettings />} />
                     <Route path="/settings/logs" element={<LogsSettings />} />
-                    <Route path="/assistant" element={<Navigate to="/home" replace />} />
-                    <Route path="/assistant/skills" element={<Navigate to="/home" replace />} />
-                    <Route path="/skills" element={<Navigate to="/home" replace />} />
-                    <Route path="/settings/assistant" element={<Navigate to="/settings" replace />} />
+                    <Route path="/assistant" element={<Assistant />} />
+                    <Route path="/assistant/skills" element={<Navigate to="/assistant" replace />} />
+                    <Route path="/skills" element={<Navigate to="/assistant" replace />} />
+                    <Route path="/settings/assistant" element={<Navigate to="/assistant" replace />} />
                     <Route path="/settings/account" element={<Navigate to="/settings/ai" replace />} />
                     <Route path="/settings/usage" element={<Navigate to="/settings/ai" replace />} />
                     <Route path="*" element={<LaunchRedirect />} />
