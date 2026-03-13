@@ -37,3 +37,9 @@ reference/
 
 # Local docs snapshots
 docs/current/FILE_TREE_SNAPSHOT.txt
+
+# Temp codex schema folders
+%TEMP%codex-schema-*/
+docs/current/temp/
+test-api.js
+GEMINI.md

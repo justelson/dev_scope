@@ -170,8 +170,8 @@ class AssistantStore {
         await this.hydrate()
     }
 
-    async createSession(title?: string) {
-        return this.runAction(() => window.devscope.assistant.createSession(title), true)
+    async createSession(title?: string, projectPath?: string) {
+        return this.runAction(() => window.devscope.assistant.createSession(title, projectPath), true)
     }
 
     async selectSession(sessionId: string) {
@@ -232,15 +232,26 @@ class AssistantStore {
 
     async chooseProjectPath(sessionId: string) {
         const folderResult = await window.devscope.selectFolder()
-        if (!folderResult.success) {
-            this.setState({ error: folderResult.error })
+        if (folderResult.success && folderResult.folderPath && !folderResult.cancelled) {
+            return this.runAction(
+                () => window.devscope.assistant.setSessionProjectPath(sessionId, folderResult.folderPath || null),
+                false
+            )
+        }
+        return folderResult
+    }
+
+    async createProjectSession() {
+        const folderResult = await window.devscope.selectFolder()
+        if (!folderResult.success || folderResult.cancelled || !folderResult.folderPath) {
             return folderResult
         }
-        if (folderResult.cancelled || !folderResult.folderPath) {
-            return { success: true as const, cancelled: true }
+        const sessionResult = await this.createSession()
+        if (!sessionResult.success) {
+            return sessionResult
         }
         return this.runAction(
-            () => window.devscope.assistant.setSessionProjectPath(sessionId, folderResult.folderPath || null),
+            () => window.devscope.assistant.setSessionProjectPath(sessionResult.sessionId, folderResult.folderPath || null),
             false
         )
     }
@@ -292,8 +303,8 @@ class AssistantStore {
 
     private setState(
         nextState:
-        | Partial<AssistantStoreState>
-        | ((current: AssistantStoreState) => Partial<AssistantStoreState>)
+            | Partial<AssistantStoreState>
+            | ((current: AssistantStoreState) => Partial<AssistantStoreState>)
     ) {
         const partial = typeof nextState === 'function' ? nextState(this.state) : nextState
         this.state = { ...this.state, ...partial }
@@ -354,7 +365,7 @@ export function useAssistantStore() {
         phase,
         refresh: () => assistantStore.refresh(),
         refreshModels: () => assistantStore.refreshModels(true),
-        createSession: (title?: string) => assistantStore.createSession(title).then(() => undefined),
+        createSession: (title?: string, projectPath?: string) => assistantStore.createSession(title, projectPath).then(() => undefined),
         selectSession: (sessionId: string) => assistantStore.selectSession(sessionId).then(() => undefined),
         renameSession: (sessionId: string, title: string) => assistantStore.renameSession(sessionId, title).then(() => undefined),
         archiveSession: (sessionId: string, archived = true) => assistantStore.archiveSession(sessionId, archived).then(() => undefined),
@@ -378,6 +389,7 @@ export function useAssistantStore() {
         chooseProjectPath: () => {
             if (!selectedSession) return Promise.resolve()
             return assistantStore.chooseProjectPath(selectedSession.id).then(() => undefined)
-        }
+        },
+        createProjectSession: () => assistantStore.createProjectSession().then(() => undefined)
     }
 }

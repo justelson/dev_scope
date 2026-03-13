@@ -565,6 +565,8 @@ export default function AssistantPage() {
         }
     }, [showHeaderMenu])
 
+    const selectedProjectPath = String(controller.selectedSession?.projectPath || controller.activeThread?.cwd || '').trim()
+
     const availableModels = useMemo(() => {
         if (controller.snapshot.knownModels.length > 0) return controller.snapshot.knownModels
         const activeModel = String(controller.activeThread?.model || '').trim()
@@ -575,7 +577,6 @@ export default function AssistantPage() {
     const contextUsedTokens = latestTurnUsage?.totalTokens ?? null
     const contextWindowTokens = latestTurnUsage?.modelContextWindow ?? null
     const sessionSidebarWidth = leftSidebarCollapsed ? 56 : Math.max(180, Math.min(520, Math.round(leftSidebarWidth)))
-    const selectedProjectPath = String(controller.selectedSession?.projectPath || controller.activeThread?.cwd || '').trim()
     const selectedProjectLabel = selectedProjectPath
         ? selectedProjectPath.split(/[\\/]/).filter(Boolean).pop() || selectedProjectPath
         : 'not set'
@@ -583,7 +584,7 @@ export default function AssistantPage() {
         ? selectedProjectPath.replace(/^[A-Z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/')
         : ''
     const displayProjectPath = showFullProjectPath ? selectedProjectPathWithTilde : selectedProjectLabel
-    
+
     const sidebarMetricChips = [
         {
             label: 'Input tokens',
@@ -621,13 +622,13 @@ export default function AssistantPage() {
     const selectedRuntimeLabel = controller.activeThread?.runtimeMode === 'full-access' ? 'Full access' : 'Supervised'
     const contextUsedDisplay = contextUsedTokens != null ? formatCompactMetric(contextUsedTokens) : controller.activeThread?.latestTurn ? 'Not reported' : 'No turn yet'
     const contextAvailableDisplay = contextWindowTokens != null ? formatCompactMetric(contextWindowTokens) : controller.activeThread?.latestTurn ? 'Not reported' : 'No turn yet'
-    const contextPercentage = contextUsedTokens != null && contextWindowTokens != null && contextWindowTokens > 0 
-        ? Math.round((contextUsedTokens / contextWindowTokens) * 100) 
+    const contextPercentage = contextUsedTokens != null && contextWindowTokens != null && contextWindowTokens > 0
+        ? Math.round((contextUsedTokens / contextWindowTokens) * 100)
         : null
-    const contextColor = contextPercentage != null 
-        ? contextPercentage >= 90 ? 'text-red-300' 
-        : contextPercentage >= 70 ? 'text-amber-300' 
-        : 'text-emerald-300'
+    const contextColor = contextPercentage != null
+        ? contextPercentage >= 90 ? 'text-red-300'
+            : contextPercentage >= 70 ? 'text-amber-300'
+                : 'text-emerald-300'
         : 'text-sparkle-text'
     const lastTimelineMessage = controller.timelineMessages[controller.timelineMessages.length - 1] || null
     const latestTimelineActivity = controller.activityFeed[0] || null
@@ -670,7 +671,7 @@ export default function AssistantPage() {
 
     const groupedIssueActivities = useMemo(() => {
         const groups: Array<{ activity: AssistantActivity; activities: AssistantActivity[]; count: number }> = []
-        
+
         for (const activity of issueActivities) {
             const lastGroup = groups[groups.length - 1]
             if (lastGroup && lastGroup.activity.summary === activity.summary && lastGroup.activity.tone === activity.tone) {
@@ -680,7 +681,7 @@ export default function AssistantPage() {
                 groups.push({ activity, activities: [activity], count: 1 })
             }
         }
-        
+
         return groups
     }, [issueActivities])
     const latestIssueGroup = groupedIssueActivities[0] || null
@@ -807,11 +808,12 @@ export default function AssistantPage() {
                         commandPending={controller.commandPending}
                         onSetCollapsed={setLeftSidebarCollapsed}
                         onWidthChange={setLeftSidebarWidth}
-                        onCreateSession={() => controller.createSession()}
+                        onCreateSession={(projectPath) => controller.createSession(undefined, projectPath)}
                         onSelectSession={controller.selectSession}
                         onRenameSession={(sessionId, title) => controller.renameSession(sessionId, title)}
                         onArchiveSession={controller.archiveSession}
                         onDeleteSession={controller.deleteSession}
+                        onChooseProjectPath={controller.createProjectSession}
                     />
 
                     <div className="flex min-w-0 flex-1">
@@ -1014,7 +1016,7 @@ export default function AssistantPage() {
                                                             await copyTextToClipboard(selectedProjectPath)
                                                             setProjectPathCopied(true)
                                                             setTimeout(() => setProjectPathCopied(false), 1600)
-                                                        } catch {}
+                                                        } catch { }
                                                     }}
                                                     className={cn(
                                                         'shrink-0 rounded-md border p-1 transition-colors',
@@ -1038,7 +1040,7 @@ export default function AssistantPage() {
                                                         await copyTextToClipboard(selectedProjectPath)
                                                         setProjectPathCopied(true)
                                                         setTimeout(() => setProjectPathCopied(false), 1600)
-                                                    } catch {}
+                                                    } catch { }
                                                 }}
                                                 className="w-full truncate text-left text-sm font-medium text-sparkle-text transition-colors hover:text-sparkle-text-secondary"
                                                 title={showFullProjectPath ? 'Show folder name (double-click to copy)' : 'Show full path (double-click to copy)'}
@@ -1081,12 +1083,12 @@ export default function AssistantPage() {
                                                     <span className={cn('font-semibold', contextColor)}>{contextPercentage}%</span>
                                                 </div>
                                                 <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
-                                                    <div 
+                                                    <div
                                                         className={cn(
                                                             'h-full transition-all duration-300',
-                                                            contextPercentage >= 90 ? 'bg-red-400' 
-                                                            : contextPercentage >= 70 ? 'bg-amber-400' 
-                                                            : 'bg-emerald-400'
+                                                            contextPercentage >= 90 ? 'bg-red-400'
+                                                                : contextPercentage >= 70 ? 'bg-amber-400'
+                                                                    : 'bg-emerald-400'
                                                         )}
                                                         style={{ width: `${Math.min(contextPercentage, 100)}%` }}
                                                     />
@@ -1172,13 +1174,13 @@ export default function AssistantPage() {
                                                 type="button"
                                                 onClick={async () => {
                                                     try {
-                                                        const allLogs = issueActivities.map(activity => 
+                                                        const allLogs = issueActivities.map(activity =>
                                                             JSON.stringify(buildIssueLogEntry(activity), null, 2)
                                                         ).join('\n\n---\n\n')
                                                         await copyTextToClipboard(allLogs)
                                                         setAllLogsCopied(true)
                                                         setTimeout(() => setAllLogsCopied(false), 1600)
-                                                    } catch {}
+                                                    } catch { }
                                                 }}
                                                 className={cn(
                                                     'rounded-md border p-1 transition-colors',

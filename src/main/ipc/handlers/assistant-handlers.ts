@@ -52,9 +52,9 @@ export function handleAssistantDisconnect(_event: Electron.IpcMainInvokeEvent, s
     return withAssistantResult(() => getAssistantService().disconnect(sessionId))
 }
 
-export function handleAssistantCreateSession(_event: Electron.IpcMainInvokeEvent, title?: string) {
-    log.info('IPC: assistant:createSession', { title })
-    return withAssistantResult(() => getAssistantService().createSession(title))
+export function handleAssistantCreateSession(_event: Electron.IpcMainInvokeEvent, title?: string, projectPath?: string) {
+    log.info('IPC: assistant:createSession', { title, projectPath })
+    return withAssistantResult(() => getAssistantService().createSession(title, projectPath))
 }
 
 export function handleAssistantSelectSession(_event: Electron.IpcMainInvokeEvent, sessionId: string) {

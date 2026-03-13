@@ -117,14 +117,14 @@ export class AssistantService {
         return { success: true as const }
     }
 
-    createSession(title?: string) {
+    createSession(title?: string, projectPath?: string) {
         const createdAt = nowIso()
         const sessionId = createAssistantId('assistant-session')
-        const thread = this.createThread(createdAt)
+        const thread = this.createThread(createdAt, null, projectPath || null)
         const session: AssistantSession = {
             id: sessionId,
             title: title?.trim() || 'New Session',
-            projectPath: null,
+            projectPath: projectPath?.trim() || null,
             archived: false,
             createdAt,
             updatedAt: createdAt,
@@ -759,12 +759,12 @@ export class AssistantService {
         return this.requireSession(session.id)
     }
 
-    private createThread(createdAt: string, previousThread?: AssistantThread | null): AssistantThread {
+    private createThread(createdAt: string, previousThread?: AssistantThread | null, cwd?: string | null): AssistantThread {
         return {
             id: createAssistantId('assistant-thread'),
             providerThreadId: null,
             model: previousThread?.model || '',
-            cwd: previousThread?.cwd || null,
+            cwd: cwd !== undefined ? cwd : (previousThread?.cwd || null),
             runtimeMode: previousThread?.runtimeMode || 'approval-required',
             interactionMode: previousThread?.interactionMode || 'default',
             state: 'idle',

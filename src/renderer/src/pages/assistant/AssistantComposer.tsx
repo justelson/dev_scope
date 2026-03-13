@@ -1006,9 +1006,9 @@ export function AssistantComposer({
 
     return (
         <>
-            <div className={cn('relative flex flex-col', compact ? 'gap-1.5' : 'gap-2')}>
+            <div className={cn('relative flex flex-col pointer-events-none', contextFiles.length > 0 ? (compact ? 'gap-1' : 'gap-1.5') : 'gap-0')}>
                 <AnimatedHeight isOpen={contextFiles.length > 0} duration={220}>
-                    <div className={cn('flex flex-wrap items-center', compact ? 'gap-1.5 pb-1' : 'gap-2 pb-1.5')}>
+                    <div className={cn('pointer-events-auto flex flex-wrap items-center', compact ? 'gap-1.5 pb-1' : 'gap-2 pb-1.5')}>
                         {contextFiles.map((file) => {
                             const meta = getContextFileMeta(file)
                             const contentType = getContentTypeTag(file)
@@ -1062,7 +1062,7 @@ export function AssistantComposer({
                     </div>
                 </AnimatedHeight>
 
-                <div ref={composerRootRef} className="relative z-10">
+                <div ref={composerRootRef} className="pointer-events-auto relative z-10">
                     <div className="group rounded-[20px] border border-white/10 bg-sparkle-card transition-[border-color,box-shadow] duration-200 focus-within:border-[var(--accent-primary)]/28 focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent-primary)_18%,transparent),0_0_18px_color-mix(in_srgb,var(--accent-primary)_12%,transparent)]">
                         <input
                             ref={filePickerRef}
@@ -1161,7 +1161,7 @@ export function AssistantComposer({
                                     >
                                         <div className="whitespace-pre-wrap break-words">
                                             {text.length === 0 ? (
-                                                <span className="text-sparkle-text-muted/45">Ask anything, @tag files/folders</span>
+                                                <span className="text-sparkle-text" style={{ opacity: 0.16 }}>Ask anything, @tag files/folders</span>
                                             ) : (
                                                 (() => {
                                                     const segments: any[] = []
@@ -1271,7 +1271,6 @@ export function AssistantComposer({
                                                             const isActive = model.id === selectedModel
                                                             const isHighlighted = index === activeModelIndex
                                                             const isLatestModel = model.id === latestModelId
-                                                            const secondaryLabel = model.description || (model.label && model.label !== model.id ? model.id : '')
                                                             return (
                                                                 <button
                                                                     key={model.id}
@@ -1282,20 +1281,23 @@ export function AssistantComposer({
                                                                         setShowModelDropdown(false)
                                                                     }}
                                                                     className={cn(
-                                                                        'grid min-h-8 w-full grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors',
-                                                                        isActive
-                                                                            ? 'bg-white/[0.06] text-sparkle-text'
-                                                                            : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text',
-                                                                        isHighlighted && !isActive && 'bg-white/[0.04] text-sparkle-text'
+                                                                        'grid min-h-8 w-full grid-cols-[1rem_auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors',
+                                                                        isLatestModel
+                                                                            ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15'
+                                                                            : isActive
+                                                                                ? 'bg-white/[0.06] text-sparkle-text'
+                                                                                : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text',
+                                                                        isHighlighted && !isActive && !isLatestModel && 'bg-white/[0.04] text-sparkle-text'
                                                                     )}
                                                                 >
                                                                     <span className="flex items-center justify-center">
                                                                         {isActive ? <Check size={13} className="text-sparkle-text" /> : <span className="h-[13px] w-[13px]" />}
                                                                     </span>
+                                                                    <OpenAILogo className="h-3 w-3 shrink-0 text-current opacity-70" />
                                                                     <span className="min-w-0 truncate text-[12px] font-medium">{model.label || model.id}</span>
-                                                                    <span className="truncate text-[10px] text-sparkle-text-muted">
-                                                                        {isLatestModel ? 'Latest' : secondaryLabel}
-                                                                    </span>
+                                                                    {isLatestModel && (
+                                                                        <span className="truncate text-[10px] text-emerald-400/80">Latest</span>
+                                                                    )}
                                                                 </button>
                                                             )
                                                         })
