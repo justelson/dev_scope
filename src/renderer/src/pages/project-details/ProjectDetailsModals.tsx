@@ -22,7 +22,7 @@ export function ScriptCatalogModal({
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
             <div
-                className="m-4 flex h-[min(82vh,760px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
+                className="m-4 flex max-h-[95vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="flex items-center justify-between border-b border-white/5 bg-black/15 px-5 py-4">
@@ -332,7 +332,7 @@ export function DependenciesModal({
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
             <div
-                className="bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-[min(1120px,96vw)] h-[min(78vh,760px)] flex flex-col m-4 overflow-hidden"
+                className="bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-[min(1120px,96vw)] max-h-[95vh] flex flex-col m-4 overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between p-5 border-b border-white/5 bg-white/5">

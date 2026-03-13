@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent, type WheelEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import {
     Calendar,
     Check,
@@ -17,7 +17,7 @@ import {
     X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { parsePatchForRendering, summarizeFileDiff, type FileDiffSummary } from '@/lib/diffRendering'
+import { extractFilePatch, scanPatchFileSummaries, type FileDiffSummary } from '@/lib/diffRendering'
 import type { GitCommit } from './types'
 import { DiffStats } from './DiffStats'
 import { FileDiffDetailModal } from './FileDiffDetailModal'
@@ -91,7 +91,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
         frameId = window.requestAnimationFrame(() => {
             timeoutId = window.setTimeout(() => {
                 if (cancelled) return
-                const next = parsePatchForRendering(diff, `commit-diff:${commit.hash}`).files.map(summarizeFileDiff)
+                const next = scanPatchFileSummaries(diff)
                 if (cancelled) return
                 setParsedDiff(next)
                 setIsPreparingDiff(false)
@@ -166,6 +166,10 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
         () => parsedDiff.find((file) => file.path === selectedFilePath) || null,
         [parsedDiff, selectedFilePath]
     )
+    const selectedFilePatch = useMemo(
+        () => (selectedFileDiff ? extractFilePatch(diff, selectedFileDiff.path, selectedFileDiff.previousPath) : ''),
+        [diff, selectedFileDiff]
+    )
 
     useEffect(() => {
         setCurrentPage((page) => Math.min(page, totalPages))
@@ -174,6 +178,10 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
     useEffect(() => {
         setCurrentPage(1)
     }, [commit.hash])
+
+    useEffect(() => {
+        setSelectedFilePath(null)
+    }, [commit.hash, diff])
 
     useEffect(() => {
         filesScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' })
@@ -194,14 +202,6 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
         }
     }
 
-    const handleModalWheelCapture = (event: WheelEvent<HTMLDivElement>) => {
-        event.stopPropagation()
-    }
-
-    const handleModalTouchMoveCapture = (event: TouchEvent<HTMLDivElement>) => {
-        event.stopPropagation()
-    }
-
     useEffect(() => {
         const previousOverflow = document.body.style.overflow
         document.body.style.overflow = 'hidden'
@@ -215,11 +215,9 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
         <div
             className="fixed inset-0 z-50 flex items-center justify-center overscroll-none bg-black/60 backdrop-blur-md animate-fadeIn"
             onClick={onClose}
-            onWheelCapture={handleModalWheelCapture}
-            onTouchMoveCapture={handleModalTouchMoveCapture}
         >
             <div
-                className="relative w-full max-w-6xl max-h-[85vh] m-4 flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl overscroll-none"
+                className="relative m-4 flex h-[90vh] max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-start justify-between p-5 border-b border-white/5 bg-white/5">
@@ -273,7 +271,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                 )}
 
                 <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)] overflow-hidden bg-black/10">
-                    <aside className="min-h-0 overflow-y-auto scroll-smooth border-b border-white/5 bg-black/20 p-4 [scrollbar-gutter:stable] lg:border-b-0 lg:border-r lg:border-r-white/10">
+                    <aside className="min-h-0 overflow-y-auto overscroll-contain border-b border-white/5 bg-black/20 p-4 custom-scrollbar [scrollbar-gutter:stable] lg:border-b-0 lg:border-r lg:border-r-white/10">
                         <div className="space-y-3">
                             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                                 <p className="text-[11px] uppercase tracking-wide text-white/40">Commit Summary</p>
@@ -344,7 +342,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                     </aside>
 
                     <section className="min-h-0 flex flex-col overflow-hidden">
-                        <div ref={filesScrollRef} className="min-h-0 flex-1 overflow-y-scroll scroll-smooth px-4 py-4 [scrollbar-gutter:stable]">
+                        <div ref={filesScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 custom-scrollbar [scrollbar-gutter:stable]">
                             {loading || isPreparingDiff ? (
                                 <div className="flex flex-col items-center justify-center py-16 text-white/30">
                                     <RefreshCw size={32} className="mb-4 animate-spin" />
@@ -475,7 +473,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                 <FileDiffDetailModal
                     isOpen={Boolean(selectedFileDiff)}
                     filePath={selectedFileDiff?.path || ''}
-                    diff=""
+                    diff={selectedFilePatch}
                     fileDiff={selectedFileDiff?.fileDiff || null}
                     additions={selectedFileDiff?.additions || 0}
                     deletions={selectedFileDiff?.deletions || 0}

@@ -19,6 +19,8 @@ export interface WorkingChangeItem {
     previousPath?: string
     name: string
     gitStatus?: 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown'
+    staged?: boolean
+    unstaged?: boolean
     additions: number
     deletions: number
     stagedAdditions?: number

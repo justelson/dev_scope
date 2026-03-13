@@ -16,6 +16,7 @@ type PushRangePreviewProps = {
     compact?: boolean
     className?: string
     showCloudBoundary?: boolean
+    remoteName?: string | null
 }
 
 type PushRangeSelectorProps = {
@@ -24,6 +25,7 @@ type PushRangeSelectorProps = {
     onActiveCommitChange: (commitHash: string) => void
     onCommitClick?: (commit: GitCommit) => void
     className?: string
+    remoteName?: string | null
 }
 
 type PushRangeConfirmModalProps = {
@@ -32,6 +34,7 @@ type PushRangeConfirmModalProps = {
     isPushing?: boolean
     dontShowAgain: boolean
     setDontShowAgain: (value: boolean) => void
+    remoteName?: string | null
     onCancel: () => void
     onConfirm: () => void
 }
@@ -144,7 +147,8 @@ function PushRangeGraph({
     summary,
     compact = false,
     className,
-    showCloudBoundary = true
+    showCloudBoundary = true,
+    remoteName
 }: PushRangePreviewProps) {
     const rows = useMemo(
         () => buildPreviewRows(summary, compact, showCloudBoundary),
@@ -163,7 +167,7 @@ function PushRangeGraph({
                     </p>
                 </div>
                 <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/60">
-                    origin
+                    {remoteName || 'remote'}
                 </div>
             </div>
 
@@ -208,7 +212,7 @@ function PushRangeGraph({
                                     </div>
                                 </div>
                                 <div className="min-w-0 flex-1 rounded-lg border border-emerald-400/20 bg-emerald-400/8 px-3 py-2 text-[11px] text-emerald-100/85">
-                                    Origin catches up here after this push.
+                                    {remoteName || 'Remote'} catches up here after this push.
                                 </div>
                             </div>
                         )
@@ -265,7 +269,8 @@ export function PushRangeSelector({
     activeCommitHash,
     onActiveCommitChange,
     onCommitClick,
-    className
+    className,
+    remoteName
 }: PushRangeSelectorProps) {
     const PAGE_SIZE = 15
     const [page, setPage] = useState(1)
@@ -312,7 +317,7 @@ export function PushRangeSelector({
                     <p className="mt-1 text-xs text-white/55">Click a commit in the local stream to choose the push boundary.</p>
                 </div>
                 <div className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-white/60">
-                    Local stream
+                    {remoteName ? `${remoteName} push boundary` : 'Local stream'}
                 </div>
             </div>
 
@@ -510,6 +515,7 @@ export function PushRangeConfirmModal({
     isPushing = false,
     dontShowAgain,
     setDontShowAgain,
+    remoteName,
     onCancel,
     onConfirm
 }: PushRangeConfirmModalProps) {
@@ -535,11 +541,11 @@ export function PushRangeConfirmModal({
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-md"
+            className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn"
             onClick={onCancel}
         >
             <div
-                className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
+                className="flex max-h-[95vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl m-4"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="border-b border-white/10 bg-white/[0.02] px-6 py-5">
@@ -548,7 +554,7 @@ export function PushRangeConfirmModal({
                             <p className="text-[11px] uppercase tracking-[0.2em] text-white/35">Confirm Partial Push</p>
                             <h3 className="mt-1 text-lg font-semibold text-white">Push up to this commit?</h3>
                             <p className="mt-2 text-sm text-white/60">
-                                This will send {formatCommitCount(summary.commitsToPush.length, 'commit')} to origin and leave {formatCommitCount(summary.newerLocalCommits.length, 'newer local commit', 'newer local commits')} on this device.
+                                This will send {formatCommitCount(summary.commitsToPush.length, 'commit')} to {remoteName || 'remote'} and leave {formatCommitCount(summary.newerLocalCommits.length, 'newer local commit', 'newer local commits')} on this device.
                             </p>
                         </div>
                         <div className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-right">
@@ -574,7 +580,7 @@ export function PushRangeConfirmModal({
                         </div>
                     </div>
 
-                    <PushRangeGraph summary={summary} compact={!showAll} showCloudBoundary className="border-white/10" />
+                    <PushRangeGraph summary={summary} compact={!showAll} showCloudBoundary className="border-white/10" remoteName={remoteName} />
 
                     <div className="mt-4 flex items-center justify-between gap-3">
                         <button

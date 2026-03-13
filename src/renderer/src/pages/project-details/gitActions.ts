@@ -1,3 +1,4 @@
+import { buildGitPublishPlan, describeGitPublishSuccess, type GitPublishPlan } from '@/lib/gitPublishPlanner'
 import type { FileTreeNode, GitCommit, GitStatusDetail } from './types'
 
 type RefreshGitOptions = {
@@ -15,6 +16,8 @@ interface GitActionParams {
     repoOwner: string | null
     settings: any
     unpushedCommits: GitCommit[]
+    branches: Array<{ name: string; isRemote: boolean; isLocal?: boolean }>
+    remotes: Array<{ name: string; pushUrl: string }>
     targetBranch: string
     currentBranch: string
     branchName: 'main' | 'master' | 'custom'
@@ -379,21 +382,28 @@ export function createProjectGitActions(params: GitActionParams) {
     }
 
     const handlePush = async (
-        mode: 'push' | 'publish' = 'push',
-        options?: { commitHash?: string; commitMessage?: string }
+        publishPlanOverride?: GitPublishPlan,
+        options?: { commitHash?: string; commitMessage?: string },
+        pushOptions?: { remoteName?: string; branchName?: string }
     ) => {
         if (!params.decodedPath) return
-        const hadUnpushedCommits = params.unpushedCommits.length > 0
         const targetCommitHash = String(options?.commitHash || '').trim()
-        const targetCommitMessage = String(options?.commitMessage || '').trim()
+        const publishPlan = publishPlanOverride ?? buildGitPublishPlan({
+            currentBranch: params.currentBranch,
+            branches: params.branches,
+            remotes: params.remotes,
+            unpushedCommits: params.unpushedCommits,
+            selectedCommitHash: targetCommitHash || undefined,
+            intent: targetCommitHash ? 'push-range' : 'push-all'
+        })
 
         params.setIsPushing(true)
         try {
             let retriedAfterTransientError = false
             const runPush = async () => {
                 const pushResult = targetCommitHash
-                    ? await window.devscope.pushSingleCommit(params.decodedPath, targetCommitHash)
-                    : await window.devscope.pushCommits(params.decodedPath)
+                    ? await window.devscope.pushSingleCommit(params.decodedPath, targetCommitHash, pushOptions)
+                    : await window.devscope.pushCommits(params.decodedPath, pushOptions)
                 if (!pushResult?.success) {
                     throw new Error(pushResult?.error || (targetCommitHash ? 'Failed to push selected commit' : 'Failed to push commits'))
                 }
@@ -416,13 +426,10 @@ export function createProjectGitActions(params: GitActionParams) {
 
             await params.refreshGitData(false, { mode: 'unpushed' })
             if (!retriedAfterTransientError) {
-                if (targetCommitHash) {
-                    params.showToast(`Pushed ${targetCommitMessage || targetCommitHash.slice(0, 7)} to remote.`)
-                } else if (mode === 'publish' || !hadUnpushedCommits) {
-                    params.showToast(`Published branch "${params.currentBranch || 'current'}" to remote.`)
-                } else {
-                    params.showToast('Pushed commits to remote.')
-                }
+                params.showToast(describeGitPublishSuccess(
+                    publishPlan,
+                    { commitHash: targetCommitHash || undefined, currentBranch: params.currentBranch }
+                ))
             }
         } catch (err: any) {
             const rawMessage = String(err?.message || err || 'Failed to push commits')
@@ -564,19 +571,19 @@ export function createProjectGitActions(params: GitActionParams) {
         void performCommit()
     }
 
-    const handleFetch = async () => {
+    const handleFetch = async (remoteName?: string, successLabel?: string) => {
         if (!params.decodedPath) return
 
         params.setIsFetching(true)
         try {
-            const result = await window.devscope.fetchUpdates(params.decodedPath)
+            const result = await window.devscope.fetchUpdates(params.decodedPath, remoteName)
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to fetch updates')
             }
 
             params.setLastFetched(Date.now())
             await params.refreshGitData(false, { quiet: true, mode: 'pulls' })
-            params.showToast('Fetched remote updates.')
+            params.showToast(successLabel || (remoteName ? `Fetched ${remoteName}.` : 'Fetched remote updates.'))
         } catch (err: any) {
             params.showToast(`Failed to fetch: ${err.message}`, undefined, undefined, 'error')
         } finally {
@@ -584,19 +591,19 @@ export function createProjectGitActions(params: GitActionParams) {
         }
     }
 
-    const handlePull = async () => {
+    const handlePull = async (options?: { remoteName?: string; branchName?: string; pushRemoteName?: string; successLabel?: string }) => {
         if (!params.decodedPath) return
 
         params.setIsPulling(true)
         try {
-            const result = await window.devscope.pullUpdates(params.decodedPath)
+            const result = await window.devscope.pullUpdates(params.decodedPath, options)
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to pull updates')
             }
 
             params.setLastPulled(Date.now())
             await params.refreshGitData(true, { mode: 'full' })
-            params.showToast('Pulled remote updates successfully.')
+            params.showToast(options?.successLabel || 'Pulled remote updates successfully.')
         } catch (err: any) {
             params.showToast(`Failed to pull: ${err.message}`, undefined, undefined, 'error')
         } finally {

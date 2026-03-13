@@ -43,7 +43,7 @@ export function ServerScriptRunModal({
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
             <div
-                className="w-full max-w-3xl rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl m-4 overflow-hidden"
+                className="w-full max-w-3xl max-h-[95vh] rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl m-4 overflow-hidden flex flex-col"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-white/[0.03]">
@@ -60,7 +60,7 @@ export function ServerScriptRunModal({
                     </button>
                 </div>
 
-                <div className="p-5 max-h-[70vh] overflow-y-auto">
+                <div className="p-5 overflow-y-auto flex-1">
                     <div className="grid gap-4 lg:grid-cols-2">
                         <div className="space-y-4">
                             <div>

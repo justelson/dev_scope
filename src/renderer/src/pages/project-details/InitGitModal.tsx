@@ -76,7 +76,7 @@ export function InitGitModal({
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={step === 'config' ? onClose : undefined}>
             <div
-                className="bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col m-4 overflow-hidden"
+                className="bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] flex flex-col m-4 overflow-hidden"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="flex items-center justify-between p-5 border-b border-white/5 bg-white/5">

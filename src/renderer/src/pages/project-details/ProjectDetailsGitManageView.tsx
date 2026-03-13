@@ -1,4 +1,5 @@
-import { GitBranch, Link, Plus, RefreshCw } from 'lucide-react'
+import { GitBranch, GitPullRequest, Link, Plus, RefreshCw } from 'lucide-react'
+import { buildGitPublishPlan } from '@/lib/gitPublishPlanner'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/FormControls'
 import { DiffStats } from './DiffStats'
@@ -12,6 +13,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
         isGitRepo,
         loadingGit,
         gitError,
+        onOpenCreatePullRequest,
         setShowInitModal,
         currentBranch,
         targetBranch,
@@ -30,9 +32,20 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
         setGitView,
         remotes,
         tags,
-        stashes
+        stashes,
+        githubPublishContext,
+        hasGitHubRemote
     } = props
     const loadingCounts = loadingGit && !gitError
+    const publishPlan = buildGitPublishPlan({
+        currentBranch,
+        branches,
+        remotes,
+        unpushedCommits,
+        intent: 'push-all',
+        githubPublishContext
+    })
+    const hasPublishAction = hasRemote === true && (unpushedCommits.length > 0 || publishPlan.currentBranchNeedsPublish)
 
     if (isGitRepo === false) {
         return (
@@ -100,6 +113,31 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                 </div>
             </div>
 
+            {hasRemote === true && (
+                <div className="bg-black/20 rounded-xl border border-white/10 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 className="text-sm font-medium text-white/85 flex items-center gap-2">
+                                <GitPullRequest size={16} />
+                                Pull Requests
+                            </h3>
+                            <p className="mt-1 text-xs text-white/48">
+                                {hasGitHubRemote
+                                    ? 'Review the local work to include, the target branch, and the browser draft summary before DevScope opens the GitHub PR page.'
+                                    : 'Add a GitHub remote to use the built-in PR flow. Standard Git push and pull still work with any remote.'}
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => onOpenCreatePullRequest?.()}
+                            disabled={!hasGitHubRemote}
+                            className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-medium text-white/75 transition-all hover:border-white/20 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                            {hasGitHubRemote ? 'Create PR' : 'GitHub Remote Required'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {hasRemote === false ? (
                 <div className="bg-amber-500/10 rounded-xl border border-amber-500/20 p-4">
                     <h3 className="text-sm font-medium text-amber-400 mb-3 flex items-center gap-2">
@@ -125,7 +163,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
             <div className="space-y-3">
                 {(() => {
                     const hasWorkingChanges = changedFiles.length > 0
-                    const hasUnpushedCommits = unpushedCommits.length > 0
+                    const hasUnpushedCommits = hasPublishAction
                     const hasIncomingCommits = (gitSyncStatus?.behind || 0) > 0 || incomingCommits.length > 0
                     const effectiveHistoryTotalCount = Math.max(gitHistoryTotalCount || 0, gitHistory.length)
                     const hasRecentCommits = effectiveHistoryTotalCount > 0
@@ -164,13 +202,16 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                             {hasUnpushedCommits && (
                                 <div className="bg-blue-500/5 rounded-xl border border-blue-500/20 p-4">
                                     <div className="flex items-center justify-between mb-2">
-                                        <h4 className="text-sm font-medium text-blue-400">To Push</h4>
+                                        <h4 className="text-sm font-medium text-blue-400">{publishPlan.title}</h4>
                                         <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
-                                            {loadingCounts ? '...' : unpushedCommits.length}
+                                            {loadingCounts ? '...' : publishPlan.commitCount}
                                         </span>
                                     </div>
                                     <div className="space-y-1">
-                                        {unpushedCommits.slice(0, 3).map((commit: any) => (
+                                        <div className="rounded-md border border-white/5 bg-black/20 px-2 py-2 text-xs text-white/60">
+                                            {publishPlan.description}
+                                        </div>
+                                        {unpushedCommits.slice(0, 2).map((commit: any) => (
                                             <div key={commit.hash} className="rounded-md border border-white/5 bg-black/20 px-2 py-1.5">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <div className="text-xs text-white/60 truncate min-w-0">
@@ -182,9 +223,14 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                                                 </div>
                                             </div>
                                         ))}
-                                        {unpushedCommits.length > 3 && (
+                                        {unpushedCommits.length > 2 && (
                                             <button onClick={() => setGitView('unpushed')} className="text-xs text-blue-400 hover:underline">
-                                                +{unpushedCommits.length - 3} more...
+                                                +{unpushedCommits.length - 2} more...
+                                            </button>
+                                        )}
+                                        {publishPlan.currentBranchNeedsPublish && unpushedCommits.length === 0 && (
+                                            <button onClick={() => setGitView('unpushed')} className="text-xs text-blue-400 hover:underline">
+                                                Review local branch status...
                                             </button>
                                         )}
                                     </div>

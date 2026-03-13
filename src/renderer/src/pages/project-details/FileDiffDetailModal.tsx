@@ -123,9 +123,9 @@ export function FileDiffDetailModal({
     }
 
     return (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fadeIn p-4" onClick={onClose}>
             <div
-                className="w-full max-w-6xl h-[86vh] min-h-[420px] max-h-[86vh] overflow-hidden rounded-2xl bg-sparkle-card border border-white/10 shadow-2xl flex flex-col"
+                className="flex h-[92vh] max-h-[95vh] min-h-[420px] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-white/10 bg-white/[0.03]">
@@ -201,7 +201,7 @@ export function FileDiffDetailModal({
                         resolvedFileDiff ? (
                             <PatchDiffViewer fileDiff={resolvedFileDiff} mode={renderMode} />
                         ) : parsedDiff.error ? (
-                            <div className="h-full overflow-auto custom-scrollbar px-5 py-4">
+                            <div className="h-full overflow-auto overscroll-contain custom-scrollbar px-5 py-4 [scrollbar-gutter:stable]">
                                 <p className="mb-3 text-xs text-amber-300/80">
                                     Falling back to raw diff view because patch parsing failed.
                                 </p>
