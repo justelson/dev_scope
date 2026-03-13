@@ -16,6 +16,23 @@ export type BrowserContentLayout = 'grouped' | 'explorer'
 export type GitBulkActionScope = 'project' | 'repo'
 export type FilePreviewDefaultMode = 'preview' | 'edit'
 export type FilePreviewPythonRunMode = 'terminal' | 'output'
+export type PullRequestGuideSource = 'project' | 'global' | 'repo-template' | 'none'
+export type PullRequestGuideMode = 'text' | 'file'
+export type PullRequestChangeSource = 'unstaged' | 'staged' | 'local-commits' | 'all-local-work'
+
+export interface PullRequestGuideConfig {
+    mode: PullRequestGuideMode
+    text: string
+    filePath: string
+}
+
+export interface ProjectPullRequestConfig {
+    guideSource: PullRequestGuideSource
+    guide: PullRequestGuideConfig
+    targetBranch: string
+    draft: boolean
+    changeSource: PullRequestChangeSource
+}
 
 export interface AccentColor {
     name: string
@@ -96,6 +113,12 @@ export interface Settings {
     gitWarnOnAuthorMismatch: boolean
     gitConfirmPartialPushRange: boolean
     gitBulkActionScope: GitBulkActionScope
+    gitPullRequestGlobalGuide: PullRequestGuideConfig
+    gitPullRequestDefaultGuideSource: PullRequestGuideSource
+    gitPullRequestDefaultTargetBranch: string
+    gitPullRequestDefaultDraft: boolean
+    gitPullRequestDefaultChangeSource: PullRequestChangeSource
+    gitProjectPullRequestConfigs: Record<string, ProjectPullRequestConfig>
 
     // AI
     groqApiKey: string
@@ -137,6 +160,16 @@ const DEFAULT_SETTINGS: Settings = {
     gitWarnOnAuthorMismatch: true,
     gitConfirmPartialPushRange: true,
     gitBulkActionScope: 'repo',
+    gitPullRequestGlobalGuide: {
+        mode: 'text',
+        text: '',
+        filePath: ''
+    },
+    gitPullRequestDefaultGuideSource: 'global',
+    gitPullRequestDefaultTargetBranch: 'main',
+    gitPullRequestDefaultDraft: true,
+    gitPullRequestDefaultChangeSource: 'all-local-work',
+    gitProjectPullRequestConfigs: {},
     groqApiKey: '',
     geminiApiKey: '',
     commitAIProvider: 'groq'
@@ -150,6 +183,44 @@ function isTheme(value: unknown): value is Theme {
 
 function isDarkTheme(value: unknown): value is DarkTheme {
     return isTheme(value) && value !== 'light'
+}
+
+function sanitizePullRequestGuideConfig(value: unknown): PullRequestGuideConfig {
+    const candidate = typeof value === 'object' && value !== null ? value as Partial<PullRequestGuideConfig> : {}
+    return {
+        mode: candidate.mode === 'file' ? 'file' : 'text',
+        text: typeof candidate.text === 'string' ? candidate.text : '',
+        filePath: typeof candidate.filePath === 'string' ? candidate.filePath : ''
+    }
+}
+
+function sanitizePullRequestChangeSource(value: unknown, fallback: PullRequestChangeSource): PullRequestChangeSource {
+    if (value === 'unstaged' || value === 'staged' || value === 'local-commits' || value === 'all-local-work') {
+        return value
+    }
+
+    if (value === 'selected-commits') return 'local-commits'
+    if (value === 'all-ready') return 'all-local-work'
+    return fallback
+}
+
+function sanitizeProjectPullRequestConfig(value: unknown, defaults: Settings): ProjectPullRequestConfig {
+    const candidate = typeof value === 'object' && value !== null ? value as Partial<ProjectPullRequestConfig> : {}
+    return {
+        guideSource: candidate.guideSource === 'project' || candidate.guideSource === 'repo-template' || candidate.guideSource === 'none'
+            ? candidate.guideSource
+            : 'global',
+        guide: sanitizePullRequestGuideConfig(candidate.guide),
+        targetBranch: typeof candidate.targetBranch === 'string' && candidate.targetBranch.trim()
+            ? candidate.targetBranch.trim()
+            : defaults.gitPullRequestDefaultTargetBranch,
+        draft: candidate.draft !== false,
+        changeSource: sanitizePullRequestChangeSource(
+            (candidate as Partial<ProjectPullRequestConfig> & { scope?: unknown }).changeSource
+                ?? (candidate as Partial<ProjectPullRequestConfig> & { scope?: unknown }).scope,
+            defaults.gitPullRequestDefaultChangeSource
+        )
+    }
 }
 
 // Load settings from localStorage
@@ -206,6 +277,31 @@ function loadSettings(): Settings {
                 gitWarnOnAuthorMismatch: candidate.gitWarnOnAuthorMismatch !== false,
                 gitConfirmPartialPushRange: candidate.gitConfirmPartialPushRange !== false,
                 gitBulkActionScope: candidate.gitBulkActionScope === 'project' ? 'project' : 'repo',
+                gitPullRequestGlobalGuide: sanitizePullRequestGuideConfig(candidate.gitPullRequestGlobalGuide),
+                gitPullRequestDefaultGuideSource:
+                    candidate.gitPullRequestDefaultGuideSource === 'project'
+                    || candidate.gitPullRequestDefaultGuideSource === 'repo-template'
+                    || candidate.gitPullRequestDefaultGuideSource === 'none'
+                        ? candidate.gitPullRequestDefaultGuideSource
+                        : 'global',
+                gitPullRequestDefaultTargetBranch: typeof candidate.gitPullRequestDefaultTargetBranch === 'string' && candidate.gitPullRequestDefaultTargetBranch.trim()
+                    ? candidate.gitPullRequestDefaultTargetBranch.trim()
+                    : DEFAULT_SETTINGS.gitPullRequestDefaultTargetBranch,
+                gitPullRequestDefaultDraft: candidate.gitPullRequestDefaultDraft !== false,
+                gitPullRequestDefaultChangeSource: sanitizePullRequestChangeSource(
+                    candidate.gitPullRequestDefaultChangeSource ?? candidate.gitPullRequestDefaultScope,
+                    DEFAULT_SETTINGS.gitPullRequestDefaultChangeSource
+                ),
+                gitProjectPullRequestConfigs: Object.fromEntries(
+                    Object.entries(
+                        typeof candidate.gitProjectPullRequestConfigs === 'object' && candidate.gitProjectPullRequestConfigs !== null
+                            ? candidate.gitProjectPullRequestConfigs as Record<string, unknown>
+                            : {}
+                    ).map(([projectPath, config]) => [
+                        projectPath,
+                        sanitizeProjectPullRequestConfig(config, DEFAULT_SETTINGS)
+                    ])
+                ),
                 groqApiKey: candidate.groqApiKey,
                 geminiApiKey: candidate.geminiApiKey,
                 commitAIProvider: candidate.commitAIProvider

@@ -42,6 +42,7 @@ Long term maintainability is a core priority. If you add new functionality, firs
   1. `npm run typecheck`
   2. targeted package/app-specific checks
   3. full builds only when they are necessary for the requested change
+- After every edit, run a lightweight syntax/type validation check when permission for validation has been granted in the current session.
 - If validation is skipped because permission was not granted, say that explicitly in the final response.
 
 ## Agent/Escalation Permission

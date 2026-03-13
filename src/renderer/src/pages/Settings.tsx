@@ -5,9 +5,10 @@
 import { Link } from 'react-router-dom'
 import {
     Palette, RefreshCw, Info,
-    ChevronRight, Settings as SettingsIcon, FolderOpen, FolderTree, Sparkles, Terminal
+    ChevronRight, Settings as SettingsIcon, FolderOpen, FolderTree, Sparkles, Terminal, GitBranch
 } from 'lucide-react'
 import { useAppUpdateState } from '@/lib/app-updates'
+import { getPullRequestChangeSourceLabel } from '@/lib/pullRequestWorkflow'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 
@@ -106,6 +107,15 @@ export default function Settings() {
                             ? `Enabled${settings.explorerHomePath ? ` \u2022 ${getPathTail(settings.explorerHomePath)}` : ' \u2022 Home (~)'}`
                             : 'Disabled'
                     }
+                />
+
+                <SettingsCard
+                    to="/settings/git"
+                    icon={<GitBranch className="text-orange-300" size={24} />}
+                    iconBg="bg-orange-500/10"
+                    title="Git"
+                    description="PR defaults, branch behavior, and Git identity"
+                    preview={`${getPullRequestChangeSourceLabel(settings.gitPullRequestDefaultChangeSource)} \u2022 ${settings.gitPullRequestDefaultTargetBranch}`}
                 />
 
                 <SettingsCard

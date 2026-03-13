@@ -527,8 +527,8 @@ function ScrollPreviewModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
-            <div className="relative w-full max-w-5xl mx-4 rounded-xl border border-white/10 bg-sparkle-bg shadow-2xl">
-                <div className="flex items-center justify-between border-b border-white/10 p-4">
+            <div className="relative w-full max-w-5xl mx-4 max-h-[95vh] rounded-xl border border-white/10 bg-sparkle-bg shadow-2xl flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between border-b border-white/10 p-4 flex-shrink-0">
                     <div>
                         <h2 className="text-lg font-semibold text-sparkle-text">Scroll Behavior Preview</h2>
                         <p className="text-sm text-sparkle-text-secondary">Try scrolling in each panel to compare</p>
