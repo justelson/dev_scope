@@ -38,6 +38,7 @@ export {
 } from './git/read'
 
 export {
+    addRemote,
     stageFiles,
     setGlobalGitUser,
     createCommit,

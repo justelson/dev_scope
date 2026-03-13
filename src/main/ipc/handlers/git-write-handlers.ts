@@ -1,5 +1,6 @@
 import log from 'electron-log'
 import {
+    addRemote,
     addRemoteOrigin,
     applyStash,
     checkoutBranch,
@@ -106,7 +107,11 @@ export async function handleSetGlobalGitUser(
     }
 }
 
-export async function handlePushCommits(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+export async function handlePushCommits(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    options?: { remoteName?: string; branchName?: string }
+) {
     const task = createTask({
         type: 'git.push',
         title: 'Push commits',
@@ -114,7 +119,7 @@ export async function handlePushCommits(_event: Electron.IpcMainInvokeEvent, pro
         initialLog: `Pushing commits for ${projectPath}`
     })
     try {
-        await pushCommits(projectPath)
+        await pushCommits(projectPath, options)
         completeTask(task.id, 'success', 'Push completed successfully.')
         return { success: true }
     } catch (err: any) {
@@ -127,7 +132,8 @@ export async function handlePushCommits(_event: Electron.IpcMainInvokeEvent, pro
 export async function handlePushSingleCommit(
     _event: Electron.IpcMainInvokeEvent,
     projectPath: string,
-    commitHash: string
+    commitHash: string,
+    options?: { remoteName?: string; branchName?: string }
 ) {
     const task = createTask({
         type: 'git.push',
@@ -136,7 +142,7 @@ export async function handlePushSingleCommit(
         initialLog: `Pushing commit ${commitHash} for ${projectPath}`
     })
     try {
-        await pushSingleCommit(projectPath, commitHash)
+        await pushSingleCommit(projectPath, commitHash, options)
         completeTask(task.id, 'success', 'Single-commit push completed successfully.')
         return { success: true }
     } catch (err: any) {
@@ -164,15 +170,26 @@ export async function handleFetchUpdates(_event: Electron.IpcMainInvokeEvent, pr
     }
 }
 
-export async function handlePullUpdates(_event: Electron.IpcMainInvokeEvent, projectPath: string) {
+export async function handlePullUpdates(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    options?: { remoteName?: string; branchName?: string; pushRemoteName?: string }
+) {
+    const remoteName = String(options?.remoteName || '').trim()
+    const pushRemoteName = String(options?.pushRemoteName || '').trim()
+    const branchName = String(options?.branchName || '').trim()
     const task = createTask({
         type: 'git.pull',
-        title: 'Pull updates',
+        title: remoteName ? `Pull ${remoteName}` : 'Pull updates',
         projectPath,
-        initialLog: 'Pulling latest changes from remote'
+        initialLog: remoteName
+            ? pushRemoteName
+                ? `Pulling ${branchName || 'current branch'} from ${remoteName} and syncing to ${pushRemoteName}`
+                : `Pulling ${branchName || 'current branch'} from ${remoteName}`
+            : 'Pulling latest changes from remote'
     })
     try {
-        await pullUpdates(projectPath)
+        await pullUpdates(projectPath, options)
         completeTask(task.id, 'success', 'Pull completed successfully.')
         return { success: true }
     } catch (err: any) {
@@ -251,6 +268,33 @@ export async function handleListRemotes(_event: Electron.IpcMainInvokeEvent, pro
         return { success: true, remotes }
     } catch (err: any) {
         log.error('Failed to list remotes:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleAddRemote(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string,
+    remoteName: string,
+    remoteUrl: string
+) {
+    const task = createTask({
+        type: 'git.remote',
+        title: `Add remote ${remoteName}`,
+        projectPath,
+        initialLog: `Adding remote ${remoteName}: ${remoteUrl}`
+    })
+    try {
+        const result = await addRemote(projectPath, remoteName, remoteUrl)
+        if (result?.success) {
+            completeTask(task.id, 'success', `Remote ${remoteName} added.`)
+        } else {
+            completeTask(task.id, 'failed', result?.error || `Failed to add remote ${remoteName}.`)
+        }
+        return result
+    } catch (err: any) {
+        log.error('Failed to add remote:', err)
+        completeTask(task.id, 'failed', err?.message || `Failed to add remote ${remoteName}.`)
         return { success: false, error: err.message }
     }
 }

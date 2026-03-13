@@ -3,6 +3,7 @@ import log from 'electron-log'
 import { clearAiDebugLogs, getAiDebugLogs } from '../../ai/ai-debug-log'
 import { generateGeminiCommitMessage, testGeminiConnection } from '../../ai/gemini'
 import { generateCommitMessage as generateGroqCommitMessage, testGroqConnection } from '../../ai/groq'
+import { generateGeminiPullRequestDraft, generateGroqPullRequestDraft } from '../../ai/pull-request'
 
 type CommitAIProvider = 'groq' | 'gemini'
 
@@ -62,6 +63,28 @@ export async function handleGenerateCommitMessage(
     }
 
     return await generateGeminiCommitMessage(apiKey, diff)
+}
+
+export async function handleGeneratePullRequestDraft(
+    _event: Electron.IpcMainInvokeEvent,
+    provider: CommitAIProvider,
+    apiKey: string,
+    input: {
+        projectName?: string
+        currentBranch: string
+        targetBranch: string
+        scopeLabel: string
+        diff: string
+        guideText?: string
+    }
+) {
+    log.info('IPC: generatePullRequestDraft', { provider, currentBranch: input?.currentBranch, targetBranch: input?.targetBranch })
+
+    if (provider === 'groq') {
+        return await generateGroqPullRequestDraft(apiKey, input)
+    }
+
+    return await generateGeminiPullRequestDraft(apiKey, input)
 }
 
 export async function handleGetAiDebugLogs(_event: Electron.IpcMainInvokeEvent, limit?: number) {

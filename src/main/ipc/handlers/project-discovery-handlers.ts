@@ -28,6 +28,31 @@ export async function handleSelectFolder(event: Electron.IpcMainInvokeEvent) {
     }
 }
 
+export async function handleSelectMarkdownFile(event: Electron.IpcMainInvokeEvent) {
+    log.info('IPC: selectMarkdownFile')
+
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        const result = await dialog.showOpenDialog(win!, {
+            title: 'Select Markdown Guide',
+            properties: ['openFile'],
+            filters: [
+                { name: 'Markdown', extensions: ['md', 'markdown', 'mdx', 'txt'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        })
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return { success: false, cancelled: true }
+        }
+
+        return { success: true, filePath: result.filePaths[0] }
+    } catch (err: any) {
+        log.error('Failed to select markdown file:', err)
+        return { success: false, error: err.message }
+    }
+}
+
 export async function handleGetUserHomePath() {
     log.info('IPC: getUserHomePath')
 

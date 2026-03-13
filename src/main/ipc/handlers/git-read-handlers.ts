@@ -23,6 +23,7 @@ import {
     getWorkingDiff,
     hasRemoteOrigin
 } from '../../inspectors/git'
+import { getGitHubPublishContext } from '../../services/github-publish'
 
 export async function handleGetGitHistory(
     _event: Electron.IpcMainInvokeEvent,
@@ -190,6 +191,19 @@ export async function handleGetRepoOwner(_event: Electron.IpcMainInvokeEvent, pr
         return { success: true, owner }
     } catch (err: any) {
         log.error('Failed to get repo owner:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetGitHubPublishContext(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string
+) {
+    try {
+        const context = await getGitHubPublishContext(projectPath)
+        return { success: true, context }
+    } catch (err: any) {
+        log.error('Failed to get GitHub publish context:', err)
         return { success: false, error: err.message }
     }
 }

@@ -200,7 +200,10 @@ export default function PatchDiffViewer({ fileDiff, patch, mode }: PatchDiffView
     }, [fileDiff, patch, renderToken])
 
     return (
-        <div ref={containerRef} className="relative h-full overflow-auto custom-scrollbar bg-transparent">
+        <div
+            ref={containerRef}
+            className="relative h-full overflow-auto overscroll-contain bg-transparent custom-scrollbar [scrollbar-gutter:stable]"
+        >
             <DiffWorkerPoolProvider>
                 {fileDiff ? (
                     <FileDiff fileDiff={fileDiff} options={options} />

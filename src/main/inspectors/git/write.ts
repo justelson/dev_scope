@@ -12,7 +12,6 @@ import {
     toErrorMessage,
     toPathSpec
 } from './core'
-import { hasRemoteOrigin } from './read'
 import type { CheckoutBranchOptions, CheckoutBranchResult, GitBranchSummary, GitRemoteSummary, GitTagSummary } from './types'
 
 const INDEX_LOCK_MAX_ATTEMPTS = 8
@@ -198,14 +197,28 @@ function parseUpstreamRef(upstreamRef: string): { remoteName: string; branchName
     return { remoteName, branchName }
 }
 
-async function pushCommitRange(projectPath: string, targetCommitHash?: string): Promise<void> {
+type GitPushOptions = {
+    remoteName?: string
+    branchName?: string
+}
+
+type GitPullOptions = {
+    remoteName?: string
+    branchName?: string
+    pushRemoteName?: string
+}
+
+async function pushCommitRange(projectPath: string, targetCommitHash?: string, options?: GitPushOptions): Promise<void> {
     try {
-        const hasRemote = await hasRemoteOrigin(projectPath)
-        if (!hasRemote) {
-            throw new Error('No remote "origin" configured')
-        }
+        const remoteNameOverride = String(options?.remoteName || '').trim()
 
         await withIndexLockRecovery(projectPath, 'push commits', async (git) => {
+            const remotes = await git.getRemotes()
+            const chosenRemoteName = remoteNameOverride || 'origin'
+            if (!remotes.some((remote) => remote.name === chosenRemoteName)) {
+                throw new Error(`No remote "${chosenRemoteName}" configured`)
+            }
+
             const upstreamRef = (await git.raw([
             'rev-parse',
             '--abbrev-ref',
@@ -215,7 +228,7 @@ async function pushCommitRange(projectPath: string, targetCommitHash?: string): 
 
             const targetHash = String(targetCommitHash || '').trim()
             if (targetHash) {
-                const branch = (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+                const branch = String(options?.branchName || '').trim() || (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
                 if (!branch || branch === 'HEAD') {
                     throw new Error('Cannot push a single commit from detached HEAD')
                 }
@@ -225,7 +238,7 @@ async function pushCommitRange(projectPath: string, targetCommitHash?: string): 
                 })
 
                 const upstream = parseUpstreamRef(upstreamRef)
-                const remoteName = upstream?.remoteName || 'origin'
+                const remoteName = remoteNameOverride || upstream?.remoteName || 'origin'
                 const remoteBranch = upstream?.branchName || branch
                 const remoteTrackingRef = upstreamRef || `${remoteName}/${remoteBranch}`
 
@@ -242,17 +255,17 @@ async function pushCommitRange(projectPath: string, targetCommitHash?: string): 
                 return
             }
 
-            if (upstreamRef) {
+            if (upstreamRef && !remoteNameOverride && !options?.branchName) {
                 await git.push()
                 return
             }
 
-            const branch = (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+            const branch = String(options?.branchName || '').trim() || (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
             if (!branch || branch === 'HEAD') {
                 throw new Error('Cannot push detached HEAD without specifying a branch')
             }
 
-            await git.push(['-u', 'origin', branch])
+            await git.push(['-u', chosenRemoteName, `${branch}:refs/heads/${branch}`])
         })
     } catch (err) {
         log.error('Failed to push commits', err)
@@ -260,14 +273,14 @@ async function pushCommitRange(projectPath: string, targetCommitHash?: string): 
     }
 }
 
-export async function pushCommits(projectPath: string): Promise<void> {
-    await pushCommitRange(projectPath)
+export async function pushCommits(projectPath: string, options?: GitPushOptions): Promise<void> {
+    await pushCommitRange(projectPath, undefined, options)
 }
 
-export async function pushSingleCommit(projectPath: string, commitHash: string): Promise<void> {
+export async function pushSingleCommit(projectPath: string, commitHash: string, options?: GitPushOptions): Promise<void> {
     try {
         assertNonEmpty(commitHash, 'Commit hash')
-        await pushCommitRange(projectPath, commitHash.trim())
+        await pushCommitRange(projectPath, commitHash.trim(), options)
     } catch (err) {
         log.error('Failed to push single commit', err)
         throw toError(err, 'Failed to push single commit')
@@ -314,21 +327,26 @@ export async function createInitialCommit(projectPath: string, message: string):
     }
 }
 
-export async function addRemoteOrigin(projectPath: string, remoteUrl: string): Promise<{ success: boolean; error?: string }> {
+export async function addRemote(projectPath: string, remoteName: string, remoteUrl: string): Promise<{ success: boolean; error?: string }> {
     try {
+        assertNonEmpty(remoteName, 'Remote name')
         assertNonEmpty(remoteUrl, 'Remote URL')
-        await withIndexLockRecovery(projectPath, 'add remote origin', async (git) => {
+        await withIndexLockRecovery(projectPath, `add remote ${remoteName.trim()}`, async (git) => {
             const remotes = await git.getRemotes()
-            if (remotes.some((remote) => remote.name === 'origin')) {
-                throw new Error('Remote "origin" already exists')
+            if (remotes.some((remote) => remote.name === remoteName.trim())) {
+                throw new Error(`Remote "${remoteName.trim()}" already exists`)
             }
-            await git.addRemote('origin', remoteUrl.trim())
+            await git.addRemote(remoteName.trim(), remoteUrl.trim())
         })
         return { success: true }
     } catch (err: any) {
-        log.error('Failed to add remote origin', err)
-        return { success: false, error: err.message || 'Failed to add remote origin' }
+        log.error('Failed to add remote', err)
+        return { success: false, error: err.message || 'Failed to add remote' }
     }
+}
+
+export async function addRemoteOrigin(projectPath: string, remoteUrl: string): Promise<{ success: boolean; error?: string }> {
+    return addRemote(projectPath, 'origin', remoteUrl)
 }
 
 export async function unstageFiles(
@@ -394,10 +412,40 @@ export async function fetchUpdates(projectPath: string, remoteName: string = 'or
     }
 }
 
-export async function pullUpdates(projectPath: string): Promise<void> {
+export async function pullUpdates(projectPath: string, options?: GitPullOptions): Promise<void> {
     try {
         await withIndexLockRecovery(projectPath, 'pull updates', async (git) => {
-            await git.pull()
+            const remoteName = String(options?.remoteName || '').trim()
+            const pushRemoteName = String(options?.pushRemoteName || '').trim()
+            const branchName = String(options?.branchName || '').trim()
+
+            if (!remoteName && !pushRemoteName && !branchName) {
+                await git.pull()
+                return
+            }
+
+            const remotes = await git.getRemotes()
+            if (remoteName && !remotes.some((remote) => remote.name === remoteName)) {
+                throw new Error(`No remote "${remoteName}" configured`)
+            }
+            if (pushRemoteName && !remotes.some((remote) => remote.name === pushRemoteName)) {
+                throw new Error(`No remote "${pushRemoteName}" configured`)
+            }
+
+            const currentBranch = branchName || (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+            if (!currentBranch || currentBranch === 'HEAD') {
+                throw new Error('Cannot pull updates from detached HEAD')
+            }
+
+            if (remoteName) {
+                await git.pull(remoteName, currentBranch)
+            } else {
+                await git.pull()
+            }
+
+            if (pushRemoteName) {
+                await git.push([pushRemoteName, `${currentBranch}:refs/heads/${currentBranch}`])
+            }
         })
     } catch (err) {
         log.error('Failed to pull updates', err)

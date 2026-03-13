@@ -53,29 +53,29 @@ export function ProjectsStatsModal({
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn p-4"
             onClick={onClose}
         >
             <div
-                className="w-full max-w-5xl max-h-[85vh] rounded-2xl border border-sparkle-border bg-sparkle-card overflow-hidden"
+                className="w-full max-w-5xl max-h-[95vh] rounded-2xl border border-white/10 bg-sparkle-card overflow-hidden flex flex-col"
                 onClick={(event) => event.stopPropagation()}
             >
-                <div className="flex items-center justify-between border-b border-sparkle-border px-5 py-3">
+                <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 flex-shrink-0">
                     <div className="flex items-center gap-3">
-                        <h3 className="text-sm font-semibold text-sparkle-text">{modalTitle}</h3>
-                        <span className="rounded-full bg-sparkle-border-secondary px-2 py-0.5 text-xs text-sparkle-text-secondary">
+                        <h3 className="text-sm font-semibold text-white">{modalTitle}</h3>
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/60">
                             {modalCount}
                         </span>
                     </div>
                     <button
                         onClick={onClose}
-                        className="rounded-md border border-sparkle-border px-2 py-1 text-xs text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover transition-colors"
+                        className="rounded-md border border-white/10 px-2 py-1 text-xs text-white/60 hover:text-white hover:bg-white/[0.03] transition-colors"
                     >
                         Close
                     </button>
                 </div>
 
-                <div className="max-h-[calc(85vh-56px)] overflow-y-auto p-4">
+                <div className="overflow-y-auto p-4 flex-1">
                     {statsModal === 'projects' && (
                         <div>
                             <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-sparkle-border bg-sparkle-card/95 px-4 pb-3 pt-1 backdrop-blur-xl">
