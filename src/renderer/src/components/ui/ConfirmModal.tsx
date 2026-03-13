@@ -70,17 +70,17 @@ export function ConfirmModal({
 
     return createPortal((
         <div
-            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-md animate-modal-backdrop"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn"
             onClick={onCancel}
         >
             <div
                 className={cn(
                     fullscreen
                         ? 'h-screen w-screen max-w-none rounded-none border-0 bg-sparkle-bg/98 p-0 shadow-none'
-                        : 'w-full max-w-md rounded-2xl border bg-sparkle-card p-6 shadow-2xl animate-modal-in',
+                        : 'w-full max-w-md rounded-2xl border bg-sparkle-card p-6 shadow-2xl m-4',
                     !fullscreen && variant === 'danger' && 'border-red-500/30',
                     !fullscreen && variant === 'warning' && 'border-amber-500/30',
-                    !fullscreen && variant === 'info' && 'border-sparkle-primary/30'
+                    !fullscreen && variant === 'info' && 'border-[var(--accent-primary)]/30'
                 )}
                 onClick={(e) => e.stopPropagation()}
             >

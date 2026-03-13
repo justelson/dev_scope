@@ -137,21 +137,21 @@ export function CreateFileTypeModal({
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/65 backdrop-blur-md px-4"
+            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/65 backdrop-blur-md animate-fadeIn px-4"
             onClick={onCancel}
         >
             <div
-                className="w-full max-w-3xl rounded-2xl border border-sparkle-border bg-sparkle-card shadow-2xl animate-modal-in"
+                className="w-full max-w-3xl max-h-[95vh] rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl overflow-hidden flex flex-col"
                 onClick={(event) => event.stopPropagation()}
             >
-                <div className="border-b border-white/10 px-5 py-4">
+                <div className="border-b border-white/10 px-5 py-4 flex-shrink-0">
                     <h3 className="text-base font-semibold text-white/90">Create New File</h3>
                     <p className="mt-1 text-xs text-white/45 truncate" title={destinationDirectory}>
                         Destination: {destinationDirectory}
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 px-5 py-4 lg:grid-cols-[1.3fr_1fr]">
+                <div className="grid grid-cols-1 gap-4 px-5 py-4 lg:grid-cols-[1.3fr_1fr] overflow-y-auto flex-1">
                     <div>
                         <div className="mb-2 flex items-center justify-between gap-2">
                             <p className="text-xs uppercase tracking-wide text-white/40">File Types</p>
