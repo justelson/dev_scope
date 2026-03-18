@@ -64,7 +64,7 @@ export async function handleDiscardChanges(
     _event: Electron.IpcMainInvokeEvent,
     projectPath: string,
     files: string[],
-    options?: { scope?: 'project' | 'repo' }
+    options?: { scope?: 'project' | 'repo'; mode?: 'unstaged' | 'staged' | 'both' }
 ) {
     try {
         await discardChanges(projectPath, files, options)

@@ -377,7 +377,7 @@ export async function unstageFiles(
 export async function discardChanges(
     projectPath: string,
     files: string[],
-    options?: { scope?: GitWriteScope }
+    options?: { scope?: GitWriteScope; mode?: 'unstaged' | 'staged' | 'both' }
 ): Promise<void> {
     try {
         if (files.length === 0 && !options?.scope) return
@@ -391,6 +391,28 @@ export async function discardChanges(
                 ))
                 : [getScopedPathSpec(repoContext.projectRelativeToRepo, scope)]
             if (pathSpecs.length === 0 || pathSpecs.every((pathSpec) => !pathSpec.trim())) return
+            const mode = options?.mode ?? 'both'
+            if (mode === 'staged') {
+                await git.raw(['restore', '--staged', '--', ...pathSpecs]).catch(async () => {
+                    await git.raw(['reset', 'HEAD', '--', ...pathSpecs])
+                })
+                return
+            }
+            if (mode === 'unstaged') {
+                await git.raw(['restore', '--worktree', '--', ...pathSpecs]).catch(async (err) => {
+                    const message = toErrorMessage(err, '')
+                    if (!isBranchPathspecNotFound(message)) {
+                        throw err
+                    }
+                })
+                await git.raw(['clean', '-f', '-d', '--', ...pathSpecs]).catch(async (err) => {
+                    const message = toErrorMessage(err, '')
+                    if (!isBranchPathspecNotFound(message)) {
+                        throw err
+                    }
+                })
+                return
+            }
             await git.raw(['restore', '--staged', '--worktree', '--', ...pathSpecs]).catch(async () => {
                 await git.raw(['checkout', '--', ...pathSpecs])
             })

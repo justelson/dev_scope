@@ -78,6 +78,7 @@ import {
     handleGetFileTree,
     handleGetPathInfo,
     handlePasteFileSystemItem,
+    handleMoveFileSystemItem,
     handleReadFileContent,
     handleReadTextFileFull,
     handleRenameFileSystemItem,
@@ -239,6 +240,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:renameFileSystemItem', handleRenameFileSystemItem)
     ipcMain.handle('devscope:deleteFileSystemItem', handleDeleteFileSystemItem)
     ipcMain.handle('devscope:pasteFileSystemItem', handlePasteFileSystemItem)
+    ipcMain.handle('devscope:moveFileSystemItem', handleMoveFileSystemItem)
     ipcMain.handle('devscope:getProjectSessions', handleGetProjectSessions)
     ipcMain.handle('devscope:getProjectProcesses', handleGetProjectProcesses)
     ipcMain.handle('devscope:getRunningApps', handleGetRunningApps)

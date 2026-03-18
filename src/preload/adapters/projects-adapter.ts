@@ -69,7 +69,7 @@ export function createProjectsAdapter() {
         discardChanges: (
             projectPath: string,
             files: string[],
-            options?: { scope?: 'project' | 'repo' }
+            options?: { scope?: 'project' | 'repo'; mode?: 'unstaged' | 'staged' | 'both' }
         ) => ipcRenderer.invoke('devscope:discardChanges', projectPath, files, options),
         createCommit: (projectPath: string, message: string) => ipcRenderer.invoke('devscope:createCommit', projectPath, message),
         setGlobalGitUser: (user: { name: string; email: string }) => ipcRenderer.invoke('devscope:setGlobalGitUser', user),
@@ -181,6 +181,8 @@ export function createProjectsAdapter() {
         deleteFileSystemItem: (targetPath: string) => ipcRenderer.invoke('devscope:deleteFileSystemItem', targetPath),
         pasteFileSystemItem: (sourcePath: string, destinationDirectory: string) =>
             ipcRenderer.invoke('devscope:pasteFileSystemItem', sourcePath, destinationDirectory),
+        moveFileSystemItem: (sourcePath: string, destinationDirectory: string) =>
+            ipcRenderer.invoke('devscope:moveFileSystemItem', sourcePath, destinationDirectory),
         getProjectSessions: (_projectPath: string) => Promise.resolve({ success: true, sessions: [] }),
         getProjectProcesses: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectProcesses', projectPath),
         getRunningApps: (limit: number = 500) => ipcRenderer.invoke('devscope:getRunningApps', limit),

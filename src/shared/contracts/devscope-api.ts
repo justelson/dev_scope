@@ -536,7 +536,7 @@ export interface DevScopeApi {
     discardChanges: (
         projectPath: string,
         files: string[],
-        options?: { scope?: 'project' | 'repo' }
+        options?: { scope?: 'project' | 'repo'; mode?: 'unstaged' | 'staged' | 'both' }
     ) => Promise<DevScopeResult>
     createCommit: (projectPath: string, message: string) => Promise<DevScopeResult>
     setGlobalGitUser: (user: { name: string; email: string }) => Promise<DevScopeResult>
@@ -620,6 +620,7 @@ export interface DevScopeApi {
     renameFileSystemItem: (targetPath: string, nextName: string) => Promise<DevScopeResult<{ path: string; name: string }>>
     deleteFileSystemItem: (targetPath: string) => Promise<DevScopeResult>
     pasteFileSystemItem: (sourcePath: string, destinationDirectory: string) => Promise<DevScopeResult<{ path: string; name: string }>>
+    moveFileSystemItem: (sourcePath: string, destinationDirectory: string) => Promise<DevScopeResult<{ path: string; name: string }>>
     getProjectSessions: (projectPath: string) => Promise<DevScopeResult>
     getProjectProcesses: (projectPath: string) => Promise<DevScopeResult<{ isLive: boolean; processes: DevScopeProcessInfo[]; activePorts: number[] }>>
     getRunningApps: (limit?: number) => Promise<DevScopeResult<{ apps: DevScopeRunningApp[] }>>

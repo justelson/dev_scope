@@ -521,3 +521,73 @@ export async function handlePasteFileSystemItem(
         return { success: false, error: err.message }
     }
 }
+
+export async function handleMoveFileSystemItem(
+    _event: Electron.IpcMainInvokeEvent,
+    sourcePath: string,
+    destinationDirectory: string
+) {
+    log.info('IPC: moveFileSystemItem', sourcePath, destinationDirectory)
+
+    try {
+        const normalizedSourcePath = String(sourcePath || '').trim()
+        const normalizedDestinationDirectory = String(destinationDirectory || '').trim()
+
+        if (!normalizedSourcePath) return { success: false, error: 'Source path is required.' }
+        if (!normalizedDestinationDirectory) return { success: false, error: 'Destination directory is required.' }
+
+        await access(normalizedSourcePath)
+        const destinationStat = await lstat(normalizedDestinationDirectory)
+        if (!destinationStat.isDirectory()) {
+            return { success: false, error: 'Destination must be a folder.' }
+        }
+
+        const sourceStat = await lstat(normalizedSourcePath)
+        const normalizedSource = normalizePathForComparison(normalizedSourcePath)
+        const normalizedDestinationDir = normalizePathForComparison(normalizedDestinationDirectory)
+
+        if (sourceStat.isDirectory() && (
+            normalizedDestinationDir === normalizedSource
+            || normalizedDestinationDir.startsWith(`${normalizedSource}${sep}`)
+        )) {
+            return { success: false, error: 'Cannot move a folder into itself.' }
+        }
+
+        const sourceName = basename(normalizedSourcePath)
+        const destinationPath = join(normalizedDestinationDirectory, sourceName)
+        const normalizedDestinationPath = normalizePathForComparison(destinationPath)
+
+        if (normalizedDestinationPath === normalizedSource) {
+            return { success: true, path: destinationPath, name: sourceName }
+        }
+
+        if (await pathExists(destinationPath)) {
+            return { success: false, error: `A file or folder named "${sourceName}" already exists in the destination.` }
+        }
+
+        try {
+            await rename(normalizedSourcePath, destinationPath)
+        } catch (err: any) {
+            if (err?.code !== 'EXDEV') {
+                throw err
+            }
+
+            await cp(normalizedSourcePath, destinationPath, {
+                recursive: sourceStat.isDirectory(),
+                errorOnExist: true,
+                force: false
+            })
+            await rm(normalizedSourcePath, { recursive: sourceStat.isDirectory(), force: false })
+        }
+
+        invalidateScanProjectsCache(dirname(normalizedSourcePath))
+        invalidateScanProjectsCache(dirname(destinationPath))
+        invalidateScanProjectsCache(normalizedSourcePath, { includeParents: false })
+        invalidateScanProjectsCache(destinationPath, { includeParents: false })
+
+        return { success: true, path: destinationPath, name: sourceName }
+    } catch (err: any) {
+        log.error('Failed to move file system item:', err)
+        return { success: false, error: err.message }
+    }
+}
