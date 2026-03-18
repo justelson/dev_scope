@@ -38,6 +38,7 @@ Rules:
 - The body should be structured and useful, not generic.
 - Prefer sections like Summary, Changes, Testing, Risks, Notes when relevant.
 - If testing evidence is missing, say it is not yet validated instead of inventing results.
+- Do not add commentary before or after the JSON.
 
 Project: ${input.projectName || 'Unknown project'}
 Current branch: ${input.currentBranch}
@@ -54,22 +55,107 @@ ${truncatedDiff}
 `
 }
 
-function parseDraftResponse(text: string): { title: string; body: string } {
+function stripMarkdownFence(text: string): string {
     const trimmed = String(text || '').trim()
-    const withoutFence = trimmed
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim()
-    const parsed = JSON.parse(withoutFence) as { title?: string; body?: string }
-    const title = String(parsed.title || '').trim()
-    const body = String(parsed.body || '').trim()
+    if (!trimmed.startsWith('```')) return trimmed
 
-    if (!title || !body) {
-        throw new Error('AI returned an incomplete pull request draft.')
+    const firstNewlineIndex = trimmed.indexOf('\n')
+    if (firstNewlineIndex < 0) return trimmed
+
+    const closingFenceIndex = trimmed.lastIndexOf('```')
+    if (closingFenceIndex <= firstNewlineIndex) return trimmed
+
+    return trimmed.slice(firstNewlineIndex + 1, closingFenceIndex).trim()
+}
+
+function extractJsonObjects(text: string): string[] {
+    const source = String(text || '')
+    const results: string[] = []
+    let startIndex = -1
+    let depth = 0
+    let inString = false
+    let escaped = false
+
+    for (let index = 0; index < source.length; index += 1) {
+        const char = source[index]
+
+        if (escaped) {
+            escaped = false
+            continue
+        }
+
+        if (inString && char === '\\') {
+            escaped = true
+            continue
+        }
+
+        if (char === '"') {
+            inString = !inString
+            continue
+        }
+
+        if (inString) continue
+
+        if (char === '{') {
+            if (depth === 0) {
+                startIndex = index
+            }
+            depth += 1
+            continue
+        }
+
+        if (char === '}') {
+            if (depth === 0) continue
+            depth -= 1
+            if (depth === 0 && startIndex >= 0) {
+                results.push(source.slice(startIndex, index + 1))
+                startIndex = -1
+            }
+        }
     }
 
-    return { title, body }
+    return results
+}
+
+function parseDraftCandidate(candidate: string): { title: string; body: string } | null {
+    try {
+        const parsed = JSON.parse(candidate) as { title?: string; body?: string }
+        const title = String(parsed?.title || '').trim()
+        const body = String(parsed?.body || '').trim()
+
+        if (!title || !body) {
+            return null
+        }
+
+        return { title, body }
+    } catch {
+        return null
+    }
+}
+
+function parseDraftResponse(text: string): { title: string; body: string } {
+    const trimmed = String(text || '').trim()
+    const withoutFence = stripMarkdownFence(trimmed)
+    const candidates = [
+        trimmed,
+        withoutFence,
+        ...extractJsonObjects(trimmed),
+        ...extractJsonObjects(withoutFence)
+    ]
+    const seen = new Set<string>()
+
+    for (const candidate of candidates) {
+        const normalized = String(candidate || '').trim()
+        if (!normalized || seen.has(normalized)) continue
+        seen.add(normalized)
+
+        const parsed = parseDraftCandidate(normalized)
+        if (parsed) {
+            return parsed
+        }
+    }
+
+    throw new Error('AI returned an invalid pull request draft format. Expected JSON with non-empty title and body.')
 }
 
 async function requestGroq(apiKey: string, prompt: string): Promise<{ success: boolean; text?: string; error?: string }> {

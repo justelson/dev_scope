@@ -23,6 +23,14 @@ import {
     getPathTail
 } from './utils'
 
+type EnsuredDraftResult = {
+    title: string
+    body: string
+    source: 'existing' | 'template' | 'ai' | 'ai-fallback'
+    provider?: 'groq' | 'gemini'
+    error?: string
+}
+
 export function usePullRequestModalController(props: PullRequestModalProps) {
     const {
         isOpen,
@@ -159,6 +167,11 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
         })
     }
 
+    function applyDraft(nextDraft: { title: string; body: string }) {
+        setDraftTitle(nextDraft.title)
+        setDraftBody(nextDraft.body)
+    }
+
     async function handlePickGuideFile() {
         const result = await window.devscope.selectMarkdownFile()
         if (!result?.success) {
@@ -174,9 +187,13 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
         })
     }
 
-    async function ensureDraft() {
+    async function ensureDraft(): Promise<EnsuredDraftResult> {
         if (draftTitle.trim() && draftBody.trim()) {
-            return { title: draftTitle.trim(), body: draftBody.trim() }
+            return {
+                title: draftTitle.trim(),
+                body: draftBody.trim(),
+                source: 'existing'
+            }
         }
 
         const guideTextValue = await resolvePullRequestGuideText(settings, projectPath, guideSource, projectGuideConfig)
@@ -194,33 +211,61 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
             guideText: guideTextValue
         })
         const provider = resolvePreferredPullRequestProvider(settings)
+        const fallbackDraft: EnsuredDraftResult = {
+            title: diffContext.fallbackDraft.title,
+            body: diffContext.fallbackDraft.body,
+            source: provider ? 'ai-fallback' : 'template',
+            provider: provider?.provider
+        }
 
         if (!provider) {
-            setDraftTitle(diffContext.fallbackDraft.title)
-            setDraftBody(diffContext.fallbackDraft.body)
-            return diffContext.fallbackDraft
+            applyDraft(fallbackDraft)
+            return fallbackDraft
         }
 
-        const result = await window.devscope.generatePullRequestDraft(provider.provider, provider.apiKey, {
-            projectName,
-            currentBranch,
-            targetBranch,
-            scopeLabel: changeSourceLabel,
-            diff: diffContext.diff,
-            guideText: guideTextValue
-        })
+        try {
+            const result = await window.devscope.generatePullRequestDraft(provider.provider, provider.apiKey, {
+                projectName,
+                currentBranch,
+                targetBranch,
+                scopeLabel: changeSourceLabel,
+                diff: diffContext.diff,
+                guideText: guideTextValue
+            })
 
-        if (!result?.success) throw new Error(result?.error || 'Failed to generate the PR draft.')
+            if (!result?.success) {
+                applyDraft(fallbackDraft)
+                return {
+                    ...fallbackDraft,
+                    error: result?.error || 'Failed to generate the PR draft.'
+                }
+            }
 
-        const nextDraft = {
-            title: String(result.title || '').trim(),
-            body: String(result.body || '').trim()
+            const nextDraft = {
+                title: String(result.title || '').trim(),
+                body: String(result.body || '').trim()
+            }
+            if (!nextDraft.title || !nextDraft.body) {
+                applyDraft(fallbackDraft)
+                return {
+                    ...fallbackDraft,
+                    error: 'PR draft generation returned empty content.'
+                }
+            }
+
+            applyDraft(nextDraft)
+            return {
+                ...nextDraft,
+                source: 'ai',
+                provider: provider.provider
+            }
+        } catch (err: any) {
+            applyDraft(fallbackDraft)
+            return {
+                ...fallbackDraft,
+                error: err?.message || 'Failed to generate the PR draft.'
+            }
         }
-        if (!nextDraft.title || !nextDraft.body) throw new Error('PR draft generation returned empty content.')
-
-        setDraftTitle(nextDraft.title)
-        setDraftBody(nextDraft.body)
-        return nextDraft
     }
 
     async function handleGenerateDraft() {
@@ -233,14 +278,20 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
         setIsGenerating(true)
         setStatusMessage(null)
         try {
-            const provider = resolvePreferredPullRequestProvider(settings)
             const draft = await ensureDraft()
             setStatusMessage({
-                tone: 'success',
-                text: provider
-                    ? `Draft generated with ${provider.provider === 'groq' ? 'Groq' : 'Gemini'}.`
-                    : 'No AI key was configured, so DevScope used the built-in draft template.'
+                tone: draft.source === 'ai-fallback' ? 'info' : 'success',
+                text: draft.source === 'ai'
+                    ? `Draft generated with ${draft.provider === 'groq' ? 'Groq' : 'Gemini'}.`
+                    : draft.source === 'ai-fallback'
+                        ? `${draft.provider === 'groq' ? 'Groq' : 'Gemini'} returned an unusable draft, so DevScope used the built-in template.`
+                        : draft.source === 'template'
+                            ? 'No AI key was configured, so DevScope used the built-in draft template.'
+                            : 'Using the current PR draft.'
             })
+            if (draft.source === 'ai-fallback' && draft.error) {
+                showToast(draft.error, undefined, undefined, 'warning')
+            }
             return draft
         } catch (err: any) {
             const message = err?.message || 'Failed to generate the PR draft.'
