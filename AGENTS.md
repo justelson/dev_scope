@@ -25,6 +25,7 @@ If a tradeoff is required, choose correctness and robustness over short-term con
 
 ## Maintainability
 Long term maintainability is a core priority. If you add new functionality, first check if there are shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
+- Keep new or heavily edited source files under roughly 500 lines when practical. If a change would push a file materially beyond that, modularize it into smaller focused modules instead of leaving it oversized, ignoring the issue, or using delegation as a workaround.
 
 ## Change Scope
 - Prefer small, focused changes that solve the requested problem directly.
