@@ -1,6 +1,19 @@
 import { readdirSync, readFileSync, statSync } from 'fs'
 import { extname, join, relative } from 'path'
 
+// ANSI color codes
+const colors = {
+    reset: '\x1b[0m',
+    bright: '\x1b[1m',
+    dim: '\x1b[2m',
+    red: '\x1b[31m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    cyan: '\x1b[36m',
+    gray: '\x1b[90m'
+}
+
 const ROOT = process.cwd()
 const SRC_DIR = join(ROOT, 'src')
 const WARN_LIMIT = 300
@@ -50,7 +63,8 @@ function walk(dir, bucket) {
 function printTable(rows) {
     for (const row of rows) {
         const lineText = String(row.lineCount).padStart(4, ' ')
-        console.log(`${lineText}  ${row.path}`)
+        const color = row.lineCount > 800 ? colors.red : row.lineCount > 650 ? colors.yellow : colors.cyan
+        console.log(`${color}${lineText}${colors.reset}  ${colors.dim}${row.path}${colors.reset}`)
     }
 }
 
@@ -73,60 +87,43 @@ const classifiedFiles = allFiles.map((item) => ({
 }))
 const trackedFiles = classifiedFiles.filter((item) => !item.exemption)
 const exemptFiles = classifiedFiles.filter((item) => item.exemption)
-const warningFiles = trackedFiles.filter((item) => item.lineCount > WARN_LIMIT)
 const hardLimitFiles = trackedFiles.filter((item) => item.lineCount > HARD_LIMIT)
-const exemptWarningFiles = exemptFiles.filter((item) => item.lineCount > WARN_LIMIT)
 const exemptHardLimitFiles = exemptFiles.filter((item) => item.lineCount > HARD_LIMIT)
 
-console.log(`LOC Policy: warn>${WARN_LIMIT}, hard>${HARD_LIMIT}`)
-console.log(`Scanned ${allFiles.length} files under src/`)
+console.log(`${colors.bright}${colors.blue}LOC Policy:${colors.reset} showing files above ${colors.cyan}${HARD_LIMIT}${colors.reset} lines`)
+console.log(`${colors.gray}Scanned ${allFiles.length} files under src/${colors.reset}`)
 if (exemptFiles.length > 0) {
-    console.log(`Exempt files: ${exemptFiles.length}`)
+    console.log(`${colors.gray}Exempt files: ${exemptFiles.length}${colors.reset}`)
 }
 console.log('')
 
-if (warningFiles.length === 0) {
-    console.log('No files above warning threshold.')
-} else {
-    console.log('Files above warning threshold:')
-    printTable(warningFiles)
-}
-
-console.log('')
 if (hardLimitFiles.length === 0) {
-    console.log('No files above hard limit.')
+    console.log(`${colors.green}✓ No files above 500 lines.${colors.reset}`)
 } else {
-    console.log('Files above hard limit:')
+    console.log(`${colors.bright}${colors.yellow}Files above ${HARD_LIMIT} lines:${colors.reset}`)
     printTable(hardLimitFiles)
 }
 
 if (exemptFiles.length > 0) {
     console.log('')
-    console.log('Exempt paths (reported, not enforced):')
+    console.log(`${colors.bright}Exempt paths${colors.reset} ${colors.gray}(reported, not enforced):${colors.reset}`)
     for (const exemption of LOC_EXEMPTIONS) {
         const matches = exemptFiles.filter((item) => item.exemption?.id === exemption.id)
         if (matches.length === 0) continue
-        const warningCount = matches.filter((item) => item.lineCount > WARN_LIMIT).length
         const hardCount = matches.filter((item) => item.lineCount > HARD_LIMIT).length
-        console.log(`- ${exemption.id}: ${exemption.reason}`)
-        console.log(`  matched ${matches.length} files, ${warningCount} above warning, ${hardCount} above hard`)
+        console.log(`${colors.blue}- ${exemption.id}:${colors.reset} ${colors.gray}${exemption.reason}${colors.reset}`)
+        console.log(`  ${colors.gray}matched ${matches.length} files, ${hardCount} above ${HARD_LIMIT}${colors.reset}`)
     }
-}
-
-if (exemptWarningFiles.length > 0) {
-    console.log('')
-    console.log('Exempt files above warning threshold:')
-    printTable(exemptWarningFiles)
 }
 
 if (exemptHardLimitFiles.length > 0) {
     console.log('')
-    console.log('Exempt files above hard limit:')
+    console.log(`${colors.bright}${colors.yellow}Exempt files above ${HARD_LIMIT} lines:${colors.reset}`)
     printTable(exemptHardLimitFiles)
 }
 
 if (strictMode && hardLimitFiles.length > 0) {
     console.error('')
-    console.error(`Strict mode failed: ${hardLimitFiles.length} files exceed hard limit.`)
+    console.error(`${colors.red}${colors.bright}✗ Strict mode failed:${colors.reset} ${colors.red}${hardLimitFiles.length} files exceed hard limit.${colors.reset}`)
     process.exit(1)
 }

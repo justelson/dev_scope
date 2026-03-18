@@ -1,32 +1,36 @@
 # Current Docs
 
-Last updated: March 9, 2026
+This folder is the active documentation set for the current DevScope Air codebase.
 
-This folder is the active documentation set for the present codebase.
-
-This repo is the active DevScope desktop app. The sibling `devscope-win` codebase is deprecated and no longer the default development target.
+The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
 ## Core References
 
-- `docs/current/CURRENT_CODEBASE_ARCHITECTURE.md`
-  - Runtime layers, route surface, IPC/preload/core boundaries.
-- `docs/current/CURRENT_CAPABILITIES_MATRIX.md`
-  - What is implemented now, grouped by capability and client surface.
-- `docs/current/ENGINEERING_QUALITY_STANDARDS.md`
-  - Engineering quality expectations by layer and definition of done.
-- `docs/current/CHANGE_VALIDATION_CHECKLIST.md`
-  - Practical validation checklist for scoped changes and regression control.
-- `docs/current/CHANGE_SCOPE_GUIDELINES.md`
-  - How to keep changes focused, layered correctly, and honestly reported.
-- `docs/current/RELEASE_OPERATIONS_PLAYBOOK.md`
-  - Operational release checklist, verification steps, and recovery guidance.
-- `docs/current/BRANDING_ASSETS.md`
-  - Branding asset roles, generation flow, and Windows/runtime validation surfaces.
-- `docs/current/UPDATE_TESTING_PLAYBOOK.md`
-  - Layered updater/release testing flow that avoids repeated public release churn.
-- `docs/platform/README.md`
-  - Multi-client architecture docs for CLI, IDE extension, and additional UIs.
+- [`CURRENT_CODEBASE_ARCHITECTURE.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CODEBASE_ARCHITECTURE.md)
+  Runtime layers, route surface, IPC/main boundaries, and active module ownership.
+- [`CURRENT_CAPABILITIES_MATRIX.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CAPABILITIES_MATRIX.md)
+  What the app exposes today, including assistant, Git, project, file, and update flows.
+- [`ENGINEERING_QUALITY_STANDARDS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\ENGINEERING_QUALITY_STANDARDS.md)
+  Quality expectations by layer.
+- [`CHANGE_SCOPE_GUIDELINES.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CHANGE_SCOPE_GUIDELINES.md)
+  Scope and layering rules for changes.
+- [`CHANGE_VALIDATION_CHECKLIST.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CHANGE_VALIDATION_CHECKLIST.md)
+  Lightweight validation guidance.
+- [`RELEASE_VERSIONING.md`](C:\Users\elson\my_coding_play\devscope\docs\current\RELEASE_VERSIONING.md)
+  Release naming/versioning rules.
+- [`RELEASE_OPERATIONS_PLAYBOOK.md`](C:\Users\elson\my_coding_play\devscope\docs\current\RELEASE_OPERATIONS_PLAYBOOK.md)
+  Packaging and release operations.
+- [`UPDATE_TESTING_PLAYBOOK.md`](C:\Users\elson\my_coding_play\devscope\docs\current\UPDATE_TESTING_PLAYBOOK.md)
+  Updater validation workflow.
+- [`BRANDING_ASSETS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\BRANDING_ASSETS.md)
+  Branding asset roles and generation flow.
 
-## Scope Rule
+## What Does Not Live Here
 
-When behavior changes in code, update these docs in the same workstream.
+- Historical docs and superseded plans have been moved into [`docs/archive`](C:\Users\elson\my_coding_play\devscope\docs\archive\LEGACY_DOCS_SUMMARY_2026-03-18.md).
+- Multi-client platform planning lives in [`docs/platform`](C:\Users\elson\my_coding_play\devscope\docs\platform\README.md).
+- Design capture/reference material remains at the top of `docs/`.
+
+## Maintenance Rule
+
+When behavior changes in code, update the relevant `docs/current/*` document in the same workstream.
