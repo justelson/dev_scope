@@ -5,6 +5,7 @@ import { useCommandPalette } from '@/lib/commandPalette'
 import { useSettings } from '@/lib/settings'
 import { cn, parseFileSearchQuery } from '@/lib/utils'
 import { buildFileSearchIndex, searchFileIndex, type FileSearchIndex, type SearchTreeNode } from '@/lib/fileSearchIndex'
+import { CommandPaletteIntro } from './CommandPaletteIntro'
 
 type Domain = 'projects' | 'files' | 'mixed'
 
@@ -364,60 +365,7 @@ export function CommandPalette() {
                 {/* Main Content Area */}
                 <div className="relative max-h-[55vh] overflow-y-auto custom-scrollbar flex flex-col bg-sparkle-bg/30">
                     {query.trim() === '' && (
-                        <div className="p-4 sm:p-5">
-                            <div className="mb-6">
-                                <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-[var(--accent-primary)] mb-3 flex items-center gap-2 px-1">
-                                    <Slash size={12} className="opacity-70" /> Quick Search
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => setQuery('/ ')}
-                                        className="group text-left p-3 sm:p-4 rounded-xl border border-sparkle-border hover:border-[var(--accent-primary)]/40 bg-sparkle-bg hover:bg-sparkle-card-hover transition-all flex items-start gap-3 shadow-sm"
-                                    >
-                                        <div className="p-2 rounded-lg bg-sparkle-card-hover border border-sparkle-border group-hover:bg-[var(--accent-primary)]/10 group-hover:text-[var(--accent-primary)] group-hover:border-[var(--accent-primary)]/20 transition-all text-sparkle-text-secondary">
-                                            <Folder size={18} className="stroke-[1.5]" />
-                                        </div>
-                                        <div>
-                                            <div className="font-semibold text-[14px] text-sparkle-text mb-0.5">Projects</div>
-                                            <div className="text-[11px] text-sparkle-text-muted">Type <span className="font-mono text-sparkle-text-secondary bg-sparkle-card border border-sparkle-border px-1 py-0.5 rounded">/</span></div>
-                                        </div>
-                                    </button>
-                                    <button
-                                        onClick={() => setQuery('// ')}
-                                        className="group text-left p-3 sm:p-4 rounded-xl border border-sparkle-border hover:border-[var(--accent-primary)]/40 bg-sparkle-bg hover:bg-sparkle-card-hover transition-all flex items-start gap-3 shadow-sm"
-                                    >
-                                        <div className="p-2 rounded-lg bg-sparkle-card-hover border border-sparkle-border group-hover:bg-[var(--accent-primary)]/10 group-hover:text-[var(--accent-primary)] group-hover:border-[var(--accent-primary)]/20 transition-all text-sparkle-text-secondary">
-                                            <File size={18} className="stroke-[1.5]" />
-                                        </div>
-                                        <div>
-                                            <div className="font-semibold text-[14px] text-sparkle-text mb-0.5">Files</div>
-                                            <div className="text-[11px] text-sparkle-text-muted">Type <span className="font-mono text-sparkle-text-secondary bg-sparkle-card border border-sparkle-border px-1 py-0.5 rounded">//</span></div>
-                                        </div>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {recent.length > 0 && (
-                                <div>
-                                    <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-[var(--accent-primary)] mb-2 flex items-center gap-2 px-1">History</div>
-                                    <div className="flex flex-col gap-1">
-                                        {recent.map((r, i) => (
-                                            <button
-                                                key={r}
-                                                onClick={() => setQuery(r + ' ')}
-                                                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-[13px] text-sparkle-text-secondary hover:bg-sparkle-card-hover border border-transparent hover:border-sparkle-border/40 hover:text-sparkle-text group transition-colors"
-                                            >
-                                                <div className="flex items-center gap-2.5">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-sparkle-text-muted group-hover:bg-[var(--accent-primary)] transition-all" />
-                                                    <span className="font-medium">{r}</span>
-                                                </div>
-                                                <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 text-[var(--accent-primary)] transition-opacity" />
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <CommandPaletteIntro recent={recent} onSelectQuery={setQuery} />
                     )}
 
                     {results.length > 0 && (

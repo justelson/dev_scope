@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Code, Copy, Edit3, Expand, ExternalLink, Eye, Minimize, PanelLeft, PanelRight, Play, Save, Square, Terminal, Trash2, Undo2, X } from 'lucide-react'
+import { Check, ChevronDown, Copy, Edit3, Expand, Eye, Minimize, PanelLeft, PanelRight, Play, Square, Terminal, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
@@ -6,6 +6,8 @@ import { useSettings } from '@/lib/settings'
 import type { GitDiffSummary } from './gitDiff'
 import type { PreviewFile } from './types'
 import { VIEWPORT_PRESETS, type ViewportPreset } from './viewport'
+import { PreviewHeaderStatusActions } from './PreviewHeaderStatusActions'
+import { PreviewHeaderHtmlControls } from './PreviewHeaderHtmlControls'
 
 interface PreviewModalHeaderProps {
     file: PreviewFile
@@ -210,6 +212,13 @@ export default function PreviewModalHeader({
     const iconButtonBaseClass = 'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all'
     const ghostIconButtonClass = `${iconButtonBaseClass} border-transparent text-white/55 hover:bg-white/10 hover:text-white`
     const activeIconButtonClass = `${iconButtonBaseClass} border-white/15 bg-white/10 text-white`
+    const viewportMetaLabel = isHtml
+        && showDetailedFileMeta
+        && !isVeryCompactHtmlHeader
+        && htmlViewMode === 'rendered'
+        && viewport !== 'responsive'
+        ? `${presetConfig.width}x${presetConfig.height}`
+        : undefined
 
     return (
         <div
@@ -427,197 +436,48 @@ export default function PreviewModalHeader({
             </div>
 
             {isHtml && !isEditMode && (
-                <div
-                    className={cn(
-                        'flex items-center gap-2',
-                        isCompactHtmlHeader ? 'order-3 w-full flex-wrap' : '',
-                        isVeryCompactHtmlHeader ? 'justify-start' : isCompactHtmlHeader ? 'justify-between' : ''
-                    )}
-                >
-                    {htmlViewMode === 'rendered' && (
-                        <div className={cn('flex items-center gap-2 bg-white/5 rounded-lg p-1.5', isUltraCompactHtmlHeader ? 'w-full' : '')}>
-                            <span className="text-[11px] text-white/60 px-1">Viewport</span>
-                            <select
-                                value={viewport}
-                                onChange={(event) => {
-                                    const nextViewport = event.target.value
-                                    if (nextViewport in VIEWPORT_PRESETS) {
-                                        onViewportChange(nextViewport as ViewportPreset)
-                                        return
-                                    }
-                                    onViewportChange('responsive')
-                                }}
-                                className="h-7 rounded-md border border-white/15 bg-white/10 px-2 text-xs text-white outline-none transition-colors hover:bg-white/15 focus:border-white/30 focus:bg-white/15"
-                                title="Choose preview viewport size"
-                                aria-label="Choose preview viewport size"
-                            >
-                                {(Object.entries(VIEWPORT_PRESETS) as [ViewportPreset, typeof presetConfig][]).map(([key, preset]) => (
-                                    <option key={key} value={key} className="bg-slate-900 text-white">
-                                        {key === 'responsive' ? 'Full Width' : `${preset.label} (${preset.width}x${preset.height})`}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-                    <div className={cn('flex items-center gap-1 bg-white/5 rounded-lg p-1', isUltraCompactHtmlHeader ? 'w-full justify-center' : '')}>
-                        <button
-                            onClick={() => onHtmlViewModeChange('rendered')}
-                            className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
-                                htmlViewMode === 'rendered'
-                                    ? 'bg-white/15 text-white'
-                                    : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-                            )}
-                            title="Rendered HTML preview"
-                            aria-label="Rendered HTML preview"
-                        >
-                            <Eye size={13} />
-                            <span className="sr-only">Rendered</span>
-                        </button>
-                        <button
-                            onClick={() => onHtmlViewModeChange('code')}
-                            className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
-                                htmlViewMode === 'code'
-                                    ? 'bg-white/15 text-white'
-                                    : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-                            )}
-                            title="HTML source preview"
-                            aria-label="HTML source preview"
-                        >
-                            <Code size={13} />
-                            <span className="sr-only">Source</span>
-                        </button>
-                    </div>
-                </div>
+                <PreviewHeaderHtmlControls
+                    isCompactHtmlHeader={isCompactHtmlHeader}
+                    isVeryCompactHtmlHeader={isVeryCompactHtmlHeader}
+                    isUltraCompactHtmlHeader={isUltraCompactHtmlHeader}
+                    htmlViewMode={htmlViewMode}
+                    viewport={viewport}
+                    onViewportChange={onViewportChange}
+                    onHtmlViewModeChange={onHtmlViewModeChange}
+                />
             )}
 
-            <div className={cn(
-                'flex items-center gap-2 min-w-0 flex-wrap justify-end',
-                isCompactHeader ? 'w-full ml-auto' : '',
-                isUltraCompactHtmlHeader ? 'w-full justify-end' : ''
-            )}>
-                {!isMediaFile && isEditMode && (
-                    <div className={controlGroupClass}>
-                        <button
-                            onClick={onRevert}
-                            disabled={!isDirty || isSaving}
-                            className={cn(
-                                iconButtonBaseClass,
-                                isDirty && !isSaving
-                                    ? 'border-transparent text-white/80 hover:bg-white/10'
-                                    : 'border-transparent text-white/35 cursor-not-allowed'
-                            )}
-                            title="Revert local changes"
-                            aria-label="Revert local changes"
-                        >
-                            <Undo2 size={13} />
-                        </button>
-                        <button
-                            onClick={onSave}
-                            disabled={!isDirty || isSaving}
-                            className={cn(
-                                iconButtonBaseClass,
-                                isDirty && !isSaving
-                                    ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
-                                    : isSaving
-                                        ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
-                                        : 'border-transparent text-white/35 cursor-not-allowed'
-                            )}
-                            title={isSaving ? 'Saving changes...' : 'Save changes (Ctrl/Cmd+S)'}
-                            aria-label={isSaving ? 'Saving changes' : 'Save changes'}
-                            aria-busy={isSaving}
-                        >
-                            <Save size={13} className={isSaving ? 'animate-pulse' : ''} />
-                        </button>
-                    </div>
-                )}
-
-                <div className="flex items-center gap-1.5 min-w-0 flex-wrap justify-end">
-                    {!isMediaFile && canRunPython && (
-                        <span className={cn('text-[10px] uppercase font-semibold px-2 py-1 rounded', pythonStatusTone)}>
-                            {pythonStatusLabel}
-                        </span>
-                    )}
-                    {!isMediaFile && showGitSummary && (
-                        <div className="flex items-center gap-1.5">
-                            <span className={cn('text-[10px] uppercase font-semibold px-2 py-1 rounded', statusTone)}>
-                                {statusLabel}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-emerald-500/10 text-emerald-300">+{gitDiffSummary?.additions ?? 0}</span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-red-500/10 text-red-300">-{gitDiffSummary?.deletions ?? 0}</span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-white/5 text-white/50">{totalFileLines} lines</span>
-                        </div>
-                    )}
-                    {!isMediaFile && showUnsavedDiffSummary && liveDiffPreview && (
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] uppercase font-semibold px-2 py-1 rounded bg-sky-500/20 text-sky-300">
-                                Unsaved
-                            </span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-emerald-500/10 text-emerald-300">+{liveDiffPreview.additions}</span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-red-500/10 text-red-300">-{liveDiffPreview.deletions}</span>
-                        </div>
-                    )}
-                    {!isMediaFile && (
-                        <span className="text-[10px] text-white/30 uppercase px-2 py-1 bg-white/5 rounded">
-                            {file.type}
-                            {isEditMode ? ' - edit' : ''}
-                            {isHtml && showDetailedFileMeta && ` - ${htmlViewMode}`}
-                            {isHtml && showDetailedFileMeta && !isVeryCompactHtmlHeader && htmlViewMode === 'rendered' && viewport !== 'responsive' && ` - ${presetConfig.width}x${presetConfig.height}`}
-                        </span>
-                    )}
-                    {!isMediaFile && showStandaloneUnsavedChip && (
-                        <span className="text-[10px] px-1.5 py-1 rounded bg-amber-500/15 text-amber-200">Unsaved</span>
-                    )}
-                    {isHtml && !isEditMode && (
-                        <button
-                            onClick={onOpenInBrowser}
-                            className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs text-white/60 hover:text-white hover:bg-white/10 transition-all'
-                            )}
-                            title="Open in Browser"
-                            aria-label="Open in browser"
-                        >
-                            <ExternalLink size={14} />
-                            <span className="sr-only">Open</span>
-                        </button>
-                    )}
-                    {isCsv && (
-                        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5">
-                            <span className="text-xs text-white/60">Column Colors</span>
-                            <button
-                                type="button"
-                                onClick={() => onCsvDistinctColorsEnabledChange(!csvDistinctColorsEnabled)}
-                                className="group"
-                                title={csvDistinctColorsEnabled ? 'Disable distinct column colors' : 'Enable distinct column colors'}
-                                aria-pressed={csvDistinctColorsEnabled}
-                            >
-                                <span
-                                    className={cn(
-                                        'inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                                        csvDistinctColorsEnabled ? 'bg-emerald-400/80' : 'bg-white/20'
-                                    )}
-                                >
-                                    <span
-                                        className={cn(
-                                            'h-4 w-4 rounded-full bg-white shadow transition-transform',
-                                            csvDistinctColorsEnabled ? 'translate-x-4' : 'translate-x-0.5'
-                                        )}
-                                    />
-                                </span>
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                <button
-                    onClick={onClose}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/40 hover:bg-white/10 hover:text-white transition-all shrink-0"
-                    title="Close (Esc)"
-                >
-                    <X size={18} />
-                </button>
-            </div>
+            <PreviewHeaderStatusActions
+                file={file}
+                gitDiffSummary={gitDiffSummary}
+                totalFileLines={totalFileLines}
+                isMediaFile={isMediaFile}
+                isEditMode={isEditMode}
+                isDirty={isDirty}
+                isSaving={isSaving}
+                showGitSummary={showGitSummary}
+                showUnsavedDiffSummary={showUnsavedDiffSummary}
+                showStandaloneUnsavedChip={showStandaloneUnsavedChip}
+                showDetailedFileMeta={showDetailedFileMeta}
+                statusTone={statusTone}
+                statusLabel={statusLabel}
+                pythonStatusTone={pythonStatusTone}
+                pythonStatusLabel={pythonStatusLabel}
+                canRunPython={canRunPython}
+                liveDiffPreview={liveDiffPreview}
+                htmlViewMode={htmlViewMode}
+                viewportLabel={viewportMetaLabel}
+                isHtml={isHtml}
+                isCsv={isCsv}
+                csvDistinctColorsEnabled={csvDistinctColorsEnabled}
+                onCsvDistinctColorsEnabledChange={onCsvDistinctColorsEnabledChange}
+                onOpenInBrowser={onOpenInBrowser}
+                onRevert={onRevert}
+                onSave={onSave}
+                onClose={onClose}
+                controlGroupClass={controlGroupClass}
+                iconButtonBaseClass={iconButtonBaseClass}
+            />
         </div>
     )
 }

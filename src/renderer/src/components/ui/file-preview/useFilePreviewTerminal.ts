@@ -4,26 +4,10 @@ import { Terminal as XtermTerminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
 import type { PreviewFile } from './types'
-import {
-    createPreviewTerminalSessionId,
-    mapTerminalStatusToState,
-    PREVIEW_TERMINAL_MIN_HEIGHT,
-    readCssVariable,
-    TERMINAL_PANEL_ANIMATION_MS,
-    type PreviewTerminalSessionItem,
-    type PreviewTerminalState,
-    type TerminalPanelPhase
-} from './modalShared'
+import { createPreviewTerminalSessionId, mapTerminalStatusToState, PREVIEW_TERMINAL_MIN_HEIGHT, readCssVariable, TERMINAL_PANEL_ANIMATION_MS, type PreviewTerminalSessionItem, type PreviewTerminalState, type TerminalPanelPhase } from './modalShared'
 
 type UseFilePreviewTerminalParams = {
-    canUsePreviewTerminal: boolean
-    file: PreviewFile
-    projectPath?: string
-    defaultShell: Shell
-    accentColorPrimary?: string
-    themeKey?: string
-    initialHeight: number
-    persistHeight: (height: number) => void
+    canUsePreviewTerminal: boolean; file: PreviewFile; projectPath?: string; defaultShell: Shell; accentColorPrimary?: string; themeKey?: string; initialHeight: number; persistHeight: (height: number) => void
 }
 
 export function useFilePreviewTerminal({
@@ -56,7 +40,6 @@ export function useFilePreviewTerminal({
     const fitAddonRef = useRef<FitAddon | null>(null)
     const terminalHydratedSessionIdRef = useRef('')
     const terminalSessionIdRef = useRef(terminalSessionId)
-
     useEffect(() => {
         terminalSessionIdRef.current = terminalSessionId
     }, [terminalSessionId])
@@ -96,7 +79,6 @@ export function useFilePreviewTerminal({
     const shouldShowTerminalPanel = canUsePreviewTerminal && terminalVisible
     const renderTerminalPanel = terminalPanelPhase !== 'hidden'
     const currentTerminalSession = terminalSessions.find((session) => session.sessionId === terminalSessionId) || null
-
     useEffect(() => {
         setTerminalVisible(false)
         setTerminalSessions([])
@@ -134,7 +116,6 @@ export function useFilePreviewTerminal({
             setTerminalError(result?.error || 'Failed to load terminal sessions.')
             return []
         }
-
         const nextSessions = (result.sessions || []) as PreviewTerminalSessionItem[]
         setTerminalGroupKey(String(result.groupKey || ''))
         setTerminalGroupCwd(String(result.cwd || targetPath || ''))
@@ -148,13 +129,11 @@ export function useFilePreviewTerminal({
             }))
         })
 
-        const selectedSessionId = (
-            preferredSessionId
+        const selectedSessionId = preferredSessionId
             || terminalSessionIdRef.current
             || nextSessions.find((session) => session.status === 'running')?.sessionId
             || nextSessions[0]?.sessionId
             || ''
-        )
         terminalSessionIdRef.current = selectedSessionId
         setTerminalSessionId(selectedSessionId)
 
@@ -209,7 +188,6 @@ export function useFilePreviewTerminal({
     const stopPreviewTerminalSession = useCallback(async (sessionId?: string) => {
         const targetSessionId = String(sessionId || terminalSessionIdRef.current || '').trim()
         if (!targetSessionId) return
-
         await closePreviewTerminal(targetSessionId)
         const nextSessions = await refreshPreviewTerminalSessions(
             targetSessionId === terminalSessionIdRef.current ? undefined : terminalSessionIdRef.current
@@ -301,10 +279,8 @@ export function useFilePreviewTerminal({
             disposePreviewTerminal()
             return
         }
-
         const host = terminalHostRef.current
         if (!host) return
-
         let terminal = xtermRef.current
         let fitAddon = fitAddonRef.current
         if (!terminal || !fitAddon) {
@@ -366,7 +342,6 @@ export function useFilePreviewTerminal({
         if (!terminalVisible || !renderTerminalPanel) return
         const unsubscribe = window.devscope.onPreviewTerminalEvent((eventPayload) => {
             if (!eventPayload?.sessionId) return
-
             if (eventPayload.type === 'output') {
                 const outputChunk = String(eventPayload.data || '')
                 setTerminalSessions((current) => current.map((session) => {
@@ -378,7 +353,6 @@ export function useFilePreviewTerminal({
                 if (eventPayload.sessionId === terminalSessionIdRef.current) xtermRef.current?.write(outputChunk)
                 return
             }
-
             if (eventPayload.type === 'started') {
                 void refreshPreviewTerminalSessions(eventPayload.sessionId).then(() => {
                     if (eventPayload.sessionId === terminalSessionIdRef.current) {
@@ -389,13 +363,11 @@ export function useFilePreviewTerminal({
                 })
                 return
             }
-
             if (eventPayload.type === 'error') {
                 setTerminalError(String(eventPayload.message || 'Terminal session error.'))
                 void refreshPreviewTerminalSessions(eventPayload.sessionId)
                 return
             }
-
             if (eventPayload.type === 'exit') {
                 void refreshPreviewTerminalSessions(eventPayload.sessionId)
             }
@@ -414,7 +386,6 @@ export function useFilePreviewTerminal({
             active = false
         }
     }, [canUsePreviewTerminal, createPreviewTerminalSession, refreshPreviewTerminalSessions, renderTerminalPanel, terminalVisible])
-
     useEffect(() => {
         if (!terminalVisible || !renderTerminalPanel) return
         const activeSession = currentTerminalSession
@@ -438,7 +409,6 @@ export function useFilePreviewTerminal({
             session.sessionId === terminalSessionId && session.hasUnreadOutput ? { ...session, hasUnreadOutput: false } : session
         )))
     }, [currentTerminalSession, defaultShell, file.path, projectPath, renderTerminalPanel, terminalGroupCwd, terminalSessionId, terminalVisible])
-
     useEffect(() => {
         if (!pendingTerminalCommand || !terminalVisible || terminalState !== 'active' || !terminalSessionIdRef.current) return
         const commandToWrite = pendingTerminalCommand

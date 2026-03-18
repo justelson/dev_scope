@@ -42,7 +42,6 @@ export function FolderBrowseEmptyState(input: {
                 <LoadingSpinner
                     message="Loading"
                     minHeightClassName="min-h-[28vh]"
-                    cardClassName="w-full max-w-md border-0 bg-transparent px-0 py-0 shadow-none backdrop-blur-0"
                 />
             </div>
         )

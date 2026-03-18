@@ -2,7 +2,7 @@
  * DevScope - Behavior Settings Page
  */
 
-import { useEffect, useState, useRef, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
     Activity,
@@ -16,13 +16,13 @@ import {
     Mouse,
     PanelLeft,
     PanelRight,
-    Power,
-    TerminalSquare,
     Play,
-    X
+    Power,
+    TerminalSquare
 } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
+import { ScrollPreviewModal } from './ScrollPreviewModal'
 
 export default function BehaviorSettings() {
     const { settings, updateSettings } = useSettings()
@@ -46,7 +46,7 @@ export default function BehaviorSettings() {
         return () => {
             isMounted = false
         }
-    }, [])
+    }, [updateSettings])
 
     const handleStartupToggle = async (enabled: boolean) => {
         try {
@@ -100,60 +100,32 @@ export default function BehaviorSettings() {
             </div>
 
             <div className="mb-6 inline-flex items-center rounded-lg border border-white/10 bg-sparkle-card p-1">
-                <BehaviorTabButton
-                    active={activeTab === 'startup'}
-                    onClick={() => setActiveTab('startup')}
-                    label="Startup & Scroll"
-                />
-                <BehaviorTabButton
-                    active={activeTab === 'preview'}
-                    onClick={() => setActiveTab('preview')}
-                    label="File Preview"
-                />
-                <BehaviorTabButton
-                    active={activeTab === 'tasks'}
-                    onClick={() => setActiveTab('tasks')}
-                    label="Tasks"
-                />
+                <BehaviorTabButton active={activeTab === 'startup'} onClick={() => setActiveTab('startup')} label="Startup & Scroll" />
+                <BehaviorTabButton active={activeTab === 'preview'} onClick={() => setActiveTab('preview')} label="File Preview" />
+                <BehaviorTabButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} label="Tasks" />
             </div>
 
             <div className="space-y-6">
                 {activeTab === 'startup' && (
                     <div className="grid gap-6 xl:grid-cols-2">
-                        <SettingsSection
-                            title="Startup"
-                            description="Choose how DevScope behaves when Windows launches."
-                        >
+                        <SettingsSection title="Startup" description="Choose how DevScope behaves when Windows launches.">
                             <div className="space-y-4">
                                 <SettingRow
                                     icon={<Power size={20} className="text-sparkle-text-secondary" />}
                                     title={settings.startWithWindows ? 'Launch with Windows' : 'Manual launch only'}
                                     description={startupStatus || 'Open DevScope automatically every time Windows starts.'}
-                                    control={(
-                                        <ToggleSwitch
-                                            checked={settings.startWithWindows}
-                                            onChange={handleStartupToggle}
-                                        />
-                                    )}
+                                    control={<ToggleSwitch checked={settings.startWithWindows} onChange={handleStartupToggle} />}
                                 />
                                 <SettingRow
                                     icon={<EyeOff size={20} className="text-sparkle-text-secondary" />}
                                     title={settings.startMinimized ? 'Start hidden in tray' : 'Start with window visible'}
                                     description="Choose whether the app appears immediately or stays tucked into the tray."
-                                    control={(
-                                        <ToggleSwitch
-                                            checked={settings.startMinimized}
-                                            onChange={handleMinimizedToggle}
-                                        />
-                                    )}
+                                    control={<ToggleSwitch checked={settings.startMinimized} onChange={handleMinimizedToggle} />}
                                 />
                             </div>
                         </SettingsSection>
 
-                        <SettingsSection
-                            title="Scroll Feel"
-                            description="Pick the scroll behavior that should be used across the app."
-                        >
+                        <SettingsSection title="Scroll Feel" description="Pick the scroll behavior that should be used across the app.">
                             <div className="space-y-4">
                                 <SettingRow
                                     icon={<Mouse size={20} className="text-sparkle-text-secondary" />}
@@ -194,12 +166,7 @@ export default function BehaviorSettings() {
                                     icon={<Expand size={20} className="text-sparkle-text-secondary" />}
                                     title={settings.filePreviewOpenInFullscreen ? 'Open in fullscreen mode' : 'Open in windowed mode'}
                                     description="Applies whenever a file preview modal is opened."
-                                    control={(
-                                        <ToggleSwitch
-                                            checked={settings.filePreviewOpenInFullscreen}
-                                            onChange={(next) => updateSettings({ filePreviewOpenInFullscreen: next })}
-                                        />
-                                    )}
+                                    control={<ToggleSwitch checked={settings.filePreviewOpenInFullscreen} onChange={(next) => updateSettings({ filePreviewOpenInFullscreen: next })} />}
                                 />
                                 <SettingRow
                                     icon={settings.filePreviewDefaultMode === 'edit'
@@ -238,32 +205,19 @@ export default function BehaviorSettings() {
                             </div>
                         </SettingsSection>
 
-                        <SettingsSection
-                            title="Fullscreen Sidebars"
-                            description="Choose which side panels stay visible in fullscreen preview."
-                        >
+                        <SettingsSection title="Fullscreen Sidebars" description="Choose which side panels stay visible in fullscreen preview.">
                             <div className="space-y-4">
                                 <SettingRow
                                     icon={<PanelLeft size={20} className="text-sparkle-text-secondary" />}
                                     title={settings.filePreviewFullscreenShowLeftPanel ? 'Left panel enabled' : 'Left panel hidden'}
                                     description="Controls the left-side navigation and preview context area."
-                                    control={(
-                                        <ToggleSwitch
-                                            checked={settings.filePreviewFullscreenShowLeftPanel}
-                                            onChange={(next) => updateSettings({ filePreviewFullscreenShowLeftPanel: next })}
-                                        />
-                                    )}
+                                    control={<ToggleSwitch checked={settings.filePreviewFullscreenShowLeftPanel} onChange={(next) => updateSettings({ filePreviewFullscreenShowLeftPanel: next })} />}
                                 />
                                 <SettingRow
                                     icon={<PanelRight size={20} className="text-sparkle-text-secondary" />}
                                     title={settings.filePreviewFullscreenShowRightPanel ? 'Right panel enabled' : 'Right panel hidden'}
                                     description="Controls the secondary right-side info panel in fullscreen mode."
-                                    control={(
-                                        <ToggleSwitch
-                                            checked={settings.filePreviewFullscreenShowRightPanel}
-                                            onChange={(next) => updateSettings({ filePreviewFullscreenShowRightPanel: next })}
-                                        />
-                                    )}
+                                    control={<ToggleSwitch checked={settings.filePreviewFullscreenShowRightPanel} onChange={(next) => updateSettings({ filePreviewFullscreenShowRightPanel: next })} />}
                                 />
                             </div>
                         </SettingsSection>
@@ -272,38 +226,21 @@ export default function BehaviorSettings() {
 
                 {activeTab === 'tasks' && (
                     <div className="grid gap-6 xl:grid-cols-2">
-                        <SettingsSection
-                            title="Tasks Tab Availability"
-                            description="Enable or disable the entire Tasks page from app navigation."
-                        >
+                        <SettingsSection title="Tasks Tab Availability" description="Enable or disable the entire Tasks page from app navigation.">
                             <SettingRow
                                 icon={<Activity size={20} className="text-sparkle-text-secondary" />}
                                 title={settings.tasksPageEnabled ? 'Tasks tab enabled' : 'Tasks tab disabled'}
                                 description="When disabled, the Tasks tab is hidden and task-manager data is not fetched."
-                                control={(
-                                    <ToggleSwitch
-                                        checked={settings.tasksPageEnabled}
-                                        onChange={(next) => updateSettings({ tasksPageEnabled: next })}
-                                    />
-                                )}
+                                control={<ToggleSwitch checked={settings.tasksPageEnabled} onChange={(next) => updateSettings({ tasksPageEnabled: next })} />}
                             />
                         </SettingsSection>
 
-                        <SettingsSection
-                            title="Running Apps Monitor"
-                            description="Enable or disable the Running Apps section inside the Tasks page."
-                        >
+                        <SettingsSection title="Running Apps Monitor" description="Enable or disable the Running Apps section inside the Tasks page.">
                             <SettingRow
                                 icon={<Gauge size={20} className="text-sparkle-text-secondary" />}
                                 title={settings.tasksRunningAppsEnabled ? 'Running Apps enabled' : 'Running Apps disabled'}
                                 description="Disabled state stops running-app and process-resource queries entirely."
-                                control={(
-                                    <ToggleSwitch
-                                        checked={settings.tasksRunningAppsEnabled}
-                                        onChange={(next) => updateSettings({ tasksRunningAppsEnabled: next })}
-                                        disabled={!settings.tasksPageEnabled}
-                                    />
-                                )}
+                                control={<ToggleSwitch checked={settings.tasksRunningAppsEnabled} onChange={(next) => updateSettings({ tasksRunningAppsEnabled: next })} disabled={!settings.tasksPageEnabled} />}
                             />
                         </SettingsSection>
                     </div>
@@ -390,9 +327,7 @@ function SettingRow({
                         </div>
                     </div>
                 </div>
-                <div className="shrink-0 lg:ml-4">
-                    {control}
-                </div>
+                <div className="shrink-0 lg:ml-4">{control}</div>
             </div>
         </div>
     )
@@ -434,7 +369,7 @@ function ToggleSwitch({
     disabled
 }: {
     checked: boolean
-    onChange: (v: boolean) => void
+    onChange: (value: boolean) => void
     disabled?: boolean
 }) {
     return (
@@ -455,277 +390,5 @@ function ToggleSwitch({
                 )}
             />
         </button>
-    )
-}
-
-function ScrollPreviewModal({
-    currentMode,
-    onClose,
-    onApply
-}: {
-    currentMode: 'smooth' | 'native'
-    onClose: () => void
-    onApply: (mode: 'smooth' | 'native') => void
-}) {
-    const [previewMode, setPreviewMode] = useState<'smooth' | 'native'>(currentMode)
-    const smoothScrollRef = useRef<HTMLDivElement>(null)
-    const nativeScrollRef = useRef<HTMLDivElement>(null)
-
-    // Smooth scroll implementation
-    useEffect(() => {
-        const container = smoothScrollRef.current
-        if (!container) return
-
-        let targetScrollTop = container.scrollTop
-        let currentScrollTop = container.scrollTop
-        let animationFrameId: number
-
-        const smoothScroll = () => {
-            const diff = targetScrollTop - currentScrollTop
-            if (Math.abs(diff) > 0.5) {
-                currentScrollTop += diff * 0.1
-                container.scrollTop = currentScrollTop
-                animationFrameId = requestAnimationFrame(smoothScroll)
-            }
-        }
-
-        const handleWheel = (e: WheelEvent) => {
-            e.preventDefault()
-            targetScrollTop = Math.max(
-                0,
-                Math.min(
-                    container.scrollHeight - container.clientHeight,
-                    targetScrollTop + e.deltaY
-                )
-            )
-            cancelAnimationFrame(animationFrameId)
-            animationFrameId = requestAnimationFrame(smoothScroll)
-        }
-
-        container.addEventListener('wheel', handleWheel, { passive: false })
-
-        return () => {
-            container.removeEventListener('wheel', handleWheel)
-            cancelAnimationFrame(animationFrameId)
-        }
-    }, [])
-
-    const sampleContent = Array.from({ length: 30 }, (_, i) => {
-        const categories = ['Project', 'Task', 'File', 'Component', 'Module', 'Service']
-        const statuses = ['Active', 'Pending', 'Completed', 'In Progress', 'Review', 'Draft']
-        const category = categories[i % categories.length]
-        const status = statuses[i % statuses.length]
-        
-        return {
-            id: i + 1,
-            title: `${category} #${i + 1}`,
-            status,
-            description: `${status} ${category.toLowerCase()} with various properties and metadata. Scroll through this list to experience the ${previewMode} scroll behavior in action.`,
-            timestamp: `${Math.floor(Math.random() * 24)}h ago`
-        }
-    })
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
-            <div className="relative w-full max-w-5xl mx-4 max-h-[95vh] rounded-xl border border-white/10 bg-sparkle-bg shadow-2xl flex flex-col overflow-hidden">
-                <div className="flex items-center justify-between border-b border-white/10 p-4 flex-shrink-0">
-                    <div>
-                        <h2 className="text-lg font-semibold text-sparkle-text">Scroll Behavior Preview</h2>
-                        <p className="text-sm text-sparkle-text-secondary">Try scrolling in each panel to compare</p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="rounded-lg p-2 text-sparkle-text-secondary transition-colors hover:bg-white/[0.03] hover:text-sparkle-text"
-                    >
-                        <X size={20} />
-                    </button>
-                </div>
-
-                <div className="p-6">
-                    <div className="mb-6 flex flex-col items-center gap-3">
-                        <span className="text-sm text-sparkle-text-secondary">Select mode to preview:</span>
-                        <div className="inline-flex items-center rounded-lg border border-white/10 bg-sparkle-card p-1">
-                            <button
-                                type="button"
-                                onClick={() => setPreviewMode('smooth')}
-                                className={cn(
-                                    'rounded-md px-6 py-2 text-sm font-medium transition-colors',
-                                    previewMode === 'smooth'
-                                        ? 'bg-[var(--accent-primary)] text-white'
-                                        : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
-                                )}
-                            >
-                                Buttery
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setPreviewMode('native')}
-                                className={cn(
-                                    'rounded-md px-6 py-2 text-sm font-medium transition-colors',
-                                    previewMode === 'native'
-                                        ? 'bg-[var(--accent-primary)] text-white'
-                                        : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
-                                )}
-                            >
-                                Native
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className={cn(
-                            "rounded-xl border overflow-hidden transition-all duration-300",
-                            previewMode === 'smooth' 
-                                ? "border-purple-500/50 shadow-lg shadow-purple-500/20 ring-2 ring-purple-500/30" 
-                                : "border-white/10"
-                        )}>
-                            <div className={cn(
-                                "border-b p-3 transition-colors",
-                                previewMode === 'smooth'
-                                    ? "bg-gradient-to-br from-purple-500/20 to-purple-600/10 border-purple-500/30"
-                                    : "bg-white/[0.03] border-white/10"
-                            )}>
-                                <div className="flex items-center gap-2">
-                                    <div className={cn(
-                                        "h-2.5 w-2.5 rounded-full transition-all duration-300",
-                                        previewMode === 'smooth' 
-                                            ? "bg-purple-400 shadow-lg shadow-purple-400/50 animate-pulse" 
-                                            : "bg-white/20"
-                                    )} />
-                                    <h3 className={cn(
-                                        "text-sm font-semibold transition-colors",
-                                        previewMode === 'smooth' ? "text-purple-300" : "text-sparkle-text"
-                                    )}>Buttery Smooth</h3>
-                                </div>
-                                <p className="mt-1 text-xs text-sparkle-text-secondary">Eased, interpolated scrolling</p>
-                            </div>
-                            <div
-                                ref={smoothScrollRef}
-                                className={cn(
-                                    "h-[400px] overflow-y-auto p-4 space-y-3 transition-colors",
-                                    previewMode === 'smooth' ? "bg-purple-500/5" : "bg-sparkle-card"
-                                )}
-                                style={{ scrollBehavior: 'auto' }}
-                            >
-                                {sampleContent.map((item) => (
-                                    <div
-                                        key={item.id}
-                                        className={cn(
-                                            "rounded-lg border p-4 transition-all",
-                                            previewMode === 'smooth'
-                                                ? "border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 hover:border-purple-500/30"
-                                                : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
-                                        )}
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className="text-sm font-semibold text-sparkle-text">{item.title}</h4>
-                                                <p className="mt-1.5 text-xs text-sparkle-text-secondary leading-relaxed">{item.description}</p>
-                                            </div>
-                                            <div className="flex flex-col items-end gap-1 shrink-0">
-                                                <span className={cn(
-                                                    "text-xs px-2 py-0.5 rounded-full",
-                                                    item.status === 'Active' && "bg-green-500/20 text-green-400",
-                                                    item.status === 'Pending' && "bg-yellow-500/20 text-yellow-400",
-                                                    item.status === 'Completed' && "bg-blue-500/20 text-blue-400",
-                                                    item.status === 'In Progress' && "bg-purple-500/20 text-purple-400",
-                                                    item.status === 'Review' && "bg-orange-500/20 text-orange-400",
-                                                    item.status === 'Draft' && "bg-gray-500/20 text-gray-400"
-                                                )}>{item.status}</span>
-                                                <span className="text-xs text-sparkle-text-secondary">{item.timestamp}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className={cn(
-                            "rounded-xl border overflow-hidden transition-all duration-300",
-                            previewMode === 'native' 
-                                ? "border-blue-500/50 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/30" 
-                                : "border-white/10"
-                        )}>
-                            <div className={cn(
-                                "border-b p-3 transition-colors",
-                                previewMode === 'native'
-                                    ? "bg-gradient-to-br from-blue-500/20 to-blue-600/10 border-blue-500/30"
-                                    : "bg-white/[0.03] border-white/10"
-                            )}>
-                                <div className="flex items-center gap-2">
-                                    <div className={cn(
-                                        "h-2.5 w-2.5 rounded-full transition-all duration-300",
-                                        previewMode === 'native' 
-                                            ? "bg-blue-400 shadow-lg shadow-blue-400/50 animate-pulse" 
-                                            : "bg-white/20"
-                                    )} />
-                                    <h3 className={cn(
-                                        "text-sm font-semibold transition-colors",
-                                        previewMode === 'native' ? "text-blue-300" : "text-sparkle-text"
-                                    )}>Native Platform</h3>
-                                </div>
-                                <p className="mt-1 text-xs text-sparkle-text-secondary">Direct, instant scrolling</p>
-                            </div>
-                            <div
-                                ref={nativeScrollRef}
-                                className={cn(
-                                    "h-[400px] overflow-y-auto p-4 space-y-3 transition-colors",
-                                    previewMode === 'native' ? "bg-blue-500/5" : "bg-sparkle-card"
-                                )}
-                            >
-                                {sampleContent.map((item) => (
-                                    <div
-                                        key={item.id}
-                                        className={cn(
-                                            "rounded-lg border p-4 transition-all",
-                                            previewMode === 'native'
-                                                ? "border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 hover:border-blue-500/30"
-                                                : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
-                                        )}
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className="text-sm font-semibold text-sparkle-text">{item.title}</h4>
-                                                <p className="mt-1.5 text-xs text-sparkle-text-secondary leading-relaxed">{item.description}</p>
-                                            </div>
-                                            <div className="flex flex-col items-end gap-1 shrink-0">
-                                                <span className={cn(
-                                                    "text-xs px-2 py-0.5 rounded-full",
-                                                    item.status === 'Active' && "bg-green-500/20 text-green-400",
-                                                    item.status === 'Pending' && "bg-yellow-500/20 text-yellow-400",
-                                                    item.status === 'Completed' && "bg-blue-500/20 text-blue-400",
-                                                    item.status === 'In Progress' && "bg-purple-500/20 text-purple-400",
-                                                    item.status === 'Review' && "bg-orange-500/20 text-orange-400",
-                                                    item.status === 'Draft' && "bg-gray-500/20 text-gray-400"
-                                                )}>{item.status}</span>
-                                                <span className="text-xs text-sparkle-text-secondary">{item.timestamp}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 border-t border-white/10 p-4">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="rounded-lg border border-white/10 bg-sparkle-card px-4 py-2 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.03]"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => onApply(previewMode)}
-                        className="rounded-lg bg-[var(--accent-primary)] px-4 py-2 text-sm text-white transition-all hover:opacity-90"
-                    >
-                        Apply {previewMode === 'smooth' ? 'Buttery' : 'Native'} Mode
-                    </button>
-                </div>
-            </div>
-        </div>
     )
 }

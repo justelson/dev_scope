@@ -54,16 +54,22 @@ type PreviewModalLayoutProps = {
     setCsvDistinctColorsEnabled: Dispatch<SetStateAction<boolean>>
     pythonRunState: 'idle' | 'running' | 'success' | 'failed' | 'stopped'
     pythonRunMode: 'terminal' | 'output'
+    pythonHasOutput: boolean
     setPythonRunMode: Dispatch<SetStateAction<'terminal' | 'output'>>
     canRunPython: boolean
     onRunPython: () => Promise<void>
     onStopPython: () => Promise<boolean>
+    onClearPythonOutput: () => void
     canUsePreviewTerminal: boolean
     terminalVisible: boolean
     onTogglePreviewTerminal: () => void
     onOpenInBrowser: () => Promise<void>
     gitDiffText: string
     gitDiffSummary: GitDiffSummary | null
+    liveDiffPreview?: {
+        additions: number
+        deletions: number
+    } | null
     totalFileLines: number
     handleModeChange: (nextMode: 'preview' | 'edit') => Promise<void>
     handleSave: () => Promise<boolean>
@@ -147,16 +153,19 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
         setCsvDistinctColorsEnabled,
         pythonRunState,
         pythonRunMode,
+        pythonHasOutput,
         setPythonRunMode,
         canRunPython,
         onRunPython,
         onStopPython,
+        onClearPythonOutput,
         canUsePreviewTerminal,
         terminalVisible,
         onTogglePreviewTerminal,
         onOpenInBrowser,
         gitDiffText,
         gitDiffSummary,
+        liveDiffPreview,
         totalFileLines,
         handleModeChange,
         handleSave,
@@ -244,10 +253,14 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
                     isExpanded={isExpanded}
                     leftPanelOpen={leftPanelOpen}
                     rightPanelOpen={rightPanelOpen}
+                    loadingEditableContent={loadingEditableContent}
                     viewport={viewport}
+                    liveDiffPreview={liveDiffPreview}
                     htmlViewMode={htmlViewMode}
                     csvDistinctColorsEnabled={csvDistinctColorsEnabled}
                     pythonRunState={pythonRunState}
+                    pythonHasOutput={pythonHasOutput}
+                    pythonRunMode={pythonRunMode}
                     terminalVisible={terminalVisible}
                     onClose={handleCloseRequest}
                     onToggleExpanded={() => setIsExpanded((current) => !current)}
@@ -260,10 +273,10 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
                     onHtmlViewModeChange={setHtmlViewMode}
                     onCsvDistinctColorsEnabledChange={setCsvDistinctColorsEnabled}
                     canRunPython={canRunPython}
-                    pythonRunMode={pythonRunMode}
                     onPythonRunModeChange={setPythonRunMode}
                     onRunPython={onRunPython}
                     onStopPython={onStopPython}
+                    onClearPythonOutput={onClearPythonOutput}
                     canUseTerminal={canUsePreviewTerminal}
                     onToggleTerminal={onTogglePreviewTerminal}
                     onOpenInBrowser={onOpenInBrowser}

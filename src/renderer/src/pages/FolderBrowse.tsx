@@ -384,7 +384,6 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
                 <LoadingSpinner
                     message="Loading"
                     minHeightClassName="min-h-[28vh]"
-                    cardClassName="w-full max-w-md"
                 />
             )}
 
