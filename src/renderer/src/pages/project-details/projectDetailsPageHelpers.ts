@@ -41,6 +41,14 @@ export function normalizeWorkingChangePath(path: string): string {
     return String(path || '').replace(/\\/g, '/').trim()
 }
 
+export function normalizeFileSystemPath(path: string): string {
+    return String(path || '')
+        .replace(/\\/g, '/')
+        .replace(/\/{2,}/g, '/')
+        .replace(/\/$/, '')
+        .toLowerCase()
+}
+
 export function getParentFolderPath(currentPath: string): string | null {
     const raw = String(currentPath || '').trim().replace(/[\\/]+$/, '')
     if (!raw) return null

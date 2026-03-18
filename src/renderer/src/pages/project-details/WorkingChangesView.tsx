@@ -2,17 +2,15 @@ import { useEffect, useMemo, useState, type Dispatch, type MouseEvent, type SetS
 import {
     Check,
     Copy,
-    File,
-    FileCode,
-    FileJson,
-    FileText,
-    Image,
     RefreshCw,
-    Sparkles
+    Sparkles,
+    Undo2
 } from 'lucide-react'
+import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
 import { cn } from '@/lib/utils'
 import { DiffStats } from './DiffStats'
 import { FileDiffDetailModal } from './FileDiffDetailModal'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 export interface WorkingChangeItem {
     path: string
@@ -86,31 +84,6 @@ function getStatusBadge(status?: WorkingChangeItem['gitStatus']) {
     }
 }
 
-function getFileIcon(name: string) {
-    const ext = name.split('.').pop()?.toLowerCase()
-    switch (ext) {
-        case 'js':
-        case 'jsx':
-            return <FileCode size={16} className="text-yellow-400" />
-        case 'ts':
-        case 'tsx':
-            return <FileCode size={16} className="text-blue-400" />
-        case 'json':
-            return <FileJson size={16} className="text-yellow-500" />
-        case 'md':
-            return <FileText size={16} className="text-white/60" />
-        case 'png':
-        case 'jpg':
-        case 'jpeg':
-        case 'gif':
-        case 'svg':
-        case 'webp':
-            return <Image size={16} className="text-purple-400" />
-        default:
-            return <File size={16} className="text-white/40" />
-    }
-}
-
 function getDiffKey(mode: DiffMode, path: string): string {
     return `${mode}:${path}`
 }
@@ -120,31 +93,41 @@ function Section({
     files,
     copiedPath,
     pendingActionPath,
+    pendingRevertPath,
     loadingDiffKeys,
     emptyText,
     actionLabel,
+    secondaryActionAllLabel,
     diffMode,
     onViewDiff,
     onActionFile,
+    onRevertFile,
     onActionAll,
+    onSecondaryActionAll,
     onEnsureStats,
     setCopiedPath,
-    onSetPendingActionPath
+    onSetPendingActionPath,
+    iconTheme
 }: {
     title: string
     files: WorkingChangeItem[]
     copiedPath: string | null
     pendingActionPath: string | null
+    pendingRevertPath?: string | null
     loadingDiffKeys: Set<string>
     emptyText: string
     actionLabel: string
+    secondaryActionAllLabel?: string
     diffMode: DiffMode
     onViewDiff: (file: WorkingChangeItem, mode: DiffMode) => Promise<void>
     onActionFile: (path: string) => Promise<void>
+    onRevertFile?: (file: WorkingChangeItem) => void
     onActionAll: () => Promise<void>
+    onSecondaryActionAll?: () => Promise<void>
     onEnsureStats?: (paths: string[]) => void
     setCopiedPath: Dispatch<SetStateAction<string | null>>
     onSetPendingActionPath: (path: string | null) => void
+    iconTheme: 'light' | 'dark'
 }) {
     const [currentPage, setCurrentPage] = useState(1)
     const sectionAdditions = useMemo(
@@ -222,6 +205,15 @@ function Section({
                         >
                             {pendingActionPath === '__all__' ? 'Working...' : `${actionLabel} All`}
                         </button>
+                        {secondaryActionAllLabel && onSecondaryActionAll ? (
+                            <button
+                                onClick={() => { void onSecondaryActionAll() }}
+                                disabled={files.length === 0 || pendingRevertPath === '__all__'}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-red-300 hover:text-red-200 hover:bg-white/[0.03] hover:border-white/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                            >
+                                {pendingRevertPath === '__all__' ? 'Working...' : secondaryActionAllLabel}
+                            </button>
+                        ) : null}
                     </div>
                 </div>
             </div>
@@ -241,26 +233,53 @@ function Section({
                                 <span className={cn('text-[10px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5', badge.className)}>
                                     {badge.label}
                                 </span>
-                                {getFileIcon(file.name)}
+                                <VscodeEntryIcon
+                                    pathValue={file.path || file.name}
+                                    kind="file"
+                                    theme={iconTheme}
+                                    className="size-4 shrink-0"
+                                />
                                 <div className="min-w-0">
-                                    <p className="text-sm font-mono text-white/80 truncate">{file.name}</p>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <p className="text-sm font-mono text-white/80 truncate">{file.name}</p>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <button
+                                                onClick={(e) => handleCopyPath(file.path, e)}
+                                                className={cn(
+                                                    'p-1 rounded transition-all opacity-0 group-hover:opacity-100',
+                                                    copiedPath === file.path
+                                                        ? 'text-emerald-400 bg-emerald-400/10'
+                                                        : 'text-white/40 hover:text-white hover:bg-white/10'
+                                                )}
+                                                title={copiedPath === file.path ? 'Copied!' : `Copy path: ${file.path}`}
+                                            >
+                                                {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
+                                            </button>
+                                            {diffMode === 'unstaged' && onRevertFile ? (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        onRevertFile(file)
+                                                    }}
+                                                    disabled={pendingRevertPath === file.path}
+                                                    className={cn(
+                                                        'p-1 rounded transition-all opacity-0 group-hover:opacity-100',
+                                                        pendingRevertPath === file.path
+                                                            ? 'text-white/30 bg-white/5'
+                                                            : 'text-white/40 hover:text-white hover:bg-white/10'
+                                                    )}
+                                                    title={`Revert unstaged changes: ${file.path}`}
+                                                >
+                                                    <Undo2 size={14} />
+                                                </button>
+                                            ) : null}
+                                        </div>
+                                    </div>
                                     <p className="text-xs text-white/45 truncate">{file.path}</p>
                                     {file.previousPath && (
                                         <p className="text-[11px] text-blue-300/80 truncate">from {file.previousPath}</p>
                                     )}
                                 </div>
-                                <button
-                                    onClick={(e) => handleCopyPath(file.path, e)}
-                                    className={cn(
-                                        'p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100',
-                                        copiedPath === file.path
-                                            ? 'text-emerald-400 bg-emerald-400/10'
-                                            : 'text-white/40 hover:text-white hover:bg-white/10'
-                                    )}
-                                    title={copiedPath === file.path ? 'Copied!' : `Copy path: ${file.path}`}
-                                >
-                                    {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
-                                </button>
                             </div>
 
                             <div className="flex items-center justify-end gap-2 shrink-0 min-w-[220px]">
@@ -334,6 +353,8 @@ export function WorkingChangesView({
     handleUnstageFile,
     handleStageAll,
     handleUnstageAll,
+    handleDiscardUnstagedFile,
+    handleDiscardUnstagedAll,
     ensureStatsForPaths
 }: {
     stagedFiles: WorkingChangeItem[]
@@ -350,16 +371,21 @@ export function WorkingChangesView({
     handleUnstageFile: (path: string) => Promise<void>
     handleStageAll: () => Promise<void>
     handleUnstageAll: () => Promise<void>
+    handleDiscardUnstagedFile: (path: string) => Promise<void>
+    handleDiscardUnstagedAll: () => Promise<void>
     ensureStatsForPaths?: (paths: string[]) => void
 }) {
     const [fileDiffs, setFileDiffs] = useState<Map<string, string>>(new Map())
     const [loadingDiffKeys, setLoadingDiffKeys] = useState<Set<string>>(new Set())
     const [copiedPath, setCopiedPath] = useState<string | null>(null)
     const [pendingActionPath, setPendingActionPath] = useState<string | null>(null)
+    const [pendingRevertPath, setPendingRevertPath] = useState<string | null>(null)
     const [selectedDiffFile, setSelectedDiffFile] = useState<WorkingChangeItem | null>(null)
     const [selectedDiffMode, setSelectedDiffMode] = useState<DiffMode>('staged')
     const [selectedDiffContent, setSelectedDiffContent] = useState('')
     const [isDiffModalLoading, setIsDiffModalLoading] = useState(false)
+    const [revertTarget, setRevertTarget] = useState<{ file?: WorkingChangeItem; scope: 'file' | 'all' } | null>(null)
+    const iconTheme = settings?.theme === 'light' ? 'light' : 'dark'
 
     const openFileDiffModal = async (file: WorkingChangeItem, mode: DiffMode) => {
         const key = getDiffKey(mode, file.path)
@@ -399,6 +425,46 @@ export function WorkingChangesView({
                 return next
             })
             setIsDiffModalLoading(false)
+        }
+    }
+
+    const buildRevertMessage = (target: { file?: WorkingChangeItem; scope: 'file' | 'all' }) => {
+        if (target.scope === 'all') {
+            return 'This will discard all unstaged changes and keep any staged changes. This cannot be undone.'
+        }
+        const file = target.file
+        if (!file) {
+            return 'This will discard the selected unstaged changes. This cannot be undone.'
+        }
+        if (file.staged) {
+            return `This will discard unstaged edits in ${file.name} and keep staged changes. This cannot be undone.`
+        }
+        if (file.gitStatus === 'untracked') {
+            return `This will permanently delete the untracked file ${file.name}. This cannot be undone.`
+        }
+        return `This will revert unstaged edits in ${file.name} to the last committed state. This cannot be undone.`
+    }
+
+    const confirmRevert = async () => {
+        if (!revertTarget) return
+        const scope = revertTarget.scope
+        const pendingKey = scope === 'all' ? '__all__' : revertTarget.file?.path
+        if (pendingKey) {
+            setPendingRevertPath(pendingKey)
+        }
+        try {
+            if (scope === 'all') {
+                await handleDiscardUnstagedAll()
+                return
+            }
+            const file = revertTarget.file
+            if (!file) return
+            await handleDiscardUnstagedFile(file.path)
+        } finally {
+            if (pendingKey) {
+                setPendingRevertPath(null)
+            }
+            setRevertTarget(null)
         }
     }
 
@@ -448,6 +514,7 @@ export function WorkingChangesView({
                     files={stagedFiles}
                     copiedPath={copiedPath}
                     pendingActionPath={pendingActionPath}
+                    pendingRevertPath={pendingRevertPath}
                     loadingDiffKeys={loadingDiffKeys}
                     emptyText="No staged files."
                     actionLabel="Unstage"
@@ -462,6 +529,7 @@ export function WorkingChangesView({
                     onEnsureStats={ensureStatsForPaths}
                     setCopiedPath={setCopiedPath}
                     onSetPendingActionPath={setPendingActionPath}
+                    iconTheme={iconTheme}
                 />
 
                 <Section
@@ -469,20 +537,27 @@ export function WorkingChangesView({
                     files={unstagedFiles}
                     copiedPath={copiedPath}
                     pendingActionPath={pendingActionPath}
+                    pendingRevertPath={pendingRevertPath}
                     loadingDiffKeys={loadingDiffKeys}
                     emptyText="No unstaged files."
                     actionLabel="Stage"
+                    secondaryActionAllLabel="Revert All"
                     diffMode="unstaged"
                     onViewDiff={openFileDiffModal}
                     onActionFile={async (path) => handleStageFile(path)}
+                    onRevertFile={(file) => setRevertTarget({ scope: 'file', file })}
                     onActionAll={async () => {
                         setPendingActionPath('__all__')
                         await handleStageAll()
                         setPendingActionPath(null)
                     }}
+                    onSecondaryActionAll={() => {
+                        setRevertTarget({ scope: 'all' })
+                    }}
                     onEnsureStats={ensureStatsForPaths}
                     setCopiedPath={setCopiedPath}
                     onSetPendingActionPath={setPendingActionPath}
+                    iconTheme={iconTheme}
                 />
             </div>
 
@@ -500,6 +575,16 @@ export function WorkingChangesView({
                     setSelectedDiffContent('')
                     setIsDiffModalLoading(false)
                 }}
+            />
+            <ConfirmModal
+                isOpen={Boolean(revertTarget)}
+                title="Revert Unstaged Changes"
+                message={revertTarget ? buildRevertMessage(revertTarget) : ''}
+                confirmLabel="Revert"
+                cancelLabel="Cancel"
+                onConfirm={() => { void confirmRevert() }}
+                onCancel={() => setRevertTarget(null)}
+                variant="danger"
             />
         </>
     )

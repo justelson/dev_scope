@@ -117,6 +117,7 @@ export function ProjectDetailsPageView(props: any) {
         handleFileTreeRename,
         handleFileTreeDelete,
         handleFileTreePaste,
+        handleFileTreeMove,
         handleFileTreeCreateFile,
         handleFileTreeCreateFolder,
         fileClipboardItem,
@@ -141,6 +142,8 @@ export function ProjectDetailsPageView(props: any) {
         handleUnstageFile,
         handleStageAll,
         handleUnstageAll,
+        handleDiscardUnstagedFile,
+        handleDiscardUnstagedAll,
         ensureWorkingChangeStats,
         hasRemote,
         gitSyncStatus,
@@ -361,6 +364,7 @@ export function ProjectDetailsPageView(props: any) {
                 onFileTreeRename={handleFileTreeRename}
                 onFileTreeDelete={handleFileTreeDelete}
                 onFileTreePaste={handleFileTreePaste}
+                onFileTreeMove={handleFileTreeMove}
                 onFileTreeCreateFile={handleFileTreeCreateFile}
                 onFileTreeCreateFolder={handleFileTreeCreateFolder}
                 hasFileClipboardItem={Boolean(fileClipboardItem)}
@@ -389,6 +393,8 @@ export function ProjectDetailsPageView(props: any) {
                 handleUnstageFile={handleUnstageFile}
                 handleStageAll={handleStageAll}
                 handleUnstageAll={handleUnstageAll}
+                handleDiscardUnstagedFile={handleDiscardUnstagedFile}
+                handleDiscardUnstagedAll={handleDiscardUnstagedAll}
                 ensureStatsForPaths={ensureWorkingChangeStats}
                 hasRemote={hasRemote}
                 gitSyncStatus={gitSyncStatus}

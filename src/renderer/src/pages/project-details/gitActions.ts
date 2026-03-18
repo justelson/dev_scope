@@ -154,6 +154,24 @@ function toUnstagedDetail(detail: GitStatusDetail): GitStatusDetail {
     }
 }
 
+function toStagedOnlyDetail(detail: GitStatusDetail): GitStatusDetail {
+    const nextStagedAdditions = detail.stagedAdditions
+    const nextStagedDeletions = detail.stagedDeletions
+    return {
+        ...detail,
+        status: detail.status === 'untracked' ? 'added' : detail.status,
+        staged: true,
+        unstaged: false,
+        additions: nextStagedAdditions,
+        deletions: nextStagedDeletions,
+        stagedAdditions: nextStagedAdditions,
+        stagedDeletions: nextStagedDeletions,
+        unstagedAdditions: 0,
+        unstagedDeletions: 0,
+        statsLoaded: detail.statsLoaded
+    }
+}
+
 export function createProjectGitActions(params: GitActionParams) {
     const bulkActionScope = params.settings.gitBulkActionScope === 'project' ? 'project' : 'repo'
 
@@ -591,6 +609,70 @@ export function createProjectGitActions(params: GitActionParams) {
         }
     }
 
+    const handleDiscardUnstagedFile = async (filePath: string) => {
+        if (!params.decodedPath || !filePath.trim()) return
+        const normalizedTarget = normalizePath(filePath)
+        const rollback = applyOptimisticDetails((prev) => {
+            let changed = false
+            const next: GitStatusDetail[] = []
+            for (const detail of prev) {
+                if (normalizePath(detail.path) !== normalizedTarget) {
+                    next.push(detail)
+                    continue
+                }
+                changed = true
+                if (detail.staged) {
+                    next.push(toStagedOnlyDetail(detail))
+                }
+            }
+            return changed ? next : prev
+        })
+
+        try {
+            const result = await window.devscope.discardChanges(params.decodedPath, [filePath], { mode: 'unstaged' })
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to discard file changes')
+            }
+            void params.refreshGitData(false, { quiet: true, mode: 'working' })
+        } catch (err: any) {
+            rollback()
+            params.showToast(`Failed to revert changes: ${err.message}`, undefined, undefined, 'error')
+        }
+    }
+
+    const handleDiscardUnstagedAll = async () => {
+        if (!params.decodedPath || params.unstagedFiles.length === 0) return
+        const rollback = applyOptimisticDetails((prev) => {
+            let changed = false
+            const next: GitStatusDetail[] = []
+            for (const detail of prev) {
+                if (!detail.unstaged) {
+                    next.push(detail)
+                    continue
+                }
+                changed = true
+                if (detail.staged) {
+                    next.push(toStagedOnlyDetail(detail))
+                }
+            }
+            return changed ? next : prev
+        })
+
+        try {
+            const result = await window.devscope.discardChanges(params.decodedPath, [], {
+                scope: bulkActionScope,
+                mode: 'unstaged'
+            })
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to discard unstaged changes')
+            }
+            void params.refreshGitData(false, { quiet: true, mode: 'working' })
+        } catch (err: any) {
+            rollback()
+            params.showToast(`Failed to revert changes: ${err.message}`, undefined, undefined, 'error')
+        }
+    }
+
     const handlePull = async (options?: { remoteName?: string; branchName?: string; pushRemoteName?: string; successLabel?: string }) => {
         if (!params.decodedPath) return
 
@@ -635,6 +717,8 @@ export function createProjectGitActions(params: GitActionParams) {
         handleUnstageFile,
         handleStageAll,
         handleUnstageAll,
+        handleDiscardUnstagedFile,
+        handleDiscardUnstagedAll,
         handleSwitchBranch,
         handleInitGit,
         handleAddRemote,

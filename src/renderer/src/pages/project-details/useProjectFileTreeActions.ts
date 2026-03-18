@@ -1,10 +1,11 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { getAllFolderPaths } from './fileTreeUtils'
 import type { FileTreeNode } from './types'
 import {
     getFileExtensionFromName,
     getParentFolderPath,
+    normalizeFileSystemPath,
     splitFileNameForRename,
     validateCreateName
 } from './projectDetailsPageHelpers'
@@ -21,6 +22,7 @@ type UseProjectFileTreeActionsParams = {
     setLoadingFolderPaths: Dispatch<SetStateAction<Set<string>>>
     setIsExpandingFolders: Dispatch<SetStateAction<boolean>>
     fileTree: FileTreeNode[]
+    setFileTree: Dispatch<SetStateAction<FileTreeNode[]>>
     openFile: (path: string) => Promise<void>
     openPreview: (
         file: { name: string; path: string },
@@ -47,6 +49,220 @@ type UseProjectFileTreeActionsParams = {
     deleteTarget: FileTreeNode | null
 }
 
+function pathsMatch(left: string, right: string): boolean {
+    return normalizeFileSystemPath(left) === normalizeFileSystemPath(right)
+}
+
+function resolvePathSeparator(pathValue: string): string {
+    return pathValue.includes('\\') ? '\\' : '/'
+}
+
+function joinFileSystemPath(directory: string, name: string): string {
+    const rawDir = String(directory || '')
+    const separator = resolvePathSeparator(rawDir)
+    const trimmed = rawDir.replace(/[\\/]+$/, '')
+    if (!trimmed) {
+        return `${separator}${name}`
+    }
+    return `${trimmed}${separator}${name}`
+}
+
+function replacePathPrefix(pathValue: string, oldPrefix: string, newPrefix: string): string {
+    if (pathValue === oldPrefix) return newPrefix
+    if (pathValue.startsWith(oldPrefix)) {
+        return `${newPrefix}${pathValue.slice(oldPrefix.length)}`
+    }
+    return pathValue
+}
+
+function updateNodePathPrefix(node: FileTreeNode, oldPrefix: string, newPrefix: string): FileTreeNode {
+    const nextPath = replacePathPrefix(node.path, oldPrefix, newPrefix)
+    const nextChildren = node.children
+        ? node.children.map((child) => updateNodePathPrefix(child, oldPrefix, newPrefix))
+        : node.children
+
+    if (nextPath === node.path && nextChildren === node.children) return node
+    return {
+        ...node,
+        path: nextPath,
+        children: nextChildren
+    }
+}
+
+function extractNodeByPath(
+    nodes: FileTreeNode[],
+    targetPath: string
+): { nodes: FileTreeNode[]; removed: FileTreeNode | null } {
+    let removed: FileTreeNode | null = null
+    let changed = false
+
+    const nextNodes = nodes.reduce<FileTreeNode[]>((acc, node) => {
+        if (pathsMatch(node.path, targetPath)) {
+            removed = node
+            changed = true
+            return acc
+        }
+
+        if (node.type === 'directory' && node.children) {
+            const result = extractNodeByPath(node.children, targetPath)
+            if (result.removed) {
+                removed = result.removed
+            }
+            if (result.nodes !== node.children) {
+                changed = true
+                acc.push({ ...node, children: result.nodes })
+                return acc
+            }
+        }
+
+        acc.push(node)
+        return acc
+    }, [])
+
+    return {
+        nodes: changed ? nextNodes : nodes,
+        removed
+    }
+}
+
+function insertNodeAtDirectory(
+    nodes: FileTreeNode[],
+    destinationDirectory: string,
+    nodeToInsert: FileTreeNode,
+    projectRootPath: string
+): { nodes: FileTreeNode[]; inserted: boolean } {
+    if (projectRootPath && pathsMatch(destinationDirectory, projectRootPath)) {
+        if (nodes.some((node) => pathsMatch(node.path, nodeToInsert.path))) {
+            return { nodes, inserted: false }
+        }
+        return { nodes: [...nodes, nodeToInsert], inserted: true }
+    }
+
+    let inserted = false
+
+    const visit = (items: FileTreeNode[]): FileTreeNode[] => {
+        let localChanged = false
+        const nextItems = items.map((node) => {
+            if (node.type !== 'directory') return node
+
+            if (pathsMatch(node.path, destinationDirectory)) {
+                const children = node.children ? [...node.children] : []
+                if (!children.some((child) => pathsMatch(child.path, nodeToInsert.path))) {
+                    children.push(nodeToInsert)
+                    inserted = true
+                    localChanged = true
+                    const nextNode: FileTreeNode = {
+                        ...node,
+                        children
+                    }
+                    if (node.childrenLoaded === false) {
+                        nextNode.childrenLoaded = false
+                    }
+                    return nextNode
+                }
+            }
+
+            if (node.children) {
+                const nextChildren = visit(node.children)
+                if (nextChildren !== node.children) {
+                    localChanged = true
+                    return { ...node, children: nextChildren }
+                }
+            }
+
+            return node
+        })
+
+        return localChanged ? nextItems : items
+    }
+
+    const nextNodes = visit(nodes)
+    return { nodes: inserted ? nextNodes : nodes, inserted }
+}
+
+function renameNodeByPath(
+    nodes: FileTreeNode[],
+    targetPath: string,
+    nextName: string,
+    nextPath: string
+): FileTreeNode[] {
+    let changed = false
+
+    const visit = (items: FileTreeNode[]): FileTreeNode[] => {
+        let localChanged = false
+        const nextItems = items.map((node) => {
+            if (pathsMatch(node.path, targetPath)) {
+                const updatedNode = updateNodePathPrefix(node, node.path, nextPath)
+                localChanged = true
+                changed = true
+                return {
+                    ...updatedNode,
+                    name: nextName
+                }
+            }
+
+            if (node.type === 'directory' && node.children) {
+                const nextChildren = visit(node.children)
+                if (nextChildren !== node.children) {
+                    localChanged = true
+                    return { ...node, children: nextChildren }
+                }
+            }
+
+            return node
+        })
+
+        return localChanged ? nextItems : items
+    }
+
+    const nextNodes = visit(nodes)
+    return changed ? nextNodes : nodes
+}
+
+function buildCopyName(sourceName: string, copyIndex: number): string {
+    if (copyIndex <= 0) return sourceName
+    const dotIndex = sourceName.lastIndexOf('.')
+    const base = dotIndex > 0 ? sourceName.slice(0, dotIndex) : sourceName
+    const ext = dotIndex > 0 ? sourceName.slice(dotIndex) : ''
+    const suffix = copyIndex === 1 ? ' Copy' : ` Copy ${copyIndex}`
+    return `${base}${suffix}${ext}`
+}
+
+function findDirectoryNode(nodes: FileTreeNode[], targetPath: string): FileTreeNode | null {
+    for (const node of nodes) {
+        if (node.type !== 'directory') continue
+        if (pathsMatch(node.path, targetPath)) return node
+        if (node.children) {
+            const found = findDirectoryNode(node.children, targetPath)
+            if (found) return found
+        }
+    }
+    return null
+}
+
+function resolveOptimisticCopyName(
+    sourceName: string,
+    destinationDirectory: string,
+    tree: FileTreeNode[],
+    projectRootPath: string
+): string {
+    const targetChildren = projectRootPath && pathsMatch(destinationDirectory, projectRootPath)
+        ? tree
+        : findDirectoryNode(tree, destinationDirectory)?.children
+
+    if (!targetChildren) return sourceName
+
+    const existingNames = new Set(targetChildren.map((child) => child.name.toLowerCase()))
+    for (let copyIndex = 0; copyIndex < 1000; copyIndex += 1) {
+        const candidate = buildCopyName(sourceName, copyIndex)
+        if (!existingNames.has(candidate.toLowerCase())) {
+            return candidate
+        }
+    }
+
+    return sourceName
+}
+
 export function useProjectFileTreeActions({
     activeTab,
     loadingFiles,
@@ -59,6 +275,7 @@ export function useProjectFileTreeActions({
     setLoadingFolderPaths,
     setIsExpandingFolders,
     fileTree,
+    setFileTree,
     openFile,
     openPreview,
     showToast,
@@ -80,6 +297,23 @@ export function useProjectFileTreeActions({
     renameExtensionSuffix,
     deleteTarget
 }: UseProjectFileTreeActionsParams) {
+    const fileTreeRef = useRef(fileTree)
+
+    useEffect(() => {
+        fileTreeRef.current = fileTree
+    }, [fileTree])
+
+    const applyOptimisticFileTree = useCallback((
+        updater: (tree: FileTreeNode[]) => FileTreeNode[]
+    ) => {
+        const previousTree = fileTreeRef.current
+        const nextTree = updater(previousTree)
+        if (nextTree !== previousTree) {
+            setFileTree(nextTree)
+        }
+        return previousTree
+    }, [setFileTree])
+
     const refreshVisibleFileTree = useCallback(async (targetPath?: string) => {
         const normalizedTargetPath = String(targetPath || '').trim()
         const shouldDeepRefresh = fileTreeFullyLoaded || fileSearch.trim().length > 0
@@ -227,15 +461,90 @@ export function useProjectFileTreeActions({
             return
         }
 
+        const optimisticName = resolveOptimisticCopyName(
+            fileClipboardItem.name,
+            destinationDirectory,
+            fileTreeRef.current,
+            projectRootPath
+        )
+        const optimisticPath = joinFileSystemPath(destinationDirectory, optimisticName)
+        const optimisticNode: FileTreeNode = {
+            name: optimisticName,
+            path: optimisticPath,
+            type: fileClipboardItem.type,
+            isHidden: optimisticName.startsWith('.'),
+            ...(fileClipboardItem.type === 'directory'
+                ? { childrenLoaded: false }
+                : {})
+        }
+
+        const previousTree = applyOptimisticFileTree((currentTree) => {
+            const { nodes } = insertNodeAtDirectory(
+                currentTree,
+                destinationDirectory,
+                optimisticNode,
+                projectRootPath
+            )
+            return nodes
+        })
+
+        showToast(`Pasting ${fileClipboardItem.name}...`, undefined, undefined, 'info')
+
         const result = await window.devscope.pasteFileSystemItem(fileClipboardItem.path, destinationDirectory)
         if (!result.success) {
+            setFileTree(previousTree)
             showToast(result.error || `Failed to paste "${fileClipboardItem.name}"`, undefined, undefined, 'error')
             return
         }
 
-        showToast(`Pasted ${fileClipboardItem.name}`)
+        if (result.path && result.name && result.path !== optimisticPath) {
+            setFileTree((currentTree) => renameNodeByPath(currentTree, optimisticPath, result.name, result.path))
+        }
+
+        showToast(`Pasted ${result.name || fileClipboardItem.name}`)
         await refreshVisibleFileTree(destinationDirectory)
-    }, [fileClipboardItem, refreshVisibleFileTree, showToast])
+    }, [applyOptimisticFileTree, fileClipboardItem, projectRootPath, refreshVisibleFileTree, setFileTree, showToast])
+
+    const handleFileTreeMove = useCallback(async (node: FileTreeNode, destinationDirectory: string) => {
+        if (!node?.path || !destinationDirectory) return
+        const normalizedDestination = String(destinationDirectory || '').trim()
+        if (!normalizedDestination) return
+
+        const sourceParent = getParentFolderPath(node.path)
+        if (sourceParent && normalizeFileSystemPath(sourceParent) === normalizeFileSystemPath(normalizedDestination)) {
+            return
+        }
+
+        const previousTree = applyOptimisticFileTree((currentTree) => {
+            const extraction = extractNodeByPath(currentTree, node.path)
+            if (!extraction.removed) return currentTree
+            const destinationPath = joinFileSystemPath(normalizedDestination, extraction.removed.name)
+            const movedNode = updateNodePathPrefix(extraction.removed, extraction.removed.path, destinationPath)
+            const insertion = insertNodeAtDirectory(
+                extraction.nodes,
+                normalizedDestination,
+                movedNode,
+                projectRootPath
+            )
+            return insertion.nodes
+        })
+
+        showToast(`Moving ${node.name}...`, undefined, undefined, 'info')
+
+        const result = await window.devscope.moveFileSystemItem(node.path, normalizedDestination)
+        if (!result.success) {
+            setFileTree(previousTree)
+            showToast(result.error || `Failed to move "${node.name}"`, undefined, undefined, 'error')
+            return
+        }
+
+        showToast(`Moved ${node.name}`)
+        const sourceParentPath = sourceParent || projectRootPath
+        if (sourceParentPath && normalizeFileSystemPath(sourceParentPath) !== normalizeFileSystemPath(normalizedDestination)) {
+            await refreshVisibleFileTree(sourceParentPath)
+        }
+        await refreshVisibleFileTree(normalizedDestination)
+    }, [applyOptimisticFileTree, projectRootPath, refreshVisibleFileTree, setFileTree, showToast])
 
     const resolveCreateDestinationDirectory = useCallback((node?: FileTreeNode): string | null => {
         if (!node) {
@@ -279,13 +588,41 @@ export function useProjectFileTreeActions({
             return
         }
 
+        const destinationDirectory = createTarget.destinationDirectory
+        const optimisticPath = joinFileSystemPath(destinationDirectory, normalizedName)
+        const optimisticNode: FileTreeNode = {
+            name: normalizedName,
+            path: optimisticPath,
+            type: createTarget.type,
+            isHidden: normalizedName.startsWith('.'),
+            ...(createTarget.type === 'directory'
+                ? { children: [], childrenLoaded: true }
+                : {})
+        }
+
+        const previousTree = applyOptimisticFileTree((currentTree) => {
+            const { nodes } = insertNodeAtDirectory(
+                currentTree,
+                destinationDirectory,
+                optimisticNode,
+                projectRootPath
+            )
+            return nodes
+        })
+
+        setCreateTarget(null)
+        setCreateDraftState('')
+        setCreateErrorMessage(null)
+        showToast(`Creating ${createTarget.type === 'file' ? 'file' : 'folder'}: ${normalizedName}...`, undefined, undefined, 'info')
+
         const result = await window.devscope.createFileSystemItem(
-            createTarget.destinationDirectory,
+            destinationDirectory,
             normalizedName,
             createTarget.type
         )
         if (!result.success) {
-            setCreateErrorMessage(result.error || `Failed to create ${createTarget.type}.`)
+            setFileTree(previousTree)
+            showToast(result.error || `Failed to create ${createTarget.type}.`, undefined, undefined, 'error')
             return
         }
 
@@ -293,12 +630,12 @@ export function useProjectFileTreeActions({
         const createdName = result.name
         const createdType = result.type
 
-        setCreateTarget(null)
-        setCreateDraftState('')
-        setCreateErrorMessage(null)
+        if (createdPath && createdName && createdPath !== optimisticPath) {
+            setFileTree((currentTree) => renameNodeByPath(currentTree, optimisticPath, createdName, createdPath))
+        }
 
         showToast(`Created ${createdType === 'file' ? 'file' : 'folder'}: ${createdName}`)
-        await refreshVisibleFileTree(createTarget.destinationDirectory)
+        await refreshVisibleFileTree(destinationDirectory)
 
         if (createdType === 'file') {
             const ext = getFileExtensionFromName(createdName) || 'txt'
@@ -309,13 +646,16 @@ export function useProjectFileTreeActions({
             )
         }
     }, [
+        applyOptimisticFileTree,
         createDraft,
         createTarget,
         openPreview,
+        projectRootPath,
         refreshVisibleFileTree,
         setCreateDraftState,
         setCreateErrorMessage,
         setCreateTarget,
+        setFileTree,
         showToast
     ])
 
@@ -337,19 +677,34 @@ export function useProjectFileTreeActions({
             return
         }
 
-        const result = await window.devscope.renameFileSystemItem(renameTarget.path, normalizedNextName)
-        if (!result.success) {
-            setRenameErrorMessage(result.error || `Failed to rename "${renameTarget.name}"`)
-            return
-        }
+        const targetPath = renameTarget.path
+        const nextPath = joinFileSystemPath(getParentFolderPath(targetPath) || projectRootPath, normalizedNextName)
 
-        showToast(`Renamed to ${normalizedNextName}`)
+        const previousTree = applyOptimisticFileTree((currentTree) => (
+            renameNodeByPath(currentTree, targetPath, normalizedNextName, nextPath)
+        ))
+
         setRenameTarget(null)
         setRenameDraft('')
         setRenameExtensionSuffix('')
         setRenameErrorMessage(null)
-        await refreshVisibleFileTree(getParentFolderPath(renameTarget.path) || projectRootPath)
+        showToast(`Renaming ${renameTarget.name}...`, undefined, undefined, 'info')
+
+        const result = await window.devscope.renameFileSystemItem(targetPath, normalizedNextName)
+        if (!result.success) {
+            setFileTree(previousTree)
+            showToast(result.error || `Failed to rename "${renameTarget.name}"`, undefined, undefined, 'error')
+            return
+        }
+
+        if (result.path && result.name && result.path !== nextPath) {
+            setFileTree((currentTree) => renameNodeByPath(currentTree, nextPath, result.name, result.path))
+        }
+
+        showToast(`Renamed to ${result.name || normalizedNextName}`)
+        await refreshVisibleFileTree(getParentFolderPath(targetPath) || projectRootPath)
     }, [
+        applyOptimisticFileTree,
         projectRootPath,
         refreshVisibleFileTree,
         renameDraft,
@@ -359,25 +714,51 @@ export function useProjectFileTreeActions({
         setRenameErrorMessage,
         setRenameExtensionSuffix,
         setRenameTarget,
+        setFileTree,
         showToast
     ])
 
     const confirmDeleteTarget = useCallback(async () => {
         if (!deleteTarget) return
-        const result = await window.devscope.deleteFileSystemItem(deleteTarget.path)
-        if (!result.success) {
-            showToast(result.error || `Failed to delete "${deleteTarget.name}"`, undefined, undefined, 'error')
-            return
-        }
+        const target = deleteTarget
+        const previousClipboard = fileClipboardItem
 
-        if (fileClipboardItem?.path === deleteTarget.path) {
+        const previousTree = applyOptimisticFileTree((currentTree) => {
+            const extraction = extractNodeByPath(currentTree, target.path)
+            return extraction.nodes
+        })
+
+        setDeleteTarget(null)
+
+        if (fileClipboardItem?.path === target.path) {
             setFileClipboardItem(null)
         }
 
-        showToast(`Deleted ${deleteTarget.name}`)
-        setDeleteTarget(null)
-        await refreshVisibleFileTree(getParentFolderPath(deleteTarget.path) || projectRootPath)
-    }, [deleteTarget, fileClipboardItem?.path, projectRootPath, refreshVisibleFileTree, setDeleteTarget, setFileClipboardItem, showToast])
+        showToast(`Deleting ${target.name}...`, undefined, undefined, 'info')
+
+        const result = await window.devscope.deleteFileSystemItem(target.path)
+        if (!result.success) {
+            setFileTree(previousTree)
+            if (previousClipboard) {
+                setFileClipboardItem(previousClipboard)
+            }
+            showToast(result.error || `Failed to delete "${target.name}"`, undefined, undefined, 'error')
+            return
+        }
+
+        showToast(`Deleted ${target.name}`)
+        await refreshVisibleFileTree(getParentFolderPath(target.path) || projectRootPath)
+    }, [
+        applyOptimisticFileTree,
+        deleteTarget,
+        fileClipboardItem,
+        projectRootPath,
+        refreshVisibleFileTree,
+        setDeleteTarget,
+        setFileClipboardItem,
+        setFileTree,
+        showToast
+    ])
 
     useEffect(() => {
         if (activeTab !== 'files' || loadingFiles) return
@@ -398,6 +779,7 @@ export function useProjectFileTreeActions({
         handleFileTreeRename,
         handleFileTreeDelete,
         handleFileTreePaste,
+        handleFileTreeMove,
         handleFileTreeCreateFile,
         handleFileTreeCreateFolder,
         submitCreateTarget,

@@ -99,6 +99,8 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         handleUnstageFile,
         handleStageAll,
         handleUnstageAll,
+        handleDiscardUnstagedFile,
+        handleDiscardUnstagedAll,
         ensureStatsForPaths,
         hasRemote,
         setInitStep,
@@ -564,6 +566,8 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         handleUnstageFile={handleUnstageFile}
                         handleStageAll={handleStageAll}
                         handleUnstageAll={handleUnstageAll}
+                        handleDiscardUnstagedFile={handleDiscardUnstagedFile}
+                        handleDiscardUnstagedAll={handleDiscardUnstagedAll}
                         ensureStatsForPaths={ensureStatsForPaths}
                     />
                 ) : gitView === 'unpushed' ? (

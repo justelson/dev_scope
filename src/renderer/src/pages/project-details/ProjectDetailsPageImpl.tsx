@@ -211,6 +211,7 @@ export default function ProjectDetailsPage() {
         setLoadingFolderPaths: state.setLoadingFolderPaths,
         setIsExpandingFolders: state.setIsExpandingFolders,
         fileTree: state.fileTree,
+        setFileTree: state.setFileTree,
         openFile: preview.openFile,
         openPreview: preview.openPreview,
         showToast: chrome.showToast,
