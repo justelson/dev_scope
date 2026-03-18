@@ -11,8 +11,33 @@ import { WebLinksAddon } from 'xterm-addon-web-links'
 import 'xterm/css/xterm.css'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
-import type { DevScopePreviewTerminalSessionSummary } from '@shared/contracts/devscope-api'
-import { summarizeGitDiff, type GitDiffSummary, type GitLineMarker } from './file-preview/gitDiff'
+import { summarizeGitDiff, type GitDiffSummary } from './file-preview/gitDiff'
+import {
+    buildLocalDiffPreview,
+    countLines,
+    createPreviewTerminalSessionId,
+    createPythonPreviewSessionId,
+    extractOutlineItems,
+    formatRelativeActivity,
+    isEditableFileType,
+    LEFT_PANEL_MAX_WIDTH,
+    LEFT_PANEL_MIN_WIDTH,
+    mapTerminalStatusToState,
+    type OutlineItem,
+    type PendingIntent,
+    PREVIEW_TERMINAL_MIN_HEIGHT,
+    PYTHON_OUTPUT_MAX_CHARS,
+    PYTHON_OUTPUT_MIN_HEIGHT,
+    readCssVariable,
+    RIGHT_PANEL_MAX_WIDTH,
+    RIGHT_PANEL_MIN_WIDTH,
+    TERMINAL_PANEL_ANIMATION_MS,
+    type PreviewTerminalSessionItem,
+    type PreviewTerminalState,
+    type TerminalPanelPhase,
+    type PythonOutputEntry,
+    type PythonOutputSource
+} from './file-preview/modalShared'
 import type { PreviewFile, PreviewMediaItem, PreviewMeta, PreviewOpenOptions } from './file-preview/types'
 import PreviewBody from './file-preview/PreviewBody'
 import PreviewErrorBoundary from './file-preview/PreviewErrorBoundary'
@@ -35,159 +60,6 @@ interface FilePreviewModalProps extends PreviewMeta {
     mediaItems?: PreviewMediaItem[]
     onSaved?: (filePath: string) => Promise<void> | void
     onClose: () => void
-}
-
-type PendingIntent = 'close' | 'preview'
-type OutlineItem = { label: string; line: number; kind: 'function' | 'class' | 'heading' }
-type LocalDiffPreview = {
-    additions: number
-    deletions: number
-    markers: GitLineMarker[]
-}
-type PythonOutputSource = 'stdout' | 'stderr' | 'system'
-type PythonOutputEntry = {
-    id: number
-    source: PythonOutputSource
-    text: string
-    at: number
-}
-type PreviewTerminalSessionItem = DevScopePreviewTerminalSessionSummary & {
-    hasUnreadOutput?: boolean
-}
-type PreviewTerminalState = 'idle' | 'connecting' | 'active' | 'exited' | 'error'
-type TerminalPanelPhase = 'hidden' | 'entering' | 'visible' | 'exiting'
-
-const LEFT_PANEL_MIN_WIDTH = 260
-const LEFT_PANEL_MAX_WIDTH = 460
-const RIGHT_PANEL_MIN_WIDTH = 240
-const RIGHT_PANEL_MAX_WIDTH = 520
-const PYTHON_OUTPUT_MAX_CHARS = 200_000
-const PYTHON_OUTPUT_MIN_HEIGHT = 96
-const PREVIEW_TERMINAL_MIN_HEIGHT = 140
-const TERMINAL_PANEL_ANIMATION_MS = 220
-
-function countLines(value: string): number {
-    if (!value) return 0
-    return value.split(/\r?\n/).length
-}
-
-function createPythonPreviewSessionId(): string {
-    return `py-prev-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function createPreviewTerminalSessionId(): string {
-    return `preview-term-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function readCssVariable(name: string, fallback: string): string {
-    if (typeof window === 'undefined') return fallback
-    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-    return value || fallback
-}
-
-function formatRelativeActivity(timestamp: number): string {
-    const deltaMs = Math.max(0, Date.now() - timestamp)
-    const seconds = Math.floor(deltaMs / 1000)
-    if (seconds < 60) return `${seconds}s`
-    const minutes = Math.floor(seconds / 60)
-    if (minutes < 60) return `${minutes}m`
-    const hours = Math.floor(minutes / 60)
-    return `${hours}h`
-}
-
-function mapTerminalStatusToState(status?: string | null): PreviewTerminalState {
-    if (status === 'running') return 'active'
-    if (status === 'error') return 'error'
-    if (status === 'exited') return 'exited'
-    return 'idle'
-}
-
-function isEditableFileType(fileType: PreviewFile['type']): boolean {
-    return fileType === 'md'
-        || fileType === 'json'
-        || fileType === 'csv'
-        || fileType === 'code'
-        || fileType === 'text'
-        || fileType === 'html'
-}
-
-function extractOutlineItems(content: string, fileType: PreviewFile['type']): OutlineItem[] {
-    const lines = content.split(/\r?\n/)
-    const items: OutlineItem[] = []
-    const pushItem = (item: OutlineItem) => {
-        if (items.length >= 120) return
-        items.push(item)
-    }
-
-    for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index] || ''
-        const trimmed = line.trim()
-        if (!trimmed) continue
-
-        const headingMatch = /^(#{1,4})\s+(.+)$/.exec(trimmed)
-        if (headingMatch && (fileType === 'md' || fileType === 'text')) {
-            pushItem({ label: headingMatch[2].trim(), line: index + 1, kind: 'heading' })
-            continue
-        }
-
-        const classMatch = /^(?:export\s+)?(?:default\s+)?class\s+([A-Za-z0-9_$]+)/.exec(trimmed)
-        if (classMatch) {
-            pushItem({ label: classMatch[1], line: index + 1, kind: 'class' })
-            continue
-        }
-
-        const fnMatch = /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/.exec(trimmed)
-            || /^(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>/.exec(trimmed)
-            || /^([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{?$/.exec(trimmed)
-        if (fnMatch) {
-            pushItem({ label: fnMatch[1], line: index + 1, kind: 'function' })
-            continue
-        }
-    }
-
-    return items
-}
-
-function buildLocalDiffPreview(previousContent: string, nextContent: string): LocalDiffPreview {
-    const previousLines = previousContent.split(/\r?\n/)
-    const nextLines = nextContent.split(/\r?\n/)
-
-    let prefix = 0
-    const minLength = Math.min(previousLines.length, nextLines.length)
-    while (prefix < minLength && previousLines[prefix] === nextLines[prefix]) {
-        prefix += 1
-    }
-
-    let suffix = 0
-    while (
-        suffix < (previousLines.length - prefix)
-        && suffix < (nextLines.length - prefix)
-        && previousLines[previousLines.length - 1 - suffix] === nextLines[nextLines.length - 1 - suffix]
-    ) {
-        suffix += 1
-    }
-
-    const removedCount = Math.max(0, previousLines.length - prefix - suffix)
-    const addedCount = Math.max(0, nextLines.length - prefix - suffix)
-    const markers: GitLineMarker[] = []
-
-    if (addedCount > 0 && removedCount > 0) {
-        for (let index = 0; index < addedCount; index += 1) {
-            markers.push({ line: prefix + index + 1, type: 'modified' })
-        }
-    } else if (addedCount > 0) {
-        for (let index = 0; index < addedCount; index += 1) {
-            markers.push({ line: prefix + index + 1, type: 'added' })
-        }
-    } else if (removedCount > 0) {
-        markers.push({ line: Math.max(1, prefix + 1), type: 'deleted' })
-    }
-
-    return {
-        additions: addedCount,
-        deletions: removedCount,
-        markers
-    }
 }
 
 export function FilePreviewModal({

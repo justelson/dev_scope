@@ -48,7 +48,7 @@ export function ConfirmModal({
                 <button
                     type="button"
                     onClick={onCancel}
-                    className="rounded-lg border border-sparkle-border px-3 py-1.5 text-sm text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-sparkle-text-secondary transition-colors hover:border-white/20 hover:bg-white/[0.03] hover:text-sparkle-text"
                 >
                     {cancelLabel}
                 </button>
@@ -56,10 +56,10 @@ export function ConfirmModal({
                     type="button"
                     onClick={onConfirm}
                     className={cn(
-                        'rounded-lg border px-3 py-1.5 text-sm transition-colors shadow-sm',
-                        variant === 'danger' && 'border-red-500/40 bg-red-500/15 text-red-200 hover:bg-red-500/25',
-                        variant === 'warning' && 'border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25',
-                        variant === 'info' && 'border-sparkle-primary/40 bg-sparkle-primary/15 text-white/90 hover:bg-sparkle-primary/25'
+                        'rounded-lg border border-white/10 px-3 py-1.5 text-sm transition-colors shadow-sm hover:border-white/20',
+                        variant === 'danger' && 'bg-red-500/15 text-red-200 hover:bg-red-500/25',
+                        variant === 'warning' && 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25',
+                        variant === 'info' && 'bg-sparkle-primary/15 text-white/90 hover:bg-sparkle-primary/25'
                     )}
                 >
                     {confirmLabel}
@@ -77,10 +77,7 @@ export function ConfirmModal({
                 className={cn(
                     fullscreen
                         ? 'h-screen w-screen max-w-none rounded-none border-0 bg-sparkle-bg/98 p-0 shadow-none'
-                        : 'w-full max-w-md rounded-2xl border bg-sparkle-card p-6 shadow-2xl m-4',
-                    !fullscreen && variant === 'danger' && 'border-red-500/30',
-                    !fullscreen && variant === 'warning' && 'border-amber-500/30',
-                    !fullscreen && variant === 'info' && 'border-[var(--accent-primary)]/30'
+                        : 'w-full max-w-md rounded-2xl border border-white/10 bg-sparkle-card p-6 shadow-2xl m-4'
                 )}
                 onClick={(e) => e.stopPropagation()}
             >
@@ -88,10 +85,7 @@ export function ConfirmModal({
                     <div className="flex h-full w-full items-center justify-center p-6">
                         <div
                             className={cn(
-                                'w-full max-w-xl rounded-2xl border bg-sparkle-card p-6 shadow-2xl animate-modal-in',
-                                variant === 'danger' && 'border-red-500/30',
-                                variant === 'warning' && 'border-amber-500/30',
-                                variant === 'info' && 'border-sparkle-primary/30'
+                                'w-full max-w-xl rounded-2xl border border-white/10 bg-sparkle-card p-6 shadow-2xl animate-modal-in'
                             )}
                         >
                             {content}

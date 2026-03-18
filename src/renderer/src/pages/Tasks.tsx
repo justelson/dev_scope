@@ -8,113 +8,29 @@ import { useLocation } from 'react-router-dom'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import type { DevScopePreviewTerminalSessionSummary } from '@shared/contracts/devscope-api'
-
-type TaskLogEntry = {
-    at: number
-    level: 'info' | 'error'
-    message: string
-}
-
-type ActiveTask = {
-    id: string
-    type: string
-    title: string
-    status: 'running' | 'success' | 'failed'
-    projectPath?: string
-    startedAt: number
-    updatedAt: number
-    logs?: TaskLogEntry[]
-}
-
-type RunningApp = {
-    name: string
-    category: 'app' | 'background'
-    processCount: number
-    cpu: number
-    memoryMb: number
-}
-
-type MemoryUnit = 'mb' | 'gb'
-type RunningAppsSort = 'name' | 'processCount' | 'cpu' | 'memoryMb' | 'avgUsage'
-type RunningAppWithUsage = RunningApp & {
-    avgUsage: number
-    cpuUsageScore: number
-    memoryUsageScore: number
-}
-
-type DeviceStats = {
-    cpuModel: string
-    cpuCores: number
-    cpuThreads: number
-    cpuUsagePercent: number | null
-    memoryTotalGb: number
-    memoryUsedGb: number
-}
-type PreviewTerminalSessionGroup = {
-    groupKey: string
-    cwd: string
-    sessions: DevScopePreviewTerminalSessionSummary[]
-    lastActivityAt: number
-    latestStartedAt: number
-}
-
-const APPS_PAGE_SIZE = 10
-const RUNNING_APPS_FETCH_LIMIT = 2000
-const RUNNING_APPS_PREFS_KEY = 'devscope.tasks.runningApps.prefs.v1'
-const TASKS_TERMINAL_PANEL_ANIMATION_MS = 220
-
-type RunningAppsPreferences = {
-    appScope: 'all' | 'app' | 'background'
-    appsFilter: 'all' | 'highCpu' | 'highMemory' | 'multiInstance' | 'activeOnly'
-    sortBy: RunningAppsSort
-    sortDirection: 'asc' | 'desc'
-    memoryUnit: MemoryUnit
-}
-
-function formatRelativeShort(timestamp: number): string {
-    const deltaMs = Math.max(0, Date.now() - timestamp)
-    const seconds = Math.floor(deltaMs / 1000)
-    if (seconds < 60) return `${seconds}s ago`
-    const minutes = Math.floor(seconds / 60)
-    if (minutes < 60) return `${minutes}m ago`
-    const hours = Math.floor(minutes / 60)
-    return `${hours}h ago`
-}
-
-function formatMemoryLabel(memoryMb: number, unit: MemoryUnit): string {
-    if (unit === 'gb') return `${(memoryMb / 1024).toFixed(2)} GB`
-    return `${memoryMb.toFixed(1)} MB`
-}
-
-function formatDeviceMemoryLabel(memoryGb: number, unit: MemoryUnit): string {
-    if (unit === 'gb') return `${memoryGb.toFixed(1)} GB`
-    return `${(memoryGb * 1024).toFixed(0)} MB`
-}
-
-function formatTerminalShellLabel(shell: string): string {
-    return String(shell || 'terminal')
-        .replace(/\.exe$/i, '')
-        .replace(/^pwsh$/i, 'PowerShell')
-        .replace(/^powershell$/i, 'PowerShell')
-        .replace(/^cmd$/i, 'CMD')
-}
-
-function getTerminalPreviewLine(session: DevScopePreviewTerminalSessionSummary): string {
-    const previewLine = String(session.recentOutput || '')
-        .trim()
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .slice(-1)[0]
-
-    return previewLine || session.cwd
-}
-
-function readCssVariable(name: string, fallback: string): string {
-    if (typeof window === 'undefined') return fallback
-    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-    return value || fallback
-}
+import {
+    createPreviewTerminalSessionId,
+    formatDeviceMemoryLabel,
+    formatMemoryLabel,
+    formatRelativeShort,
+    formatTerminalShellLabel,
+    getTerminalPreviewLine,
+    readCssVariable
+} from './tasks/tasks-formatters'
+import {
+    APPS_PAGE_SIZE,
+    RUNNING_APPS_FETCH_LIMIT,
+    RUNNING_APPS_PREFS_KEY,
+    TASKS_TERMINAL_PANEL_ANIMATION_MS,
+    type ActiveTask,
+    type DeviceStats,
+    type MemoryUnit,
+    type PreviewTerminalSessionGroup,
+    type RunningApp,
+    type RunningAppsPreferences,
+    type RunningAppsSort,
+    type RunningAppWithUsage
+} from './tasks/tasks-types'
 
 function readRunningAppsPreferences(): Partial<RunningAppsPreferences> {
     try {
@@ -125,10 +41,6 @@ function readRunningAppsPreferences(): Partial<RunningAppsPreferences> {
     } catch {
         return {}
     }
-}
-
-function createPreviewTerminalSessionId(): string {
-    return `tasks-term-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 export default function Tasks() {

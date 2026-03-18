@@ -2,63 +2,23 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import {
     Calendar,
     Check,
-    Code,
     Copy,
-    File,
-    FileCode,
-    FileJson,
-    FileText,
-    Folder,
-    FolderOpen,
     GitCommitHorizontal,
-    Image,
     RefreshCw,
     User,
     X
 } from 'lucide-react'
+import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
+import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { extractFilePatch, scanPatchFileSummaries, type FileDiffSummary } from '@/lib/diffRendering'
 import type { GitCommit } from './types'
 import { DiffStats } from './DiffStats'
 import { FileDiffDetailModal } from './FileDiffDetailModal'
 
-function getFileIcon(name: string, isDirectory: boolean, isExpanded?: boolean) {
-    if (isDirectory) {
-        return isExpanded ? <FolderOpen size={16} className="text-blue-400" /> : <Folder size={16} className="text-blue-400" />
-    }
-
-    const ext = name.split('.').pop()?.toLowerCase()
-    switch (ext) {
-        case 'js':
-        case 'jsx':
-            return <FileCode size={16} className="text-yellow-400" />
-        case 'ts':
-        case 'tsx':
-            return <FileCode size={16} className="text-blue-400" />
-        case 'json':
-            return <FileJson size={16} className="text-yellow-500" />
-        case 'md':
-            return <FileText size={16} className="text-white/60" />
-        case 'html':
-        case 'htm':
-            return <Code size={16} className="text-orange-400" />
-        case 'css':
-        case 'scss':
-        case 'sass':
-            return <FileCode size={16} className="text-pink-400" />
-        case 'png':
-        case 'jpg':
-        case 'jpeg':
-        case 'gif':
-        case 'svg':
-        case 'webp':
-            return <Image size={16} className="text-purple-400" />
-        default:
-            return <File size={16} className="text-white/40" />
-    }
-}
-
 export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: GitCommit, diff: string, loading: boolean, onClose: () => void }) {
+    const { settings } = useSettings()
+    const iconTheme = settings?.theme === 'light' ? 'light' : 'dark'
     const FILES_PER_PAGE = 15
     const [showCommitInfo, setShowCommitInfo] = useState(false)
     const [copiedHash, setCopiedHash] = useState(false)
@@ -257,7 +217,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                     <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-black/20">
                         <div className="flex items-center gap-3 text-xs text-white/50">
                             <span className="flex items-center gap-1">
-                                <File size={12} />
+                                <VscodeEntryIcon pathValue="file" kind="file" theme={iconTheme} className="size-3 shrink-0" />
                                 {parsedDiff.length} {parsedDiff.length === 1 ? 'file' : 'files'} changed
                             </span>
                             <span className="text-green-400">
@@ -356,7 +316,12 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                                                 <div key={file.path} className="group rounded-xl border border-white/5 bg-black/30 p-3 transition-colors [content-visibility:auto] [contain-intrinsic-size:84px] hover:border-white/10">
                                                     <div className="flex items-center justify-between gap-3">
                                                         <div className="flex items-start gap-3 flex-1 min-w-0">
-                                                            {getFileIcon(file.path.split('/').pop() || '', false)}
+                                                            <VscodeEntryIcon
+                                                                pathValue={file.path}
+                                                                kind="file"
+                                                                theme={iconTheme}
+                                                                className="size-4 shrink-0"
+                                                            />
                                                             <div className="min-w-0">
                                                                 <p className="text-sm font-mono text-white/80 truncate">{file.path}</p>
                                                                 {file.previousPath && (
@@ -394,7 +359,7 @@ export function CommitDiffModal({ commit, diff, loading, onClose }: { commit: Gi
                                 </>
                             ) : (
                                 <div className="flex flex-col items-center justify-center py-16 text-white/30">
-                                    <FileText size={48} className="mb-4 opacity-20" />
+                                    <VscodeEntryIcon pathValue="file" kind="file" theme={iconTheme} className="size-12 mb-4 opacity-50" />
                                     <p className="text-sm">No changes to display</p>
                                 </div>
                             )}

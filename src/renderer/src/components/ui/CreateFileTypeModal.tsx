@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Code2, FileCode, FileJson, FileText, Globe, Hash, NotebookPen, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
+import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
+import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 
 export interface FileTypePreset {
@@ -8,39 +10,38 @@ export interface FileTypePreset {
     label: string
     extension: string
     description: string
-    icon: React.ReactNode
 }
 
 const FILE_TYPE_PRESETS: FileTypePreset[] = [
-    { id: 'markdown', label: 'Markdown', extension: 'md', description: 'Notes and docs', icon: <NotebookPen size={14} /> },
-    { id: 'json', label: 'JSON', extension: 'json', description: 'Structured data', icon: <FileJson size={14} /> },
-    { id: 'typescript', label: 'TypeScript', extension: 'ts', description: 'Typed JS source', icon: <Code2 size={14} /> },
-    { id: 'javascript', label: 'JavaScript', extension: 'js', description: 'JS source file', icon: <FileCode size={14} /> },
-    { id: 'tsx', label: 'TSX', extension: 'tsx', description: 'React TypeScript component', icon: <Code2 size={14} /> },
-    { id: 'jsx', label: 'JSX', extension: 'jsx', description: 'React JavaScript component', icon: <FileCode size={14} /> },
-    { id: 'python', label: 'Python', extension: 'py', description: 'Python source', icon: <FileCode size={14} /> },
-    { id: 'java', label: 'Java', extension: 'java', description: 'Java source', icon: <FileCode size={14} /> },
-    { id: 'csharp', label: 'C#', extension: 'cs', description: '.NET source', icon: <FileCode size={14} /> },
-    { id: 'go', label: 'Go', extension: 'go', description: 'Go source', icon: <FileCode size={14} /> },
-    { id: 'rust', label: 'Rust', extension: 'rs', description: 'Rust source', icon: <FileCode size={14} /> },
-    { id: 'php', label: 'PHP', extension: 'php', description: 'PHP source', icon: <FileCode size={14} /> },
-    { id: 'ruby', label: 'Ruby', extension: 'rb', description: 'Ruby source', icon: <FileCode size={14} /> },
-    { id: 'sql', label: 'SQL', extension: 'sql', description: 'Database query file', icon: <Hash size={14} /> },
-    { id: 'shell', label: 'Shell Script', extension: 'sh', description: 'Shell script', icon: <FileCode size={14} /> },
-    { id: 'powershell', label: 'PowerShell', extension: 'ps1', description: 'PowerShell script', icon: <FileCode size={14} /> },
-    { id: 'text', label: 'Text', extension: 'txt', description: 'Plain text', icon: <FileText size={14} /> },
-    { id: 'log', label: 'Log', extension: 'log', description: 'Log file', icon: <FileText size={14} /> },
-    { id: 'yaml', label: 'YAML', extension: 'yml', description: 'Config and manifests', icon: <Hash size={14} /> },
-    { id: 'toml', label: 'TOML', extension: 'toml', description: 'Configuration file', icon: <Hash size={14} /> },
-    { id: 'ini', label: 'INI', extension: 'ini', description: 'INI config file', icon: <Hash size={14} /> },
-    { id: 'xml', label: 'XML', extension: 'xml', description: 'Structured markup', icon: <Hash size={14} /> },
-    { id: 'csv', label: 'CSV', extension: 'csv', description: 'Spreadsheet data', icon: <Hash size={14} /> },
-    { id: 'env', label: 'ENV', extension: 'env', description: 'Environment variables', icon: <Hash size={14} /> },
-    { id: 'gitignore', label: 'Git Ignore', extension: 'gitignore', description: 'Git ignore rules', icon: <Hash size={14} /> },
-    { id: 'dockerfile', label: 'Dockerfile', extension: 'dockerfile', description: 'Container build file', icon: <Hash size={14} /> },
-    { id: 'css', label: 'CSS', extension: 'css', description: 'Stylesheet', icon: <Globe size={14} /> },
-    { id: 'scss', label: 'SCSS', extension: 'scss', description: 'Sass stylesheet', icon: <Globe size={14} /> },
-    { id: 'html', label: 'HTML', extension: 'html', description: 'Web document', icon: <Globe size={14} /> }
+    { id: 'markdown', label: 'Markdown', extension: 'md', description: 'Notes and docs' },
+    { id: 'json', label: 'JSON', extension: 'json', description: 'Structured data' },
+    { id: 'typescript', label: 'TypeScript', extension: 'ts', description: 'Typed JS source' },
+    { id: 'javascript', label: 'JavaScript', extension: 'js', description: 'JS source file' },
+    { id: 'tsx', label: 'TSX', extension: 'tsx', description: 'React TypeScript component' },
+    { id: 'jsx', label: 'JSX', extension: 'jsx', description: 'React JavaScript component' },
+    { id: 'python', label: 'Python', extension: 'py', description: 'Python source' },
+    { id: 'java', label: 'Java', extension: 'java', description: 'Java source' },
+    { id: 'csharp', label: 'C#', extension: 'cs', description: '.NET source' },
+    { id: 'go', label: 'Go', extension: 'go', description: 'Go source' },
+    { id: 'rust', label: 'Rust', extension: 'rs', description: 'Rust source' },
+    { id: 'php', label: 'PHP', extension: 'php', description: 'PHP source' },
+    { id: 'ruby', label: 'Ruby', extension: 'rb', description: 'Ruby source' },
+    { id: 'sql', label: 'SQL', extension: 'sql', description: 'Database query file' },
+    { id: 'shell', label: 'Shell Script', extension: 'sh', description: 'Shell script' },
+    { id: 'powershell', label: 'PowerShell', extension: 'ps1', description: 'PowerShell script' },
+    { id: 'text', label: 'Text', extension: 'txt', description: 'Plain text' },
+    { id: 'log', label: 'Log', extension: 'log', description: 'Log file' },
+    { id: 'yaml', label: 'YAML', extension: 'yml', description: 'Config and manifests' },
+    { id: 'toml', label: 'TOML', extension: 'toml', description: 'Configuration file' },
+    { id: 'ini', label: 'INI', extension: 'ini', description: 'INI config file' },
+    { id: 'xml', label: 'XML', extension: 'xml', description: 'Structured markup' },
+    { id: 'csv', label: 'CSV', extension: 'csv', description: 'Spreadsheet data' },
+    { id: 'env', label: 'ENV', extension: 'env', description: 'Environment variables' },
+    { id: 'gitignore', label: 'Git Ignore', extension: 'gitignore', description: 'Git ignore rules' },
+    { id: 'dockerfile', label: 'Dockerfile', extension: 'dockerfile', description: 'Container build file' },
+    { id: 'css', label: 'CSS', extension: 'css', description: 'Stylesheet' },
+    { id: 'scss', label: 'SCSS', extension: 'scss', description: 'Sass stylesheet' },
+    { id: 'html', label: 'HTML', extension: 'html', description: 'Web document' }
 ]
 
 interface CreateFileTypeModalProps {
@@ -80,6 +81,13 @@ export function CreateFileTypeModal({
     onCreate,
     onCancel
 }: CreateFileTypeModalProps) {
+    const { settings } = useSettings()
+    const iconTheme = settings.theme === 'light' ? 'light' : 'dark'
+    const iconPathOverrides: Record<string, string> = {
+        env: '.env',
+        gitignore: '.gitignore',
+        dockerfile: 'Dockerfile'
+    }
     const normalizedInitialExtension = String(initialExtension || '').trim().replace(/^\./, '').toLowerCase()
     const initialPreset = useMemo(
         () => FILE_TYPE_PRESETS.find((preset) => preset.extension === normalizedInitialExtension),
@@ -132,6 +140,14 @@ export function CreateFileTypeModal({
         ? (hasExplicitExt ? normalizedBaseName : `${normalizedBaseName}.${finalExtension}`)
         : ''
     const canCreate = normalizedBaseName.length > 0
+    const renderPresetIcon = (extension: string) => (
+        <VscodeEntryIcon
+            pathValue={iconPathOverrides[extension] ?? `file.${extension || 'txt'}`}
+            kind="file"
+            theme={iconTheme}
+            className="size-4 shrink-0"
+        />
+    )
 
     if (!isOpen || typeof document === 'undefined') return null
 
@@ -188,7 +204,7 @@ export function CreateFileTypeModal({
                                         )}
                                     >
                                         <div className="flex items-center gap-2 text-sm font-medium">
-                                            {preset.icon}
+                                            {renderPresetIcon(preset.extension)}
                                             {preset.label}
                                             <span className="text-[10px] text-white/45">.{preset.extension}</span>
                                         </div>

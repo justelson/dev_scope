@@ -33,7 +33,8 @@ export const VscodeEntryIcon = memo(function VscodeEntryIcon({
             alt=""
             aria-hidden="true"
             className={cn('size-4 shrink-0', className)}
-            loading="lazy"
+            loading="eager"
+            decoding="async"
             onError={() => setFailedIconUrl(iconUrl)}
         />
     )

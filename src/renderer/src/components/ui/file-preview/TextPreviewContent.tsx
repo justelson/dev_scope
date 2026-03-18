@@ -148,11 +148,13 @@ function TextPreviewContent({
             )}
 
             {file.type === 'csv' && (
-                <CsvPreviewTable
-                    content={content}
-                    language={file.language}
-                    useDistinctColumnColors={csvDistinctColorsEnabled}
-                />
+                <div className="w-full h-full min-h-0 flex-1">
+                    <CsvPreviewTable
+                        content={content}
+                        language={file.language}
+                        useDistinctColumnColors={csvDistinctColorsEnabled}
+                    />
+                </div>
             )}
 
             {file.type === 'code' && (

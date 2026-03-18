@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { MAX_CSV_ROWS } from './constants'
 import { detectCsvDelimiter, extractColorValues, parseDelimitedContent } from './utils'
@@ -85,33 +85,83 @@ function ColorChips({ value, idPrefix }: { value: string; idPrefix: string }) {
 }
 
 export default function CsvPreviewTable({ content, language, useDistinctColumnColors }: CsvPreviewTableProps) {
-    const csvPreview = useMemo(() => {
-        const delimiter = language === 'tsv' ? '\t' : detectCsvDelimiter(content)
-        const rows = parseDelimitedContent(content, delimiter).filter(row => row.some(cell => cell.trim().length > 0))
+    const [page, setPage] = useState(1)
+    const [isRendering, setIsRendering] = useState(true)
+    const [csvPreview, setCsvPreview] = useState<{ header: string[]; body: string[][]; totalRows: number }>({
+        header: [],
+        body: [],
+        totalRows: 0
+    })
 
-        if (rows.length === 0) {
-            return { header: [] as string[], body: [] as string[][], totalRows: 0, truncated: false }
-        }
+    useEffect(() => {
+        let cancelled = false
+        setIsRendering(true)
 
-        const header = rows[0]
-        const bodyRows = rows.slice(1)
-        const truncated = bodyRows.length > MAX_CSV_ROWS
+        const timeoutId = window.setTimeout(() => {
+            if (cancelled) return
+            const delimiter = language === 'tsv' ? '\t' : detectCsvDelimiter(content)
+            const rows = parseDelimitedContent(content, delimiter).filter(row => row.some(cell => cell.trim().length > 0))
 
-        return {
-            header,
-            body: truncated ? bodyRows.slice(0, MAX_CSV_ROWS) : bodyRows,
-            totalRows: bodyRows.length,
-            truncated
+            if (rows.length === 0) {
+                setCsvPreview({ header: [], body: [], totalRows: 0 })
+                setIsRendering(false)
+                return
+            }
+
+            const header = rows[0]
+            const bodyRows = rows.slice(1)
+
+            setCsvPreview({
+                header,
+                body: bodyRows,
+                totalRows: bodyRows.length
+            })
+            setIsRendering(false)
+        }, 0)
+
+        return () => {
+            cancelled = true
+            window.clearTimeout(timeoutId)
         }
     }, [content, language])
 
+    useEffect(() => {
+        setPage(1)
+    }, [content, language])
+
+    const totalPages = Math.max(1, Math.ceil(csvPreview.totalRows / MAX_CSV_ROWS))
+    const activePage = Math.min(page, totalPages)
+
+    useEffect(() => {
+        setPage((current) => Math.min(current, totalPages))
+    }, [totalPages])
+
+    const pageStartIndex = (activePage - 1) * MAX_CSV_ROWS
+    const pageEndIndex = Math.min(pageStartIndex + MAX_CSV_ROWS, csvPreview.totalRows)
+    const pageRows = csvPreview.body.slice(pageStartIndex, pageEndIndex)
+    const pageStartLabel = csvPreview.totalRows === 0 ? 0 : pageStartIndex + 1
+    const pageEndLabel = csvPreview.totalRows === 0 ? 0 : pageEndIndex
+    const shouldSimplifyCellRendering = csvPreview.totalRows > 200 || csvPreview.header.length > 30
+    const useColumnColors = useDistinctColumnColors && !shouldSimplifyCellRendering
+    const showColorChips = useColumnColors
+    const columnThemes = useMemo(
+        () => csvPreview.header.map((_, index) => (useColumnColors ? getColumnTheme(index) : null)),
+        [csvPreview.header, useColumnColors]
+    )
+
     return (
-        <div className="w-full max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden">
+        <div className="w-full h-full min-h-0 bg-sparkle-card rounded-xl border border-white/5 overflow-hidden flex flex-col">
             <div className="px-4 py-2.5 border-b border-white/5 text-xs text-white/50 bg-black/20">
-                {csvPreview.totalRows} rows {csvPreview.truncated ? `(showing first ${MAX_CSV_ROWS})` : ''}
+                {isRendering
+                    ? 'Rendering CSV preview...'
+                    : `${csvPreview.totalRows} rows ${csvPreview.totalRows > 0 ? `(showing ${pageStartLabel}-${pageEndLabel})` : ''}`}
             </div>
-            {csvPreview.header.length > 0 ? (
-                <div className="overflow-auto max-h-[70vh] custom-scrollbar">
+            {isRendering ? (
+                <div className="flex flex-1 items-center justify-center text-xs text-white/50">
+                    Rendering CSV preview...
+                </div>
+            ) : csvPreview.header.length > 0 ? (
+                <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
                     <table className="w-full border-collapse text-sm">
                         <thead className="sticky top-0 bg-black/40 backdrop-blur-md">
                             <tr>
@@ -120,13 +170,13 @@ export default function CsvPreviewTable({ content, language, useDistinctColumnCo
                                         key={`csv-header-${index}`}
                                         className={cn(
                                             'px-3 py-2 text-left border-b border-r last:border-r-0 font-medium',
-                                            useDistinctColumnColors ? 'text-white/90' : 'text-white/80 border-white/10 border-r-white/5'
+                                            useColumnColors ? 'text-white/90' : 'text-white/80 border-white/10 border-r-white/5'
                                         )}
-                                        style={useDistinctColumnColors ? {
-                                            backgroundColor: getColumnTheme(index).headerBackground,
-                                            color: getColumnTheme(index).headerText,
-                                            borderBottomColor: getColumnTheme(index).borderColor,
-                                            borderRightColor: getColumnTheme(index).borderColor
+                                        style={useColumnColors && columnThemes[index] ? {
+                                            backgroundColor: columnThemes[index]?.headerBackground,
+                                            color: columnThemes[index]?.headerText,
+                                            borderBottomColor: columnThemes[index]?.borderColor,
+                                            borderRightColor: columnThemes[index]?.borderColor
                                         } : undefined}
                                     >
                                         {column || `Column ${index + 1}`}
@@ -135,25 +185,25 @@ export default function CsvPreviewTable({ content, language, useDistinctColumnCo
                             </tr>
                         </thead>
                         <tbody>
-                            {csvPreview.body.map((row, rowIndex) => (
+                            {pageRows.map((row, rowIndex) => (
                                 <tr
-                                    key={`csv-row-${rowIndex}`}
+                                    key={`csv-row-${pageStartIndex + rowIndex}`}
                                     className={cn(
-                                        useDistinctColumnColors
+                                        useColumnColors
                                             ? 'hover:bg-white/[0.03]'
                                             : 'odd:bg-white/[0.02] hover:bg-white/[0.04]'
                                     )}
                                 >
                                     {csvPreview.header.map((_, colIndex) => {
                                         const cellValue = row[colIndex] || ''
-                                        const columnTheme = useDistinctColumnColors ? getColumnTheme(colIndex) : null
+                                        const columnTheme = columnThemes[colIndex]
                                         return (
                                             <td
-                                                key={`csv-cell-${rowIndex}-${colIndex}`}
-                                                className={cn(
-                                                    'px-3 py-2 border-b border-r last:border-r-0 align-top',
-                                                    useDistinctColumnColors ? 'text-white/85' : 'text-white/70 border-white/5 border-r-white/5'
-                                                )}
+                                            key={`csv-cell-${pageStartIndex + rowIndex}-${colIndex}`}
+                                            className={cn(
+                                                'px-3 py-2 border-b border-r last:border-r-0 align-top',
+                                                useColumnColors ? 'text-white/85' : 'text-white/70 border-white/5 border-r-white/5'
+                                            )}
                                                 style={columnTheme ? {
                                                     backgroundColor: columnTheme.cellBackground,
                                                     color: columnTheme.cellText,
@@ -163,7 +213,9 @@ export default function CsvPreviewTable({ content, language, useDistinctColumnCo
                                             >
                                                 <span className="inline-flex items-center">
                                                     <span>{cellValue}</span>
-                                                    <ColorChips value={cellValue} idPrefix={`csv-${rowIndex}-${colIndex}`} />
+                                                    {showColorChips ? (
+                                                        <ColorChips value={cellValue} idPrefix={`csv-${rowIndex}-${colIndex}`} />
+                                                    ) : null}
                                                 </span>
                                             </td>
                                         )
@@ -175,6 +227,37 @@ export default function CsvPreviewTable({ content, language, useDistinctColumnCo
                 </div>
             ) : (
                 <div className="p-5 text-sm text-white/60">No tabular data found in this CSV file.</div>
+            )}
+            {csvPreview.header.length > 0 && totalPages > 1 && (
+                <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-white/5 text-xs text-white/50 bg-black/20">
+                    <span>
+                        Page {activePage} of {totalPages}
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setPage((current) => Math.max(1, current - 1))}
+                            disabled={activePage <= 1}
+                            className={cn(
+                                'rounded-md border border-white/5 px-2 py-1 text-[11px] transition-colors',
+                                activePage <= 1 ? 'text-white/20' : 'text-white/60 hover:border-white/10 hover:text-white'
+                            )}
+                        >
+                            Prev
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                            disabled={activePage >= totalPages}
+                            className={cn(
+                                'rounded-md border border-white/5 px-2 py-1 text-[11px] transition-colors',
+                                activePage >= totalPages ? 'text-white/20' : 'text-white/60 hover:border-white/10 hover:text-white'
+                            )}
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     )

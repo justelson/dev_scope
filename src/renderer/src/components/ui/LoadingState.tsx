@@ -51,6 +51,22 @@ function LoadingCard({
                 cardClassName
             )}
         >
+            <LoadingContent message={message} detail={detail} elapsed={elapsed} />
+        </div>
+    )
+}
+
+function LoadingContent({
+    message,
+    detail,
+    elapsed
+}: {
+    message: string
+    detail?: string
+    elapsed: number
+}) {
+    return (
+        <>
             <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
                 <div className="absolute inset-0 rounded-2xl bg-[var(--accent-primary)]/10 blur-md" />
                 <div className="relative inline-block h-8 w-8 animate-spin rounded-full border-[3px] border-current border-t-transparent text-[var(--accent-primary)]" />
@@ -65,7 +81,7 @@ function LoadingCard({
                     Elapsed {formatTime(elapsed)}
                 </div>
             </div>
-        </div>
+        </>
     )
 }
 

@@ -1,6 +1,8 @@
-import { Check, ChevronDown, Code, Copy, Edit3, Expand, ExternalLink, Eye, FileJson, FileText, FileType, Film, Image as ImageIcon, Minimize, Music4, PanelLeft, PanelRight, Play, Save, Square, Table, Terminal, Trash2, Undo2, X } from 'lucide-react'
+import { Check, ChevronDown, Code, Copy, Edit3, Expand, ExternalLink, Eye, Minimize, PanelLeft, PanelRight, Play, Save, Square, Terminal, Trash2, Undo2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
+import { useSettings } from '@/lib/settings'
 import type { GitDiffSummary } from './gitDiff'
 import type { PreviewFile } from './types'
 import { VIEWPORT_PRESETS, type ViewportPreset } from './viewport'
@@ -46,18 +48,6 @@ interface PreviewModalHeaderProps {
     canUseTerminal?: boolean
     terminalVisible?: boolean
     onToggleTerminal?: () => void
-}
-
-function PreviewFileIcon({ type }: { type: PreviewFile['type'] }) {
-    if (type === 'md') return <FileText size={18} className="text-blue-400 shrink-0" />
-    if (type === 'html') return <Code size={18} className="text-orange-400 shrink-0" />
-    if (type === 'json') return <FileJson size={18} className="text-yellow-300 shrink-0" />
-    if (type === 'csv') return <Table size={18} className="text-emerald-300 shrink-0" />
-    if (type === 'code') return <Code size={18} className="text-cyan-300 shrink-0" />
-    if (type === 'image') return <ImageIcon size={18} className="text-purple-400 shrink-0" />
-    if (type === 'video') return <Film size={18} className="text-red-400 shrink-0" />
-    if (type === 'audio') return <Music4 size={18} className="text-sky-300 shrink-0" />
-    return <FileType size={18} className="text-gray-400 shrink-0" />
 }
 
 function formatPreviewFileName(name: string, maxLength: number): string {
@@ -118,6 +108,8 @@ export default function PreviewModalHeader({
     terminalVisible = false,
     onToggleTerminal
 }: PreviewModalHeaderProps) {
+    const { settings } = useSettings()
+    const iconTheme = settings.theme === 'light' ? 'light' : 'dark'
     const isHtml = file.type === 'html'
     const isCsv = file.type === 'csv'
     const isMediaFile = file.type === 'image' || file.type === 'video' || file.type === 'audio'
@@ -229,7 +221,12 @@ export default function PreviewModalHeader({
             )}
         >
             <div className={cn('flex items-center gap-3 min-w-0', isCompactHeader ? 'flex-1 flex-wrap w-full' : '', isUltraCompactHtmlHeader ? 'w-full' : '')}>
-                <PreviewFileIcon type={file.type} />
+                <VscodeEntryIcon
+                    pathValue={file.path || file.name}
+                    kind="file"
+                    theme={iconTheme}
+                    className="size-[18px] shrink-0"
+                />
                 <div className="min-w-0 flex items-center gap-2">
                     <h3 className="text-sm font-semibold text-white" title={file.name}>
                         {visibleFileName}
