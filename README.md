@@ -1,69 +1,213 @@
-# DevScope Air
+<div align="center">
+  <pre>
+██████╗ ███████╗██╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗
+██╔══██╗██╔════╝██║   ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
+██║  ██║█████╗  ██║   ██║███████╗██║     ██║   ██║██████╔╝█████╗  
+██║  ██║██╔══╝  ╚██╗ ██╔╝╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  
+██████╔╝███████╗ ╚████╔╝ ███████║╚██████╗╚██████╔╝██║     ███████╗
+╚═════╝ ╚══════╝  ╚═══╝  ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝
+  </pre>
+</div>
 
-DevScope Air is the primary Windows desktop app in this repository. It combines project discovery, project details, Git workflows, assistant sessions, file preview tooling, system/task visibility, and desktop update flows in a single Electron app.
+<h1 align="center">DevScope Air</h1>
 
-The repository root is the desktop release target. [`apps/landing/devscope-web`](C:\Users\elson\my_coding_play\devscope\apps\landing\devscope-web\README.md) is the separate landing site, not the desktop runtime.
+<p align="center">
+  <strong>Projects-First Developer Workspace for Windows</strong>
+</p>
 
-## Current Product Surface
+<p align="center">
+  <a href="https://github.com/justelson/dev_scope">
+    <img src="https://img.shields.io/badge/Repo-dev__scope-181717?style=for-the-badge&logo=github" alt="Repository">
+  </a>
+  <img src="https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge&logo=windows" alt="Windows Support">
+  <img src="https://img.shields.io/github/v/release/justelson/dev_scope?include_prereleases&display_name=tag&style=for-the-badge&color=7c3aed" alt="Latest Release">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
+</p>
 
-- Projects: scan local roots, browse folders, inspect project details, and jump into installed IDEs.
-- Files: read file trees, preview text/media/image content, and support targeted preview-terminal and Python preview workflows.
-- Git: status, history, sync state, branches, remotes, tags, stashes, staging, commit, push/pull, and repo setup flows.
-- Assistant: session-based assistant UI with model listing, approvals, user-input responses, project association, and event streaming.
-- Desktop ops: system overview, readiness/tooling data, task views, app settings, and release updater flows.
+<p align="center">
+  <img src="https://img.shields.io/badge/Electron-Desktop-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=111827" alt="React 19">
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5">
+  <img src="https://img.shields.io/badge/Tailwind-CSS-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
+  <img src="https://img.shields.io/badge/Git-Workflows-F05032?style=flat-square&logo=git&logoColor=white" alt="Git Workflows">
+</p>
 
-## Repo Layout
+---
 
-- [`src/main`](C:\Users\elson\my_coding_play\devscope\src\main): Electron main process, IPC handlers, assistant service, project/git integrations, update orchestration.
-- [`src/preload`](C:\Users\elson\my_coding_play\devscope\src\preload): narrow renderer bridge adapters exposed through `window.devscope`.
-- [`src/renderer/src`](C:\Users\elson\my_coding_play\devscope\src\renderer\src): React app shell, pages, layouts, and in-app UI.
-- [`src/shared`](C:\Users\elson\my_coding_play\devscope\src\shared): cross-process contracts and reusable shared logic.
-- [`docs`](C:\Users\elson\my_coding_play\devscope\docs\README.md): current documentation, platform planning docs, and archived legacy summary.
-- [`archive`](C:\Users\elson\my_coding_play\devscope\archive): old code retained for reference, not current runtime.
+## Overview
 
-## Development
+> **Primary Desktop App**
+> This repository root is the active Windows desktop codebase for DevScope Air.
+> The older `devscope-win` implementation is not the active app and older work remains only in git history or archive folders.
 
-Prerequisites:
+DevScope Air is the main Windows Electron app in this repository. It is built around local project discovery, project browsing, file preview, Git workflows, app settings, and release update flows from one desktop surface.
 
-- Node.js 18+
-- npm 9+
-- Windows 10/11 as the primary runtime target
+The current package is [`devscope-air-win`](./package.json).
+Current package version:
+![Package Version](https://img.shields.io/github/package-json/v/justelson/dev_scope?filename=package.json&style=flat-square&color=7c3aed)
 
-Desktop app commands:
+## Key Features
+
+| Feature | Description |
+| :--- | :--- |
+| **Project Discovery** | Scan a main projects root plus additional folders and index projects across multiple local locations. |
+| **Project Browsing** | Browse folders, inspect project details, and preview files without leaving the app shell. |
+| **Git Productivity** | View status, diffs, history, branches, remotes, stashes, tags, commits, push state, and repository setup actions. |
+| **AI Commit Assistant** | Generate commit messages through Groq or Google Gemini from the app's Git-oriented flows. |
+| **Desktop Updates** | Check, download, and install release updates through the built-in updater flow. |
+| **Settings Surface** | Configure appearance, behavior, projects, AI, terminal preferences, logs, and app metadata. |
+
+## Capability Map
+
+```mermaid
+graph TD
+    A[DevScope Air] --> B[Project Discovery]
+    A --> C[Project Browse and Preview]
+    A --> D[Git Workflows]
+    A --> E[AI Commit Generation]
+    A --> F[Desktop Updates]
+    A --> G[Settings]
+
+    B --> B1[Main Projects Folder]
+    B --> B2[Additional Folders]
+    B --> B3[Folder Indexing]
+
+    D --> D1[Status and Diffs]
+    D --> D2[Commit and Push]
+    D --> D3[Branches Remotes Tags Stashes]
+
+    E --> E1[Groq]
+    E --> E2[Google Gemini]
+```
+
+## Air Build Notes
+
+DevScope Air intentionally keeps some capability surfaces disabled in this build:
+
+- **AI Runtime Status** is disabled in Air.
+- **AgentScope session tooling** is disabled in Air.
+- The app still contains a broad shared tool registry, but not every historical surface is exposed in the current Air UI.
+
+## Technology Stack
+
+DevScope Air is built with a Windows-first desktop stack:
+
+- **Desktop Shell**: [Electron](https://www.electronjs.org/) with [`electron-vite`](https://electron-vite.org/)
+- **Frontend**: [React](https://react.dev/) 19 + [TypeScript](https://www.typescriptlang.org/) + [Tailwind CSS](https://tailwindcss.com/)
+- **Renderer Routing**: [React Router](https://reactrouter.com/)
+- **Editor/Preview Tooling**: Monaco-based file preview support
+- **AI Integration**: Groq and Google Gemini for commit message generation
+- **Desktop Packaging**: `electron-builder`
+
+## Getting Started
+
+### Prerequisites
+
+- **Node.js**: v18 or higher
+- **npm**: v9 or higher
+- **Windows 10/11**: primary supported target
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/justelson/dev_scope.git
+   cd devscope
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+### Running in Development
 
 ```bash
-npm install
 npm run dev
+```
+
+### Type Checking
+
+```bash
 npm run typecheck
 ```
 
-Additional packaging commands:
+### Building for Production
 
 ```bash
 npm run build
-npm run build:win
-npm run build:unpack
-npm run dist:organize
 ```
 
-Release outputs are organized under:
+### Packaging for Windows
 
-- `dist/releases/v<package-version>/`
-- `dist/unpacked/v<package-version>/`
+```bash
+npm run build:win
+```
 
-## Documentation
+Packaged installers and update metadata are written to `dist/releases/v<package-version>/`.
+Unpacked desktop bundles are written to `dist/unpacked/v<package-version>/win-unpacked/`.
+Use `npm run dist:organize` to move older flat `dist` artifacts into that versioned layout.
 
-Start with:
+## Project Structure
 
-- [`docs/README.md`](C:\Users\elson\my_coding_play\devscope\docs\README.md)
-- [`docs/current/README.md`](C:\Users\elson\my_coding_play\devscope\docs\current\README.md)
-- [`docs/current/CURRENT_CODEBASE_ARCHITECTURE.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CODEBASE_ARCHITECTURE.md)
-- [`docs/current/CURRENT_CAPABILITIES_MATRIX.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CAPABILITIES_MATRIX.md)
+```mermaid
+graph TD
+    A[Electron Main] --> B[IPC Handlers]
+    A --> C[Update Manager]
+    A --> D[Git and Project Integrations]
+    B --> E[Preload Adapters]
+    E --> F[Renderer Process]
+    F --> G[React Pages and UI]
+    G --> H[Projects]
+    G --> I[Settings]
+    G --> J[Tasks]
+    D --> K[Project Discovery]
+    D --> L[Git Operations]
+    F --> M[Shared Contracts]
+```
 
-Platform-planning docs for CLI, IDE extension, and alternate clients live in [`docs/platform`](C:\Users\elson\my_coding_play\devscope\docs\platform\README.md).
+## Repository Areas
 
-## Notes
+- [`src/main`](./src/main): Electron main process, IPC registration, update logic, Git and project handlers.
+- [`src/preload`](./src/preload): renderer bridge adapters and disabled-feature adapters.
+- [`src/renderer/src`](./src/renderer/src): React app shell, pages, layouts, and UI components.
+- [`src/shared`](./src/shared): contracts, shared metrics, and tool-registry definitions.
+- [`apps/landing/devscope-web`](./apps/landing/devscope-web): separate landing-site package.
 
-- The in-repo assistant is active in the current desktop app and should be documented as part of the live surface.
-- Historical docs are archived into a zip and summary under `docs/archive/` and are no longer source-of-truth.
-- Legacy implementations may still exist under `archive/`, but active work targets the desktop app at repository root.
+## Contributing
+
+Contributions are welcome, especially around project workflows, Git UX, desktop polish, and Windows-focused developer tooling.
+
+1. Fork the project
+2. Create your branch: `git checkout -b feature/your-change`
+3. Commit your changes
+4. Push the branch
+5. Open a pull request
+
+## Acknowledgements
+
+- DevScope repository: [justelson/dev_scope](https://github.com/justelson/dev_scope)
+- Sparkle design origin: [thedogecraft/sparkle](https://github.com/thedogecraft/sparkle)
+
+The Sparkle-inspired visual direction used in this repository was originally derived from that Sparkle project, then adapted to DevScope's own product structure and behaviors.
+
+## License
+
+Distributed under the MIT License. See [`package.json`](./package.json) for the current package metadata.
+
+## Repository Notes
+
+- The repository root is the primary desktop app and release target.
+- The landing package has its own README at [`apps/landing/devscope-web/README.md`](./apps/landing/devscope-web/README.md).
+- Historical legacy work remains accessible through git history and archive folders.
+
+---
+
+<p align="center">
+  Built for Windows developers who want project context and Git workflow in one place.
+</p>
+
+---
+<div align="center">
+  # Devs don't use light mode.
+<div>
