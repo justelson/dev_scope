@@ -26,7 +26,7 @@ export function createAssistantAdapter() {
             listModels: (forceRefresh = false) => ipcRenderer.invoke(ASSISTANT_IPC.listModels, forceRefresh),
             connect: (options?: AssistantConnectOptions) => ipcRenderer.invoke(ASSISTANT_IPC.connect, options),
             disconnect: (sessionId?: string) => ipcRenderer.invoke(ASSISTANT_IPC.disconnect, sessionId),
-            createSession: (title?: string) => ipcRenderer.invoke(ASSISTANT_IPC.createSession, title),
+            createSession: (title?: string, projectPath?: string) => ipcRenderer.invoke(ASSISTANT_IPC.createSession, title, projectPath),
             selectSession: (sessionId: string) => ipcRenderer.invoke(ASSISTANT_IPC.selectSession, sessionId),
             renameSession: (sessionId: string, title: string) => ipcRenderer.invoke(ASSISTANT_IPC.renameSession, sessionId, title),
             archiveSession: (sessionId: string, archived = true) => ipcRenderer.invoke(ASSISTANT_IPC.archiveSession, sessionId, archived),
