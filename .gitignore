@@ -43,3 +43,6 @@ docs/current/FILE_TREE_SNAPSHOT.txt
 docs/current/temp/
 test-api.js
 GEMINI.md
+
+# Local root archives
+archive/
