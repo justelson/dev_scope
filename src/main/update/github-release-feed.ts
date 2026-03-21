@@ -18,7 +18,8 @@ type ParsedVersion = {
     major: number
     minor: number
     patch: number
-    prerelease: string[]
+    channel: 'alpha' | 'beta' | 'stable'
+    previewStep: number
 }
 
 export type GitHubReleaseFeed = {
@@ -82,51 +83,60 @@ function requestJson<T>(hostname: string, requestPath: string): Promise<T> {
     })
 }
 
-function parseVersion(version: string): ParsedVersion | null {
-    const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/)
+export function parseVersion(version: string): ParsedVersion | null {
+    const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)\.?(\d+)?)?$/i)
     if (!match) return null
+
+    const prerelease = String(match[4] || '').toLowerCase()
+    const channel = prerelease.startsWith('alpha')
+        ? 'alpha'
+        : prerelease.startsWith('beta')
+            ? 'beta'
+            : 'stable'
 
     return {
         major: Number(match[1]),
         minor: Number(match[2]),
         patch: Number(match[3]),
-        prerelease: match[4] ? match[4].split('.') : []
+        channel,
+        previewStep: Number(match[5] || 0)
     }
 }
 
-function comparePrereleaseIdentifiers(left: string, right: string): number {
-    const leftNumeric = /^\d+$/.test(left)
-    const rightNumeric = /^\d+$/.test(right)
-
-    if (leftNumeric && rightNumeric) {
-        return Number(left) - Number(right)
+function getChannelRank(channel: ParsedVersion['channel']): number {
+    switch (channel) {
+        case 'stable':
+            return 3
+        case 'beta':
+            return 2
+        case 'alpha':
+            return 1
+        default:
+            return 0
     }
-    if (leftNumeric) return -1
-    if (rightNumeric) return 1
-    return left.localeCompare(right)
 }
 
 function compareVersions(left: ParsedVersion, right: ParsedVersion): number {
+    const channelRankDiff = getChannelRank(left.channel) - getChannelRank(right.channel)
+    if (channelRankDiff !== 0) return channelRankDiff
+    if (left.previewStep !== right.previewStep) return left.previewStep - right.previewStep
     if (left.major !== right.major) return left.major - right.major
     if (left.minor !== right.minor) return left.minor - right.minor
-    if (left.patch !== right.patch) return left.patch - right.patch
+    return left.patch - right.patch
+}
 
-    if (left.prerelease.length === 0 && right.prerelease.length === 0) return 0
-    if (left.prerelease.length === 0) return 1
-    if (right.prerelease.length === 0) return -1
-
-    const length = Math.max(left.prerelease.length, right.prerelease.length)
-    for (let index = 0; index < length; index += 1) {
-        const leftPart = left.prerelease[index]
-        const rightPart = right.prerelease[index]
-        if (leftPart === undefined) return -1
-        if (rightPart === undefined) return 1
-
-        const comparison = comparePrereleaseIdentifiers(leftPart, rightPart)
-        if (comparison !== 0) return comparison
+export function compareReleaseVersionStrings(leftVersion: string, rightVersion: string): number {
+    const left = parseVersion(leftVersion)
+    const right = parseVersion(rightVersion)
+    if (!left || !right) {
+        throw new Error(`Cannot compare invalid release versions "${leftVersion}" and "${rightVersion}".`)
     }
 
-    return 0
+    return compareVersions(left, right)
+}
+
+export function resolveReleaseChannelForVersion(version: string): ParsedVersion['channel'] {
+    return parseVersion(version)?.channel || 'stable'
 }
 
 function getLatestYmlAsset(release: GitHubRelease): GitHubReleaseAsset | null {

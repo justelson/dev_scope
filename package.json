@@ -18,7 +18,8 @@
         "build:unpack": "electron-vite build && node scripts/maint/package-win-release.mjs unpacked",
         "dist:organize": "node scripts/maint/organize-dist.mjs",
         "brand:assets": "python scripts/maint/generate_branding_assets.py",
-        "release:publish:local": "node scripts/maint/publish-local-release.mjs"
+        "release:publish:local": "node scripts/maint/publish-local-release.mjs",
+        "update:test-feed": "node --experimental-strip-types scripts/maint/check-github-update-feed.mjs"
     },
     "dependencies": {
         "@dnd-kit/core": "^6.3.1",
