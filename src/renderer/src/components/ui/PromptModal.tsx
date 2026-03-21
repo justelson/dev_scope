@@ -59,7 +59,7 @@ export function PromptModal({
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 backdrop-blur-md"
+            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn"
             onClick={onCancel}
         >
             {errorMessage && (
@@ -68,7 +68,7 @@ export function PromptModal({
                 </div>
             )}
             <div
-                className="w-full max-w-md rounded-2xl border border-white/10 bg-sparkle-card p-6 shadow-2xl animate-modal-in"
+                className="w-full max-w-md rounded-2xl border border-white/10 bg-sparkle-card p-6 shadow-2xl m-4"
                 onClick={(event) => event.stopPropagation()}
             >
                 <h3 className="text-base font-semibold text-sparkle-text break-words">{title}</h3>

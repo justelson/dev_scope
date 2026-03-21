@@ -1,34 +1,29 @@
 # DevScope Docs
 
-Last updated: February 23, 2026
+This directory is organized around one rule: only current implementation guidance stays in the live docs tree.
 
-This docs tree is split into two zones:
+## Structure
 
-- `docs/current/` for the current codebase and active architecture.
-- `docs/legacy/` for historical implementation notes, reports, and phase artifacts that are still useful for reference.
+- [`docs/current`](C:\Users\elson\my_coding_play\devscope\docs\current\README.md): source-of-truth docs for the desktop app that ships from the repository root.
+- [`docs/platform`](C:\Users\elson\my_coding_play\devscope\docs\platform\README.md): planning and architecture docs for future clients built on top of the shared DevScope contract.
+- [`docs/archive`](C:\Users\elson\my_coding_play\devscope\docs\archive\LEGACY_DOCS_SUMMARY_2026-03-18.md): archived legacy material summary plus the zipped legacy docs bundle.
 
 ## Start Here
 
-1. `docs/current/README.md`
-2. `docs/platform/README.md`
+1. [`docs/current/README.md`](C:\Users\elson\my_coding_play\devscope\docs\current\README.md)
+2. [`docs/current/CURRENT_CODEBASE_ARCHITECTURE.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CODEBASE_ARCHITECTURE.md)
+3. [`docs/current/CURRENT_CAPABILITIES_MATRIX.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CAPABILITIES_MATRIX.md)
+4. [`docs/platform/README.md`](C:\Users\elson\my_coding_play\devscope\docs\platform\README.md) when you are planning additional clients
 
-## Current Docs
+## Additional Reference Material
 
-- `docs/current/CURRENT_CODEBASE_ARCHITECTURE.md`
-- `docs/current/CURRENT_CAPABILITIES_MATRIX.md`
-- `docs/current/ENGINEERING_QUALITY_STANDARDS.md`
-- `docs/current/CHANGE_VALIDATION_CHECKLIST.md`
-- `docs/platform/BUILDING_ON_TOP_GUIDE.md`
-- `docs/platform/CLI_ON_DEVSCOPE.md`
-- `docs/platform/IDE_EXTENSION_ON_DEVSCOPE.md`
-- `docs/platform/ALT_UI_CLIENTS_ON_DEVSCOPE.md`
+These files stay outside `docs/current` because they are supporting reference assets, not day-to-day architecture docs:
 
-## Legacy Docs
+- [`docs/DESIGN_CAPTURE_REPORT.md`](C:\Users\elson\my_coding_play\devscope\docs\DESIGN_CAPTURE_REPORT.md)
+- [`docs/DESIGN_COMPONENT_INVENTORY.md`](C:\Users\elson\my_coding_play\devscope\docs\DESIGN_COMPONENT_INVENTORY.md)
+- [`docs/DESIGN_LEARNED.md`](C:\Users\elson\my_coding_play\devscope\docs\DESIGN_LEARNED.md)
+- [`docs/DESIGN_TOKENS_EXTRACTED.json`](C:\Users\elson\my_coding_play\devscope\docs\DESIGN_TOKENS_EXTRACTED.json)
 
-See `docs/legacy/README.md` for archived content by topic.
+## Maintenance Rule
 
-## Doc Policy
-
-- New work should update `docs/current/*` and relevant `docs/platform/*` files.
-- Do not add new active docs into `docs/legacy/*`.
-- If a current doc becomes outdated but still informative, move it to `docs/legacy/*` and add a short note in `docs/legacy/README.md`.
+If a document stops describing the current app or active plans, archive it instead of leaving it in the live tree.

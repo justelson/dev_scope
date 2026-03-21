@@ -1,11 +1,11 @@
 <div align="center">
   <pre>
- ██████╗ ███████╗██╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗
- ██╔══██╗██╔════╝██║   ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
-██║  ██║█████╗  ██║   ██║███████╗██║     ██║   ██║██████╔╝█████╗
-██║  ██║██╔══╝  ╚██╗ ██╔╝╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝
- ██████╔╝███████╗ ╚████╔╝ ███████║╚██████╗╚██████╔╝██║     ███████╗
- ╚═════╝ ╚══════╝  ╚═══╝  ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝
+██████╗ ███████╗██╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗
+██╔══██╗██╔════╝██║   ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
+██║  ██║█████╗  ██║   ██║███████╗██║     ██║   ██║██████╔╝█████╗  
+██║  ██║██╔══╝  ╚██╗ ██╔╝╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  
+██████╔╝███████╗ ╚████╔╝ ███████║╚██████╗╚██████╔╝██║     ███████╗
+╚═════╝ ╚══════╝  ╚═══╝  ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝
   </pre>
 </div>
 
@@ -20,7 +20,7 @@
     <img src="https://img.shields.io/badge/Repo-dev__scope-181717?style=for-the-badge&logo=github" alt="Repository">
   </a>
   <img src="https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge&logo=windows" alt="Windows Support">
-  <img src="https://img.shields.io/badge/Version-1.1.0--alpha.3-7c3aed?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/github/v/release/justelson/dev_scope?include_prereleases&display_name=tag&style=for-the-badge&color=7c3aed" alt="Latest Release">
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
 </p>
 
@@ -42,7 +42,9 @@
 
 DevScope Air is the main Windows Electron app in this repository. It is built around local project discovery, project browsing, file preview, Git workflows, app settings, and release update flows from one desktop surface.
 
-The current package is [`devscope-air-win`](./package.json), currently version `1.1.0-alpha.3`.
+The current package is [`devscope-air-win`](./package.json).
+Current package version:
+![Package Version](https://img.shields.io/github/package-json/v/justelson/dev_scope?filename=package.json&style=flat-square&color=7c3aed)
 
 ## Key Features
 
@@ -206,5 +208,6 @@ Distributed under the MIT License. See [`package.json`](./package.json) for the 
 </p>
 
 ---
-
-# Devs don't use light mode.
+<div align="center">
+  # Devs don't use light mode.
+<div>

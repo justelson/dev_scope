@@ -12,9 +12,6 @@ interface DevScopeLogoProps {
     className?: string
 }
 
-type AirBadgeSize = 'xxs' | 'xs' | 'sm'
-
-// Theme-specific logo colors
 const THEME_COLORS = {
     dark: { primary: '#22d3ee', secondary: '#06b6d4', glow: 'cyan' },
     midnight: { primary: '#6366f1', secondary: '#4f46e5', glow: 'indigo' },
@@ -25,41 +22,17 @@ const THEME_COLORS = {
     charcoal: { primary: '#fbbf24', secondary: '#f59e0b', glow: 'amber' },
     navy: { primary: '#60a5fa', secondary: '#3b82f6', glow: 'blue' },
     light: { primary: '#22d3ee', secondary: '#06b6d4', glow: 'cyan' },
-    green: { primary: '#34d399', secondary: '#10b981', glow: 'emerald' },
-}
+    green: { primary: '#34d399', secondary: '#10b981', glow: 'emerald' }
+} as const
 
-const README_ASCII_BANNER = `    ██
- ██████╗ ███████╗██╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗
- ██╔══██╗██╔════╝██║   ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
- ██║  ██║█████╗  ██║   ██║███████╗██║     ██║   ██║██████╔╝█████╗  
- ██║  ██║██╔══╝  ╚██╗ ██╔╝╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  
- ██████╔╝███████╗ ╚████╔╝ ███████║╚██████╗╚██████╔╝██║     ███████╗
- ╚═════╝ ╚══════╝  ╚═══╝  ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝`
-
-function AirBadge({ size = 'xs', className }: { size?: AirBadgeSize; className?: string }) {
-    const sizeClasses: Record<AirBadgeSize, string> = {
-        xxs: 'text-[6px] px-1 py-[1px] tracking-[0.1em]',
-        xs: 'text-[7px] px-1.5 py-[1px] tracking-[0.12em]',
-        sm: 'text-[8px] px-2 py-0.5 tracking-[0.12em]'
-    }
-
-    return (
-        <span
-            className={cn(
-                'inline-flex items-center rounded-full font-bold leading-none',
-                sizeClasses[size],
-                className
-            )}
-            style={{
-                border: '1px solid var(--accent-primary)',
-                backgroundColor: 'color-mix(in srgb, var(--accent-primary) 15%, transparent)',
-                color: 'var(--accent-primary)'
-            }}
-        >
-            AIR
-        </span>
-    )
-}
+const CLEAN_README_ASCII_BANNER = [
+    '██████╗ ███████╗██╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗',
+    '██╔══██╗██╔════╝██║   ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝',
+    '██║  ██║█████╗  ██║   ██║███████╗██║     ██║   ██║██████╔╝█████╗  ',
+    '██║  ██║██╔══╝  ╚██╗ ██╔╝╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  ',
+    '██████╔╝███████╗ ╚████╔╝ ███████║╚██████╗╚██████╔╝██║     ███████╗',
+    '╚═════╝ ╚══════╝  ╚═══╝  ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝'
+].join('\n')
 
 export default function DevScopeLogo({ size = 'md', showText = false, className }: DevScopeLogoProps) {
     const { settings } = useSettings()
@@ -80,18 +53,18 @@ export default function DevScopeLogo({ size = 'md', showText = false, className 
                 className="relative flex items-center justify-center"
                 style={{ width: icon, height: icon }}
             >
-                <div 
-                    className="absolute inset-0 rounded-lg blur-sm" 
-                    style={{ 
-                        background: `linear-gradient(to bottom right, ${themeColors.primary}33, ${themeColors.secondary}33)` 
+                <div
+                    className="absolute inset-0 rounded-lg blur-sm"
+                    style={{
+                        background: `linear-gradient(to bottom right, ${themeColors.primary}33, ${themeColors.secondary}33)`
                     }}
                 />
 
-                <div 
-                    className="relative w-full h-full rounded-lg bg-gradient-to-br from-[#0a1628] to-[#0c1a2e] border flex items-center justify-center overflow-hidden"
+                <div
+                    className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border bg-gradient-to-br from-[#0a1628] to-[#0c1a2e]"
                     style={{ borderColor: `${themeColors.primary}4D` }}
                 >
-                    <svg viewBox="0 0 24 24" className="w-[70%] h-[70%]" fill="none">
+                    <svg viewBox="0 0 24 24" className="h-[70%] w-[70%]" fill="none">
                         <g style={{ color: themeColors.primary }}>
                             <rect x="4" y="4" width="3" height="2" fill="currentColor" opacity="0.9" />
                             <rect x="7" y="4" width="3" height="2" fill="currentColor" opacity="0.8" />
@@ -115,15 +88,13 @@ export default function DevScopeLogo({ size = 'md', showText = false, className 
                         </g>
                         <rect x="2" y="2" width="2" height="2" fill={themeColors.primary} opacity="0.8" />
                     </svg>
-                    <div 
-                        className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-transparent animate-pulse"
-                        style={{ 
-                            backgroundImage: `linear-gradient(to bottom, transparent, ${themeColors.primary}0D, transparent)` 
+                    <div
+                        className="absolute inset-0 animate-pulse bg-gradient-to-b from-transparent via-transparent to-transparent"
+                        style={{
+                            backgroundImage: `linear-gradient(to bottom, transparent, ${themeColors.primary}0D, transparent)`
                         }}
                     />
                 </div>
-
-                <AirBadge size="xs" className="absolute -top-1 -right-1.5 z-20" />
             </div>
 
             {showText && (
@@ -141,17 +112,16 @@ export function DevScopeLogoMini({ className }: { className?: string }) {
 
     return (
         <div className={cn('relative inline-flex', className)}>
-            <div 
-                className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#0a1628] to-[#0c1a2e] border flex items-center justify-center relative overflow-hidden"
+            <div
+                className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg border bg-gradient-to-br from-[#0a1628] to-[#0c1a2e]"
                 style={{ borderColor: `${themeColors.primary}4D` }}
             >
-                <span className="font-bold text-sm relative z-10" style={{ color: themeColors.primary }}>D</span>
-                <div 
-                    className="absolute top-0.5 left-0.5 w-1 h-1 rounded-full" 
+                <span className="relative z-10 text-sm font-bold" style={{ color: themeColors.primary }}>D</span>
+                <div
+                    className="absolute left-0.5 top-0.5 h-1 w-1 rounded-full"
                     style={{ backgroundColor: themeColors.primary }}
                 />
             </div>
-            <AirBadge size="xxs" className="absolute -top-1 -right-1 z-20" />
         </div>
     )
 }
@@ -162,13 +132,12 @@ export function DevScopeLogoASCII({ className }: { className?: string }) {
 
     return (
         <div className={cn('relative inline-block', className)}>
-            <pre 
-                className="text-[8px] leading-[1.1] font-mono select-none"
+            <pre
+                className="m-0 whitespace-pre text-[8px] leading-[1.1] font-mono select-none"
                 style={{ color: themeColors.primary }}
             >
-                {README_ASCII_BANNER}
+                {CLEAN_README_ASCII_BANNER}
             </pre>
-            <AirBadge size="xxs" className="absolute -top-1 -right-1 z-20" />
         </div>
     )
 }
@@ -179,13 +148,12 @@ export function DevScopeLogoASCIIMini({ className }: { className?: string }) {
 
     return (
         <div className={cn('relative inline-block', className)}>
-            <pre 
-                className="text-[4px] leading-[1] font-mono select-none pr-4"
+            <pre
+                className="m-0 whitespace-pre text-[4px] leading-[1] font-mono select-none"
                 style={{ color: themeColors.primary }}
             >
-                {README_ASCII_BANNER}
+                {CLEAN_README_ASCII_BANNER}
             </pre>
-            <AirBadge size="xxs" className="absolute top-0 right-0 z-20" />
         </div>
     )
 }

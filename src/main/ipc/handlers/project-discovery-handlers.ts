@@ -1,6 +1,7 @@
 import { clipboard, BrowserWindow, dialog, shell } from 'electron'
 import { spawn } from 'child_process'
 import { stat } from 'fs/promises'
+import { homedir } from 'os'
 import log from 'electron-log'
 import { devscopeCore } from '../../core/devscope-core'
 import { getInstalledIdes, launchProjectInIde } from '../../inspectors/system/windows-ides'
@@ -24,6 +25,47 @@ export async function handleSelectFolder(event: Electron.IpcMainInvokeEvent) {
     } catch (err: any) {
         log.error('Failed to select folder:', err)
         return { success: false, error: err.message }
+    }
+}
+
+export async function handleSelectMarkdownFile(event: Electron.IpcMainInvokeEvent) {
+    log.info('IPC: selectMarkdownFile')
+
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        const result = await dialog.showOpenDialog(win!, {
+            title: 'Select Markdown Guide',
+            properties: ['openFile'],
+            filters: [
+                { name: 'Markdown', extensions: ['md', 'markdown', 'mdx', 'txt'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        })
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return { success: false, cancelled: true }
+        }
+
+        return { success: true, filePath: result.filePaths[0] }
+    } catch (err: any) {
+        log.error('Failed to select markdown file:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetUserHomePath() {
+    log.info('IPC: getUserHomePath')
+
+    try {
+        const path = homedir()
+        if (!path) {
+            return { success: false, error: 'Home directory is unavailable.' }
+        }
+
+        return { success: true, path }
+    } catch (err: any) {
+        log.error('Failed to resolve user home path:', err)
+        return { success: false, error: err.message || 'Failed to resolve user home path.' }
     }
 }
 

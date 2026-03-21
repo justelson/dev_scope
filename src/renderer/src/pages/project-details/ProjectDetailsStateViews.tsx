@@ -1,4 +1,5 @@
-import { ArrowLeft, AlertCircle, RefreshCw } from 'lucide-react'
+import { ArrowLeft, AlertCircle } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/LoadingState'
 
 interface ErrorViewProps {
     error: string | null
@@ -7,10 +8,11 @@ interface ErrorViewProps {
 
 export function ProjectDetailsLoadingView() {
     return (
-        <div className="flex flex-col items-center justify-center min-h-[50vh] animate-fadeIn gap-4">
-            <RefreshCw size={32} className="text-[var(--accent-primary)] animate-spin" />
-            <p className="text-white/40 text-sm">Loading Project...</p>
-        </div>
+        <LoadingSpinner
+            message="Loading project..."
+            className="animate-fadeIn"
+            minHeightClassName="min-h-[50vh]"
+        />
     )
 }
 

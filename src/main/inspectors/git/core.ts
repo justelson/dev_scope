@@ -93,6 +93,10 @@ export function createGit(projectPath: string): SimpleGit {
         }
     }
 
+    // Reduce background read-lock contention from status/diff polling while still allowing
+    // commands that need mandatory locks (add/commit) to acquire them normally.
+    git.env('GIT_OPTIONAL_LOCKS', '0')
+
     return git
 }
 

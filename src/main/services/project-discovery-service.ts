@@ -8,11 +8,13 @@ import {
     type FrameworkDefinition,
     type ProjectTypeDefinition
 } from '../ipc/project-detection'
+import { resolveProjectIconPath } from './project-icon-resolver'
 
 export type ScannedProject = {
     name: string
     path: string
     type: string
+    projectIconPath?: string | null
     typeInfo?: ProjectTypeDefinition
     markers: string[]
     frameworks: string[]
@@ -148,6 +150,7 @@ async function scanProjectsUncached(folderPath: string): Promise<ScanProjectsRes
         const markers: string[] = []
         let frameworks: string[] = []
         let frameworkInfo: FrameworkDefinition[] = []
+        let packageJson: any = null
 
         try {
             const projectEntries = await readdir(projectPath)
@@ -173,7 +176,7 @@ async function scanProjectsUncached(folderPath: string): Promise<ScanProjectsRes
                 try {
                     const pkgPath = join(projectPath, 'package.json')
                     const pkgContent = await readFile(pkgPath, 'utf-8')
-                    const packageJson = JSON.parse(pkgContent)
+                    packageJson = JSON.parse(pkgContent)
                     frameworkInfo = detectFrameworksFromPackageJson(packageJson, projectEntries)
                     frameworks = frameworkInfo.map((framework) => framework.id)
                 } catch (err) {
@@ -182,12 +185,14 @@ async function scanProjectsUncached(folderPath: string): Promise<ScanProjectsRes
             }
 
             const stats = await stat(projectPath)
+            const projectIconPath = await resolveProjectIconPath(projectPath, projectEntries, packageJson)
 
             if (markers.length > 0) {
                 projects.push({
                     name: entry.name,
                     path: projectPath,
                     type: projectType?.id || 'unknown',
+                    projectIconPath,
                     typeInfo: projectType,
                     markers,
                     frameworks,

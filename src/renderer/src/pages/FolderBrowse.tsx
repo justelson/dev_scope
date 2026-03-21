@@ -4,167 +4,73 @@
  */
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Folder, FolderTree, Settings as SettingsIcon } from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AlertCircle } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
-import { cn } from '@/lib/utils'
 import { useTerminal } from '@/App'
-import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { CreateFileTypeModal } from '@/components/ui/CreateFileTypeModal'
-import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
+import { useFilePreview } from '@/components/ui/FilePreviewModal'
 import { LoadingSpinner } from '@/components/ui/LoadingState'
-import { PromptModal } from '@/components/ui/PromptModal'
+import type { PreviewMediaSource } from '@/components/ui/file-preview/types'
+import { buildMediaPreviewSources, isMediaPreviewType, resolvePreviewType } from '@/components/ui/file-preview/utils'
+import { resolveExplorerHomePath, useDefaultExplorerHomePath } from '@/lib/explorerHome'
 import { trackRecentProject } from '@/lib/recentProjects'
 import { useSettings } from '@/lib/settings'
-import { ProjectsStatsModal } from './projects/ProjectsStatsModal'
+import { FolderBrowseContent } from './folder-browse/FolderBrowseContent'
+import { FolderBrowseEmptyState } from './folder-browse/FolderBrowseEmptyState'
+import { FolderBrowseHeader } from './folder-browse/FolderBrowseHeader'
+import { FolderBrowseOverlays } from './folder-browse/FolderBrowseOverlays'
+import { FolderBrowseToolbar } from './folder-browse/FolderBrowseToolbar'
+import {
+    FILES_PAGE_SIZE,
+    FolderBrowseMode,
+    getParentFolderPathWithinRoot,
+    normalizePath,
+    resolveNavigationRoot,
+    yieldToBrowserPaint
+} from './folder-browse/folderBrowsePageUtils'
+import { type FileItem, type FolderItem, type Project } from './folder-browse/types'
+import { useFolderBrowseActions } from './folder-browse/useFolderBrowseActions'
+import { formatFileSize, formatRelativeTime, getFileColor, getProjectTypes } from './folder-browse/utils'
 import { useProjectStatsModal } from './projects/useProjectStatsModal'
 import type { IndexedInventory, IndexedProject, IndexedTotals, IndexAllFoldersResult } from './projects/projectsTypes'
-import { FolderBrowseContent } from './folder-browse/FolderBrowseContent'
-import { FolderBrowseHeader } from './folder-browse/FolderBrowseHeader'
-import { FolderBrowseToolbar } from './folder-browse/FolderBrowseToolbar'
-import { getProjectTypeById, type FileItem, type FolderItem, type Project } from './folder-browse/types'
-import { formatFileSize, formatRelativeTime, getFileColor, getProjectTypes } from './folder-browse/utils'
 
-const FILES_PAGE_SIZE = 300
-
-type FileSystemClipboardItem = {
-    path: string
-    name: string
-    type: 'file' | 'directory'
+type FolderBrowseProps = {
+    mode?: FolderBrowseMode
 }
 
-type CreateFileSystemTarget = {
-    destinationDirectory: string
-    type: 'file' | 'directory'
-    presetExtension?: string
-}
-
-async function yieldToBrowserPaint(): Promise<void> {
-    await new Promise<void>((resolve) => {
-        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-            window.requestAnimationFrame(() => resolve())
-            return
-        }
-        setTimeout(resolve, 0)
-    })
-}
-
-function getParentFolderPath(currentPath: string): string | null {
-    const raw = String(currentPath || '').trim().replace(/\//g, '\\').replace(/[\\]+$/, '')
-    if (!raw) return null
-
-    if (/^[A-Za-z]:\\?$/.test(raw)) return null
-    if (/^\\\\[^\\]+\\[^\\]+$/.test(raw)) return null
-
-    const lastSepIndex = raw.lastIndexOf('\\')
-    if (lastSepIndex < 0) return null
-
-    const parent = raw.slice(0, lastSepIndex)
-    if (!parent || parent === raw) return null
-
-    if (/^[A-Za-z]:$/.test(parent)) {
-        return `${parent}\\`
-    }
-
-    return parent
-}
-
-function splitFileNameForRename(name: string): { baseName: string; extensionSuffix: string } {
-    const raw = String(name || '')
-    const dotIndex = raw.lastIndexOf('.')
-    if (dotIndex <= 0 || dotIndex === raw.length - 1) {
-        return { baseName: raw, extensionSuffix: '' }
-    }
-    return {
-        baseName: raw.slice(0, dotIndex),
-        extensionSuffix: raw.slice(dotIndex)
-    }
-}
-
-function getFileExtensionFromName(name: string): string {
-    const dotIndex = name.lastIndexOf('.')
-    if (dotIndex <= 0 || dotIndex === name.length - 1) return ''
-    return name.slice(dotIndex + 1).toLowerCase()
-}
-
-function validateCreateName(name: string): string | null {
-    const trimmed = String(name || '').trim()
-    if (!trimmed) return 'Name cannot be empty.'
-    if (trimmed === '.' || trimmed === '..') return 'Name cannot be "." or "..".'
-    if (trimmed.includes('/') || trimmed.includes('\\')) return 'Name cannot include path separators.'
-    return null
-}
-
-function normalizePath(path: string): string {
-    const raw = String(path || '').trim().replace(/\//g, '\\')
-    if (!raw) return ''
-    if (/^[A-Za-z]:\\?$/.test(raw)) return `${raw.slice(0, 2)}\\`
-    if (/^\\\\[^\\]+\\[^\\]+\\?$/.test(raw)) return raw.replace(/[\\]+$/, '')
-    return raw.replace(/[\\]+$/, '')
-}
-
-function isPathWithinRoot(path: string, root: string): boolean {
-    const normalizedPath = normalizePath(path).toLowerCase()
-    const normalizedRoot = normalizePath(root).toLowerCase()
-    if (!normalizedPath || !normalizedRoot) return false
-    if (normalizedPath === normalizedRoot) return true
-    return normalizedPath.startsWith(`${normalizedRoot}\\`)
-}
-
-function resolveNavigationRoot(path: string, roots: string[]): string | null {
-    const normalizedPath = normalizePath(path)
-    if (!normalizedPath) return null
-
-    const matchingRoots = roots
-        .map((root) => normalizePath(root))
-        .filter((root) => root.length > 0)
-        .filter((root) => isPathWithinRoot(normalizedPath, root))
-
-    if (matchingRoots.length === 0) return null
-    matchingRoots.sort((left, right) => right.length - left.length)
-    return matchingRoots[0]
-}
-
-function getParentFolderPathWithinRoot(currentPath: string, rootLimit: string | null): string | null {
-    const normalizedCurrentPath = normalizePath(currentPath)
-    const normalizedRootLimit = normalizePath(rootLimit || '')
-
-    if (!normalizedCurrentPath) return null
-    if (normalizedRootLimit && normalizedCurrentPath.toLowerCase() === normalizedRootLimit.toLowerCase()) return null
-
-    const parent = getParentFolderPath(normalizedCurrentPath)
-    if (!parent) return null
-
-    if (!normalizedRootLimit) {
-        return parent
-    }
-
-    if (!isPathWithinRoot(parent, normalizedRootLimit)) {
-        return null
-    }
-
-    return parent
-}
-
-export default function FolderBrowse() {
+export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProps) {
     const { settings, updateSettings } = useSettings()
     const { openTerminal } = useTerminal()
     const { folderPath } = useParams<{ folderPath: string }>()
     const navigate = useNavigate()
+    const isExplorerMode = mode === 'explorer'
+    const defaultExplorerHomePath = useDefaultExplorerHomePath()
+    const isResolvingExplorerHomePath = isExplorerMode && !settings.explorerHomePath && defaultExplorerHomePath === null
+    const surfaceTitle = isExplorerMode ? 'Explorer' : 'Projects'
+    const emptyStateTitle = isExplorerMode ? 'Explorer home folder not set' : 'No Projects Folder Configured'
+    const emptyStateDescription = isExplorerMode
+        ? 'DevScope could not resolve your home folder. Choose a custom Explorer root in settings.'
+        : 'Set up a projects folder in settings to browse your projects.'
+    const settingsRoute = isExplorerMode ? '/settings/explorer' : '/settings/projects'
+    const settingsButtonLabel = isExplorerMode ? 'Open Explorer Settings' : 'Configure Projects Folder'
+    const browseRootPath = isExplorerMode
+        ? resolveExplorerHomePath(settings.explorerHomePath, defaultExplorerHomePath)
+        : settings.projectsFolder
 
     const decodedPath = useMemo(() => {
         const pathFromRoute = folderPath ? decodeURIComponent(folderPath) : ''
         if (pathFromRoute.trim()) return pathFromRoute
-        return String(settings.projectsFolder || '').trim()
-    }, [folderPath, settings.projectsFolder])
+        return String(browseRootPath || '').trim()
+    }, [browseRootPath, folderPath])
     const folderName = decodedPath.split(/[/\\]/).pop() || 'Folder'
-    const folderHistoryRef = useRef<string[]>([])
     const configuredBrowseRoots = useMemo(() => (
-        Array.from(new Set([
-            settings.projectsFolder,
-            ...(settings.additionalFolders || [])
-        ].filter((path): path is string => typeof path === 'string' && path.trim().length > 0)))
-    ), [settings.projectsFolder, settings.additionalFolders])
+        isExplorerMode
+            ? []
+            : Array.from(new Set([
+                settings.projectsFolder,
+                ...(settings.additionalFolders || [])
+            ].filter((path): path is string => typeof path === 'string' && path.trim().length > 0)))
+    ), [isExplorerMode, settings.additionalFolders, settings.projectsFolder])
     const navigationRoot = useMemo(
         () => resolveNavigationRoot(decodedPath, configuredBrowseRoots),
         [decodedPath, configuredBrowseRoots]
@@ -184,23 +90,12 @@ export default function FolderBrowse() {
     const [filterType, setFilterType] = useState('all')
     const [isCurrentFolderGitRepo, setIsCurrentFolderGitRepo] = useState(false)
     const [visibleFileCount, setVisibleFileCount] = useState(FILES_PAGE_SIZE)
-    const [copiedPath, setCopiedPath] = useState(false)
-    const [fileClipboardItem, setFileClipboardItem] = useState<FileSystemClipboardItem | null>(null)
-    const [renameTarget, setRenameTarget] = useState<FileSystemClipboardItem | null>(null)
-    const [renameDraft, setRenameDraft] = useState('')
-    const [renameExtensionSuffix, setRenameExtensionSuffix] = useState('')
-    const [renameErrorMessage, setRenameErrorMessage] = useState<string | null>(null)
-    const [createTarget, setCreateTarget] = useState<CreateFileSystemTarget | null>(null)
-    const [createDraft, setCreateDraft] = useState('')
-    const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
-    const [deleteTarget, setDeleteTarget] = useState<FileSystemClipboardItem | null>(null)
-    const [toast, setToast] = useState<{ message: string; visible: boolean; tone?: 'success' | 'error' } | null>(null)
     const [indexedTotals, setIndexedTotals] = useState<IndexedTotals | null>(null)
     const [indexedInventory, setIndexedInventory] = useState<IndexedInventory | null>(null)
     const indexTotalsRunRef = useRef(0)
-
     const {
         previewFile,
+        previewMediaItems,
         previewContent,
         loadingPreview,
         previewTruncated,
@@ -250,51 +145,12 @@ export default function FolderBrowse() {
             }
         }
 
-        checkGitRepo()
+        void checkGitRepo()
     }, [decodedPath])
 
     useEffect(() => {
-        loadContents(false)
+        void loadContents(false)
     }, [loadContents])
-
-    useEffect(() => {
-        if (!decodedPath) return
-
-        const history = folderHistoryRef.current
-        const existingIndex = history.lastIndexOf(decodedPath)
-
-        if (existingIndex >= 0) {
-            folderHistoryRef.current = history.slice(0, existingIndex + 1)
-            return
-        }
-
-        history.push(decodedPath)
-    }, [decodedPath])
-
-    useEffect(() => {
-        setCopiedPath(false)
-    }, [decodedPath])
-
-    const showToast = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
-        setToast({ message, visible: false, tone })
-        window.setTimeout(() => {
-            setToast((current) => current ? { ...current, visible: true } : current)
-        }, 8)
-    }, [])
-
-    useEffect(() => {
-        if (!toast?.visible) return
-        const hideTimer = window.setTimeout(() => {
-            setToast((current) => current ? { ...current, visible: false } : current)
-        }, 2200)
-        const removeTimer = window.setTimeout(() => {
-            setToast(null)
-        }, 2600)
-        return () => {
-            window.clearTimeout(hideTimer)
-            window.clearTimeout(removeTimer)
-        }
-    }, [toast?.visible])
 
     const parsedSearchQuery = useMemo(
         () => parseFileSearchQuery(deferredSearchQuery),
@@ -303,10 +159,11 @@ export default function FolderBrowse() {
 
     const projectTypes = useMemo(() => getProjectTypes(projects), [projects])
     const isProjectsRootView = useMemo(() => {
+        if (isExplorerMode) return false
         const normalizedCurrent = normalizePath(decodedPath)
         const normalizedProjectsRoot = normalizePath(settings.projectsFolder || '')
         return Boolean(normalizedCurrent && normalizedProjectsRoot && normalizedCurrent === normalizedProjectsRoot)
-    }, [decodedPath, settings.projectsFolder])
+    }, [decodedPath, isExplorerMode, settings.projectsFolder])
     const statsScanKey = useMemo(() => normalizePath(decodedPath).toLowerCase(), [decodedPath])
     const statsModalController = useProjectStatsModal(projects, indexedTotals, indexedInventory, statsScanKey)
     const rootStats = useMemo(() => ({
@@ -390,9 +247,49 @@ export default function FolderBrowse() {
     const gitRepos = useMemo(() => projects.filter((project) => project.type === 'git'), [projects])
 
     const filteredFiles = useMemo(() => {
-        if (!deferredSearchQuery) return files
-        return files.filter((file) => fileNameMatchesQuery(file.name, parsedSearchQuery))
-    }, [files, deferredSearchQuery, parsedSearchQuery])
+        const matchingFiles = !deferredSearchQuery
+            ? files
+            : files.filter((file) => fileNameMatchesQuery(file.name, parsedSearchQuery))
+
+        const mediaSources = buildMediaPreviewSources(matchingFiles.map((file) => ({
+            name: file.name,
+            path: file.path,
+            extension: file.extension
+        })))
+        const mediaByPath = new Map(mediaSources.map((item) => [item.path.toLowerCase(), item]))
+        const albumArtPaths = new Set(
+            mediaSources
+                .filter((item) => item.type !== 'image' && item.thumbnailPath)
+                .map((item) => String(item.thumbnailPath || '').toLowerCase())
+                .filter(Boolean)
+        )
+
+        return matchingFiles
+            .filter((file) => !(file.extension && albumArtPaths.has(file.path.toLowerCase())))
+            .map((file) => {
+                const mediaItem = mediaByPath.get(file.path.toLowerCase())
+                if (mediaItem) {
+                    return {
+                        ...file,
+                        previewType: mediaItem.type,
+                        previewThumbnailPath: mediaItem.thumbnailPath ?? null,
+                        isAlbumArt: false
+                    }
+                }
+
+                const previewTarget = resolvePreviewType(file.name, file.extension)
+                if (previewTarget && isMediaPreviewType(previewTarget.type)) {
+                    return {
+                        ...file,
+                        previewType: previewTarget.type,
+                        previewThumbnailPath: previewTarget.type === 'image' ? file.path : null,
+                        isAlbumArt: false
+                    }
+                }
+
+                return file
+            })
+    }, [deferredSearchQuery, files, parsedSearchQuery])
 
     useEffect(() => {
         setVisibleFileCount(FILES_PAGE_SIZE)
@@ -402,339 +299,44 @@ export default function FolderBrowse() {
         () => filteredFiles.slice(0, visibleFileCount),
         [filteredFiles, visibleFileCount]
     )
-
     const hasMoreFiles = displayedFiles.length < filteredFiles.length
-
+    const mediaPreviewSources = useMemo<PreviewMediaSource[]>(() => buildMediaPreviewSources(displayedFiles.map((file) => ({
+        name: file.name,
+        path: file.path,
+        extension: file.extension
+    }))), [displayedFiles])
     const loadMoreFiles = useCallback(() => {
         setVisibleFileCount((current) => current + FILES_PAGE_SIZE)
     }, [])
 
-    const handleProjectClick = (project: Project) => {
-        navigate(`/projects/${encodeURIComponent(project.path)}`)
-    }
-
-    const handleFolderClick = (folder: FolderItem) => {
-        navigate(`/folder-browse/${encodeURIComponent(folder.path)}`)
-    }
-
-    const handleViewAsProject = () => {
-        navigate(`/projects/${encodeURIComponent(decodedPath)}`)
-    }
-
-    const handleBack = () => {
-        const history = folderHistoryRef.current
-        if (history.length > 1) {
-            history.pop()
-            while (history.length > 0) {
-                const previousFolder = history[history.length - 1]
-                if (!navigationRoot || isPathWithinRoot(previousFolder, navigationRoot)) {
-                    navigate(`/folder-browse/${encodeURIComponent(previousFolder)}`)
-                    return
-                }
-                history.pop()
-            }
-        }
-
-        const parentPath = getParentFolderPathWithinRoot(decodedPath, navigationRoot)
-        if (parentPath && parentPath !== decodedPath) {
-            navigate(`/folder-browse/${encodeURIComponent(parentPath)}`)
-            return
-        }
-
-        navigate(-1)
-    }
-
-    const handleNavigateUp = () => {
-        const parentPath = getParentFolderPathWithinRoot(decodedPath, navigationRoot)
-        if (!parentPath || parentPath === decodedPath) {
-            return
-        }
-        navigate(`/folder-browse/${encodeURIComponent(parentPath)}`)
-    }
-
-    const copyTextToClipboard = useCallback(async (value: string): Promise<boolean> => {
-        try {
-            if (window.devscope.copyToClipboard) {
-                const result = await window.devscope.copyToClipboard(value)
-                if (!result.success) {
-                    setError(result.error || 'Failed to copy to clipboard')
-                    return false
-                }
-            } else {
-                await navigator.clipboard.writeText(value)
-            }
-            return true
-        } catch (err: any) {
-            setError(err?.message || 'Failed to copy to clipboard')
-            return false
-        }
-    }, [])
-
-    const handleCopyPath = useCallback(async () => {
-        if (!decodedPath.trim()) return
-        const copied = await copyTextToClipboard(decodedPath)
-        setCopiedPath(copied)
-        if (copied) {
-            showToast('Copied folder path')
-            window.setTimeout(() => setCopiedPath(false), 1500)
-        }
-    }, [decodedPath, copyTextToClipboard, showToast])
-
-    const handleEntryOpen = useCallback(async (entry: FileSystemClipboardItem) => {
-        if (entry.type === 'directory') {
-            navigate(`/folder-browse/${encodeURIComponent(entry.path)}`)
-            return
-        }
-        const result = await window.devscope.openFile(entry.path)
-        if (!result.success) {
-            setError(result.error || `Failed to open "${entry.name}"`)
-        }
-    }, [navigate])
-
-    const handleEntryOpenWith = useCallback(async (entry: FileSystemClipboardItem) => {
-        if (entry.type === 'directory') return
-        const result = await window.devscope.openWith(entry.path)
-        if (!result.success) {
-            setError(result.error || `Failed to open "${entry.name}" with...`)
-        }
-    }, [])
-
-    const handleEntryOpenInExplorer = useCallback(async (entry: FileSystemClipboardItem) => {
-        const result = await window.devscope.openInExplorer(entry.path)
-        if (!result.success) {
-            setError(result.error || `Failed to open "${entry.name}" in explorer`)
-        }
-    }, [])
-
-    const handleEntryCopyPath = useCallback(async (entry: FileSystemClipboardItem) => {
-        const copied = await copyTextToClipboard(entry.path)
-        if (copied) showToast(`Copied path: ${entry.name}`)
-    }, [copyTextToClipboard, showToast])
-
-    const handleEntryCopy = useCallback((entry: FileSystemClipboardItem) => {
-        setFileClipboardItem({
-            path: entry.path,
-            name: entry.name,
-            type: entry.type
-        })
-        setError(null)
-        showToast(`Copied ${entry.type === 'directory' ? 'folder' : 'file'}: ${entry.name}`)
-    }, [showToast])
-
-    const handleEntryRename = useCallback(async (entry: FileSystemClipboardItem) => {
-        const splitName = entry.type === 'file'
-            ? splitFileNameForRename(entry.name)
-            : { baseName: entry.name, extensionSuffix: '' }
-        setRenameTarget(entry)
-        setRenameDraft(splitName.baseName)
-        setRenameExtensionSuffix(splitName.extensionSuffix)
-        setRenameErrorMessage(null)
-    }, [])
-
-    const handleEntryDelete = useCallback(async (entry: FileSystemClipboardItem) => {
-        setDeleteTarget(entry)
-    }, [])
-
-    const handleProjectRename = useCallback(async (project: Project) => {
-        await handleEntryRename({
-            path: project.path,
-            name: project.name,
-            type: 'directory'
-        })
-    }, [handleEntryRename])
-
-    const handleProjectDelete = useCallback(async (project: Project) => {
-        await handleEntryDelete({
-            path: project.path,
-            name: project.name,
-            type: 'directory'
-        })
-    }, [handleEntryDelete])
-
-    const handleEntryPaste = useCallback(async (entry: FileSystemClipboardItem) => {
-        if (!fileClipboardItem) return
-
-        const destinationDirectory = entry.type === 'directory'
-            ? entry.path
-            : getParentFolderPath(entry.path)
-
-        if (!destinationDirectory) {
-            setError('Unable to resolve destination folder for paste.')
-            return
-        }
-
-        const result = await window.devscope.pasteFileSystemItem(fileClipboardItem.path, destinationDirectory)
-        if (!result.success) {
-            setError(result.error || `Failed to paste "${fileClipboardItem.name}"`)
-            return
-        }
-
-        showToast(`Pasted ${fileClipboardItem.name}`)
-        await loadContents(true)
-    }, [fileClipboardItem, loadContents, showToast])
-
-    const resolveEntryDestinationDirectory = useCallback((entry: FileSystemClipboardItem): string | null => {
-        if (entry.type === 'directory') return entry.path
-        return getParentFolderPath(entry.path)
-    }, [])
-
-    const openCreatePrompt = useCallback((destinationDirectory: string, type: 'file' | 'directory', presetExtension?: string) => {
-        setCreateTarget({ destinationDirectory, type, presetExtension })
-        setCreateDraft('')
-        setCreateErrorMessage(null)
-        setError(null)
-    }, [])
-
-    const handleCreateInCurrentFolder = useCallback((type: 'file' | 'directory', presetExtension?: string) => {
-        if (!decodedPath) return
-        openCreatePrompt(decodedPath, type, presetExtension)
-    }, [decodedPath, openCreatePrompt])
-
-    const handleEntryCreateFile = useCallback((entry: FileSystemClipboardItem) => {
-        const destinationDirectory = resolveEntryDestinationDirectory(entry)
-        if (!destinationDirectory) {
-            setError('Unable to resolve destination folder.')
-            return
-        }
-        openCreatePrompt(destinationDirectory, 'file')
-    }, [openCreatePrompt, resolveEntryDestinationDirectory])
-
-    const handleEntryCreateFolder = useCallback((entry: FileSystemClipboardItem) => {
-        const destinationDirectory = resolveEntryDestinationDirectory(entry)
-        if (!destinationDirectory) {
-            setError('Unable to resolve destination folder.')
-            return
-        }
-        openCreatePrompt(destinationDirectory, 'directory')
-    }, [openCreatePrompt, resolveEntryDestinationDirectory])
-
-    const submitCreateTarget = useCallback(async (nextName?: string) => {
-        if (!createTarget) return
-
-        const normalizedName = String(nextName ?? createDraft).trim()
-        const validationError = validateCreateName(normalizedName)
-        if (validationError) {
-            setCreateErrorMessage(validationError)
-            return
-        }
-
-        const result = await window.devscope.createFileSystemItem(
-            createTarget.destinationDirectory,
-            normalizedName,
-            createTarget.type
-        )
-        if (!result.success) {
-            setCreateErrorMessage(result.error || `Failed to create ${createTarget.type}.`)
-            return
-        }
-
-        const createdPath = result.path
-        const createdName = result.name
-        const createdType = result.type
-
-        setCreateTarget(null)
-        setCreateDraft('')
-        setCreateErrorMessage(null)
-
-        showToast(`Created ${createdType === 'file' ? 'file' : 'folder'}: ${createdName}`)
-        await loadContents(true)
-
-        if (createdType === 'file') {
-            const ext = getFileExtensionFromName(createdName) || 'txt'
-            await openPreview(
-                { name: createdName, path: createdPath },
-                ext,
-                { startInEditMode: true }
-            )
-        }
-    }, [createDraft, createTarget, loadContents, openPreview, showToast])
-
-    const submitRenameTarget = useCallback(async () => {
-        if (!renameTarget) return
-
-        const normalizedBaseName = renameDraft.trim()
-        if (!normalizedBaseName) {
-            setRenameErrorMessage('Name cannot be empty.')
-            return
-        }
-        const normalizedNextName = renameTarget.type === 'file'
-            ? `${normalizedBaseName}${renameExtensionSuffix}`
-            : normalizedBaseName
-        if (normalizedNextName === renameTarget.name) {
-            setRenameTarget(null)
-            setRenameDraft('')
-            setRenameExtensionSuffix('')
-            setRenameErrorMessage(null)
-            return
-        }
-
-        const result = await window.devscope.renameFileSystemItem(renameTarget.path, normalizedNextName)
-        if (!result.success) {
-            setRenameErrorMessage(result.error || `Failed to rename "${renameTarget.name}"`)
-            return
-        }
-
-        setRenameTarget(null)
-        setRenameDraft('')
-        setRenameExtensionSuffix('')
-        setRenameErrorMessage(null)
-        showToast(`Renamed to ${normalizedNextName}`)
-        await loadContents(true)
-    }, [loadContents, renameDraft, renameExtensionSuffix, renameTarget, showToast])
-
-    const confirmDeleteTarget = useCallback(async () => {
-        if (!deleteTarget) return
-
-        const result = await window.devscope.deleteFileSystemItem(deleteTarget.path)
-        if (!result.success) {
-            setError(result.error || `Failed to delete "${deleteTarget.name}"`)
-            return
-        }
-
-        if (fileClipboardItem?.path === deleteTarget.path) {
-            setFileClipboardItem(null)
-        }
-
-        setDeleteTarget(null)
-        showToast(`Deleted ${deleteTarget.name}`)
-        await loadContents(true)
-    }, [deleteTarget, fileClipboardItem?.path, loadContents, showToast])
+    const actions = useFolderBrowseActions({
+        mode,
+        decodedPath,
+        navigationRoot,
+        navigate,
+        updateSettings,
+        loadContents,
+        openPreview,
+        setError
+    })
 
     if (!decodedPath) {
         return (
-            <div className="animate-fadeIn">
-                <div className="mb-8">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 rounded-lg bg-indigo-500/10">
-                            <FolderTree className="text-indigo-400" size={24} />
-                        </div>
-                        <h1 className="text-2xl font-semibold text-sparkle-text">Projects</h1>
-                    </div>
-                    <p className="text-sparkle-text-secondary">Your coding projects in one place</p>
-                </div>
-
-                <div className="flex flex-col items-center justify-center py-16 bg-sparkle-card rounded-xl border border-sparkle-border">
-                    <Folder size={48} className="text-sparkle-text-muted mb-4" />
-                    <h3 className="text-lg font-medium text-sparkle-text mb-2">No Projects Folder Configured</h3>
-                    <p className="text-sparkle-text-secondary text-center max-w-md mb-6">
-                        Set up a projects folder in settings to browse your projects.
-                    </p>
-                    <Link
-                        to="/settings/projects"
-                        className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-primary)] text-white rounded-lg hover:bg-[var(--accent-primary)]/90 transition-colors"
-                    >
-                        <SettingsIcon size={16} />
-                        <span>Configure Projects Folder</span>
-                    </Link>
-                </div>
-            </div>
+            <FolderBrowseEmptyState
+                emptyStateDescription={emptyStateDescription}
+                emptyStateTitle={emptyStateTitle}
+                isExplorerMode={isExplorerMode}
+                isResolvingExplorerHomePath={isResolvingExplorerHomePath}
+                onSelectExplorerHome={() => { void actions.handleSelectExplorerHome() }}
+                settingsButtonLabel={settingsButtonLabel}
+                settingsRoute={settingsRoute}
+                surfaceTitle={surfaceTitle}
+            />
         )
     }
 
     return (
-        <div
-            className="project-surface-scrollbar mx-auto min-w-0 max-w-[1600px] animate-fadeIn overflow-x-hidden overflow-y-auto pb-20 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-        >
+        <div className="project-surface-scrollbar mx-auto min-w-0 max-w-[1600px] animate-fadeIn overflow-x-hidden overflow-y-auto pb-20 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]">
             <FolderBrowseHeader
                 folderName={folderName}
                 decodedPath={decodedPath}
@@ -743,19 +345,19 @@ export default function FolderBrowse() {
                 rootStats={rootStats}
                 isCurrentFolderGitRepo={isCurrentFolderGitRepo}
                 loading={loading}
-                onBack={handleBack}
-                onNavigateUp={handleNavigateUp}
+                onBack={actions.handleBack}
+                onNavigateUp={actions.handleNavigateUp}
                 canNavigateUp={canNavigateUp}
-                onViewAsProject={handleViewAsProject}
+                onViewAsProject={actions.handleViewAsProject}
                 onOpenTerminal={() => openTerminal({ displayName: folderName, id: 'main', category: 'folder' }, decodedPath)}
-                onCopyPath={handleCopyPath}
-                copiedPath={copiedPath}
+                onCopyPath={actions.handleCopyPath}
+                copiedPath={actions.copiedPath}
                 onOpenStats={(key) => statsModalController.setStatsModal(key)}
-                onOpenProjectsSettings={() => navigate('/settings/projects')}
+                onOpenProjectsSettings={isExplorerMode ? undefined : () => navigate('/settings/projects')}
                 onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}
                 onRefresh={() => { void loadContents(true) }}
-                onCreateFile={(presetExtension) => handleCreateInCurrentFolder('file', presetExtension)}
-                onCreateFolder={() => handleCreateInCurrentFolder('directory')}
+                onCreateFile={(presetExtension) => actions.handleCreateInCurrentFolder('file', presetExtension)}
+                onCreateFolder={() => actions.handleCreateInCurrentFolder('directory')}
             />
 
             <FolderBrowseToolbar
@@ -772,7 +374,7 @@ export default function FolderBrowse() {
             />
 
             {error && (
-                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3">
+                <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
                     <AlertCircle size={20} className="text-red-400" />
                     <span className="text-red-300">{error}</span>
                 </div>
@@ -780,10 +382,8 @@ export default function FolderBrowse() {
 
             {loading && (
                 <LoadingSpinner
-                    message="Loading folder contents..."
-                    detail={`Scanning ${folderName} and preparing files, folders, and projects.`}
+                    message="Loading"
                     minHeightClassName="min-h-[28vh]"
-                    cardClassName="w-full max-w-md"
                 />
             )}
 
@@ -803,144 +403,68 @@ export default function FolderBrowse() {
                     isCondensedLayout={false}
                     searchQuery={searchQuery}
                     error={error}
-                    onFolderClick={handleFolderClick}
-                    onProjectClick={handleProjectClick}
-                    onProjectRename={handleProjectRename}
-                    onProjectDelete={handleProjectDelete}
-                    onOpenFilePreview={(file) => openPreview(file, file.extension)}
+                    onFolderClick={actions.handleFolderClick}
+                    onProjectClick={actions.handleProjectClick}
+                    onProjectRename={actions.handleProjectRename}
+                    onProjectDelete={actions.handleProjectDelete}
+                    onOpenFilePreview={(file) => openPreview(file, file.extension, { mediaItems: mediaPreviewSources })}
                     onOpenProjectInExplorer={(path) => window.devscope.openInExplorer?.(path)}
-                    onEntryOpen={handleEntryOpen}
-                    onEntryOpenWith={handleEntryOpenWith}
-                    onEntryOpenInExplorer={handleEntryOpenInExplorer}
-                    onEntryCopyPath={handleEntryCopyPath}
-                    onEntryCopy={handleEntryCopy}
-                    onEntryRename={handleEntryRename}
-                    onEntryDelete={handleEntryDelete}
-                    onEntryPaste={handleEntryPaste}
-                    onEntryCreateFile={handleEntryCreateFile}
-                    onEntryCreateFolder={handleEntryCreateFolder}
+                    onEntryOpen={actions.handleEntryOpen}
+                    onEntryOpenWith={actions.handleEntryOpenWith}
+                    onEntryOpenInExplorer={actions.handleEntryOpenInExplorer}
+                    onEntryCopyPath={actions.handleEntryCopyPath}
+                    onEntryCopy={actions.handleEntryCopy}
+                    onEntryRename={actions.handleEntryRename}
+                    onEntryDelete={actions.handleEntryDelete}
+                    onEntryPaste={actions.handleEntryPaste}
+                    onEntryCreateFile={actions.handleEntryCreateFile}
+                    onEntryCreateFolder={actions.handleEntryCreateFolder}
                     onRefresh={() => { void loadContents(true) }}
-                    hasFileClipboardItem={Boolean(fileClipboardItem)}
+                    hasFileClipboardItem={Boolean(actions.fileClipboardItem)}
                     formatFileSize={formatFileSize}
                     getFileColor={getFileColor}
                     formatRelativeTime={formatRelativeTime}
                 />
             )}
 
-            {previewFile && (
-                <FilePreviewModal
-                    file={previewFile}
-                    content={previewContent}
-                    loading={loadingPreview}
-                    truncated={previewTruncated}
-                    size={previewSize}
-                    previewBytes={previewBytes}
-                    modifiedAt={previewModifiedAt}
-                    projectPath={decodedPath}
-                    onOpenLinkedPreview={openPreview}
-                    onSaved={async () => {
-                        await loadContents(true)
-                    }}
-                    onClose={closePreview}
-                />
-            )}
-
-            <ProjectsStatsModal
-                statsModal={statsModalController.statsModal}
-                modalTitle={statsModalController.modalTitle}
-                modalCount={statsModalController.modalCount}
-                projectsModalQuery={statsModalController.projectsModalQuery}
-                setProjectsModalQuery={statsModalController.setProjectsModalQuery}
-                filteredModalProjects={statsModalController.filteredModalProjects}
-                modalFrameworks={statsModalController.modalFrameworks}
-                modalTypes={statsModalController.modalTypes}
-                onClose={() => statsModalController.setStatsModal(null)}
-                onProjectClick={handleProjectClick}
-                onProjectRename={handleProjectRename}
-                onProjectDelete={handleProjectDelete}
-                getProjectTypeLabel={(type) => getProjectTypeById(type)?.displayName || type}
-                onOpenInExplorer={(path) => window.devscope.openInExplorer?.(path)}
+            <FolderBrowseOverlays
+                closePreview={closePreview}
+                confirmDeleteTarget={actions.confirmDeleteTarget}
+                createDraft={actions.createDraft}
+                createErrorMessage={actions.createErrorMessage}
+                createTarget={actions.createTarget}
+                deleteTarget={actions.deleteTarget}
+                decodedPath={decodedPath}
+                handleProjectClick={actions.handleProjectClick}
+                handleProjectDelete={actions.handleProjectDelete}
+                handleProjectRename={actions.handleProjectRename}
+                loadingPreview={loadingPreview}
+                onPreviewSaved={async () => { await loadContents(true) }}
+                openPreview={openPreview}
+                previewBytes={previewBytes}
+                previewContent={previewContent}
+                previewFile={previewFile}
+                previewMediaItems={previewMediaItems}
+                previewModifiedAt={previewModifiedAt}
+                previewSize={previewSize}
+                previewTruncated={previewTruncated}
+                renameDraft={actions.renameDraft}
+                renameErrorMessage={actions.renameErrorMessage}
+                renameExtensionSuffix={actions.renameExtensionSuffix}
+                renameTarget={actions.renameTarget}
+                setCreateDraft={actions.setCreateDraft}
+                setCreateErrorMessage={actions.setCreateErrorMessage}
+                setCreateTarget={actions.setCreateTarget}
+                setDeleteTarget={actions.setDeleteTarget}
+                setRenameDraft={actions.setRenameDraft}
+                setRenameErrorMessage={actions.setRenameErrorMessage}
+                setRenameExtensionSuffix={actions.setRenameExtensionSuffix}
+                setRenameTarget={actions.setRenameTarget}
+                statsModalController={statsModalController}
+                submitCreateTarget={actions.submitCreateTarget}
+                submitRenameTarget={actions.submitRenameTarget}
+                toast={actions.toast}
             />
-
-            <CreateFileTypeModal
-                isOpen={Boolean(createTarget && createTarget.type === 'file')}
-                destinationDirectory={createTarget?.destinationDirectory || ''}
-                initialExtension={createTarget?.presetExtension}
-                errorMessage={createErrorMessage}
-                onCreate={async (fileName) => { await submitCreateTarget(fileName) }}
-                onCancel={() => {
-                    setCreateTarget(null)
-                    setCreateErrorMessage(null)
-                }}
-            />
-            <PromptModal
-                isOpen={Boolean(createTarget && createTarget.type === 'directory')}
-                title="Create New Folder"
-                message={createTarget ? `Create in: ${createTarget.destinationDirectory}` : ''}
-                value={createDraft}
-                onChange={(value) => {
-                    setCreateDraft(value)
-                    if (createErrorMessage) setCreateErrorMessage(null)
-                }}
-                onConfirm={() => { void submitCreateTarget() }}
-                onCancel={() => {
-                    setCreateTarget(null)
-                    setCreateDraft('')
-                    setCreateErrorMessage(null)
-                }}
-                confirmLabel="Create Folder"
-                placeholder="Enter folder name"
-                errorMessage={createErrorMessage}
-            />
-            <PromptModal
-                isOpen={Boolean(renameTarget)}
-                title="Rename Item"
-                message={renameTarget
-                    ? renameTarget.type === 'file'
-                        ? `Rename "${renameTarget.name}" (file extension is locked for safety)`
-                        : `Rename "${renameTarget.name}"`
-                    : ''}
-                value={renameDraft}
-                onChange={(value) => {
-                    setRenameDraft(value)
-                    if (renameErrorMessage) setRenameErrorMessage(null)
-                }}
-                onConfirm={() => { void submitRenameTarget() }}
-                onCancel={() => {
-                    setRenameTarget(null)
-                    setRenameDraft('')
-                    setRenameExtensionSuffix('')
-                    setRenameErrorMessage(null)
-                }}
-                confirmLabel="Rename"
-                placeholder="Enter new name"
-                valueSuffix={renameTarget?.type === 'file' ? renameExtensionSuffix : ''}
-                errorMessage={renameErrorMessage}
-            />
-            <ConfirmModal
-                isOpen={Boolean(deleteTarget)}
-                title="Delete Item?"
-                message={deleteTarget ? `Are you sure you want to delete "${deleteTarget.name}"? This action cannot be undone.` : ''}
-                confirmLabel="Delete"
-                onConfirm={() => { void confirmDeleteTarget() }}
-                onCancel={() => setDeleteTarget(null)}
-                variant="danger"
-                fullscreen
-            />
-
-            {toast && (
-                <div
-                    className={cn(
-                        'fixed bottom-4 right-4 z-[120] max-w-sm rounded-xl px-4 py-3 text-sm shadow-lg backdrop-blur-md transition-all duration-300',
-                        toast.tone === 'error'
-                            ? 'border border-red-500/30 bg-red-500/10 text-red-200'
-                            : 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
-                        toast.visible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'
-                    )}
-                >
-                    {toast.message}
-                </div>
-            )}
         </div>
     )
 }

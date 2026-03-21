@@ -1,15 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUpRight, BookOpen, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
 import { navigateMarkdownLink } from '@/components/ui/markdown/linkNavigation'
+import type { UseFilePreviewReturn } from '@/components/ui/file-preview/useFilePreview'
 
 interface ProjectDetailsReadmeTabProps {
-    [key: string]: any
+    project: {
+        path: string
+        readme?: string | null
+    }
+    openPreview?: UseFilePreviewReturn['openPreview']
+    readmeContentRef: MutableRefObject<HTMLDivElement | null>
+    readmeExpanded: boolean
+    readmeNeedsExpand: boolean
+    setReadmeExpanded: (expanded: boolean) => void
 }
 
-export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
+function ProjectDetailsReadmeTabImpl(props: ProjectDetailsReadmeTabProps) {
     const {
         project,
         openPreview,
@@ -23,6 +32,7 @@ export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
     const lastScrollYRef = useRef(0)
     const [showFloatingCollapse, setShowFloatingCollapse] = useState(false)
     const [floatingRightPx, setFloatingRightPx] = useState(24)
+    const readmeFilePath = `${project.path}/README.md`
 
     const getScrollParent = (node: HTMLElement | null): HTMLElement | Window => {
         if (!node) return window
@@ -75,7 +85,23 @@ export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
             setFloatingRightPx((prev) => (Math.abs(prev - rightOffset) < 1 ? prev : rightOffset))
         }
 
+        let rafId: number | null = null
+        let lastUpdate = 0
+        const throttleMs = 100
+
         const updateFloatingState = () => {
+            const now = Date.now()
+            if (now - lastUpdate < throttleMs) {
+                if (rafId === null) {
+                    rafId = requestAnimationFrame(() => {
+                        rafId = null
+                        updateFloatingState()
+                    })
+                }
+                return
+            }
+            lastUpdate = now
+
             const currentY = getScrollTop()
             const scrollingUp = currentY < lastScrollYRef.current - 2
             const scrollingDown = currentY > lastScrollYRef.current + 2
@@ -101,6 +127,9 @@ export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
         window.addEventListener('resize', updateFloatingState)
 
         return () => {
+            if (rafId !== null) {
+                cancelAnimationFrame(rafId)
+            }
             if (scrollParent === window) {
                 window.removeEventListener('scroll', updateFloatingState)
             } else {
@@ -110,6 +139,15 @@ export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
         }
     }, [readmeExpanded, readmeNeedsExpand])
 
+    const handleInternalMarkdownLink = useCallback(async (href: string) => {
+        await navigateMarkdownLink({
+            href,
+            filePath: readmeFilePath,
+            navigate,
+            openPreview
+        })
+    }, [navigate, openPreview, readmeFilePath])
+
     return (
         <div ref={readmeSectionRef} className="relative">
             {project.readme ? (
@@ -117,21 +155,14 @@ export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
                     <div
                         ref={readmeContentRef}
                         className={cn(
-                            "p-8 pt-6 overflow-hidden transition-all duration-300",
+                            "p-8 pt-6 overflow-hidden",
                             !readmeExpanded && "max-h-[500px]"
                         )}
                     >
                         <MarkdownRenderer
                             content={project.readme}
-                            filePath={`${project.path}/README.md`}
-                            onInternalLinkClick={async (href) => {
-                                await navigateMarkdownLink({
-                                    href,
-                                    filePath: `${project.path}/README.md`,
-                                    navigate,
-                                    openPreview
-                                })
-                            }}
+                            filePath={readmeFilePath}
+                            onInternalLinkClick={handleInternalMarkdownLink}
                         />
                     </div>
                     {readmeNeedsExpand && !readmeExpanded && (
@@ -164,7 +195,7 @@ export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
                                 type="button"
                                 onClick={() => {
                                     void openPreview?.(
-                                        { name: 'README.md', path: `${project.path}/README.md` },
+                                        { name: 'README.md', path: readmeFilePath },
                                         'md'
                                     )
                                 }}
@@ -193,3 +224,13 @@ export function ProjectDetailsReadmeTab(props: ProjectDetailsReadmeTabProps) {
         </div>
     )
 }
+
+export const ProjectDetailsReadmeTab = memo(ProjectDetailsReadmeTabImpl, (previous, next) => (
+    previous.project.path === next.project.path
+    && previous.project.readme === next.project.readme
+    && previous.openPreview === next.openPreview
+    && previous.readmeContentRef === next.readmeContentRef
+    && previous.readmeExpanded === next.readmeExpanded
+    && previous.readmeNeedsExpand === next.readmeNeedsExpand
+    && previous.setReadmeExpanded === next.setReadmeExpanded
+))

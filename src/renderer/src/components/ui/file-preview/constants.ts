@@ -2,6 +2,7 @@ export const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown', 'mdown', 'mdx'])
 export const HTML_EXTENSIONS = new Set(['html', 'htm'])
 export const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp', 'avif'])
 export const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'm4v'])
+export const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'm4a', 'aac', 'flac', 'oga', 'opus'])
 export const JSON_EXTENSIONS = new Set(['json', 'jsonc', 'json5'])
 export const CSV_EXTENSIONS = new Set(['csv', 'tsv'])
 export const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'env'])
@@ -68,4 +69,3 @@ export const COLOR_SCAN_CHAR_LIMIT = 250_000
 export const CODE_BLOCK_BG = '#0f172a'
 export const HIGHLIGHT_MAX_CHARS = 180_000
 export const HIGHLIGHT_MAX_LINES = 4_000
-

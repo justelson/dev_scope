@@ -9,6 +9,7 @@ export type {
     CheckoutBranchOptions,
     CheckoutBranchResult,
     GitCommit,
+    GitHistoryCountResult,
     GitHistoryResult,
     GitignorePattern,
     GitSyncStatus
@@ -19,6 +20,7 @@ export {
     getGitStatusDetailed,
     getGitStatusEntryStats,
     getGitHistory,
+    getGitHistoryCount,
     getGitCommitStats,
     getCommitDiff,
     getWorkingDiff,
@@ -36,10 +38,12 @@ export {
 } from './git/read'
 
 export {
+    addRemote,
     stageFiles,
     setGlobalGitUser,
     createCommit,
     pushCommits,
+    pushSingleCommit,
     initGitRepo,
     createInitialCommit,
     addRemoteOrigin,

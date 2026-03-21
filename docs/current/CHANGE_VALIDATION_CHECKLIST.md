@@ -1,6 +1,6 @@
 # Change Validation Checklist
 
-Last updated: March 8, 2026
+Last updated: March 18, 2026
 
 Use this checklist for PRs/patches in the current DevScope desktop codebase.
 
@@ -23,10 +23,14 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
   - `/projects`
   - `/projects/:projectPath`
   - `/folder-browse/:folderPath`
+  - `/assistant`
   - `/settings/about`
+- If enabled in settings, verify:
+  - `/tasks`
+  - `/explorer`
 - Verify buttons/controls are aligned and responsive after UI changes.
 - Verify copy/open/refresh actions continue working for path-based flows.
-- Verify removed legacy routes redirect cleanly instead of throwing renderer errors.
+- Verify compatibility redirects still resolve cleanly instead of throwing renderer errors.
 
 ## 4) Data + Indexing Check
 
@@ -39,22 +43,23 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 Given current repo policy in `AGENTS.md`:
 
 - Do not run full builds/tests unless explicitly approved in-session.
-- Run lightweight validation by default (targeted syntax/transpile checks).
+- Prefer the lightest useful validation first.
 
-Suggested lightweight checks:
+Suggested default order when validation is approved:
 
-```bash
-node -e "const ts=require('typescript');const fs=require('fs');const p='path/to/file.tsx';const src=fs.readFileSync(p,'utf8');const out=ts.transpileModule(src,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020},reportDiagnostics:true,fileName:p});if((out.diagnostics||[]).length){process.exit(1)}"
-```
+1. `npm run typecheck`
+2. targeted package/app-specific checks
+3. full builds only when necessary
 
 If full validation is explicitly approved:
 
 ```bash
+npm run typecheck
 npm run build
 ```
 
 ## 6) Documentation Check
 
 - Update `docs/current/*` for behavior/architecture changes.
-- If replacing older guidance, move old docs to `docs/legacy/*`.
-- Keep migration note in `docs/current/DOCS_REFACTOR_2026-02-23.md` when restructuring docs.
+- If replacing older guidance, move it into the archive flow documented under `docs/archive/`.
+- Keep the live docs tree limited to current guidance plus supporting reference docs.

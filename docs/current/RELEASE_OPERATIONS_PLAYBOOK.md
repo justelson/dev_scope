@@ -1,6 +1,6 @@
 # Release Operations Playbook
 
-Last updated: March 9, 2026
+Last updated: March 18, 2026
 
 This document explains how DevScope desktop releases should be prepared, verified, recovered, and organized.
 
@@ -23,8 +23,19 @@ Every desktop release should leave the repo and GitHub in a state that is:
 1. Update package version in `package.json`.
 2. Keep release-facing UI/documentation in sync with that version when needed.
 3. Create and push tag `v<package-version>`.
-4. Verify GitHub Actions release workflow status.
-5. Verify GitHub release exists and expected assets are attached.
+4. Verify GitHub Actions release workflow status or use the local publisher path when intentionally doing a local publish.
+5. Verify GitHub release exists, has the correct title, and expected assets are attached.
+
+## Required GitHub Release Name
+
+GitHub release names must follow:
+
+- `DevScope Air <package-version>`
+
+Examples:
+
+- `DevScope Air 1.5.1-alpha.5`
+- `DevScope Air 1.5.1`
 
 ## Expected Windows Release Assets
 
@@ -69,9 +80,10 @@ After any release task:
 3. Confirm release type is correct:
    - prerelease for `-alpha.*` and `-beta.*`
    - normal release for plain stable tags
-4. Confirm expected Windows assets exist.
-5. Confirm `latest.yml` points at the actual uploaded installer filename.
-6. If the landing page download button is meant to target the newest release, verify it still resolves correctly.
+4. Confirm the release title is `DevScope Air <package-version>`.
+5. Confirm expected Windows assets exist.
+6. Confirm `latest.yml` points at the actual uploaded installer filename.
+7. If the landing page download button is meant to target the newest release, verify it still resolves correctly.
 
 ## Remote Failure Handling
 
@@ -109,7 +121,7 @@ The local publisher script can be used as the preferred recovery path when GitHu
 2. ensure the intended release commit is on `main`
 3. ensure `v<package-version>` exists locally
 4. run `npm run release:publish:local`
-5. verify the GitHub release object and all required assets
+5. verify the GitHub release object, title, and all required assets
 
 ## Local Lock / Cleanup Rules
 
@@ -133,5 +145,6 @@ Update this playbook when:
 - release scripts change
 - output folder conventions change
 - GitHub release workflow behavior changes
+- GitHub release naming behavior changes
 - updater asset requirements change
 - manual recovery process changes

@@ -1,0 +1,475 @@
+import type { ClipboardEvent, Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react'
+import type { AssistantInteractionMode, AssistantRuntimeMode } from '@shared/assistant/contracts'
+import type { MentionCandidate } from './assistant-composer-mentions'
+import {
+    InlineMentionTag,
+    reconcileInlineMentionTags,
+    removeInlineMentionTagRange,
+    replaceInlineMentionTokensWithLabels,
+    sortInlineMentionTags
+} from './assistant-composer-inline-mentions'
+import type { AssistantComposerPreferenceEffort } from './assistant-composer-preferences'
+import type { ComposerContextFile } from './assistant-composer-types'
+import {
+    ATTACHMENT_REMOVE_MS,
+    buildAttachmentPath,
+    buildTextAttachmentFromPaste,
+    createAttachmentId,
+    getContextFileMeta,
+    inferImageExtensionFromMimeType,
+    isLargeTextPaste,
+    MAX_ATTACHMENT_CONTENT_CHARS,
+    readFileAsDataUrl,
+    summarizeTextPreview
+} from './assistant-composer-utils'
+
+type SetStringState = Dispatch<SetStateAction<string>>
+type SetBooleanState = Dispatch<SetStateAction<boolean>>
+type SetNumberState = Dispatch<SetStateAction<number>>
+type SetStringArrayState = Dispatch<SetStateAction<string[]>>
+type SetContextFilesState = Dispatch<SetStateAction<ComposerContextFile[]>>
+type SetInlineMentionTagsState = Dispatch<SetStateAction<InlineMentionTag[]>>
+
+export type AssistantComposerHandlersArgs = {
+    disabled: boolean
+    isConnected: boolean
+    isSending: boolean
+    onSend: (prompt: string, contextFiles: ComposerContextFile[], options: {
+        model?: string
+        runtimeMode: AssistantRuntimeMode
+        interactionMode: AssistantInteractionMode
+        effort: AssistantComposerPreferenceEffort
+        serviceTier?: 'fast'
+    }) => Promise<boolean>
+    text: string
+    setText: SetStringState
+    inlineMentionTags: InlineMentionTag[]
+    setInlineMentionTags: SetInlineMentionTagsState
+    contextFiles: ComposerContextFile[]
+    setContextFiles: SetContextFilesState
+    sentPromptHistory: string[]
+    setSentPromptHistory: SetStringArrayState
+    historyCursor: number | null
+    setHistoryCursor: Dispatch<SetStateAction<number | null>>
+    draftBeforeHistory: string
+    setDraftBeforeHistory: SetStringState
+    showMentionMenu: boolean
+    setShowMentionMenu: SetBooleanState
+    mentionCandidates: MentionCandidate[]
+    mentionState: { start: number; query: string } | null
+    activeMentionCandidate: MentionCandidate | null
+    setActiveMentionIndex: SetNumberState
+    showModelDropdown: boolean
+    setShowModelDropdown: SetBooleanState
+    filteredModelOptions: Array<{ id: string; label: string; description?: string }>
+    activeModelCandidate: { id: string; label: string; description?: string } | null
+    setActiveModelIndex: SetNumberState
+    showBranchDropdown: boolean
+    setShowBranchDropdown: SetBooleanState
+    filteredBranches: Array<{ name: string; label?: string; commit?: string; current?: boolean }>
+    setActiveBranchIndex: SetNumberState
+    selectedModel: string
+    setSelectedModel: SetStringState
+    selectedRuntimeMode: AssistantRuntimeMode
+    setSelectedRuntimeMode: Dispatch<SetStateAction<AssistantRuntimeMode>>
+    selectedInteractionMode: AssistantInteractionMode
+    selectedEffort: AssistantComposerPreferenceEffort
+    fastModeEnabled: boolean
+    setComposerCursor: SetNumberState
+    removingAttachmentIds: string[]
+    setRemovingAttachmentIds: SetStringArrayState
+    textareaRef: RefObject<HTMLTextAreaElement | null>
+}
+
+export function createAssistantComposerHandlers(args: AssistantComposerHandlersArgs) {
+    const {
+        disabled,
+        isConnected,
+        isSending,
+        onSend,
+        text,
+        setText,
+        inlineMentionTags,
+        setInlineMentionTags,
+        contextFiles,
+        setContextFiles,
+        sentPromptHistory,
+        setSentPromptHistory,
+        historyCursor,
+        setHistoryCursor,
+        draftBeforeHistory,
+        setDraftBeforeHistory,
+        showMentionMenu,
+        setShowMentionMenu,
+        mentionCandidates,
+        mentionState,
+        activeMentionCandidate,
+        setActiveMentionIndex,
+        showModelDropdown,
+        setShowModelDropdown,
+        filteredModelOptions,
+        activeModelCandidate,
+        setActiveModelIndex,
+        showBranchDropdown,
+        setShowBranchDropdown,
+        filteredBranches,
+        setActiveBranchIndex,
+        selectedModel,
+        setSelectedModel,
+        selectedRuntimeMode,
+        setSelectedRuntimeMode,
+        selectedInteractionMode,
+        selectedEffort,
+        fastModeEnabled,
+        setComposerCursor,
+        removingAttachmentIds,
+        setRemovingAttachmentIds,
+        textareaRef
+    } = args
+
+    const upsertAttachment = (attachment: ComposerContextFile) => {
+        setContextFiles((prev) => {
+            const sameByPath = prev.find((entry) => entry.path === attachment.path && entry.path !== '')
+            return sameByPath ? prev : [...prev, attachment]
+        })
+    }
+
+    const removeAttachment = (id: string) => {
+        setRemovingAttachmentIds((prev) => prev.includes(id) ? prev : [...prev, id])
+        window.setTimeout(() => {
+            setContextFiles((prev) => prev.filter((entry) => entry.id !== id))
+            setRemovingAttachmentIds((prev) => prev.filter((entryId) => entryId !== id))
+        }, ATTACHMENT_REMOVE_MS)
+    }
+
+    const applyMentionCandidate = (candidate: MentionCandidate) => {
+        if (!mentionState) return
+        const start = mentionState.start
+        const cursor = textareaRef.current?.selectionStart ?? text.length
+        const mentionToken = `@${candidate.name}`
+        const nextText = `${text.slice(0, start)}${mentionToken} ${text.slice(cursor)}`
+        const nextTag: InlineMentionTag = {
+            id: createAttachmentId(),
+            path: candidate.path,
+            relativePath: candidate.relativePath,
+            label: candidate.name,
+            kind: candidate.type,
+            start,
+            end: start + mentionToken.length
+        }
+        setText(nextText)
+        setInlineMentionTags((current) => sortInlineMentionTags([...reconcileInlineMentionTags(text, nextText, current), nextTag]))
+        setShowMentionMenu(false)
+        window.requestAnimationFrame(() => {
+            const nextCursor = start + mentionToken.length + 1
+            setComposerCursor(nextCursor)
+            textareaRef.current?.focus()
+            textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
+        })
+    }
+
+    const attachFile = async (file: File, source: 'paste' | 'manual') => {
+        const declaredMimeType = String(file.type || '').trim().toLowerCase()
+        const fallbackName = declaredMimeType.startsWith('image/') ? `${source}-image-${Date.now()}.${inferImageExtensionFromMimeType(declaredMimeType)}` : `${source}-file-${Date.now()}`
+        const name = file.name || fallbackName
+        const electronPath = String((file as File & { path?: string }).path || '').trim()
+        const metaPath = electronPath || buildAttachmentPath(source, name)
+        const mimeType = declaredMimeType || 'application/octet-stream'
+        const looksLikeImageByName = /\.(png|jpe?g|gif|webp|svg|bmp|ico|tiff?|avif|apng|heic|heif|jfif|jxl)$/i.test(name)
+        const needsInlineImageContent = source === 'paste' || !electronPath || metaPath.startsWith('clipboard://')
+
+        const addImageAttachment = async (dataUrl: string, resolvedMimeType: string) => {
+            let attachmentPath = metaPath
+            if (source === 'paste') {
+                const saveResult = await window.devscope.assistant.persistClipboardImage({
+                    dataUrl,
+                    fileName: name,
+                    mimeType: resolvedMimeType
+                })
+                if (!saveResult.success || !saveResult.path) {
+                    const errorMessage = saveResult.success ? 'Clipboard image path was not returned.' : saveResult.error
+                    throw new Error(errorMessage || 'Failed to save clipboard image.')
+                }
+                attachmentPath = saveResult.path
+            }
+            upsertAttachment({
+                id: createAttachmentId(),
+                path: attachmentPath,
+                name,
+                mimeType: resolvedMimeType,
+                sizeBytes: file.size,
+                kind: 'image',
+                previewDataUrl: dataUrl,
+                content: needsInlineImageContent && source !== 'paste' ? dataUrl : undefined,
+                previewText: source === 'paste' ? 'Pasted image from clipboard.' : 'Attached image file.',
+                source,
+                animateIn: true
+            })
+        }
+
+        if (mimeType.startsWith('image/') || looksLikeImageByName) {
+            try {
+                const dataUrl = await readFileAsDataUrl(file)
+                const dataUrlMimeMatch = dataUrl.match(/^data:([^;,]+)[;,]/i)
+                await addImageAttachment(dataUrl, String(dataUrlMimeMatch?.[1] || '').trim().toLowerCase() || (mimeType.startsWith('image/') ? mimeType : 'image/png'))
+            } catch {}
+            return
+        }
+
+        if (source === 'paste' && !declaredMimeType) {
+            try {
+                const dataUrl = await readFileAsDataUrl(file)
+                const dataUrlMimeMatch = dataUrl.match(/^data:([^;,]+)[;,]/i)
+                const dataUrlMimeType = String(dataUrlMimeMatch?.[1] || '').trim().toLowerCase()
+                if (dataUrlMimeType.startsWith('image/')) {
+                    await addImageAttachment(dataUrl, dataUrlMimeType)
+                    return
+                }
+            } catch {}
+        }
+
+        try {
+            const rawText = await file.text()
+            const trimmed = rawText.length > MAX_ATTACHMENT_CONTENT_CHARS ? `${rawText.slice(0, MAX_ATTACHMENT_CONTENT_CHARS)}\n\n[truncated]` : rawText
+            const meta = getContextFileMeta({ path: metaPath, name, mimeType })
+            upsertAttachment({
+                id: createAttachmentId(),
+                path: metaPath,
+                name,
+                mimeType,
+                sizeBytes: file.size,
+                kind: meta.category === 'code' ? 'code' : 'doc',
+                content: trimmed,
+                previewText: summarizeTextPreview(rawText),
+                source,
+                animateIn: true
+            })
+        } catch {
+            upsertAttachment({
+                id: createAttachmentId(),
+                path: metaPath,
+                name,
+                mimeType,
+                sizeBytes: file.size,
+                kind: 'file',
+                previewText: source === 'paste' ? 'Binary attachment from clipboard.' : 'Attached binary file.',
+                source,
+                animateIn: true
+            })
+        }
+    }
+
+    const handleSend = async () => {
+        const prompt = replaceInlineMentionTokensWithLabels(text, inlineMentionTags).trim()
+        const inlineMentionFiles: ComposerContextFile[] = inlineMentionTags.map((tag) => {
+            const meta = getContextFileMeta({ path: tag.path, name: tag.label })
+            return {
+                id: `mention_${tag.id}`,
+                path: tag.path,
+                name: tag.label,
+                kind: meta.category === 'image' ? 'image' : meta.category === 'code' ? 'code' : 'file',
+                source: 'manual'
+            }
+        })
+        const contextFilesForSend = [...contextFiles, ...inlineMentionFiles].filter((file, index, collection) => {
+            const fileKey = `${String(file.path || '').toLowerCase()}::${String(file.name || '').toLowerCase()}`
+            return collection.findIndex((candidate) => `${String(candidate.path || '').toLowerCase()}::${String(candidate.name || '').toLowerCase()}` === fileKey) === index
+        })
+        if ((!prompt && contextFilesForSend.length === 0) || disabled || isSending || !isConnected) return
+        const prevText = text
+        const prevTags = inlineMentionTags
+        const prevFiles = contextFiles
+        setText('')
+        setInlineMentionTags([])
+        setContextFiles([])
+        setHistoryCursor(null)
+        setDraftBeforeHistory('')
+        const success = await onSend(prompt, contextFilesForSend, {
+            model: selectedModel || undefined,
+            runtimeMode: selectedRuntimeMode,
+            interactionMode: selectedInteractionMode,
+            effort: selectedEffort,
+            serviceTier: fastModeEnabled ? 'fast' : undefined
+        })
+        if (!success) {
+            setText(prevText)
+            setInlineMentionTags(prevTags)
+            setContextFiles(prevFiles)
+            return
+        }
+        if (prompt) setSentPromptHistory((prev) => prev[prev.length - 1] === prompt ? prev : [...prev.slice(-49), prompt])
+    }
+
+    const handleRecallPrevious = () => {
+        if (!sentPromptHistory.length) return
+        if (historyCursor == null) {
+            setDraftBeforeHistory(text)
+            const nextIndex = sentPromptHistory.length - 1
+            setHistoryCursor(nextIndex)
+            setText(sentPromptHistory[nextIndex])
+            setInlineMentionTags([])
+            return
+        }
+        const nextIndex = Math.max(0, historyCursor - 1)
+        setHistoryCursor(nextIndex)
+        setText(sentPromptHistory[nextIndex])
+        setInlineMentionTags([])
+    }
+
+    const handleRecallNext = () => {
+        if (historyCursor == null) return
+        if (historyCursor >= sentPromptHistory.length - 1) {
+            setHistoryCursor(null)
+            setText(draftBeforeHistory)
+            setInlineMentionTags([])
+            setDraftBeforeHistory('')
+            return
+        }
+        const nextIndex = historyCursor + 1
+        setHistoryCursor(nextIndex)
+        setText(sentPromptHistory[nextIndex])
+        setInlineMentionTags([])
+    }
+
+    const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        const target = event.currentTarget
+        const selectionStart = target.selectionStart ?? 0
+        const selectionEnd = target.selectionEnd ?? 0
+        const atStart = selectionStart === 0 && selectionEnd === 0
+        const atEnd = selectionStart === text.length && selectionEnd === text.length
+
+        if (inlineMentionTags.length > 0 && (event.key === 'Backspace' || event.key === 'Delete')) {
+            const isBackspace = event.key === 'Backspace'
+            const overlappingTags = selectionStart === selectionEnd
+                ? inlineMentionTags.filter((tag) => isBackspace ? selectionStart > tag.start && selectionStart <= tag.end : selectionStart >= tag.start && selectionStart < tag.end)
+                : inlineMentionTags.filter((tag) => tag.start < selectionEnd && tag.end > selectionStart)
+
+            if (overlappingTags.length > 0) {
+                event.preventDefault()
+                const rangeStart = Math.min(selectionStart, ...overlappingTags.map((tag) => tag.start))
+                const rangeEnd = Math.max(selectionEnd, ...overlappingTags.map((tag) => tag.end))
+                const nextText = `${text.slice(0, rangeStart)}${text.slice(rangeEnd)}`
+                setText(nextText)
+                setInlineMentionTags((current) => reconcileInlineMentionTags(text, nextText, removeInlineMentionTagRange(current, rangeStart, rangeEnd)))
+                setComposerCursor(rangeStart)
+                window.requestAnimationFrame(() => {
+                    textareaRef.current?.focus()
+                    textareaRef.current?.setSelectionRange(rangeStart, rangeStart)
+                })
+                return
+            }
+        }
+
+        if (showMentionMenu && mentionCandidates.length > 0) {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setActiveMentionIndex((current) => (current + 1) % mentionCandidates.length)
+                return
+            }
+            if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setActiveMentionIndex((current) => (current - 1 + mentionCandidates.length) % mentionCandidates.length)
+                return
+            }
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                applyMentionCandidate(activeMentionCandidate || mentionCandidates[0])
+                return
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault()
+                setShowMentionMenu(false)
+                return
+            }
+        }
+
+        if (showModelDropdown && filteredModelOptions.length > 0) {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setActiveModelIndex((current) => (current + 1) % filteredModelOptions.length)
+                return
+            }
+            if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setActiveModelIndex((current) => (current - 1 + filteredModelOptions.length) % filteredModelOptions.length)
+                return
+            }
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                setSelectedModel((activeModelCandidate || filteredModelOptions[0]).id)
+                setShowModelDropdown(false)
+                return
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault()
+                setShowModelDropdown(false)
+                return
+            }
+        }
+
+        if (showBranchDropdown && filteredBranches.length > 0) {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setActiveBranchIndex((current) => (current + 1) % filteredBranches.length)
+                return
+            }
+            if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setActiveBranchIndex((current) => (current - 1 + filteredBranches.length) % filteredBranches.length)
+                return
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault()
+                setShowBranchDropdown(false)
+                return
+            }
+        }
+
+        if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'ArrowUp' && atStart) {
+            event.preventDefault()
+            handleRecallPrevious()
+            return
+        }
+        if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'ArrowDown' && atEnd) {
+            event.preventDefault()
+            handleRecallNext()
+            return
+        }
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            void handleSend()
+        }
+    }
+
+    const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+        const clipboard = event.clipboardData
+        if (!clipboard) return
+        const items = Array.from(clipboard.items || [])
+        const fileItems = items.filter((item) => item.kind === 'file')
+        if (fileItems.length > 0) {
+            event.preventDefault()
+            for (const item of fileItems) {
+                const file = item.getAsFile()
+                if (file) void attachFile(file, 'paste')
+            }
+            return
+        }
+        const plainText = clipboard.getData('text/plain')
+        if (isLargeTextPaste(plainText)) {
+            event.preventDefault()
+            upsertAttachment(buildTextAttachmentFromPaste(plainText))
+        }
+    }
+
+    return {
+        removeAttachment,
+        applyMentionCandidate,
+        attachFile,
+        handleSend,
+        handleRecallPrevious,
+        handleRecallNext,
+        handleKeyDown,
+        handlePaste,
+        hasRemovingAttachment: removingAttachmentIds.length > 0
+    }
+}

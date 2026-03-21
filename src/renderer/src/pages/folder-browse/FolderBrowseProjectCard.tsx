@@ -67,6 +67,7 @@ export function FolderBrowseProjectCard({
                         <ProjectIcon
                             projectType={project.type}
                             framework={project.frameworks?.[0]}
+                            customIconPath={project.projectIconPath}
                             size={40}
                         />
                         {project.type === 'electron' && (
@@ -87,6 +88,7 @@ export function FolderBrowseProjectCard({
                             <ProjectIcon
                                 projectType={project.type}
                                 framework={project.frameworks?.[0]}
+                                customIconPath={project.projectIconPath}
                                 size={32}
                             />
                         </div>

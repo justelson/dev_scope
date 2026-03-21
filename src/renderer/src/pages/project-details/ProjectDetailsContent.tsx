@@ -31,7 +31,14 @@ export function ProjectDetailsContent(props: ProjectDetailsContentProps) {
                 <div className={isCondensedLayout ? 'col-span-12 flex min-w-0 flex-col gap-6' : 'col-span-12 lg:col-span-8 flex min-w-0 flex-col gap-6'}>
                     <div className="bg-sparkle-card border border-white/5 rounded-2xl overflow-hidden min-h-[500px] shadow-sm">
                         {activeTab === 'readme' ? (
-                            <ProjectDetailsReadmeTab {...props} />
+                            <ProjectDetailsReadmeTab
+                                project={project}
+                                openPreview={props.openPreview}
+                                readmeContentRef={props.readmeContentRef}
+                                readmeExpanded={props.readmeExpanded}
+                                readmeNeedsExpand={props.readmeNeedsExpand}
+                                setReadmeExpanded={props.setReadmeExpanded}
+                            />
                         ) : activeTab === 'files' ? (
                             <ProjectDetailsFilesTab {...props} />
                         ) : activeTab === 'git' ? (

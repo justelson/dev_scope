@@ -9,12 +9,14 @@ import { existsSync, statSync } from 'fs'
 import { electronApp, is } from './utils'
 import log from 'electron-log'
 import { registerIpcHandlers } from './ipc'
+import { disposeAssistantService } from './assistant'
 import { disposeSystemMetricsBridge } from './system-metrics/manager'
 import { disposeUpdater, initializeUpdater, registerUpdateWindow } from './update/manager'
 
 // Configure logging
+const verboseMainLogs = process.env.DEVSCOPE_VERBOSE_LOGS === '1'
 log.transports.file.level = 'info'
-log.transports.console.level = 'debug'
+log.transports.console.level = verboseMainLogs ? 'debug' : 'warn'
 console.log = log.log
 console.error = log.error
 console.warn = log.warn
@@ -372,6 +374,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+    disposeAssistantService()
     disposeSystemMetricsBridge()
     disposeUpdater()
     if (process.platform !== 'darwin') {
@@ -380,6 +383,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+    disposeAssistantService()
     disposeUpdater()
 })
 

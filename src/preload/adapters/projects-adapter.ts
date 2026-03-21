@@ -12,6 +12,8 @@ export function createProjectsAdapter() {
 
     return {
         selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),
+        selectMarkdownFile: () => ipcRenderer.invoke('devscope:selectMarkdownFile'),
+        getUserHomePath: () => ipcRenderer.invoke('devscope:getUserHomePath'),
         scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) =>
             ipcRenderer.invoke('devscope:scanProjects', folderPath, options),
         openInExplorer: (path: string) => ipcRenderer.invoke('devscope:openInExplorer', path),
@@ -27,6 +29,8 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:getFileTree', projectPath, options),
         getGitHistory: (projectPath: string, limit?: number, options?: { all?: boolean; includeStats?: boolean }) =>
             ipcRenderer.invoke('devscope:getGitHistory', projectPath, limit, options),
+        getGitHistoryCount: (projectPath: string, options?: { all?: boolean }) =>
+            ipcRenderer.invoke('devscope:getGitHistoryCount', projectPath, options),
         getGitCommitStats: (projectPath: string, commitHashes: string[]) =>
             ipcRenderer.invoke('devscope:getGitCommitStats', projectPath, commitHashes),
         getCommitDiff: (projectPath: string, commitHash: string) => ipcRenderer.invoke('devscope:getCommitDiff', projectPath, commitHash),
@@ -48,6 +52,39 @@ export function createProjectsAdapter() {
         getGitUser: (projectPath: string) => ipcRenderer.invoke('devscope:getGitUser', projectPath),
         getGlobalGitUser: () => ipcRenderer.invoke('devscope:getGlobalGitUser'),
         getRepoOwner: (projectPath: string) => ipcRenderer.invoke('devscope:getRepoOwner', projectPath),
+        getGitHubPublishContext: (projectPath: string) =>
+            ipcRenderer.invoke('devscope:getGitHubPublishContext', projectPath),
+        getCurrentBranchPullRequest: (projectPath: string) =>
+            ipcRenderer.invoke('devscope:getCurrentBranchPullRequest', projectPath),
+        createOrOpenPullRequest: (
+            projectPath: string,
+            input: {
+                projectName?: string
+                targetBranch?: string
+                draft?: boolean
+                title?: string
+                body?: string
+                guideText?: string
+                provider?: 'groq' | 'gemini' | 'codex'
+                apiKey?: string
+                model?: string
+            }
+        ) => ipcRenderer.invoke('devscope:createOrOpenPullRequest', projectPath, input),
+        commitPushAndCreatePullRequest: (
+            projectPath: string,
+            input: {
+                projectName?: string
+                commitMessage?: string
+                targetBranch?: string
+                draft?: boolean
+                guideText?: string
+                provider?: 'groq' | 'gemini' | 'codex'
+                apiKey?: string
+                model?: string
+                autoStageAll?: boolean
+                stageScope?: 'project' | 'repo'
+            }
+        ) => ipcRenderer.invoke('devscope:commitPushAndCreatePullRequest', projectPath, input),
         hasRemoteOrigin: (projectPath: string) => ipcRenderer.invoke('devscope:hasRemoteOrigin', projectPath),
         getProjectsGitOverview: (projectPaths: string[]) => ipcRenderer.invoke('devscope:getProjectsGitOverview', projectPaths),
         stageFiles: (
@@ -63,13 +100,19 @@ export function createProjectsAdapter() {
         discardChanges: (
             projectPath: string,
             files: string[],
-            options?: { scope?: 'project' | 'repo' }
+            options?: { scope?: 'project' | 'repo'; mode?: 'unstaged' | 'staged' | 'both' }
         ) => ipcRenderer.invoke('devscope:discardChanges', projectPath, files, options),
         createCommit: (projectPath: string, message: string) => ipcRenderer.invoke('devscope:createCommit', projectPath, message),
         setGlobalGitUser: (user: { name: string; email: string }) => ipcRenderer.invoke('devscope:setGlobalGitUser', user),
-        pushCommits: (projectPath: string) => ipcRenderer.invoke('devscope:pushCommits', projectPath),
+        pushCommits: (projectPath: string, options?: { remoteName?: string; branchName?: string }) =>
+            ipcRenderer.invoke('devscope:pushCommits', projectPath, options),
+        pushSingleCommit: (projectPath: string, commitHash: string, options?: { remoteName?: string; branchName?: string }) =>
+            ipcRenderer.invoke('devscope:pushSingleCommit', projectPath, commitHash, options),
         fetchUpdates: (projectPath: string, remoteName?: string) => ipcRenderer.invoke('devscope:fetchUpdates', projectPath, remoteName),
-        pullUpdates: (projectPath: string) => ipcRenderer.invoke('devscope:pullUpdates', projectPath),
+        pullUpdates: (
+            projectPath: string,
+            options?: { remoteName?: string; branchName?: string; pushRemoteName?: string }
+        ) => ipcRenderer.invoke('devscope:pullUpdates', projectPath, options),
         listBranches: (projectPath: string) => ipcRenderer.invoke('devscope:listBranches', projectPath),
         createBranch: (projectPath: string, branchName: string, checkout?: boolean) =>
             ipcRenderer.invoke('devscope:createBranch', projectPath, branchName, checkout),
@@ -81,6 +124,8 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:checkoutBranch', projectPath, branchName, options),
         deleteBranch: (projectPath: string, branchName: string, force?: boolean) =>
             ipcRenderer.invoke('devscope:deleteBranch', projectPath, branchName, force),
+        addRemote: (projectPath: string, remoteName: string, remoteUrl: string) =>
+            ipcRenderer.invoke('devscope:addRemote', projectPath, remoteName, remoteUrl),
         listRemotes: (projectPath: string) => ipcRenderer.invoke('devscope:listRemotes', projectPath),
         setRemoteUrl: (projectPath: string, remoteName: string, remoteUrl: string) =>
             ipcRenderer.invoke('devscope:setRemoteUrl', projectPath, remoteName, remoteUrl),
@@ -167,6 +212,8 @@ export function createProjectsAdapter() {
         deleteFileSystemItem: (targetPath: string) => ipcRenderer.invoke('devscope:deleteFileSystemItem', targetPath),
         pasteFileSystemItem: (sourcePath: string, destinationDirectory: string) =>
             ipcRenderer.invoke('devscope:pasteFileSystemItem', sourcePath, destinationDirectory),
+        moveFileSystemItem: (sourcePath: string, destinationDirectory: string) =>
+            ipcRenderer.invoke('devscope:moveFileSystemItem', sourcePath, destinationDirectory),
         getProjectSessions: (_projectPath: string) => Promise.resolve({ success: true, sessions: [] }),
         getProjectProcesses: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectProcesses', projectPath),
         getRunningApps: (limit: number = 500) => ipcRenderer.invoke('devscope:getRunningApps', limit),

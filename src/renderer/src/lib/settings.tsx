@@ -4,17 +4,54 @@
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import {
+    loadLegacyAssistantComposerDefaults,
+    sanitizeAssistantDefaultEffort,
+    sanitizeAssistantDefaultInteractionMode,
+    sanitizeAssistantDefaultRuntimeMode
+} from './settings-assistant-defaults'
+
+export {
+    getAssistantDefaultEffortLabel,
+    getAssistantDefaultInteractionModeLabel,
+    getAssistantDefaultRuntimeModeLabel,
+    getAssistantDefaultSpeedLabel,
+    getAssistantDefaultsPreview
+} from './settings-assistant-defaults'
 
 // Settings Types
 export type Theme = 'dark' | 'light' | 'purple' | 'green' | 'midnight' | 'ocean' | 'forest' | 'slate' | 'charcoal' | 'navy'
+export type DarkTheme = Exclude<Theme, 'light'>
 export type Shell = 'powershell' | 'cmd'
-export type CommitAIProvider = 'groq' | 'gemini'
+export type CommitAIProvider = 'groq' | 'gemini' | 'codex'
 export type ScrollMode = 'smooth' | 'native'
 export type BrowserViewMode = 'grid' | 'finder'
 export type BrowserContentLayout = 'grouped' | 'explorer'
 export type GitBulkActionScope = 'project' | 'repo'
 export type FilePreviewDefaultMode = 'preview' | 'edit'
 export type FilePreviewPythonRunMode = 'terminal' | 'output'
+export type PullRequestGuideSource = 'project' | 'global' | 'repo-template' | 'none'
+export type PullRequestGuideMode = 'text' | 'file'
+export type PullRequestChangeSource = 'unstaged' | 'staged' | 'local-commits' | 'all-local-work'
+export type AssistantUsageDisplayMode = 'remaining' | 'used'
+export type AssistantTextStreamingMode = 'stream' | 'chunks'
+export type AssistantDefaultRuntimeMode = 'approval-required' | 'full-access'
+export type AssistantDefaultInteractionMode = 'default' | 'plan'
+export type AssistantDefaultEffort = 'low' | 'medium' | 'high' | 'xhigh'
+
+export interface PullRequestGuideConfig {
+    mode: PullRequestGuideMode
+    text: string
+    filePath: string
+}
+
+export interface ProjectPullRequestConfig {
+    guideSource: PullRequestGuideSource
+    guide: PullRequestGuideConfig
+    targetBranch: string
+    draft: boolean
+    changeSource: PullRequestChangeSource
+}
 
 export interface AccentColor {
     name: string
@@ -38,7 +75,7 @@ export const ACCENT_COLORS: AccentColor[] = [
     { name: 'Violet', primary: '#7c3aed', secondary: '#a78bfa' },
     { name: 'Amber', primary: '#f59e0b', secondary: '#fbbf24' },
     { name: 'Lime', primary: '#84cc16', secondary: '#a3e635' },
-    { name: 'Sky', primary: '#0ea5e9', secondary: '#38bdf8' },
+    { name: 'Sky', primary: '#0ea5e9', secondary: '#38bdf8' }
 ]
 
 export const THEMES = [
@@ -49,20 +86,19 @@ export const THEMES = [
     { id: 'forest' as Theme, name: 'Forest Night', color: '#0a1a11', description: 'Dark forest green', accentColor: 'Emerald' },
     { id: 'slate' as Theme, name: 'Slate', color: '#1a1d23', description: 'Cool gray slate', accentColor: 'Sky' },
     { id: 'charcoal' as Theme, name: 'Charcoal', color: '#16181d', description: 'Warm charcoal gray', accentColor: 'Amber' },
-    { id: 'navy' as Theme, name: 'Cursor Dark', color: '#0b0d10', description: 'Near-black Cursor-inspired theme', accentColor: 'Blue' },
+    { id: 'navy' as Theme, name: 'Cursor Dark', color: '#0b0d10', description: 'Near-black Cursor-inspired theme', accentColor: 'Blue' }
 ]
 
 export interface Settings {
-    // Appearance
     theme: Theme
+    lastDarkTheme: DarkTheme
     accentColor: AccentColor
     compactMode: boolean
     sidebarCollapsed: boolean
-
-    // Terminal
+    betaSettingsEnabled: boolean
+    explorerTabEnabled: boolean
+    explorerHomePath: string
     defaultShell: Shell
-
-    // Behavior
     startMinimized: boolean
     startWithWindows: boolean
     scrollMode: ScrollMode
@@ -77,32 +113,46 @@ export interface Settings {
     projectDetailsShowTaskManagerTab: boolean
     tasksPageEnabled: boolean
     tasksRunningAppsEnabled: boolean
-
-    // Projects
     projectsFolder: string
     additionalFolders: string[]
     enableFolderIndexing: boolean
     autoIndexOnStartup: boolean
-
-    // Git
     gitAutoRefreshOnProjectOpen: boolean
     gitInitDefaultBranch: string
     gitInitCreateGitignore: boolean
     gitInitCreateInitialCommit: boolean
     gitWarnOnAuthorMismatch: boolean
+    gitConfirmPartialPushRange: boolean
     gitBulkActionScope: GitBulkActionScope
-
-    // AI
+    gitPullRequestGlobalGuide: PullRequestGuideConfig
+    gitPullRequestDefaultGuideSource: PullRequestGuideSource
+    gitPullRequestDefaultTargetBranch: string
+    gitPullRequestDefaultDraft: boolean
+    gitPullRequestDefaultChangeSource: PullRequestChangeSource
+    gitProjectPullRequestConfigs: Record<string, ProjectPullRequestConfig>
+    gitAutoCreateBranchWhenTargetMatches: boolean
     groqApiKey: string
     geminiApiKey: string
+    codexModel: string
     commitAIProvider: CommitAIProvider
+    assistantUsageDisplayMode: AssistantUsageDisplayMode
+    assistantTextStreamingMode: AssistantTextStreamingMode
+    assistantDefaultModel: string
+    assistantDefaultRuntimeMode: AssistantDefaultRuntimeMode
+    assistantDefaultInteractionMode: AssistantDefaultInteractionMode
+    assistantDefaultEffort: AssistantDefaultEffort
+    assistantDefaultFastMode: boolean
 }
 
 const DEFAULT_SETTINGS: Settings = {
     theme: 'dark',
+    lastDarkTheme: 'dark',
     accentColor: ACCENT_COLORS[0],
     compactMode: false,
     sidebarCollapsed: false,
+    betaSettingsEnabled: false,
+    explorerTabEnabled: false,
+    explorerHomePath: '',
     defaultShell: 'powershell',
     startMinimized: false,
     startWithWindows: false,
@@ -127,28 +177,106 @@ const DEFAULT_SETTINGS: Settings = {
     gitInitCreateGitignore: true,
     gitInitCreateInitialCommit: false,
     gitWarnOnAuthorMismatch: true,
+    gitConfirmPartialPushRange: true,
     gitBulkActionScope: 'repo',
+    gitPullRequestGlobalGuide: {
+        mode: 'text',
+        text: '',
+        filePath: ''
+    },
+    gitPullRequestDefaultGuideSource: 'global',
+    gitPullRequestDefaultTargetBranch: 'main',
+    gitPullRequestDefaultDraft: true,
+    gitPullRequestDefaultChangeSource: 'all-local-work',
+    gitProjectPullRequestConfigs: {},
+    gitAutoCreateBranchWhenTargetMatches: false,
     groqApiKey: '',
     geminiApiKey: '',
-    commitAIProvider: 'groq'
+    codexModel: '',
+    commitAIProvider: 'groq',
+    assistantUsageDisplayMode: 'remaining',
+    assistantTextStreamingMode: 'stream',
+    assistantDefaultModel: '',
+    assistantDefaultRuntimeMode: 'approval-required',
+    assistantDefaultInteractionMode: 'default',
+    assistantDefaultEffort: 'high',
+    assistantDefaultFastMode: false
 }
 
 const STORAGE_KEY = 'devscope-settings'
+const LEGACY_ASSISTANT_COMPOSER_PREFERENCES_STORAGE_KEY = 'devscope:assistant-composer-preferences'
 
-// Load settings from localStorage
+function isTheme(value: unknown): value is Theme {
+    return typeof value === 'string' && ['dark', 'light', 'purple', 'green', 'midnight', 'ocean', 'forest', 'slate', 'charcoal', 'navy'].includes(value)
+}
+
+function isDarkTheme(value: unknown): value is DarkTheme {
+    return isTheme(value) && value !== 'light'
+}
+
+function sanitizePullRequestGuideConfig(value: unknown): PullRequestGuideConfig {
+    const candidate = typeof value === 'object' && value !== null ? value as Partial<PullRequestGuideConfig> : {}
+    return {
+        mode: candidate.mode === 'file' ? 'file' : 'text',
+        text: typeof candidate.text === 'string' ? candidate.text : '',
+        filePath: typeof candidate.filePath === 'string' ? candidate.filePath : ''
+    }
+}
+
+function sanitizePullRequestChangeSource(value: unknown, fallback: PullRequestChangeSource): PullRequestChangeSource {
+    if (value === 'unstaged' || value === 'staged' || value === 'local-commits' || value === 'all-local-work') {
+        return value
+    }
+    if (value === 'selected-commits') return 'local-commits'
+    if (value === 'all-ready') return 'all-local-work'
+    return fallback
+}
+
+function sanitizeProjectPullRequestConfig(value: unknown, defaults: Settings): ProjectPullRequestConfig {
+    const candidate = typeof value === 'object' && value !== null ? value as Partial<ProjectPullRequestConfig> : {}
+    return {
+        guideSource: candidate.guideSource === 'project' || candidate.guideSource === 'repo-template' || candidate.guideSource === 'none'
+            ? candidate.guideSource
+            : 'global',
+        guide: sanitizePullRequestGuideConfig(candidate.guide),
+        targetBranch: typeof candidate.targetBranch === 'string' && candidate.targetBranch.trim()
+            ? candidate.targetBranch.trim()
+            : defaults.gitPullRequestDefaultTargetBranch,
+        draft: candidate.draft !== false,
+        changeSource: sanitizePullRequestChangeSource(
+            (candidate as Partial<ProjectPullRequestConfig> & { scope?: unknown }).changeSource
+                ?? (candidate as Partial<ProjectPullRequestConfig> & { scope?: unknown }).scope,
+            defaults.gitPullRequestDefaultChangeSource
+        )
+    }
+}
+
 function loadSettings(): Settings {
     try {
+        const legacyAssistantDefaults = loadLegacyAssistantComposerDefaults(
+            LEGACY_ASSISTANT_COMPOSER_PREFERENCES_STORAGE_KEY,
+            DEFAULT_SETTINGS
+        )
         const stored = localStorage.getItem(STORAGE_KEY)
         if (stored) {
             const parsed = JSON.parse(stored)
-            const candidate = { ...DEFAULT_SETTINGS, ...parsed }
+            const candidate = { ...DEFAULT_SETTINGS, ...legacyAssistantDefaults, ...parsed }
+            const theme = isTheme(candidate.theme) ? candidate.theme : DEFAULT_SETTINGS.theme
+            const lastDarkTheme = isDarkTheme(candidate.lastDarkTheme)
+                ? candidate.lastDarkTheme
+                : isDarkTheme(theme)
+                    ? theme
+                    : DEFAULT_SETTINGS.lastDarkTheme
 
-            // Keep only active settings keys to drop obsolete/dead fields from older app versions.
             return {
-                theme: candidate.theme,
+                theme,
+                lastDarkTheme,
                 accentColor: candidate.accentColor,
                 compactMode: candidate.compactMode,
                 sidebarCollapsed: candidate.sidebarCollapsed,
+                betaSettingsEnabled: candidate.betaSettingsEnabled === true,
+                explorerTabEnabled: candidate.explorerTabEnabled === true,
+                explorerHomePath: typeof candidate.explorerHomePath === 'string' ? candidate.explorerHomePath : '',
                 defaultShell: candidate.defaultShell,
                 startMinimized: candidate.startMinimized,
                 startWithWindows: candidate.startWithWindows,
@@ -177,19 +305,56 @@ function loadSettings(): Settings {
                 gitInitCreateGitignore: candidate.gitInitCreateGitignore !== false,
                 gitInitCreateInitialCommit: !!candidate.gitInitCreateInitialCommit,
                 gitWarnOnAuthorMismatch: candidate.gitWarnOnAuthorMismatch !== false,
+                gitConfirmPartialPushRange: candidate.gitConfirmPartialPushRange !== false,
                 gitBulkActionScope: candidate.gitBulkActionScope === 'project' ? 'project' : 'repo',
+                gitPullRequestGlobalGuide: sanitizePullRequestGuideConfig(candidate.gitPullRequestGlobalGuide),
+                gitPullRequestDefaultGuideSource:
+                    candidate.gitPullRequestDefaultGuideSource === 'project'
+                    || candidate.gitPullRequestDefaultGuideSource === 'repo-template'
+                    || candidate.gitPullRequestDefaultGuideSource === 'none'
+                        ? candidate.gitPullRequestDefaultGuideSource
+                        : 'global',
+                gitPullRequestDefaultTargetBranch: typeof candidate.gitPullRequestDefaultTargetBranch === 'string' && candidate.gitPullRequestDefaultTargetBranch.trim()
+                    ? candidate.gitPullRequestDefaultTargetBranch.trim()
+                    : DEFAULT_SETTINGS.gitPullRequestDefaultTargetBranch,
+                gitPullRequestDefaultDraft: candidate.gitPullRequestDefaultDraft !== false,
+                gitPullRequestDefaultChangeSource: sanitizePullRequestChangeSource(
+                    candidate.gitPullRequestDefaultChangeSource ?? candidate.gitPullRequestDefaultScope,
+                    DEFAULT_SETTINGS.gitPullRequestDefaultChangeSource
+                ),
+                gitProjectPullRequestConfigs: Object.fromEntries(
+                    Object.entries(
+                        typeof candidate.gitProjectPullRequestConfigs === 'object' && candidate.gitProjectPullRequestConfigs !== null
+                            ? candidate.gitProjectPullRequestConfigs as Record<string, unknown>
+                            : {}
+                    ).map(([projectPath, config]) => [
+                        projectPath,
+                        sanitizeProjectPullRequestConfig(config, DEFAULT_SETTINGS)
+                    ])
+                ),
+                gitAutoCreateBranchWhenTargetMatches: candidate.gitAutoCreateBranchWhenTargetMatches === true,
                 groqApiKey: candidate.groqApiKey,
                 geminiApiKey: candidate.geminiApiKey,
-                commitAIProvider: candidate.commitAIProvider
+                codexModel: typeof candidate.codexModel === 'string' ? candidate.codexModel.trim() : '',
+                commitAIProvider: candidate.commitAIProvider === 'gemini' || candidate.commitAIProvider === 'codex' ? candidate.commitAIProvider : 'groq',
+                assistantUsageDisplayMode: candidate.assistantUsageDisplayMode === 'used' ? 'used' : 'remaining',
+                assistantTextStreamingMode: candidate.assistantTextStreamingMode === 'chunks' ? 'chunks' : 'stream',
+                assistantDefaultModel: typeof candidate.assistantDefaultModel === 'string' ? candidate.assistantDefaultModel.trim() : '',
+                assistantDefaultRuntimeMode: sanitizeAssistantDefaultRuntimeMode(candidate.assistantDefaultRuntimeMode),
+                assistantDefaultInteractionMode: sanitizeAssistantDefaultInteractionMode(candidate.assistantDefaultInteractionMode),
+                assistantDefaultEffort: sanitizeAssistantDefaultEffort(candidate.assistantDefaultEffort),
+                assistantDefaultFastMode: !!candidate.assistantDefaultFastMode
             }
         }
     } catch (e) {
         console.error('Failed to load settings:', e)
     }
-    return DEFAULT_SETTINGS
+    return {
+        ...DEFAULT_SETTINGS,
+        ...loadLegacyAssistantComposerDefaults(LEGACY_ASSISTANT_COMPOSER_PREFERENCES_STORAGE_KEY, DEFAULT_SETTINGS)
+    }
 }
 
-// Save settings to localStorage
 function saveSettings(settings: Settings): void {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
@@ -198,7 +363,6 @@ function saveSettings(settings: Settings): void {
     }
 }
 
-// Context
 interface SettingsContextType {
     settings: Settings
     updateSettings: (partial: Partial<Settings>) => void
@@ -211,17 +375,14 @@ const SettingsContext = createContext<SettingsContextType | null>(null)
 export function SettingsProvider({ children }: { children: ReactNode }) {
     const [settings, setSettings] = useState<Settings>(loadSettings)
 
-    // Apply theme on mount and change
     useEffect(() => {
         applyTheme(settings.theme)
     }, [settings.theme])
 
-    // Apply accent color on mount and change
     useEffect(() => {
         applyAccentColor(settings.accentColor)
     }, [settings.accentColor])
 
-    // Apply compact mode
     useEffect(() => {
         if (settings.compactMode) {
             document.body.classList.add('compact-mode')
@@ -230,13 +391,26 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
     }, [settings.compactMode])
 
-    // Save settings whenever they change
     useEffect(() => {
         saveSettings(settings)
     }, [settings])
 
     const updateSettings = (partial: Partial<Settings>) => {
-        setSettings(prev => ({ ...prev, ...partial }))
+        setSettings((prev) => {
+            const nextTheme = partial.theme ?? prev.theme
+            const nextLastDarkTheme = isDarkTheme(partial.lastDarkTheme)
+                ? partial.lastDarkTheme
+                : isDarkTheme(nextTheme)
+                    ? nextTheme
+                    : prev.lastDarkTheme
+
+            return {
+                ...prev,
+                ...partial,
+                theme: nextTheme,
+                lastDarkTheme: nextLastDarkTheme
+            }
+        })
     }
 
     const resetSettings = () => {
@@ -245,17 +419,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
 
     const clearCache = () => {
-        // Clear all devscope-related localStorage items except settings
         const keysToRemove: string[] = []
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
+        for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index)
             if (key && key.startsWith('devscope-') && key !== STORAGE_KEY) {
                 keysToRemove.push(key)
             }
         }
-        keysToRemove.forEach(key => localStorage.removeItem(key))
-
-        // Dispatch event to notify components
+        keysToRemove.forEach((key) => localStorage.removeItem(key))
         window.dispatchEvent(new CustomEvent('devscope:cache-cleared'))
     }
 
@@ -274,7 +445,6 @@ export function useSettings() {
     return context
 }
 
-// Helper functions
 function applyTheme(theme: Theme) {
     document.body.classList.remove('dark', 'light', 'purple', 'green', 'midnight', 'ocean', 'forest', 'slate', 'charcoal', 'navy')
     if (theme !== 'dark') {
@@ -286,4 +456,3 @@ function applyAccentColor(accent: AccentColor) {
     document.documentElement.style.setProperty('--accent-primary', accent.primary)
     document.documentElement.style.setProperty('--accent-secondary', accent.secondary)
 }
-

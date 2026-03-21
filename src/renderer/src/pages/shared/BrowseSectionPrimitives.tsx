@@ -1,4 +1,4 @@
-import type { ComponentType, ElementType } from 'react'
+import type { ComponentType, ElementType, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 export const WRAP_AND_CLAMP_2 = 'whitespace-normal break-words [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical] overflow-hidden'
@@ -30,9 +30,10 @@ interface FinderItemProps {
     onClick: () => void
     className?: string
     iconClassName?: string
+    visual?: ReactNode
 }
 
-export function FinderItem({ icon: Icon, title, subtitle, tag, tagColor, onClick, className, iconClassName }: FinderItemProps) {
+export function FinderItem({ icon: Icon, title, subtitle, tag, tagColor, onClick, className, iconClassName, visual }: FinderItemProps) {
     return (
         <button
             onClick={onClick}
@@ -44,7 +45,7 @@ export function FinderItem({ icon: Icon, title, subtitle, tag, tagColor, onClick
             )}
         >
             <div className="relative flex h-16 w-16 items-center justify-center overflow-visible rounded-2xl border border-white/5 bg-sparkle-bg shadow-inner transition-all group-hover:border-white/20">
-                <Icon size={32} className={cn('transition-transform duration-300 group-hover:scale-110', iconClassName)} />
+                {visual || <Icon size={32} className={cn('transition-transform duration-300 group-hover:scale-110', iconClassName)} />}
 
                 {tag && (
                     <div

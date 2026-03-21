@@ -23,11 +23,40 @@ import {
     handleGetAiDebugLogs,
     handleGetStartupSettings,
     handleSetStartupSettings,
+    handleTestCodexConnection,
     handleTestGeminiConnection,
     handleTestGroqConnection
 } from './handlers/settings-ai-handlers'
 import {
+    handleAssistantArchiveSession,
+    handleAssistantBootstrap,
+    handleAssistantClearLogs,
+    handleAssistantConnect,
+    handleAssistantCreateSession,
+    handleAssistantDeleteMessage,
+    handleAssistantDeleteSession,
+    handleAssistantDisconnect,
+    handleAssistantGetAccountOverview,
+    handleAssistantGetSnapshot,
+    handleAssistantGetStatus,
+    handleAssistantInterruptTurn,
+    handleAssistantListModels,
+    handleAssistantNewThread,
+    handleAssistantPersistClipboardImage,
+    handleAssistantRenameSession,
+    handleAssistantRespondApproval,
+    handleAssistantRespondUserInput,
+    handleAssistantSelectSession,
+    handleAssistantSendPrompt,
+    handleAssistantSetSessionProjectPath,
+    handleAssistantSubscribe,
+    handleAssistantUnsubscribe
+} from './handlers/assistant-handlers'
+import { ASSISTANT_IPC } from '../../shared/assistant/contracts'
+import { peekAssistantService } from '../assistant'
+import {
     handleCopyToClipboard,
+    handleGetUserHomePath,
     handleIndexAllFolders,
     handleOpenFile,
     handleOpenInExplorer,
@@ -35,7 +64,8 @@ import {
     handleOpenWith,
     handleListInstalledIdes,
     handleScanProjects,
-    handleSelectFolder
+    handleSelectFolder,
+    handleSelectMarkdownFile
 } from './handlers/project-discovery-handlers'
 import {
     handleGetActivePorts,
@@ -51,6 +81,7 @@ import {
     handleGetFileTree,
     handleGetPathInfo,
     handlePasteFileSystemItem,
+    handleMoveFileSystemItem,
     handleReadFileContent,
     handleReadTextFileFull,
     handleRenameFileSystemItem,
@@ -79,10 +110,13 @@ import {
     handleGetCommitDiff,
     handleGetGitCommitStats,
     handleGetGitHistory,
+    handleGetGitHistoryCount,
     handleGetGitStatusEntryStats,
     handleGetGitSyncStatus,
     handleGetGitStatus,
     handleGetGitStatusDetailed,
+    handleGetGitHubPublishContext,
+    handleGetCurrentBranchPullRequest,
     handleGetGlobalGitUser,
     handleGetGitUser,
     handleGetGitignorePatterns,
@@ -96,11 +130,14 @@ import {
     handleHasRemoteOrigin
 } from './handlers/git-read-handlers'
 import {
+    handleAddRemote,
     handleAddRemoteOrigin,
     handleApplyStash,
     handleCheckoutBranch,
     handleCreateBranch,
     handleCreateCommit,
+    handleCreateOrOpenPullRequest,
+    handleCommitPushAndCreatePullRequest,
     handleCreateInitialCommit,
     handleCreateStash,
     handleCreateTag,
@@ -116,6 +153,7 @@ import {
     handleListTags,
     handlePullUpdates,
     handlePushCommits,
+    handlePushSingleCommit,
     handleRemoveRemote,
     handleSetRemoteUrl,
     handleSetGlobalGitUser,
@@ -152,11 +190,37 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getStartupSettings', handleGetStartupSettings)
     ipcMain.handle('devscope:testGroqConnection', handleTestGroqConnection)
     ipcMain.handle('devscope:testGeminiConnection', handleTestGeminiConnection)
+    ipcMain.handle('devscope:testCodexConnection', handleTestCodexConnection)
     ipcMain.handle('devscope:generateCommitMessage', handleGenerateCommitMessage)
     ipcMain.handle('devscope:getAiDebugLogs', handleGetAiDebugLogs)
     ipcMain.handle('devscope:clearAiDebugLogs', handleClearAiDebugLogs)
+    ipcMain.handle(ASSISTANT_IPC.subscribe, handleAssistantSubscribe)
+    ipcMain.handle(ASSISTANT_IPC.unsubscribe, handleAssistantUnsubscribe)
+    ipcMain.handle(ASSISTANT_IPC.bootstrap, handleAssistantBootstrap)
+    ipcMain.handle(ASSISTANT_IPC.getSnapshot, handleAssistantGetSnapshot)
+    ipcMain.handle(ASSISTANT_IPC.getStatus, handleAssistantGetStatus)
+    ipcMain.handle(ASSISTANT_IPC.getAccountOverview, handleAssistantGetAccountOverview)
+    ipcMain.handle(ASSISTANT_IPC.listModels, handleAssistantListModels)
+    ipcMain.handle(ASSISTANT_IPC.connect, handleAssistantConnect)
+    ipcMain.handle(ASSISTANT_IPC.disconnect, handleAssistantDisconnect)
+    ipcMain.handle(ASSISTANT_IPC.createSession, handleAssistantCreateSession)
+    ipcMain.handle(ASSISTANT_IPC.selectSession, handleAssistantSelectSession)
+    ipcMain.handle(ASSISTANT_IPC.renameSession, handleAssistantRenameSession)
+    ipcMain.handle(ASSISTANT_IPC.archiveSession, handleAssistantArchiveSession)
+    ipcMain.handle(ASSISTANT_IPC.deleteSession, handleAssistantDeleteSession)
+    ipcMain.handle(ASSISTANT_IPC.deleteMessage, handleAssistantDeleteMessage)
+    ipcMain.handle(ASSISTANT_IPC.clearLogs, handleAssistantClearLogs)
+    ipcMain.handle(ASSISTANT_IPC.setSessionProjectPath, handleAssistantSetSessionProjectPath)
+    ipcMain.handle(ASSISTANT_IPC.persistClipboardImage, handleAssistantPersistClipboardImage)
+    ipcMain.handle(ASSISTANT_IPC.newThread, handleAssistantNewThread)
+    ipcMain.handle(ASSISTANT_IPC.sendPrompt, handleAssistantSendPrompt)
+    ipcMain.handle(ASSISTANT_IPC.interruptTurn, handleAssistantInterruptTurn)
+    ipcMain.handle(ASSISTANT_IPC.respondApproval, handleAssistantRespondApproval)
+    ipcMain.handle(ASSISTANT_IPC.respondUserInput, handleAssistantRespondUserInput)
 
     ipcMain.handle('devscope:selectFolder', handleSelectFolder)
+    ipcMain.handle('devscope:selectMarkdownFile', handleSelectMarkdownFile)
+    ipcMain.handle('devscope:getUserHomePath', handleGetUserHomePath)
     ipcMain.handle('devscope:scanProjects', handleScanProjects)
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
     ipcMain.handle('devscope:openInExplorer', handleOpenInExplorer)
@@ -185,12 +249,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:renameFileSystemItem', handleRenameFileSystemItem)
     ipcMain.handle('devscope:deleteFileSystemItem', handleDeleteFileSystemItem)
     ipcMain.handle('devscope:pasteFileSystemItem', handlePasteFileSystemItem)
+    ipcMain.handle('devscope:moveFileSystemItem', handleMoveFileSystemItem)
     ipcMain.handle('devscope:getProjectSessions', handleGetProjectSessions)
     ipcMain.handle('devscope:getProjectProcesses', handleGetProjectProcesses)
     ipcMain.handle('devscope:getRunningApps', handleGetRunningApps)
     ipcMain.handle('devscope:getActivePorts', handleGetActivePorts)
 
     ipcMain.handle('devscope:getGitHistory', handleGetGitHistory)
+    ipcMain.handle('devscope:getGitHistoryCount', handleGetGitHistoryCount)
     ipcMain.handle('devscope:getGitCommitStats', handleGetGitCommitStats)
     ipcMain.handle('devscope:getCommitDiff', handleGetCommitDiff)
     ipcMain.handle('devscope:getWorkingDiff', handleGetWorkingDiff)
@@ -204,6 +270,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getGitUser', handleGetGitUser)
     ipcMain.handle('devscope:getGlobalGitUser', handleGetGlobalGitUser)
     ipcMain.handle('devscope:getRepoOwner', handleGetRepoOwner)
+    ipcMain.handle('devscope:getGitHubPublishContext', handleGetGitHubPublishContext)
+    ipcMain.handle('devscope:getCurrentBranchPullRequest', handleGetCurrentBranchPullRequest)
     ipcMain.handle('devscope:hasRemoteOrigin', handleHasRemoteOrigin)
     ipcMain.handle('devscope:getProjectsGitOverview', handleGetProjectsGitOverview)
     ipcMain.handle('devscope:checkIsGitRepo', handleCheckIsGitRepo)
@@ -212,14 +280,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:unstageFiles', handleUnstageFiles)
     ipcMain.handle('devscope:discardChanges', handleDiscardChanges)
     ipcMain.handle('devscope:createCommit', handleCreateCommit)
+    ipcMain.handle('devscope:createOrOpenPullRequest', handleCreateOrOpenPullRequest)
+    ipcMain.handle('devscope:commitPushAndCreatePullRequest', handleCommitPushAndCreatePullRequest)
     ipcMain.handle('devscope:setGlobalGitUser', handleSetGlobalGitUser)
     ipcMain.handle('devscope:pushCommits', handlePushCommits)
+    ipcMain.handle('devscope:pushSingleCommit', handlePushSingleCommit)
     ipcMain.handle('devscope:fetchUpdates', handleFetchUpdates)
     ipcMain.handle('devscope:pullUpdates', handlePullUpdates)
     ipcMain.handle('devscope:listBranches', handleListBranches)
     ipcMain.handle('devscope:createBranch', handleCreateBranch)
     ipcMain.handle('devscope:checkoutBranch', handleCheckoutBranch)
     ipcMain.handle('devscope:deleteBranch', handleDeleteBranch)
+    ipcMain.handle('devscope:addRemote', handleAddRemote)
     ipcMain.handle('devscope:listRemotes', handleListRemotes)
     ipcMain.handle('devscope:setRemoteUrl', handleSetRemoteUrl)
     ipcMain.handle('devscope:removeRemote', handleRemoveRemote)
@@ -262,5 +334,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     mainWindow.webContents.once('destroyed', () => {
         systemMetricsBridge.unsubscribe(mainWindow.webContents.id)
+        peekAssistantService()?.unsubscribe(mainWindow.webContents.id)
     })
 }

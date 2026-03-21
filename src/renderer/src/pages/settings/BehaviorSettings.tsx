@@ -2,16 +2,40 @@
  * DevScope - Behavior Settings Page
  */
 
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, Power, EyeOff, Mouse, Expand, Eye, Edit3, PanelLeft, PanelRight, TerminalSquare, ListChecks, Activity, Gauge } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import {
+    Activity,
+    ArrowLeft,
+    Edit3,
+    Expand,
+    Eye,
+    EyeOff,
+    Gauge,
+    ListChecks,
+    Mouse,
+    PanelLeft,
+    PanelRight,
+    Play,
+    Power,
+    SquareTerminal,
+    TerminalSquare
+} from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
+import { ScrollPreviewModal } from './ScrollPreviewModal'
+
+type BehaviorTab = 'startup' | 'preview' | 'tasks' | 'terminal'
 
 export default function BehaviorSettings() {
     const { settings, updateSettings } = useSettings()
     const [startupStatus, setStartupStatus] = useState<string | null>(null)
-    const [activeTab, setActiveTab] = useState<'startup' | 'preview' | 'tasks'>('startup')
+    const [showScrollPreview, setShowScrollPreview] = useState(false)
+    const [searchParams, setSearchParams] = useSearchParams()
+    const activeTab = useMemo<BehaviorTab>(() => {
+        const tab = String(searchParams.get('tab') || '').trim()
+        return tab === 'preview' || tab === 'tasks' || tab === 'terminal' ? tab : 'startup'
+    }, [searchParams])
 
     useEffect(() => {
         let isMounted = true
@@ -24,12 +48,12 @@ export default function BehaviorSettings() {
                     startMinimized: Boolean(result.openAsHidden)
                 })
             })
-            .catch(() => { })
+            .catch(() => {})
 
         return () => {
             isMounted = false
         }
-    }, [])
+    }, [updateSettings])
 
     const handleStartupToggle = async (enabled: boolean) => {
         try {
@@ -43,7 +67,7 @@ export default function BehaviorSettings() {
             } else {
                 setStartupStatus('Failed to update')
             }
-        } catch (err) {
+        } catch {
             setStartupStatus('Failed to update')
         }
         setTimeout(() => setStartupStatus(null), 3000)
@@ -59,23 +83,32 @@ export default function BehaviorSettings() {
         }
     }
 
+    const setActiveTab = (nextTab: BehaviorTab) => {
+        const nextParams = new URLSearchParams(searchParams)
+        if (nextTab === 'startup') {
+            nextParams.delete('tab')
+        } else {
+            nextParams.set('tab', nextTab)
+        }
+        setSearchParams(nextParams, { replace: true })
+    }
+
     return (
         <div className="animate-fadeIn">
-            {/* Header */}
             <div className="mb-6">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-blue-500/10">
+                        <div className="rounded-lg bg-blue-500/10 p-2">
                             <Power className="text-blue-400" size={24} />
                         </div>
                         <div>
                             <h1 className="text-xl font-semibold text-sparkle-text">Behavior</h1>
-                            <p className="text-sm text-sparkle-text-secondary">Startup options</p>
+                            <p className="text-sm text-sparkle-text-secondary">Startup, preview, tasks, and terminal controls</p>
                         </div>
                     </div>
                     <Link
                         to="/settings"
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-sparkle-text hover:text-[var(--accent-primary)] bg-sparkle-card hover:bg-sparkle-card-hover border border-sparkle-border rounded-lg transition-all shrink-0"
+                        className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-sparkle-card px-4 py-2 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.03] hover:text-[var(--accent-primary)]"
                     >
                         <ArrowLeft size={16} />
                         Back to Settings
@@ -83,310 +116,319 @@ export default function BehaviorSettings() {
                 </div>
             </div>
 
-            <div className="mb-6 inline-flex items-center rounded-lg border border-sparkle-border bg-sparkle-card p-1">
-                <button
-                    type="button"
-                    onClick={() => setActiveTab('startup')}
-                    className={cn(
-                        'rounded-md px-3 py-1.5 text-xs transition-colors',
-                        activeTab === 'startup'
-                            ? 'bg-[var(--accent-primary)] text-white'
-                            : 'text-sparkle-text-secondary hover:bg-sparkle-bg hover:text-sparkle-text'
-                    )}
-                >
-                    Startup & Scroll
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setActiveTab('preview')}
-                    className={cn(
-                        'rounded-md px-3 py-1.5 text-xs transition-colors',
-                        activeTab === 'preview'
-                            ? 'bg-[var(--accent-primary)] text-white'
-                            : 'text-sparkle-text-secondary hover:bg-sparkle-bg hover:text-sparkle-text'
-                    )}
-                >
-                    File Preview
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setActiveTab('tasks')}
-                    className={cn(
-                        'rounded-md px-3 py-1.5 text-xs transition-colors',
-                        activeTab === 'tasks'
-                            ? 'bg-[var(--accent-primary)] text-white'
-                            : 'text-sparkle-text-secondary hover:bg-sparkle-bg hover:text-sparkle-text'
-                    )}
-                >
-                    Tasks
-                </button>
+            <div className="mb-6 inline-flex items-center rounded-lg border border-white/10 bg-sparkle-card p-1">
+                <BehaviorTabButton active={activeTab === 'startup'} onClick={() => setActiveTab('startup')} label="Startup & Scroll" />
+                <BehaviorTabButton active={activeTab === 'preview'} onClick={() => setActiveTab('preview')} label="File Preview" />
+                <BehaviorTabButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} label="Tasks" />
+                <BehaviorTabButton active={activeTab === 'terminal'} onClick={() => setActiveTab('terminal')} label="Terminal" />
             </div>
 
             <div className="space-y-6">
                 {activeTab === 'startup' && (
-                    <>
-                        <SettingsSection title="Start with Windows" description="Launch DevScope automatically when Windows starts">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <Power size={20} className="text-sparkle-text-secondary" />
-                                    <div>
-                                        <p className="text-sm font-medium text-sparkle-text">
-                                            {settings.startWithWindows ? 'Enabled' : 'Disabled'}
-                                        </p>
-                                        {startupStatus && (
-                                            <p className="text-xs text-[var(--accent-primary)]">{startupStatus}</p>
-                                        )}
-                                    </div>
-                                </div>
-                                <ToggleSwitch
-                                    checked={settings.startWithWindows}
-                                    onChange={handleStartupToggle}
+                    <div className="grid gap-6 xl:grid-cols-2">
+                        <SettingsSection title="Startup" description="Choose how DevScope behaves when Windows launches.">
+                            <div className="space-y-4">
+                                <SettingRow
+                                    icon={<Power size={20} className="text-sparkle-text-secondary" />}
+                                    title={settings.startWithWindows ? 'Launch with Windows' : 'Manual launch only'}
+                                    description={startupStatus || 'Open DevScope automatically every time Windows starts.'}
+                                    control={<ToggleSwitch checked={settings.startWithWindows} onChange={handleStartupToggle} />}
+                                />
+                                <SettingRow
+                                    icon={<EyeOff size={20} className="text-sparkle-text-secondary" />}
+                                    title={settings.startMinimized ? 'Start hidden in tray' : 'Start with window visible'}
+                                    description="Choose whether the app appears immediately or stays tucked into the tray."
+                                    control={<ToggleSwitch checked={settings.startMinimized} onChange={handleMinimizedToggle} />}
                                 />
                             </div>
                         </SettingsSection>
 
-                        <SettingsSection title="Start Minimized" description="Start in the system tray instead of showing the window">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <EyeOff size={20} className="text-sparkle-text-secondary" />
-                                    <p className="text-sm font-medium text-sparkle-text">
-                                        {settings.startMinimized ? 'Start hidden' : 'Start visible'}
-                                    </p>
-                                </div>
-                                <ToggleSwitch
-                                    checked={settings.startMinimized}
-                                    onChange={handleMinimizedToggle}
+                        <SettingsSection title="Scroll Feel" description="Pick the scroll behavior that should be used across the app.">
+                            <div className="space-y-4">
+                                <SettingRow
+                                    icon={<Mouse size={20} className="text-sparkle-text-secondary" />}
+                                    title={settings.scrollMode === 'smooth' ? 'Buttery smooth scroll' : 'Native platform scroll'}
+                                    description="This affects long pages, settings views, and dense panels."
+                                    control={(
+                                        <SegmentedControl
+                                            activeKey={settings.scrollMode}
+                                            options={[
+                                                { key: 'smooth', label: 'Buttery' },
+                                                { key: 'native', label: 'Native' }
+                                            ]}
+                                            onChange={(value) => updateSettings({ scrollMode: value as 'smooth' | 'native' })}
+                                        />
+                                    )}
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowScrollPreview(true)}
+                                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.05]"
+                                >
+                                    <Play size={16} />
+                                    Preview Scroll Behaviors
+                                </button>
                             </div>
                         </SettingsSection>
-
-                        <SettingsSection title="Scroll Feel" description="Choose between DevScope buttery scrolling and native app scrolling">
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <Mouse size={20} className="text-sparkle-text-secondary" />
-                                    <p className="text-sm font-medium text-sparkle-text">
-                                        {settings.scrollMode === 'smooth' ? 'Buttery smooth' : 'Native'}
-                                    </p>
-                                </div>
-
-                                <div className="inline-flex items-center rounded-lg border border-sparkle-border bg-sparkle-bg p-1">
-                                    <button
-                                        onClick={() => updateSettings({ scrollMode: 'smooth' })}
-                                        className={cn(
-                                            'px-3 py-1.5 rounded-md text-xs transition-colors',
-                                            settings.scrollMode === 'smooth'
-                                                ? 'bg-[var(--accent-primary)] text-white'
-                                                : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
-                                        )}
-                                    >
-                                        Buttery
-                                    </button>
-                                    <button
-                                        onClick={() => updateSettings({ scrollMode: 'native' })}
-                                        className={cn(
-                                            'px-3 py-1.5 rounded-md text-xs transition-colors',
-                                            settings.scrollMode === 'native'
-                                                ? 'bg-[var(--accent-primary)] text-white'
-                                                : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
-                                        )}
-                                    >
-                                        Native
-                                    </button>
-                                </div>
-                            </div>
-                        </SettingsSection>
-                    </>
+                    </div>
                 )}
 
                 {activeTab === 'preview' && (
-                    <>
-                        <SettingsSection title="Default Open State" description="Control how file previews open by default in File Browse and Project Details">
-                            <div className="space-y-5">
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-center gap-3">
-                                        <Expand size={20} className="text-sparkle-text-secondary" />
-                                        <div>
-                                            <p className="text-sm font-medium text-sparkle-text">
-                                                {settings.filePreviewOpenInFullscreen ? 'Open in fullscreen mode' : 'Open in windowed mode'}
-                                            </p>
-                                            <p className="text-xs text-sparkle-text-secondary">Applies when opening any file preview modal</p>
-                                        </div>
-                                    </div>
-                                    <ToggleSwitch
-                                        checked={settings.filePreviewOpenInFullscreen}
-                                        onChange={(next) => updateSettings({ filePreviewOpenInFullscreen: next })}
-                                    />
-                                </div>
-
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-center gap-3">
-                                        {settings.filePreviewDefaultMode === 'edit'
-                                            ? <Edit3 size={20} className="text-sparkle-text-secondary" />
-                                            : <Eye size={20} className="text-sparkle-text-secondary" />}
-                                        <p className="text-sm font-medium text-sparkle-text">
-                                            Default mode: {settings.filePreviewDefaultMode === 'edit' ? 'Edit' : 'Preview'}
-                                        </p>
-                                    </div>
-
-                                    <div className="inline-flex items-center rounded-lg border border-sparkle-border bg-sparkle-bg p-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => updateSettings({ filePreviewDefaultMode: 'preview' })}
-                                            className={cn(
-                                                'px-3 py-1.5 rounded-md text-xs transition-colors',
-                                                settings.filePreviewDefaultMode === 'preview'
-                                                    ? 'bg-[var(--accent-primary)] text-white'
-                                                    : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
-                                            )}
-                                        >
-                                            Preview
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => updateSettings({ filePreviewDefaultMode: 'edit' })}
-                                            className={cn(
-                                                'px-3 py-1.5 rounded-md text-xs transition-colors',
-                                                settings.filePreviewDefaultMode === 'edit'
-                                                    ? 'bg-[var(--accent-primary)] text-white'
-                                                    : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
-                                            )}
-                                        >
-                                            Edit
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-center gap-3">
-                                        {settings.filePreviewPythonRunMode === 'terminal'
-                                            ? <TerminalSquare size={20} className="text-sparkle-text-secondary" />
-                                            : <ListChecks size={20} className="text-sparkle-text-secondary" />}
-                                        <div>
-                                            <p className="text-sm font-medium text-sparkle-text">
-                                                Python run default: {settings.filePreviewPythonRunMode === 'terminal' ? 'Terminal' : 'Output tab'}
-                                            </p>
-                                            <p className="text-xs text-sparkle-text-secondary">Used by the preview Play button dropdown default selection</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="inline-flex items-center rounded-lg border border-sparkle-border bg-sparkle-bg p-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => updateSettings({ filePreviewPythonRunMode: 'terminal' })}
-                                            className={cn(
-                                                'px-3 py-1.5 rounded-md text-xs transition-colors',
-                                                settings.filePreviewPythonRunMode === 'terminal'
-                                                    ? 'bg-[var(--accent-primary)] text-white'
-                                                    : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
-                                            )}
-                                        >
-                                            Terminal
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => updateSettings({ filePreviewPythonRunMode: 'output' })}
-                                            className={cn(
-                                                'px-3 py-1.5 rounded-md text-xs transition-colors',
-                                                settings.filePreviewPythonRunMode === 'output'
-                                                    ? 'bg-[var(--accent-primary)] text-white'
-                                                    : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-sparkle-card-hover'
-                                            )}
-                                        >
-                                            Output
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </SettingsSection>
-
-                        <SettingsSection title="Fullscreen Sidebars" description="Choose which side panels are shown when entering fullscreen preview">
+                    <div className="grid gap-6 xl:grid-cols-2">
+                        <SettingsSection
+                            title="Default Open State"
+                            description="Control how file previews open by default in File Browse and Project Details."
+                        >
                             <div className="space-y-4">
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-center gap-3">
-                                        <PanelLeft size={20} className="text-sparkle-text-secondary" />
-                                        <p className="text-sm font-medium text-sparkle-text">
-                                            {settings.filePreviewFullscreenShowLeftPanel ? 'Left panel enabled' : 'Left panel hidden'}
-                                        </p>
-                                    </div>
-                                    <ToggleSwitch
-                                        checked={settings.filePreviewFullscreenShowLeftPanel}
-                                        onChange={(next) => updateSettings({ filePreviewFullscreenShowLeftPanel: next })}
-                                    />
-                                </div>
-
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-center gap-3">
-                                        <PanelRight size={20} className="text-sparkle-text-secondary" />
-                                        <p className="text-sm font-medium text-sparkle-text">
-                                            {settings.filePreviewFullscreenShowRightPanel ? 'Right panel enabled' : 'Right panel hidden'}
-                                        </p>
-                                    </div>
-                                    <ToggleSwitch
-                                        checked={settings.filePreviewFullscreenShowRightPanel}
-                                        onChange={(next) => updateSettings({ filePreviewFullscreenShowRightPanel: next })}
-                                    />
-                                </div>
+                                <SettingRow
+                                    icon={<Expand size={20} className="text-sparkle-text-secondary" />}
+                                    title={settings.filePreviewOpenInFullscreen ? 'Open in fullscreen mode' : 'Open in windowed mode'}
+                                    description="Applies whenever a file preview modal is opened."
+                                    control={<ToggleSwitch checked={settings.filePreviewOpenInFullscreen} onChange={(next) => updateSettings({ filePreviewOpenInFullscreen: next })} />}
+                                />
+                                <SettingRow
+                                    icon={settings.filePreviewDefaultMode === 'edit'
+                                        ? <Edit3 size={20} className="text-sparkle-text-secondary" />
+                                        : <Eye size={20} className="text-sparkle-text-secondary" />}
+                                    title={`Default mode: ${settings.filePreviewDefaultMode === 'edit' ? 'Edit' : 'Preview'}`}
+                                    description="Used as the initial mode for newly opened previews."
+                                    control={(
+                                        <SegmentedControl
+                                            activeKey={settings.filePreviewDefaultMode}
+                                            options={[
+                                                { key: 'preview', label: 'Preview' },
+                                                { key: 'edit', label: 'Edit' }
+                                            ]}
+                                            onChange={(value) => updateSettings({ filePreviewDefaultMode: value as 'preview' | 'edit' })}
+                                        />
+                                    )}
+                                />
+                                <SettingRow
+                                    icon={settings.filePreviewPythonRunMode === 'terminal'
+                                        ? <TerminalSquare size={20} className="text-sparkle-text-secondary" />
+                                        : <ListChecks size={20} className="text-sparkle-text-secondary" />}
+                                    title={`Python run default: ${settings.filePreviewPythonRunMode === 'terminal' ? 'Terminal' : 'Output tab'}`}
+                                    description="Controls the default selection in the preview Play dropdown."
+                                    control={(
+                                        <SegmentedControl
+                                            activeKey={settings.filePreviewPythonRunMode}
+                                            options={[
+                                                { key: 'terminal', label: 'Terminal' },
+                                                { key: 'output', label: 'Output' }
+                                            ]}
+                                            onChange={(value) => updateSettings({ filePreviewPythonRunMode: value as 'terminal' | 'output' })}
+                                        />
+                                    )}
+                                />
                             </div>
                         </SettingsSection>
 
-                    </>
+                        <SettingsSection title="Fullscreen Sidebars" description="Choose which side panels stay visible in fullscreen preview.">
+                            <div className="space-y-4">
+                                <SettingRow
+                                    icon={<PanelLeft size={20} className="text-sparkle-text-secondary" />}
+                                    title={settings.filePreviewFullscreenShowLeftPanel ? 'Left panel enabled' : 'Left panel hidden'}
+                                    description="Controls the left-side navigation and preview context area."
+                                    control={<ToggleSwitch checked={settings.filePreviewFullscreenShowLeftPanel} onChange={(next) => updateSettings({ filePreviewFullscreenShowLeftPanel: next })} />}
+                                />
+                                <SettingRow
+                                    icon={<PanelRight size={20} className="text-sparkle-text-secondary" />}
+                                    title={settings.filePreviewFullscreenShowRightPanel ? 'Right panel enabled' : 'Right panel hidden'}
+                                    description="Controls the secondary right-side info panel in fullscreen mode."
+                                    control={<ToggleSwitch checked={settings.filePreviewFullscreenShowRightPanel} onChange={(next) => updateSettings({ filePreviewFullscreenShowRightPanel: next })} />}
+                                />
+                            </div>
+                        </SettingsSection>
+                    </div>
                 )}
 
                 {activeTab === 'tasks' && (
-                    <>
-                        <SettingsSection title="Tasks Tab Availability" description="Enable or disable the entire Tasks page from app navigation">
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <Activity size={20} className="text-sparkle-text-secondary" />
-                                    <div>
-                                        <p className="text-sm font-medium text-sparkle-text">
-                                            {settings.tasksPageEnabled ? 'Tasks tab enabled' : 'Tasks tab disabled'}
-                                        </p>
-                                        <p className="text-xs text-sparkle-text-secondary">
-                                            When disabled, the Tasks tab is hidden and task-manager data is not fetched.
-                                        </p>
-                                    </div>
-                                </div>
-                                <ToggleSwitch
-                                    checked={settings.tasksPageEnabled}
-                                    onChange={(next) => updateSettings({ tasksPageEnabled: next })}
+                    <div className="grid gap-6 xl:grid-cols-2">
+                        <SettingsSection title="Tasks Tab Availability" description="Enable or disable the entire Tasks page from app navigation.">
+                            <SettingRow
+                                icon={<Activity size={20} className="text-sparkle-text-secondary" />}
+                                title={settings.tasksPageEnabled ? 'Tasks tab enabled' : 'Tasks tab disabled'}
+                                description="When disabled, the Tasks tab is hidden and task-manager data is not fetched."
+                                control={<ToggleSwitch checked={settings.tasksPageEnabled} onChange={(next) => updateSettings({ tasksPageEnabled: next })} />}
+                            />
+                        </SettingsSection>
+
+                        <SettingsSection title="Running Apps Monitor" description="Enable or disable the Running Apps section inside the Tasks page.">
+                            <SettingRow
+                                icon={<Gauge size={20} className="text-sparkle-text-secondary" />}
+                                title={settings.tasksRunningAppsEnabled ? 'Running Apps enabled' : 'Running Apps disabled'}
+                                description="Disabled state stops running-app and process-resource queries entirely."
+                                control={<ToggleSwitch checked={settings.tasksRunningAppsEnabled} onChange={(next) => updateSettings({ tasksRunningAppsEnabled: next })} disabled={!settings.tasksPageEnabled} />}
+                            />
+                        </SettingsSection>
+                    </div>
+                )}
+
+                {activeTab === 'terminal' && (
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.82fr)]">
+                        <SettingsSection title="Default Shell" description="Choose which shell DevScope launches for terminal actions.">
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <TerminalChoiceCard
+                                    active={settings.defaultShell === 'powershell'}
+                                    accentClassName="border-blue-500/50 bg-blue-500/10 text-blue-100"
+                                    idleClassName="border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
+                                    glyphClassName="text-blue-300"
+                                    label="PowerShell"
+                                    caption="Recommended for Windows workflows"
+                                    glyph="PS"
+                                    onClick={() => updateSettings({ defaultShell: 'powershell' })}
+                                />
+                                <TerminalChoiceCard
+                                    active={settings.defaultShell === 'cmd'}
+                                    accentClassName="border-amber-500/50 bg-amber-500/10 text-amber-100"
+                                    idleClassName="border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
+                                    glyphClassName="text-amber-300"
+                                    label="Command Prompt"
+                                    caption="Classic shell fallback"
+                                    glyph="CMD"
+                                    onClick={() => updateSettings({ defaultShell: 'cmd' })}
                                 />
                             </div>
                         </SettingsSection>
 
-                        <SettingsSection title="Running Apps Monitor" description="Enable or disable the Running Apps section inside the Tasks page">
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <Gauge size={20} className="text-sparkle-text-secondary" />
-                                    <div>
-                                        <p className="text-sm font-medium text-sparkle-text">
-                                            {settings.tasksRunningAppsEnabled ? 'Running Apps enabled' : 'Running Apps disabled'}
-                                        </p>
-                                        <p className="text-xs text-sparkle-text-secondary">
-                                            Disabled state stops running-app/process-resource queries entirely.
-                                        </p>
-                                    </div>
-                                </div>
-                                <ToggleSwitch
-                                    checked={settings.tasksRunningAppsEnabled}
-                                    onChange={(next) => updateSettings({ tasksRunningAppsEnabled: next })}
-                                    disabled={!settings.tasksPageEnabled}
+                        <SettingsSection title="Terminal Usage" description="How this shell choice is applied across the app.">
+                            <div className="space-y-4">
+                                <SettingRow
+                                    icon={<SquareTerminal size={20} className="text-sparkle-text-secondary" />}
+                                    title={`Current default: ${settings.defaultShell === 'cmd' ? 'Command Prompt' : 'PowerShell'}`}
+                                    description="Used whenever DevScope opens a terminal from projects, tasks, previews, or assistant actions."
+                                    control={(
+                                        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-sparkle-text">
+                                            {settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell'}
+                                        </span>
+                                    )}
                                 />
+                                <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+                                    <p className="text-sm font-medium text-sparkle-text">What changes</p>
+                                    <ul className="mt-2 space-y-2 text-xs leading-relaxed text-sparkle-text-secondary">
+                                        <li>Project and folder terminal launches use this shell by default.</li>
+                                        <li>Assistant and tool-triggered terminal actions inherit this choice.</li>
+                                        <li>Switching here applies immediately. No app restart is required.</li>
+                                    </ul>
+                                </div>
                             </div>
                         </SettingsSection>
-                    </>
+                    </div>
                 )}
+            </div>
+
+            {showScrollPreview && (
+                <ScrollPreviewModal
+                    currentMode={settings.scrollMode}
+                    onClose={() => setShowScrollPreview(false)}
+                    onApply={(mode) => {
+                        updateSettings({ scrollMode: mode })
+                        setShowScrollPreview(false)
+                    }}
+                />
+            )}
+        </div>
+    )
+}
+
+function BehaviorTabButton({
+    active,
+    onClick,
+    label
+}: {
+    active: boolean
+    onClick: () => void
+    label: string
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={cn(
+                'rounded-md px-3 py-1.5 text-xs transition-colors',
+                active
+                    ? 'bg-[var(--accent-primary)] text-white'
+                    : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
+            )}
+        >
+            {label}
+        </button>
+    )
+}
+
+function SettingsSection({
+    title,
+    description,
+    children
+}: {
+    title: string
+    description: string
+    children: ReactNode
+}) {
+    return (
+        <div className="h-full rounded-xl border border-white/10 bg-sparkle-card p-5">
+            <h2 className="mb-1 font-semibold text-sparkle-text">{title}</h2>
+            <p className="mb-4 text-sm text-sparkle-text-secondary">{description}</p>
+            {children}
+        </div>
+    )
+}
+
+function SettingRow({
+    icon,
+    title,
+    description,
+    control
+}: {
+    icon: ReactNode
+    title: string
+    description: string
+    control: ReactNode
+}) {
+    return (
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-3">
+                        <div className="mt-0.5 shrink-0">{icon}</div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium text-sparkle-text">{title}</p>
+                            <p className="mt-1 text-xs text-sparkle-text-secondary">{description}</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="shrink-0 lg:ml-4">{control}</div>
             </div>
         </div>
     )
 }
 
-function SettingsSection({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+function SegmentedControl({
+    activeKey,
+    options,
+    onChange
+}: {
+    activeKey: string
+    options: Array<{ key: string; label: string }>
+    onChange: (value: string) => void
+}) {
     return (
-        <div className="bg-sparkle-card rounded-xl border border-sparkle-border p-5">
-            <h2 className="font-semibold text-sparkle-text mb-1">{title}</h2>
-            <p className="text-sm text-sparkle-text-secondary mb-4">{description}</p>
-            {children}
+        <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/[0.03] p-1">
+            {options.map((option) => (
+                <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => onChange(option.key)}
+                    className={cn(
+                        'rounded-md px-3 py-1.5 text-xs transition-colors',
+                        activeKey === option.key
+                            ? 'bg-[var(--accent-primary)] text-white'
+                            : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
+                    )}
+                >
+                    {option.label}
+                </button>
+            ))}
         </div>
     )
 }
@@ -397,7 +439,7 @@ function ToggleSwitch({
     disabled
 }: {
     checked: boolean
-    onChange: (v: boolean) => void
+    onChange: (value: boolean) => void
     disabled?: boolean
 }) {
     return (
@@ -406,14 +448,14 @@ function ToggleSwitch({
             onClick={() => !disabled && onChange(!checked)}
             disabled={disabled}
             className={cn(
-                'w-12 h-7 rounded-full transition-colors relative',
-                checked ? 'bg-[var(--accent-primary)]' : 'bg-sparkle-border',
-                disabled && 'opacity-50 cursor-not-allowed'
+                'relative h-7 w-12 rounded-full transition-colors',
+                checked ? 'bg-[var(--accent-primary)]' : 'bg-white/10',
+                disabled && 'cursor-not-allowed opacity-50'
             )}
         >
             <div
                 className={cn(
-                    'absolute top-1 w-5 h-5 rounded-full bg-white transition-transform shadow',
+                    'absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform',
                     checked ? 'translate-x-6' : 'translate-x-1'
                 )}
             />
@@ -421,4 +463,37 @@ function ToggleSwitch({
     )
 }
 
-
+function TerminalChoiceCard({
+    active,
+    accentClassName,
+    idleClassName,
+    glyphClassName,
+    label,
+    caption,
+    glyph,
+    onClick
+}: {
+    active: boolean
+    accentClassName: string
+    idleClassName: string
+    glyphClassName: string
+    label: string
+    caption: string
+    glyph: string
+    onClick: () => void
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={cn(
+                'rounded-xl border p-5 text-left transition-all',
+                active ? accentClassName : idleClassName
+            )}
+        >
+            <div className={cn('text-2xl font-semibold', glyphClassName)}>{glyph}</div>
+            <p className="mt-3 text-sm font-medium text-sparkle-text">{label}</p>
+            <p className="mt-1 text-xs text-sparkle-text-secondary">{caption}</p>
+        </button>
+    )
+}

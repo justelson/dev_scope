@@ -663,3 +663,55 @@
 .animate-broken-light {
   animation: brokenLightFlicker 2.3s steps(1, end) infinite;
 }
+
+/* ============================================================================
+   Performance Utilities
+   ============================================================================ */
+.smooth-scroll {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.optimize-scroll {
+  contain: layout style paint;
+  content-visibility: auto;
+}
+
+/* ============================================================================
+   Select Dropdown Theming
+   ============================================================================ */
+select option {
+  background-color: var(--color-card);
+  color: var(--color-text);
+  padding: 8px 12px;
+}
+
+select option:hover,
+select option:focus,
+select option:checked {
+  background-color: color-mix(in srgb, var(--color-text), transparent 90%);
+  color: var(--color-text);
+}
+
+/* Firefox specific */
+@-moz-document url-prefix() {
+  select option {
+    background-color: var(--color-card);
+    color: var(--color-text);
+  }
+  
+  select option:checked {
+    background-color: color-mix(in srgb, var(--color-primary), transparent 80%);
+  }
+}
+

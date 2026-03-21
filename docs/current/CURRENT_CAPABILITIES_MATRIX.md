@@ -1,86 +1,94 @@
 # Current Capabilities Matrix
 
-Last validated: March 8, 2026
+Last validated against code on March 20, 2026.
 
-This matrix reflects the currently exposed DevScope desktop capabilities from the shared contract and adapters.
+## Status Legend
 
-## Legend
+- `Implemented`: active in the current desktop app.
+- `Implemented (setting-gated)`: present, but only visible when enabled in settings.
+- `Planning-only`: documented direction, not a first-class implementation in this repo yet.
+- `Archived`: retained for reference only, not part of the live runtime.
 
-- `Implemented`: available and wired in main/preload/renderer.
-- `Deprecated/Removed`: intentionally not part of the active desktop product surface.
-- `Planned`: design docs exist but not first-class product surface yet.
+## Desktop Shell and System
 
-## Capability Areas
+- Window controls: `Implemented`
+- System overview and detailed system stats: `Implemented`
+- Readiness and developer-tooling detection: `Implemented`
+- Shared metrics bootstrap, subscribe, and read flows: `Implemented`
+- Active task listing: `Implemented`
 
-### System + Environment
+## Projects and File Workflows
 
-- System overview/stats/readiness: `Implemented`
-- Shared metrics bootstrap/subscribe/read: `Implemented`
-- Developer tooling sensing: `Implemented`
-
-### Projects + File Browsing
-
-- Folder selection and project scan: `Implemented`
-- Recursive indexing across roots: `Implemented`
+- Folder selection and root scanning: `Implemented`
+- Project indexing across multiple roots: `Implemented`
 - Project details read model: `Implemented`
-- File tree and file content preview reads: `Implemented`
-- Open in explorer / open file / copy path: `Implemented`
+- Installed IDE listing and open-in-IDE flows: `Implemented`
+- File tree reads and path info: `Implemented`
+- File preview reads across text/media/image content: `Implemented`
+- File writes, rename, move, paste, and delete flows: `Implemented`
+- Preview terminal sessions: `Implemented`
+- Python preview runs: `Implemented`
 
-### Git Workflows
+## Git Workflows
 
-- Read flows (status, history, unpushed, owner/user, remotes/tags/stashes): `Implemented`
-- Write flows (stage/unstage/discard/commit/push/fetch/pull): `Implemented`
-- Repo setup flows (init, initial commit, remote origin, gitignore generators): `Implemented`
+- Read flows for status, history, sync, remotes, tags, stashes, repo owner, publish context, and working diff: `Implemented`
+- Write flows for stage, unstage, discard, branch/tag actions, stash actions, fetch, pull, push, and repo init/setup: `Implemented`
+- AI-generated commit message flow with Groq, Gemini, or Codex model selection: `Implemented`
+- One-click staged `commit -> push -> create/open PR` flow for GitHub remotes: `Implemented`
+- GitHub CLI-backed pull request create/open flow with AI-or-template draft generation: `Implemented`
 
-### Terminal
+## Assistant
 
-- Open external terminal at path via IPC bridge: `Implemented`
-- Full in-app terminal manager APIs: `Deprecated/Removed`
+- Assistant page in renderer: `Implemented`
+- Session create/select/rename/archive/delete: `Implemented`
+- Assistant sidebar project grouping with newest-first chats for new sessions, progressive 5-chat "Show more" expansion, and drag reordering: `Implemented`
+- Connect/disconnect and model listing: `Implemented`
+- Prompt send and interrupt: `Implemented` (empty composer text falls back to a default send prompt)
+- Approval response and user-input response handling: `Implemented`
+- Active-plan progress panel and proposed-plan sidebar toggle in the assistant header: `Implemented`
+- Assistant header project Git change summary with total uncommitted +/- stats: `Implemented`
+- Pending AI follow-up question panel with inline option response flow: `Implemented`
+- Session project-path association and new thread flow: `Implemented`
+- Event subscription and snapshot/status reads: `Implemented`
+- Session switching with cached selected-thread hydration: `Implemented`
+- Assistant persistence auto-recovers corrupt SQLite state by backing it up, rebuilding, and maintaining a JSON fallback snapshot for recovery: `Implemented`
+- Assistant markdown file links and edited-file entries opening in-app preview: `Implemented`
+- App-level assistant defaults for model, chat/plan mode, supervised/full-access mode, reasoning level, and fast mode: `Implemented`
+- Assistant account overview surface with auth mode, plan, and rate-limit reads: `Implemented`
 
-### Desktop Updates
+## Settings and Navigation
 
-- Current version/release channel surface: `Implemented`
-- Check/download/install update actions: `Implemented`
-- GitHub Releases update feed integration: `Implemented`
+- Home page: `Implemented`
+- Projects page: `Implemented`
+- Settings pages: `Implemented`
+- Tasks page: `Implemented (setting-gated)`
+- Explorer page: `Implemented (setting-gated)`
+- Quick-open/command palette support: `Implemented`
 
-### Removed Lightweight Surfaces
+## Updates and Release Flows
 
-- Mobile companion web client: `Deprecated/Removed`
-- Remote access relay / pairing stack: `Deprecated/Removed`
+- Current version and update state surface: `Implemented`
+- Check, download, and install update actions: `Implemented`
+- GitHub Releases-based packaged update flow: `Implemented`
+- Versioned release output organization under `dist/releases` and `dist/unpacked`: `Implemented`
 
-### Window Controls
+## Separate Repo Packages and Archived Material
 
-- Minimize/maximize/close/isMaximized: `Implemented` for Electron client
+- Landing site in `apps/landing/devscope-web`: `Implemented` as a separate package
+- `archive/codex-assistant/*`: `Archived`
+- Zipped legacy docs under `docs/archive`: `Archived`
 
-### Archived Assistant / Agent Runtime Surfaces
+## Planned Platform Extensions
 
-- In-app assistant pages and IPC surface: `Deprecated/Removed`
-- AgentScope/runtime orchestration surface: `Deprecated/Removed`
-- Archived source retained for reference under `archive/codex-assistant`: `Implemented`
-
-## Client Surface Coverage
-
-### Electron Renderer (current primary client)
-
-- Full supported surface via `window.devscope`: `Implemented`
-
-### CLI on shared core
-
-- Architecture docs and approach defined: `Planned`
-- First-class implementation in this repo: `Not yet`
-
-### IDE extension on shared core
-
-- Architecture docs and approach defined: `Planned`
-- First-class implementation in this repo: `Not yet`
-
-### Alternate UI clients
-
-- Architecture docs and approach defined: `Planned`
-- First-class implementation in this repo: `Not yet`
+- CLI on top of shared contract/core: `Planning-only`
+- IDE extension on top of shared contract/core: `Planning-only`
+- Alternate UI clients on top of shared contract/core: `Planning-only`
 
 ## Source of Truth
 
-For exact operation signatures, use:
+For exact operation signatures and current surface area, use:
 
 - `src/shared/contracts/devscope-api.ts`
+- `src/shared/assistant/contracts/*`
+- `src/main/ipc/handlers.ts`
+- `src/renderer/src/App.tsx`

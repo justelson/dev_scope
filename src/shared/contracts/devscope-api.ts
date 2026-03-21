@@ -1,206 +1,60 @@
 import type { SharedSystemMetrics } from '../system-metrics'
 import type { FullReport, ReadinessReport, SystemHealth, ToolingReport } from '../../main/inspectors/types'
+import type {
+    AssistantApprovalResponseInput,
+    AssistantAccountOverviewPayload,
+    AssistantBootstrapPayload,
+    AssistantClearLogsInput,
+    AssistantConnectOptions,
+    AssistantDeleteMessageInput,
+    AssistantEventStreamPayload,
+    AssistantModelInfo,
+    AssistantPersistClipboardImageInput,
+    AssistantRuntimeStatus,
+    AssistantSendPromptOptions,
+    AssistantSnapshot,
+    AssistantUserInputResponseInput
+} from '../assistant/contracts'
+import type {
+    DevScopeGitBranchSummary,
+    DevScopeGitCommit,
+    DevScopeGitFileStatus,
+    DevScopeGitHistoryCount,
+    DevScopeGitHubPublishContext,
+    DevScopeGitRemoteSummary,
+    DevScopeGitStashSummary,
+    DevScopeGitStatusDetail,
+    DevScopeGitStatusEntryStats,
+    DevScopeGitSyncStatus,
+    DevScopeGitTagSummary,
+    DevScopeProjectGitOverviewItem,
+    DevScopePullRequestDraftSource,
+    DevScopePullRequestProvider,
+    DevScopePullRequestSummary,
+    DevScopeCreatePullRequestInput,
+    DevScopeCommitPushPullRequestInput,
+    DevScopeGitTextProvider
+} from './devscope-git-contracts'
+import type {
+    DevScopeFileItem,
+    DevScopeFileTreeNode,
+    DevScopeFolderItem,
+    DevScopeIndexedProject,
+    DevScopeInstalledIde,
+    DevScopePathInfo,
+    DevScopeProcessInfo,
+    DevScopeProject,
+    DevScopeProjectDetails,
+    DevScopePythonPreviewEvent,
+    DevScopeRunningApp
+} from './devscope-project-contracts'
+
+export * from './devscope-git-contracts'
+export * from './devscope-project-contracts'
 
 export type DevScopeOk<T = Record<string, unknown>> = { success: true } & T
 export type DevScopeErr = { success: false; error: string }
 export type DevScopeResult<T = Record<string, unknown>> = DevScopeOk<T> | DevScopeErr
-
-export type DevScopeGitFileStatus = 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown'
-export type DevScopeGitStatusDetail = {
-    path: string
-    previousPath?: string
-    status: DevScopeGitFileStatus
-    code: string
-    staged: boolean
-    unstaged: boolean
-    additions: number
-    deletions: number
-    stagedAdditions: number
-    stagedDeletions: number
-    unstagedAdditions: number
-    unstagedDeletions: number
-    statsLoaded?: boolean
-}
-
-export type DevScopeGitStatusEntryStats = {
-    path: string
-    additions: number
-    deletions: number
-    stagedAdditions: number
-    stagedDeletions: number
-    unstagedAdditions: number
-    unstagedDeletions: number
-    statsLoaded: boolean
-}
-
-export type DevScopeProject = {
-    name: string
-    path: string
-    type: string
-    markers: string[]
-    frameworks: string[]
-    lastModified?: number
-    isProject: boolean
-}
-
-export type DevScopeFolderItem = {
-    name: string
-    path: string
-    lastModified?: number
-    isProject: boolean
-}
-
-export type DevScopeFileItem = {
-    name: string
-    path: string
-    size: number
-    lastModified?: number
-    extension: string
-}
-
-export type DevScopeProjectDetails = {
-    name: string
-    displayName: string
-    path: string
-    type: string
-    markers: string[]
-    frameworks: string[]
-    readme?: string
-    scripts?: Record<string, string>
-    dependencies?: Record<string, string>
-    devDependencies?: Record<string, string>
-    dependencyInstallStatus?: {
-        installed: boolean | null
-        checked: boolean
-        ecosystem: 'node' | 'unknown'
-        totalPackages: number
-        installedPackages: number
-        missingPackages: number
-        missingDependencies?: string[]
-        missingSample?: string[]
-        reason?: string
-    } | null
-    [key: string]: unknown
-}
-
-export type DevScopeFileTreeNode = {
-    name: string
-    path: string
-    type: 'file' | 'directory'
-    size?: number
-    children?: DevScopeFileTreeNode[]
-    childrenLoaded?: boolean
-    isHidden: boolean
-    gitStatus?: DevScopeGitFileStatus
-}
-
-export type DevScopePathInfo = {
-    path: string
-    name: string
-    exists: boolean
-    type: 'file' | 'directory' | null
-}
-
-export type DevScopeGitCommit = {
-    hash: string
-    shortHash: string
-    parents: string[]
-    author: string
-    date: string
-    message: string
-    additions: number
-    deletions: number
-    filesChanged: number
-    statsLoaded?: boolean
-}
-
-export type DevScopeGitBranchSummary = {
-    name: string
-    current: boolean
-    commit: string
-    label: string
-    isRemote: boolean
-    isLocal?: boolean
-}
-
-export type DevScopeGitRemoteSummary = {
-    name: string
-    fetchUrl: string
-    pushUrl: string
-}
-
-export type DevScopeGitSyncStatus = {
-    currentBranch: string
-    upstreamBranch: string | null
-    headHash: string | null
-    upstreamHeadHash: string | null
-    hasRemote: boolean
-    ahead: number
-    behind: number
-    workingTreeChanged: boolean
-    workingTreeChangeCount: number
-    statusToken: string
-    detached: boolean
-}
-
-export type DevScopeGitTagSummary = {
-    name: string
-    commit?: string
-}
-
-export type DevScopeGitStashSummary = {
-    hash: string
-    message: string
-}
-
-export type DevScopeProjectGitOverviewItem = {
-    path: string
-    isGitRepo: boolean
-    changedCount: number
-    unpushedCount: number
-    hasRemote: boolean
-    error?: string
-}
-
-export type DevScopeIndexedProject = DevScopeProject & {
-    sourceFolder: string
-    depth: number
-}
-
-export type DevScopeProcessInfo = {
-    pid: number
-    name: string
-    port?: number
-    command?: string
-    type: 'dev-server' | 'node' | 'python' | 'other'
-}
-
-export type DevScopeRunningApp = {
-    name: string
-    category: 'app' | 'background'
-    processCount: number
-    cpu: number
-    memoryMb: number
-}
-
-export type DevScopeInstalledIde = {
-    id: string
-    name: string
-    icon: string
-    color: string
-}
-
-export type DevScopePythonPreviewEvent = {
-    sessionId: string
-    type: 'started' | 'stdout' | 'stderr' | 'exit' | 'error'
-    text?: string
-    code?: number | null
-    signal?: string | null
-    pid?: number | null
-    interpreter?: string
-    command?: string
-    stopped?: boolean
-}
 
 export type DevScopePreviewTerminalEvent = {
     sessionId: string
@@ -231,6 +85,7 @@ export type DevScopePreviewTerminalSessionSummary = {
 export type DevScopeTaskType =
     | 'git.commit'
     | 'git.push'
+    | 'git.pr'
     | 'git.fetch'
     | 'git.pull'
     | 'git.checkout'
@@ -337,6 +192,34 @@ export interface DevScopeAgentScopeApi {
     [method: string]: (...args: any[]) => any
 }
 
+export interface DevScopeAssistantApi {
+    subscribe: () => Promise<DevScopeResult>
+    unsubscribe: () => Promise<DevScopeResult>
+    bootstrap: () => Promise<AssistantBootstrapPayload>
+    getSnapshot: () => Promise<AssistantSnapshot>
+    getStatus: () => Promise<AssistantRuntimeStatus>
+    getAccountOverview: () => Promise<DevScopeResult<AssistantAccountOverviewPayload>>
+    listModels: (forceRefresh?: boolean) => Promise<DevScopeResult<{ models: AssistantModelInfo[] }>>
+    connect: (options?: AssistantConnectOptions) => Promise<DevScopeResult<{ threadId: string }>>
+    disconnect: (sessionId?: string) => Promise<DevScopeResult>
+    createSession: (title?: string, projectPath?: string) => Promise<DevScopeResult<{ sessionId: string }>>
+    selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot: AssistantSnapshot }>>
+    renameSession: (sessionId: string, title: string) => Promise<DevScopeResult>
+    archiveSession: (sessionId: string, archived?: boolean) => Promise<DevScopeResult>
+    deleteSession: (sessionId: string) => Promise<DevScopeResult>
+    deleteMessage: (input: AssistantDeleteMessageInput) => Promise<DevScopeResult>
+    clearLogs: (input?: AssistantClearLogsInput) => Promise<DevScopeResult>
+    setSessionProjectPath: (sessionId: string, projectPath: string | null) => Promise<DevScopeResult>
+    persistClipboardImage: (input: AssistantPersistClipboardImageInput) => Promise<DevScopeResult<{ path: string }>>
+    newThread: (sessionId?: string) => Promise<DevScopeResult<{ threadId: string }>>
+    sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) =>
+        Promise<DevScopeResult<{ sessionId: string; threadId: string; turnId: string }>>
+    interruptTurn: (turnId?: string, sessionId?: string) => Promise<DevScopeResult>
+    respondApproval: (input: AssistantApprovalResponseInput) => Promise<DevScopeResult>
+    respondUserInput: (input: AssistantUserInputResponseInput) => Promise<DevScopeResult>
+    onEvent: (callback: (event: AssistantEventStreamPayload) => void) => () => void
+}
+
 export interface DevScopeApi {
     // System
     getSystemOverview: () => Promise<SystemHealth>
@@ -347,7 +230,7 @@ export interface DevScopeApi {
     system: DevScopeSystemApi
 
     // Capabilities disabled in Air
-    getAIRuntimeStatus: () => Promise<DevScopeResult>
+    getAIRuntimeStatus: () => Promise<DevScopeResult<{ status: AssistantRuntimeStatus }>>
     getAIAgents: () => Promise<DevScopeResult<{ agents: unknown[] }>>
 
     // Settings + AI
@@ -357,10 +240,13 @@ export interface DevScopeApi {
     clearAiDebugLogs: () => Promise<DevScopeResult>
     testGroqConnection: (apiKey: string) => Promise<DevScopeResult>
     testGeminiConnection: (apiKey: string) => Promise<DevScopeResult>
-    generateCommitMessage: (provider: 'groq' | 'gemini', apiKey: string, diff: string) => Promise<DevScopeResult<{ message: string }>>
+    testCodexConnection: (model?: string) => Promise<DevScopeResult>
+    generateCommitMessage: (provider: DevScopeGitTextProvider, apiKey: string, diff: string, model?: string) => Promise<DevScopeResult<{ message: string }>>
 
     // Projects + Git
     selectFolder: () => Promise<DevScopeResult<{ folderPath?: string; cancelled?: boolean }>>
+    selectMarkdownFile: () => Promise<DevScopeResult<{ filePath?: string; cancelled?: boolean }>>
+    getUserHomePath: () => Promise<DevScopeResult<{ path: string }>>
     scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) => Promise<DevScopeResult<{ projects: DevScopeProject[]; folders: DevScopeFolderItem[]; files: DevScopeFileItem[]; cached?: boolean; cachedAt?: number }>>
     openInExplorer: (path: string) => Promise<DevScopeResult>
     openInTerminal: (path: string, preferredShell?: 'powershell' | 'cmd', initialCommand?: string) => Promise<DevScopeResult>
@@ -396,6 +282,10 @@ export interface DevScopeApi {
         limit?: number,
         options?: { all?: boolean; includeStats?: boolean }
     ) => Promise<DevScopeResult<{ commits: DevScopeGitCommit[] }>>
+    getGitHistoryCount: (
+        projectPath: string,
+        options?: { all?: boolean }
+    ) => Promise<DevScopeResult<DevScopeGitHistoryCount>>
     getGitCommitStats: (
         projectPath: string,
         commitHashes: string[]
@@ -422,6 +312,31 @@ export interface DevScopeApi {
     getGitUser: (projectPath: string) => Promise<DevScopeResult<{ user: { name: string; email: string } | null }>>
     getGlobalGitUser: () => Promise<DevScopeResult<{ user: { name: string; email: string } | null }>>
     getRepoOwner: (projectPath: string) => Promise<DevScopeResult<{ owner: string | null }>>
+    getGitHubPublishContext: (
+        projectPath: string
+    ) => Promise<DevScopeResult<{ context: DevScopeGitHubPublishContext }>>
+    getCurrentBranchPullRequest: (
+        projectPath: string
+    ) => Promise<DevScopeResult<{ pullRequest: DevScopePullRequestSummary | null }>>
+    createOrOpenPullRequest: (
+        projectPath: string,
+        input: DevScopeCreatePullRequestInput
+    ) => Promise<DevScopeResult<{
+        status: 'created' | 'opened_existing'
+        draftSource: DevScopePullRequestDraftSource
+        provider?: DevScopePullRequestProvider
+        pullRequest: DevScopePullRequestSummary
+    }>>
+    commitPushAndCreatePullRequest: (
+        projectPath: string,
+        input: DevScopeCommitPushPullRequestInput
+    ) => Promise<DevScopeResult<{
+        status: 'created' | 'opened_existing'
+        draftSource: DevScopePullRequestDraftSource
+        provider?: DevScopePullRequestProvider
+        pullRequest: DevScopePullRequestSummary
+        commitMessage: string
+    }>>
     hasRemoteOrigin: (projectPath: string) => Promise<DevScopeResult<{ hasRemote: boolean }>>
     getProjectsGitOverview: (projectPaths: string[]) => Promise<DevScopeResult<{ items: DevScopeProjectGitOverviewItem[] }>>
     stageFiles: (
@@ -437,17 +352,33 @@ export interface DevScopeApi {
     discardChanges: (
         projectPath: string,
         files: string[],
-        options?: { scope?: 'project' | 'repo' }
+        options?: { scope?: 'project' | 'repo'; mode?: 'unstaged' | 'staged' | 'both' }
     ) => Promise<DevScopeResult>
     createCommit: (projectPath: string, message: string) => Promise<DevScopeResult>
     setGlobalGitUser: (user: { name: string; email: string }) => Promise<DevScopeResult>
-    pushCommits: (projectPath: string) => Promise<DevScopeResult>
+    pushCommits: (
+        projectPath: string,
+        options?: { remoteName?: string; branchName?: string }
+    ) => Promise<DevScopeResult>
+    pushSingleCommit: (
+        projectPath: string,
+        commitHash: string,
+        options?: { remoteName?: string; branchName?: string }
+    ) => Promise<DevScopeResult>
     fetchUpdates: (projectPath: string, remoteName?: string) => Promise<DevScopeResult>
-    pullUpdates: (projectPath: string) => Promise<DevScopeResult>
+    pullUpdates: (
+        projectPath: string,
+        options?: {
+            remoteName?: string
+            branchName?: string
+            pushRemoteName?: string
+        }
+    ) => Promise<DevScopeResult>
     listBranches: (projectPath: string) => Promise<DevScopeResult<{ branches: DevScopeGitBranchSummary[] }>>
     createBranch: (projectPath: string, branchName: string, checkout?: boolean) => Promise<DevScopeResult>
     checkoutBranch: (projectPath: string, branchName: string, options?: { autoStash?: boolean; autoCleanupLock?: boolean }) => Promise<DevScopeResult<{ stashed: boolean; cleanedLock?: boolean; stashRef?: string; stashMessage?: string }>>
     deleteBranch: (projectPath: string, branchName: string, force?: boolean) => Promise<DevScopeResult>
+    addRemote: (projectPath: string, remoteName: string, remoteUrl: string) => Promise<DevScopeResult>
     listRemotes: (projectPath: string) => Promise<DevScopeResult<{ remotes: DevScopeGitRemoteSummary[] }>>
     setRemoteUrl: (projectPath: string, remoteName: string, remoteUrl: string) => Promise<DevScopeResult>
     removeRemote: (projectPath: string, remoteName: string) => Promise<DevScopeResult>
@@ -505,6 +436,7 @@ export interface DevScopeApi {
     renameFileSystemItem: (targetPath: string, nextName: string) => Promise<DevScopeResult<{ path: string; name: string }>>
     deleteFileSystemItem: (targetPath: string) => Promise<DevScopeResult>
     pasteFileSystemItem: (sourcePath: string, destinationDirectory: string) => Promise<DevScopeResult<{ path: string; name: string }>>
+    moveFileSystemItem: (sourcePath: string, destinationDirectory: string) => Promise<DevScopeResult<{ path: string; name: string }>>
     getProjectSessions: (projectPath: string) => Promise<DevScopeResult>
     getProjectProcesses: (projectPath: string) => Promise<DevScopeResult<{ isLive: boolean; processes: DevScopeProcessInfo[]; activePorts: number[] }>>
     getRunningApps: (limit?: number) => Promise<DevScopeResult<{ apps: DevScopeRunningApp[] }>>
@@ -513,6 +445,7 @@ export interface DevScopeApi {
     getFileSystemRoots: () => Promise<DevScopeResult<{ roots: string[] }>>
 
     terminal: DevScopeTerminalApi
+    assistant: DevScopeAssistantApi
     agentscope: DevScopeAgentScopeApi
     updates: DevScopeUpdatesApi
     window: DevScopeWindowApi

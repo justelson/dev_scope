@@ -28,6 +28,7 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
         handleConfirmScriptRun,
         projectPath,
         previewFile,
+        previewMediaItems,
         previewContent,
         loadingPreview,
         previewTruncated,
@@ -86,6 +87,7 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
                     modifiedAt={previewModifiedAt}
                     projectPath={projectPath}
                     onOpenLinkedPreview={openPreview}
+                    mediaItems={previewMediaItems}
                     onSaved={onPreviewSaved}
                     onClose={closePreview}
                 />

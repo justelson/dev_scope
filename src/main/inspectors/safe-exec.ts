@@ -12,6 +12,7 @@ const execFileAsync = promisify(execFileCallback)
 // Cache for command existence checks (cleared on app restart)
 const commandExistsCache = new Map<string, boolean>()
 const versionCache = new Map<string, string | null>()
+const commandPathCache = new Map<string, string | null>()
 
 /**
  * Get environment with fixed PATH for common tools
@@ -24,7 +25,8 @@ export function getAugmentedEnv(): NodeJS.ProcessEnv {
         const commonPaths = [
             'C:\\Program Files\\nodejs',
             'C:\\Program Files (x86)\\nodejs',
-            process.env.APPDATA ? `${process.env.APPDATA}\\npm` : ''
+            process.env.APPDATA ? `${process.env.APPDATA}\\npm` : '',
+            process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Microsoft\\WindowsApps` : ''
         ].filter(Boolean)
 
         let pathKey = 'Path' // Windows checks case-insensitive, but env key might be Path or PATH
@@ -124,6 +126,31 @@ export async function safeExec(
     }
 }
 
+export async function findCommandPath(command: string, options?: { useCache?: boolean }): Promise<string | null> {
+    const useCache = options?.useCache !== false
+    if (useCache && commandPathCache.has(command)) {
+        return commandPathCache.get(command) ?? null
+    }
+
+    try {
+        const locateCmd = process.platform === 'win32' ? 'where' : 'which'
+        const result = await safeExec(locateCmd, [command], { timeout: 3000 })
+        const lines = String(result.stdout || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+        if (lines[0]) {
+            commandPathCache.set(command, lines[0])
+            return lines[0]
+        }
+    } catch {
+        // Fall through.
+    }
+
+    commandPathCache.set(command, null)
+    return null
+}
+
 /**
  * Check if a command exists on the system (with caching)
  */
@@ -133,16 +160,9 @@ export async function commandExists(command: string): Promise<boolean> {
         return commandExistsCache.get(command)!
     }
 
-    try {
-        const locateCmd = process.platform === 'win32' ? 'where' : 'which'
-        const result = await safeExec(locateCmd, [command], { timeout: 3000 })
-        const exists = result.stdout.trim().length > 0
-        commandExistsCache.set(command, exists)
-        return exists
-    } catch {
-        commandExistsCache.set(command, false)
-        return false
-    }
+    const exists = Boolean(await findCommandPath(command))
+    commandExistsCache.set(command, exists)
+    return exists
 }
 
 /**
@@ -194,5 +214,6 @@ export async function getCommandVersion(
 export function clearCommandCache(): void {
     commandExistsCache.clear()
     versionCache.clear()
+    commandPathCache.clear()
 }
 

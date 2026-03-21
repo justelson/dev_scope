@@ -9,7 +9,6 @@ interface LoadingStateProps {
     message?: string
     detail?: string
     className?: string
-    cardClassName?: string
     minHeightClassName?: string
 }
 
@@ -33,37 +32,29 @@ function formatTime(ms: number) {
     return `${seconds}.${tenths}s`
 }
 
-function LoadingCard({
+function LoadingContent({
     message,
     detail,
-    elapsed,
-    cardClassName
+    elapsed
 }: {
     message: string
     detail?: string
     elapsed: number
-    cardClassName?: string
 }) {
     return (
-        <div
-            className={cn(
-                'flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-sparkle-card/85 px-8 py-7 shadow-[0_18px_48px_rgba(0,0,0,0.22)] backdrop-blur-sm',
-                cardClassName
-            )}
-        >
-            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
-                <div className="absolute inset-0 rounded-2xl bg-[var(--accent-primary)]/10 blur-md" />
+        <div className="flex flex-col items-center gap-4 text-center">
+            <div className="relative flex h-12 w-12 items-center justify-center">
+                <div className="absolute inset-2 rounded-full bg-[var(--accent-primary)]/12 blur-md" />
                 <div className="relative inline-block h-8 w-8 animate-spin rounded-full border-[3px] border-current border-t-transparent text-[var(--accent-primary)]" />
             </div>
-            <div className="text-center">
+            <div>
                 <p className="text-base font-medium text-sparkle-text">{message}</p>
-                {detail && (
+                {detail ? (
                     <p className="mt-1 text-sm text-sparkle-text-secondary">{detail}</p>
-                )}
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-mono text-sparkle-text-muted">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-primary)]" />
-                    Elapsed {formatTime(elapsed)}
-                </div>
+                ) : null}
+                <p className="mt-3 text-xs font-mono tracking-[0.18em] text-sparkle-text-muted/90 uppercase">
+                    {formatTime(elapsed)}
+                </p>
             </div>
         </div>
     )
@@ -73,19 +64,13 @@ export function LoadingSpinner({
     message = 'Loading...',
     detail,
     className,
-    cardClassName,
     minHeightClassName = 'min-h-[52vh]'
 }: LoadingStateProps) {
     const elapsed = useElapsedTime()
 
     return (
         <div className={cn('flex items-center justify-center px-4 py-10', minHeightClassName, className)}>
-            <LoadingCard
-                message={message}
-                detail={detail}
-                elapsed={elapsed}
-                cardClassName={cardClassName}
-            />
+            <LoadingContent message={message} detail={detail} elapsed={elapsed} />
         </div>
     )
 }
@@ -93,19 +78,13 @@ export function LoadingSpinner({
 export function LoadingOverlay({
     message = 'Loading...',
     detail,
-    className,
-    cardClassName
+    className
 }: LoadingStateProps) {
     const elapsed = useElapsedTime()
 
     return (
         <div className={cn('absolute inset-0 z-10 flex items-center justify-center pointer-events-none px-4', className)}>
-            <LoadingCard
-                message={message}
-                detail={detail}
-                elapsed={elapsed}
-                cardClassName={cardClassName}
-            />
+            <LoadingContent message={message} detail={detail} elapsed={elapsed} />
         </div>
     )
 }

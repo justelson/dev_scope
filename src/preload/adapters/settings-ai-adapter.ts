@@ -9,7 +9,8 @@ export function createSettingsAndAiAdapter() {
         clearAiDebugLogs: () => ipcRenderer.invoke('devscope:clearAiDebugLogs'),
         testGroqConnection: (apiKey: string) => ipcRenderer.invoke('devscope:testGroqConnection', apiKey),
         testGeminiConnection: (apiKey: string) => ipcRenderer.invoke('devscope:testGeminiConnection', apiKey),
-        generateCommitMessage: (provider: 'groq' | 'gemini', apiKey: string, diff: string) =>
-            ipcRenderer.invoke('devscope:generateCommitMessage', provider, apiKey, diff)
+        testCodexConnection: (model?: string) => ipcRenderer.invoke('devscope:testCodexConnection', model),
+        generateCommitMessage: (provider: 'groq' | 'gemini' | 'codex', apiKey: string, diff: string, model?: string) =>
+            ipcRenderer.invoke('devscope:generateCommitMessage', provider, apiKey, diff, model)
     }
 }

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Columns3, Copy, RefreshCw, Rows3, X } from 'lucide-react'
 import type { FileDiffMetadata } from '@pierre/diffs/react'
+import { RawPatchFallback } from '@/components/ui/diff-viewer/RawPatchFallback'
+import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
+import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { DiffStats } from './DiffStats'
 import PatchDiffViewer from '@/components/ui/diff-viewer/PatchDiffViewer'
@@ -49,6 +52,8 @@ export function FileDiffDetailModal({
     subtitle,
     onClose
 }: FileDiffDetailModalProps) {
+    const { settings } = useSettings()
+    const iconTheme = settings?.theme === 'light' ? 'light' : 'dark'
     const [copied, setCopied] = useState(false)
     const [renderMode, setRenderMode] = useState<'stacked' | 'split'>(() => {
         try {
@@ -123,14 +128,20 @@ export function FileDiffDetailModal({
     }
 
     return (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fadeIn p-4" onClick={onClose}>
             <div
-                className="w-full max-w-6xl h-[86vh] min-h-[420px] max-h-[86vh] overflow-hidden rounded-2xl bg-sparkle-card border border-white/10 shadow-2xl flex flex-col"
+                className="flex h-[92vh] max-h-[95vh] min-h-[420px] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-white/10 bg-white/[0.03]">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-1">
+                            <VscodeEntryIcon
+                                pathValue={filePath}
+                                kind="file"
+                                theme={iconTheme}
+                                className="size-4 shrink-0"
+                            />
                             <h4 className="text-sm font-semibold text-white truncate">{filePath}</h4>
                             {status && (
                                 <span className={cn('text-[10px] uppercase font-bold px-1.5 py-0.5 rounded', getStatusTone(status))}>
@@ -201,14 +212,10 @@ export function FileDiffDetailModal({
                         resolvedFileDiff ? (
                             <PatchDiffViewer fileDiff={resolvedFileDiff} mode={renderMode} />
                         ) : parsedDiff.error ? (
-                            <div className="h-full overflow-auto custom-scrollbar px-5 py-4">
-                                <p className="mb-3 text-xs text-amber-300/80">
-                                    Falling back to raw diff view because patch parsing failed.
-                                </p>
-                                <pre className="whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-black/30 p-4 font-mono text-[12px] leading-5 text-white/75">
-                                    {parsedDiff.patch}
-                                </pre>
-                            </div>
+                            <RawPatchFallback
+                                patch={parsedDiff.patch}
+                                notice="Falling back to raw diff view because patch parsing failed."
+                            />
                         ) : (
                             <PatchDiffViewer patch={parsedDiff.patch} mode={renderMode} />
                         )

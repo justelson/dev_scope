@@ -1,177 +1,10 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, AlertTriangle, CheckCircle2, Command, ExternalLink, HelpCircle, Loader2, Package, Play, Search, X } from 'lucide-react'
+import { ProjectAuthorMismatchModal } from './ProjectAuthorMismatchModal'
+import { ProjectScriptCatalogModal } from './ProjectScriptCatalogModal'
 
-export function ScriptCatalogModal({
-    projectName,
-    scripts,
-    scriptPredictions,
-    onRunScript,
-    onClose
-}: {
-    projectName?: string
-    scripts: Record<string, string>
-    scriptPredictions?: Record<string, { intent?: string; confidence?: number }>
-    onRunScript: (name: string, command: string) => void
-    onClose: () => void
-}) {
-    const entries = useMemo(
-        () => Object.entries(scripts || {}).sort(([left], [right]) => left.localeCompare(right)),
-        [scripts]
-    )
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
-            <div
-                className="m-4 flex h-[min(82vh,760px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
-                onClick={(event) => event.stopPropagation()}
-            >
-                <div className="flex items-center justify-between border-b border-white/5 bg-black/15 px-5 py-4">
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2 text-white/85">
-                            <Command size={18} className="text-[var(--accent-primary)]" />
-                            <h3 className="truncate text-base font-semibold">Scripts</h3>
-                        </div>
-                        <p className="mt-1 truncate text-sm text-white/45">
-                            {projectName ? `${projectName} script catalog` : 'Project script catalog'}
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="rounded-lg border border-white/10 p-2 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
-                        title="Close scripts"
-                    >
-                        <X size={16} />
-                    </button>
-                </div>
-
-                <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-3">
-                    {entries.length > 0 ? (
-                        <div className="space-y-2">
-                            {entries.map(([name, command]) => {
-                                const prediction = scriptPredictions?.[name]
-                                return (
-                                    <div
-                                        key={name}
-                                        className="flex items-center gap-3 rounded-xl border border-white/5 bg-black/10 px-3 py-3 transition-colors hover:border-white/10 hover:bg-white/[0.03]"
-                                    >
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                onRunScript(name, command)
-                                                onClose()
-                                            }}
-                                            className="shrink-0 rounded-full bg-[var(--accent-primary)]/12 p-2.5 text-[var(--accent-primary)] transition-colors hover:bg-[var(--accent-primary)] hover:text-white"
-                                            title={`Run ${name}`}
-                                        >
-                                            <Play size={15} />
-                                        </button>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="truncate text-sm font-medium text-white/88">{name}</span>
-                                                {prediction?.intent && (
-                                                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/50">
-                                                        {prediction.intent}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="mt-1 truncate font-mono text-xs text-white/38">{command}</p>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    ) : (
-                        <div className="flex h-full flex-col items-center justify-center text-white/30">
-                            <Command size={42} className="mb-4 opacity-25" />
-                            <p className="text-sm">No scripts found</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-export function AuthorMismatchModal({
-    gitUser,
-    repoOwner,
-    onConfirm,
-    onCancel,
-    dontShowAgain,
-    setDontShowAgain
-}: {
-    gitUser: { name: string; email: string },
-    repoOwner: string,
-    onConfirm: () => void,
-    onCancel: () => void,
-    dontShowAgain: boolean,
-    setDontShowAgain: (value: boolean) => void
-}) {
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onCancel}>
-            <div
-                className="bg-sparkle-card border border-yellow-500/30 rounded-2xl shadow-2xl w-full max-w-md m-4 overflow-hidden"
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="p-6">
-                    <div className="flex items-start gap-4 mb-4">
-                        <div className="p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
-                            <AlertCircle size={24} className="text-yellow-500" />
-                        </div>
-                        <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-white mb-2">
-                                Author Mismatch Warning
-                            </h3>
-                            <p className="text-sm text-white/60 mb-4">
-                                Your current Git user doesn't match the repository owner.
-                            </p>
-
-                            <div className="space-y-3 bg-black/30 rounded-xl p-4 border border-white/5">
-                                <div>
-                                    <p className="text-xs text-white/40 mb-1">Repository Owner:</p>
-                                    <p className="text-sm font-mono text-white/80">{repoOwner}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-white/40 mb-1">Current Git User:</p>
-                                    <p className="text-sm font-mono text-white/80">{gitUser.name}</p>
-                                    <p className="text-xs font-mono text-white/40">{gitUser.email}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <label className="flex items-center gap-2 mb-4 cursor-pointer group">
-                        <input
-                            type="checkbox"
-                            checked={dontShowAgain}
-                            onChange={(e) => setDontShowAgain(e.target.checked)}
-                            className="w-4 h-4 rounded border-white/20 bg-white/5 text-[var(--accent-primary)] focus:ring-2 focus:ring-[var(--accent-primary)]/50"
-                        />
-                        <span className="text-sm text-white/60 group-hover:text-white/80 transition-colors">
-                            Don't show this warning again
-                        </span>
-                    </label>
-
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={onCancel}
-                            className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white text-sm font-medium rounded-lg transition-all border border-white/10"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={onConfirm}
-                            className="flex-1 px-4 py-2.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 hover:text-yellow-400 text-sm font-medium rounded-lg transition-all border border-yellow-500/30"
-                        >
-                            Commit Anyway
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
-}
+export const ScriptCatalogModal = ProjectScriptCatalogModal
+export const AuthorMismatchModal = ProjectAuthorMismatchModal
 
 type DependencyInstallStatus = {
     installed: boolean | null
@@ -184,9 +17,6 @@ type DependencyInstallStatus = {
     missingSample?: string[]
     reason?: string
 }
-
-const DEPENDENCY_ROW_HEIGHT = 72
-const DEPENDENCY_OVERSCAN = 8
 
 export function DependenciesModal({
     projectName,
@@ -210,8 +40,6 @@ export function DependenciesModal({
     const [installFeedbackTone, setInstallFeedbackTone] = useState<'idle' | 'progress' | 'success' | 'error'>('idle')
     const [installFeedbackMessage, setInstallFeedbackMessage] = useState<string>('')
     const listRef = useRef<HTMLDivElement | null>(null)
-    const [scrollTop, setScrollTop] = useState(0)
-    const [viewportHeight, setViewportHeight] = useState(0)
     const deferredSearch = useDeferredValue(search)
     const searchValue = deferredSearch.toLowerCase()
     const allDependencies = useMemo(() => {
@@ -234,20 +62,6 @@ export function DependenciesModal({
     const filtered = useMemo(() => allDependencies.filter(({ name }) =>
         name.toLowerCase().includes(searchValue)
     ), [allDependencies, searchValue])
-    const visibleRange = useMemo(() => {
-        const safeViewportHeight = viewportHeight || 480
-        const startIndex = Math.max(0, Math.floor(scrollTop / DEPENDENCY_ROW_HEIGHT) - DEPENDENCY_OVERSCAN)
-        const visibleCount = Math.ceil(safeViewportHeight / DEPENDENCY_ROW_HEIGHT) + (DEPENDENCY_OVERSCAN * 2)
-        const endIndex = Math.min(filtered.length, startIndex + visibleCount)
-        return { startIndex, endIndex }
-    }, [filtered.length, scrollTop, viewportHeight])
-    const visibleDependencies = useMemo(
-        () => filtered.slice(visibleRange.startIndex, visibleRange.endIndex),
-        [filtered, visibleRange.endIndex, visibleRange.startIndex]
-    )
-    const totalDependencyHeight = filtered.length * DEPENDENCY_ROW_HEIGHT
-    const topSpacerHeight = visibleRange.startIndex * DEPENDENCY_ROW_HEIGHT
-    const bottomSpacerHeight = Math.max(0, totalDependencyHeight - (visibleRange.endIndex * DEPENDENCY_ROW_HEIGHT))
 
     const missingDependencySet = useMemo(() => (
         new Set((dependencyInstallStatus?.missingDependencies || []).map((name) => name.toLowerCase()))
@@ -335,22 +149,10 @@ export function DependenciesModal({
     }
 
     useEffect(() => {
-        const container = listRef.current
-        if (!container) return
-
-        const syncViewportHeight = () => {
-            setViewportHeight(container.clientHeight)
-        }
-
-        syncViewportHeight()
-
-        const resizeObserver = new ResizeObserver(() => {
-            syncViewportHeight()
-        })
-        resizeObserver.observe(container)
-
+        const originalOverflow = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
         return () => {
-            resizeObserver.disconnect()
+            document.body.style.overflow = originalOverflow
         }
     }, [])
 
@@ -358,13 +160,12 @@ export function DependenciesModal({
         const container = listRef.current
         if (!container) return
         container.scrollTop = 0
-        setScrollTop(0)
     }, [searchValue, projectPath])
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
             <div
-                className="bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-[min(1120px,96vw)] h-[min(78vh,760px)] flex flex-col m-4 overflow-hidden"
+                className="bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-[min(1120px,96vw)] max-h-[95vh] flex flex-col m-4 overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between p-5 border-b border-white/5 bg-white/5">
@@ -383,8 +184,8 @@ export function DependenciesModal({
                         <X size={20} />
                     </button>
                 </div>
-                <div className="grid h-full min-h-0 grid-cols-2">
-                    <aside className="h-full min-h-0 border-r border-white/10 bg-black/20 p-4 overflow-y-auto custom-scrollbar">
+                <div className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)] overflow-hidden">
+                    <aside className="h-full min-h-0 border-r border-white/10 bg-black/20 p-4">
                         <div className="rounded-xl border border-white/10 bg-gradient-to-br from-sky-500/10 via-white/[0.03] to-violet-500/10 p-3.5">
                             <p className="text-[11px] uppercase tracking-wide text-white/45">Project Overview</p>
                             <p className="mt-1.5 text-sm font-semibold text-white truncate" title={projectName || ''}>{projectName || 'Current Project'}</p>
@@ -498,16 +299,11 @@ export function DependenciesModal({
 
                         <div
                             ref={listRef}
-                            className="min-h-0 overflow-y-auto p-2 custom-scrollbar flex-1 bg-black/10"
-                            onScroll={(event) => {
-                                setScrollTop(event.currentTarget.scrollTop)
-                            }}
+                            className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-black/10 p-2 custom-scrollbar"
                         >
                             {filtered.length > 0 ? (
-                                <div style={{ height: totalDependencyHeight > 0 ? `${totalDependencyHeight}px` : undefined }}>
-                                    <div style={{ height: `${topSpacerHeight}px` }} />
-                                    <div className="grid grid-cols-1 gap-2">
-                                    {visibleDependencies.map(({ name, version, scope }) => {
+                                <div className="grid grid-cols-1 gap-2">
+                                    {filtered.map(({ name, version, scope }) => {
                                         const isMissing = missingDependencySet.has(name.toLowerCase())
                                         const presenceTone = dependencyInstallStatus?.checked
                                             ? isMissing ? 'missing' : 'installed'
@@ -517,7 +313,6 @@ export function DependenciesModal({
                                             <div
                                                 key={`${scope}:${name}`}
                                                 className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-3"
-                                                style={{ minHeight: `${DEPENDENCY_ROW_HEIGHT - 8}px` }}
                                             >
                                                 <div className="min-w-0 flex-1">
                                                     <span className="text-sm text-white/80 font-mono font-medium block truncate" title={name}>{name}</span>
@@ -553,8 +348,6 @@ export function DependenciesModal({
                                             </div>
                                         )
                                     })}
-                                    </div>
-                                    <div style={{ height: `${bottomSpacerHeight}px` }} />
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center py-16 text-white/30">

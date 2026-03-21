@@ -1,9 +1,13 @@
-import { Check, ChevronDown, Code, Copy, Edit3, Expand, ExternalLink, Eye, FileJson, FileText, FileType, Film, Image as ImageIcon, Minimize, PanelLeft, PanelRight, Play, Save, Square, Table, Terminal, Trash2, Undo2, X } from 'lucide-react'
+import { Check, ChevronDown, Copy, Edit3, Expand, Eye, PanelLeft, PanelRight, Play, Square, Terminal, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
+import { useSettings } from '@/lib/settings'
 import type { GitDiffSummary } from './gitDiff'
 import type { PreviewFile } from './types'
 import { VIEWPORT_PRESETS, type ViewportPreset } from './viewport'
+import { PreviewHeaderStatusActions } from './PreviewHeaderStatusActions'
+import { PreviewHeaderHtmlControls } from './PreviewHeaderHtmlControls'
 
 interface PreviewModalHeaderProps {
     file: PreviewFile
@@ -48,15 +52,23 @@ interface PreviewModalHeaderProps {
     onToggleTerminal?: () => void
 }
 
-function PreviewFileIcon({ type }: { type: PreviewFile['type'] }) {
-    if (type === 'md') return <FileText size={18} className="text-blue-400 shrink-0" />
-    if (type === 'html') return <Code size={18} className="text-orange-400 shrink-0" />
-    if (type === 'json') return <FileJson size={18} className="text-yellow-300 shrink-0" />
-    if (type === 'csv') return <Table size={18} className="text-emerald-300 shrink-0" />
-    if (type === 'code') return <Code size={18} className="text-cyan-300 shrink-0" />
-    if (type === 'image') return <ImageIcon size={18} className="text-purple-400 shrink-0" />
-    if (type === 'video') return <Film size={18} className="text-red-400 shrink-0" />
-    return <FileType size={18} className="text-gray-400 shrink-0" />
+function formatPreviewFileName(name: string, maxLength: number): string {
+    const raw = String(name || '').trim()
+    if (!raw || raw.length <= maxLength) return raw
+
+    const dotIndex = raw.lastIndexOf('.')
+    const hasExtension = dotIndex > 0 && dotIndex < raw.length - 1
+    const extension = hasExtension ? raw.slice(dotIndex) : ''
+    const baseName = hasExtension ? raw.slice(0, dotIndex) : raw
+    const budget = Math.max(8, maxLength - extension.length - 3)
+    const startLength = Math.max(4, Math.ceil(budget * 0.6))
+    const endLength = Math.max(3, budget - startLength)
+
+    if (baseName.length <= startLength + endLength + 3) {
+        return raw
+    }
+
+    return `${baseName.slice(0, startLength)}...${baseName.slice(-endLength)}${extension}`
 }
 
 export default function PreviewModalHeader({
@@ -98,8 +110,11 @@ export default function PreviewModalHeader({
     terminalVisible = false,
     onToggleTerminal
 }: PreviewModalHeaderProps) {
+    const { settings } = useSettings()
+    const iconTheme = settings.theme === 'light' ? 'light' : 'dark'
     const isHtml = file.type === 'html'
     const isCsv = file.type === 'csv'
+    const isMediaFile = file.type === 'image' || file.type === 'video' || file.type === 'audio'
     const presetConfig = VIEWPORT_PRESETS[viewport]
     const containerRef = useRef<HTMLDivElement | null>(null)
     const pythonRunModeMenuRef = useRef<HTMLDivElement | null>(null)
@@ -147,6 +162,7 @@ export default function PreviewModalHeader({
     const isVeryCompactHtmlHeader = isHtml && headerWidth < 820
     const isUltraCompactHtmlHeader = isHtml && headerWidth < 680
     const isCompactHeader = headerWidth < 1240
+    const visibleFileName = formatPreviewFileName(file.name, headerWidth < 820 ? 28 : headerWidth < 1080 ? 40 : 56)
 
     const statusTone = !gitDiffSummary ? 'bg-white/10 text-white/60'
         : gitDiffSummary.status === 'added'
@@ -196,6 +212,13 @@ export default function PreviewModalHeader({
     const iconButtonBaseClass = 'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all'
     const ghostIconButtonClass = `${iconButtonBaseClass} border-transparent text-white/55 hover:bg-white/10 hover:text-white`
     const activeIconButtonClass = `${iconButtonBaseClass} border-white/15 bg-white/10 text-white`
+    const viewportMetaLabel = isHtml
+        && showDetailedFileMeta
+        && !isVeryCompactHtmlHeader
+        && htmlViewMode === 'rendered'
+        && viewport !== 'responsive'
+        ? `${presetConfig.width}x${presetConfig.height}`
+        : undefined
 
     return (
         <div
@@ -207,9 +230,16 @@ export default function PreviewModalHeader({
             )}
         >
             <div className={cn('flex items-center gap-3 min-w-0', isCompactHeader ? 'flex-1 flex-wrap w-full' : '', isUltraCompactHtmlHeader ? 'w-full' : '')}>
-                <PreviewFileIcon type={file.type} />
+                <VscodeEntryIcon
+                    pathValue={file.path || file.name}
+                    kind="file"
+                    theme={iconTheme}
+                    className="size-[18px] shrink-0"
+                />
                 <div className="min-w-0 flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-white truncate">{file.name}</h3>
+                    <h3 className="text-sm font-semibold text-white" title={file.name}>
+                        {visibleFileName}
+                    </h3>
                     <button
                         onClick={handleCopyPath}
                         className={cn(
@@ -223,39 +253,41 @@ export default function PreviewModalHeader({
                         {copied ? <Check size={14} /> : <Copy size={14} />}
                     </button>
                 </div>
-                <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1 shrink-0">
-                    <button
-                        onClick={() => onModeChange('preview')}
-                        className={cn(
-                            'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
-                            !isEditMode
-                                ? 'bg-white/15 text-white'
-                                : 'text-white/50 hover:text-white/80 hover:bg-white/10'
-                        )}
-                        title="Preview mode"
-                        aria-label="Preview mode"
-                    >
-                        <Eye size={13} />
-                        <span className="sr-only">Preview</span>
-                    </button>
-                    <button
-                        onClick={() => onModeChange('edit')}
-                        disabled={!isEditable || !!loadingEditableContent}
-                        className={cn(
-                            'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
-                            isEditMode
-                                ? 'bg-white/15 text-white'
-                                : 'text-white/50 hover:text-white/80 hover:bg-white/10',
-                            (!isEditable || !!loadingEditableContent) && 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-white/50'
-                        )}
-                        title={isEditable ? 'Edit mode' : 'This file type is preview-only'}
-                        aria-label={isEditable ? 'Edit mode' : 'This file type is preview-only'}
-                    >
-                        <Edit3 size={13} />
-                        <span className="sr-only">Edit</span>
-                    </button>
-                </div>
-                {(canUseTerminal || canRunPython) && (
+                {!isMediaFile && (
+                    <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1 shrink-0">
+                        <button
+                            onClick={() => onModeChange('preview')}
+                            className={cn(
+                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
+                                !isEditMode
+                                    ? 'bg-white/15 text-white'
+                                    : 'text-white/50 hover:text-white/80 hover:bg-white/10'
+                            )}
+                            title="Preview mode"
+                            aria-label="Preview mode"
+                        >
+                            <Eye size={13} />
+                            <span className="sr-only">Preview</span>
+                        </button>
+                        <button
+                            onClick={() => onModeChange('edit')}
+                            disabled={!isEditable || !!loadingEditableContent}
+                            className={cn(
+                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
+                                isEditMode
+                                    ? 'bg-white/15 text-white'
+                                    : 'text-white/50 hover:text-white/80 hover:bg-white/10',
+                                (!isEditable || !!loadingEditableContent) && 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-white/50'
+                            )}
+                            title={isEditable ? 'Edit mode' : 'This file type is preview-only'}
+                            aria-label={isEditable ? 'Edit mode' : 'This file type is preview-only'}
+                        >
+                            <Edit3 size={13} />
+                            <span className="sr-only">Edit</span>
+                        </button>
+                    </div>
+                )}
+                {!isMediaFile && (canUseTerminal || canRunPython) && (
                     <div className={controlGroupClass}>
                         {canUseTerminal && (
                             <button
@@ -297,7 +329,7 @@ export default function PreviewModalHeader({
                                     <ChevronDown size={12} />
                                 </button>
                                 {pythonRunModeMenuOpen && (
-                                    <div className="absolute right-0 top-9 z-40 w-44 rounded-lg border border-sparkle-border bg-sparkle-card p-1.5 shadow-2xl">
+                                    <div className="absolute right-0 top-9 z-40 w-44 rounded-lg border border-white/10 bg-sparkle-card p-1.5 shadow-2xl">
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -308,7 +340,7 @@ export default function PreviewModalHeader({
                                                 'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
                                                 pythonRunMode === 'terminal'
                                                     ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
-                                                    : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                                    : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
                                             )}
                                         >
                                             <span>Run in Terminal</span>
@@ -324,7 +356,7 @@ export default function PreviewModalHeader({
                                                 'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
                                                 pythonRunMode === 'output'
                                                     ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
-                                                    : 'text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text'
+                                                    : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
                                             )}
                                         >
                                             <span>Run in Output</span>
@@ -352,245 +384,93 @@ export default function PreviewModalHeader({
                         )}
                     </div>
                 )}
-                <div className={controlGroupClass}>
-                    <button
-                        onClick={onToggleExpanded}
-                        className={cn(
-                            iconButtonBaseClass,
-                            isExpanded
-                                ? 'border-sky-400/30 bg-sky-500/12 text-sky-200'
-                                : 'border-transparent text-white/55 hover:bg-white/10 hover:text-white'
+                {!isMediaFile && (
+                    <div className={controlGroupClass}>
+                        <button
+                            onClick={onToggleExpanded}
+                            className={cn(
+                                iconButtonBaseClass,
+                                isExpanded
+                                    ? 'border-sky-400/30 bg-sky-500/12 text-sky-200'
+                                    : 'border-transparent text-white/55 hover:bg-white/10 hover:text-white'
+                            )}
+                            title={isExpanded ? 'Return to windowed view' : 'Expand workspace'}
+                        >
+                            <span className="relative block h-4 w-4">
+                                <Expand
+                                    size={16}
+                                    className={cn(
+                                        'absolute inset-0 transition-all duration-250 ease-out',
+                                        isExpanded ? 'scale-[0.9] rotate-180 opacity-100' : 'scale-100 rotate-0 opacity-100'
+                                    )}
+                                />
+                            </span>
+                        </button>
+                        {isExpanded && (
+                            <>
+                                <button
+                                    onClick={onToggleLeftPanel}
+                                    className={cn(leftPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
+                                    title={leftPanelOpen ? 'Hide left panel' : 'Show left panel'}
+                                >
+                                    <PanelLeft size={16} />
+                                </button>
+                                <button
+                                    onClick={onToggleRightPanel}
+                                    className={cn(rightPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
+                                    title={rightPanelOpen ? 'Hide right panel' : 'Show right panel'}
+                                >
+                                    <PanelRight size={16} />
+                                </button>
+                            </>
                         )}
-                        title={isExpanded ? 'Collapse workspace' : 'Expand workspace'}
-                    >
-                        <span className="relative block h-4 w-4">
-                            <Expand
-                                size={16}
-                                className={cn(
-                                    'absolute inset-0 transition-all duration-250 ease-out',
-                                    isExpanded ? 'scale-75 -rotate-45 opacity-0' : 'scale-100 rotate-0 opacity-100'
-                                )}
-                            />
-                            <Minimize
-                                size={16}
-                                className={cn(
-                                    'absolute inset-0 transition-all duration-250 ease-out',
-                                    isExpanded ? 'scale-100 rotate-0 opacity-100' : 'scale-75 rotate-45 opacity-0'
-                                )}
-                            />
-                        </span>
-                    </button>
-                    {isExpanded && (
-                        <>
-                            <button
-                                onClick={onToggleLeftPanel}
-                                className={cn(leftPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
-                                title={leftPanelOpen ? 'Hide left panel' : 'Show left panel'}
-                            >
-                                <PanelLeft size={16} />
-                            </button>
-                            <button
-                                onClick={onToggleRightPanel}
-                                className={cn(rightPanelOpen ? activeIconButtonClass : ghostIconButtonClass)}
-                                title={rightPanelOpen ? 'Hide right panel' : 'Show right panel'}
-                            >
-                                <PanelRight size={16} />
-                            </button>
-                        </>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {isHtml && !isEditMode && (
-                <div
-                    className={cn(
-                        'flex items-center gap-2',
-                        isCompactHtmlHeader ? 'order-3 w-full flex-wrap' : '',
-                        isVeryCompactHtmlHeader ? 'justify-start' : isCompactHtmlHeader ? 'justify-between' : ''
-                    )}
-                >
-                    {htmlViewMode === 'rendered' && (
-                        <div className={cn('flex items-center gap-2 bg-white/5 rounded-lg p-1.5', isUltraCompactHtmlHeader ? 'w-full' : '')}>
-                            <span className="text-[11px] text-white/60 px-1">Viewport</span>
-                            <select
-                                value={viewport}
-                                onChange={(event) => {
-                                    const nextViewport = event.target.value
-                                    if (nextViewport in VIEWPORT_PRESETS) {
-                                        onViewportChange(nextViewport as ViewportPreset)
-                                        return
-                                    }
-                                    onViewportChange('responsive')
-                                }}
-                                className="h-7 rounded-md border border-white/15 bg-white/10 px-2 text-xs text-white outline-none transition-colors hover:bg-white/15 focus:border-white/30 focus:bg-white/15"
-                                title="Choose preview viewport size"
-                                aria-label="Choose preview viewport size"
-                            >
-                                {(Object.entries(VIEWPORT_PRESETS) as [ViewportPreset, typeof presetConfig][]).map(([key, preset]) => (
-                                    <option key={key} value={key} className="bg-slate-900 text-white">
-                                        {key === 'responsive' ? 'Full Width' : `${preset.label} (${preset.width}x${preset.height})`}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-                    <div className={cn('flex items-center gap-1 bg-white/5 rounded-lg p-1', isUltraCompactHtmlHeader ? 'w-full justify-center' : '')}>
-                        <button
-                            onClick={() => onHtmlViewModeChange('rendered')}
-                            className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
-                                htmlViewMode === 'rendered'
-                                    ? 'bg-white/15 text-white'
-                                    : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-                            )}
-                            title="Rendered HTML preview"
-                            aria-label="Rendered HTML preview"
-                        >
-                            <Eye size={13} />
-                            <span className="sr-only">Rendered</span>
-                        </button>
-                        <button
-                            onClick={() => onHtmlViewModeChange('code')}
-                            className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all',
-                                htmlViewMode === 'code'
-                                    ? 'bg-white/15 text-white'
-                                    : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-                            )}
-                            title="HTML source preview"
-                            aria-label="HTML source preview"
-                        >
-                            <Code size={13} />
-                            <span className="sr-only">Source</span>
-                        </button>
-                    </div>
-                </div>
+                <PreviewHeaderHtmlControls
+                    isCompactHtmlHeader={isCompactHtmlHeader}
+                    isVeryCompactHtmlHeader={isVeryCompactHtmlHeader}
+                    isUltraCompactHtmlHeader={isUltraCompactHtmlHeader}
+                    htmlViewMode={htmlViewMode}
+                    viewport={viewport}
+                    onViewportChange={onViewportChange}
+                    onHtmlViewModeChange={onHtmlViewModeChange}
+                />
             )}
 
-            <div className={cn(
-                'flex items-center gap-2 min-w-0 flex-wrap justify-end',
-                isCompactHeader ? 'w-full ml-auto' : '',
-                isUltraCompactHtmlHeader ? 'w-full justify-end' : ''
-            )}>
-                {isEditMode && (
-                    <div className={controlGroupClass}>
-                        <button
-                            onClick={onRevert}
-                            disabled={!isDirty || isSaving}
-                            className={cn(
-                                iconButtonBaseClass,
-                                isDirty && !isSaving
-                                    ? 'border-transparent text-white/80 hover:bg-white/10'
-                                    : 'border-transparent text-white/35 cursor-not-allowed'
-                            )}
-                            title="Revert local changes"
-                            aria-label="Revert local changes"
-                        >
-                            <Undo2 size={13} />
-                        </button>
-                        <button
-                            onClick={onSave}
-                            disabled={!isDirty || isSaving}
-                            className={cn(
-                                iconButtonBaseClass,
-                                isDirty && !isSaving
-                                    ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
-                                    : isSaving
-                                        ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
-                                        : 'border-transparent text-white/35 cursor-not-allowed'
-                            )}
-                            title={isSaving ? 'Saving changes...' : 'Save changes (Ctrl/Cmd+S)'}
-                            aria-label={isSaving ? 'Saving changes' : 'Save changes'}
-                            aria-busy={isSaving}
-                        >
-                            <Save size={13} className={isSaving ? 'animate-pulse' : ''} />
-                        </button>
-                    </div>
-                )}
-
-                <div className="flex items-center gap-1.5 min-w-0 flex-wrap justify-end">
-                    {canRunPython && (
-                        <span className={cn('text-[10px] uppercase font-semibold px-2 py-1 rounded', pythonStatusTone)}>
-                            {pythonStatusLabel}
-                        </span>
-                    )}
-                    {showGitSummary && (
-                        <div className="flex items-center gap-1.5">
-                            <span className={cn('text-[10px] uppercase font-semibold px-2 py-1 rounded', statusTone)}>
-                                {statusLabel}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-emerald-500/10 text-emerald-300">+{gitDiffSummary?.additions ?? 0}</span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-red-500/10 text-red-300">-{gitDiffSummary?.deletions ?? 0}</span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-white/5 text-white/50">{totalFileLines} lines</span>
-                        </div>
-                    )}
-                    {showUnsavedDiffSummary && liveDiffPreview && (
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] uppercase font-semibold px-2 py-1 rounded bg-sky-500/20 text-sky-300">
-                                Unsaved
-                            </span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-emerald-500/10 text-emerald-300">+{liveDiffPreview.additions}</span>
-                            <span className="text-[10px] px-1.5 py-1 rounded bg-red-500/10 text-red-300">-{liveDiffPreview.deletions}</span>
-                        </div>
-                    )}
-                    <span className="text-[10px] text-white/30 uppercase px-2 py-1 bg-white/5 rounded">
-                        {file.type}
-                        {isEditMode ? ' - edit' : ''}
-                        {isHtml && showDetailedFileMeta && ` - ${htmlViewMode}`}
-                        {isHtml && showDetailedFileMeta && !isVeryCompactHtmlHeader && htmlViewMode === 'rendered' && viewport !== 'responsive' && ` - ${presetConfig.width}x${presetConfig.height}`}
-                    </span>
-                    {showStandaloneUnsavedChip && (
-                        <span className="text-[10px] px-1.5 py-1 rounded bg-amber-500/15 text-amber-200">Unsaved</span>
-                    )}
-                    {isHtml && !isEditMode && (
-                        <button
-                            onClick={onOpenInBrowser}
-                            className={cn(
-                                'inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs text-white/60 hover:text-white hover:bg-white/10 transition-all'
-                            )}
-                            title="Open in Browser"
-                            aria-label="Open in browser"
-                        >
-                            <ExternalLink size={14} />
-                            <span className="sr-only">Open</span>
-                        </button>
-                    )}
-                    {isCsv && (
-                        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5">
-                            <span className="text-xs text-white/60">Column Colors</span>
-                            <button
-                                type="button"
-                                onClick={() => onCsvDistinctColorsEnabledChange(!csvDistinctColorsEnabled)}
-                                className="group"
-                                title={csvDistinctColorsEnabled ? 'Disable distinct column colors' : 'Enable distinct column colors'}
-                                aria-pressed={csvDistinctColorsEnabled}
-                            >
-                                <span
-                                    className={cn(
-                                        'inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                                        csvDistinctColorsEnabled ? 'bg-emerald-400/80' : 'bg-white/20'
-                                    )}
-                                >
-                                    <span
-                                        className={cn(
-                                            'h-4 w-4 rounded-full bg-white shadow transition-transform',
-                                            csvDistinctColorsEnabled ? 'translate-x-4' : 'translate-x-0.5'
-                                        )}
-                                    />
-                                </span>
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                <button
-                    onClick={onClose}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/40 hover:bg-white/10 hover:text-white transition-all shrink-0"
-                    title="Close (Esc)"
-                >
-                    <X size={18} />
-                </button>
-            </div>
+            <PreviewHeaderStatusActions
+                file={file}
+                gitDiffSummary={gitDiffSummary}
+                totalFileLines={totalFileLines}
+                isMediaFile={isMediaFile}
+                isEditMode={isEditMode}
+                isDirty={isDirty}
+                isSaving={isSaving}
+                showGitSummary={showGitSummary}
+                showUnsavedDiffSummary={showUnsavedDiffSummary}
+                showStandaloneUnsavedChip={showStandaloneUnsavedChip}
+                showDetailedFileMeta={showDetailedFileMeta}
+                statusTone={statusTone}
+                statusLabel={statusLabel}
+                pythonStatusTone={pythonStatusTone}
+                pythonStatusLabel={pythonStatusLabel}
+                canRunPython={canRunPython}
+                liveDiffPreview={liveDiffPreview}
+                htmlViewMode={htmlViewMode}
+                viewportLabel={viewportMetaLabel}
+                isHtml={isHtml}
+                isCsv={isCsv}
+                csvDistinctColorsEnabled={csvDistinctColorsEnabled}
+                onCsvDistinctColorsEnabledChange={onCsvDistinctColorsEnabledChange}
+                onOpenInBrowser={onOpenInBrowser}
+                onRevert={onRevert}
+                onSave={onSave}
+                onClose={onClose}
+                controlGroupClass={controlGroupClass}
+                iconButtonBaseClass={iconButtonBaseClass}
+            />
         </div>
     )
 }

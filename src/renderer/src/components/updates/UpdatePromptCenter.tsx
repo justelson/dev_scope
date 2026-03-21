@@ -368,14 +368,14 @@ export function UpdatePromptCenter() {
     const modal = isModalOpen && typeof document !== 'undefined'
         ? createPortal(
             <div
-                className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-md"
+                className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn"
                 onClick={closeModal}
             >
                 <div
-                    className="m-4 w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
+                    className="m-4 w-full max-w-2xl max-h-[95vh] overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl flex flex-col"
                     onClick={(event) => event.stopPropagation()}
                 >
-                    <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
+                    <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5 flex-shrink-0">
                         <div>
                             <div className="flex items-center gap-2">
                                 <span className={cn('h-2.5 w-2.5 rounded-full', statusOrb)} />

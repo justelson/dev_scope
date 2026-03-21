@@ -1,38 +1,39 @@
 # DevScope Web Landing App
 
-This package is the Vite-based landing site for DevScope. It is separate from the Windows desktop app at the repository root.
+This package is the landing site for DevScope Air. It is separate from the Windows desktop app at the repository root.
 
-## Current Status
+## Package Role
 
-- Package: `devscope-web`
-- Version: `0.0.0`
-- Stack: Vite + React 19 + TypeScript + Tailwind CSS
-- Deploy target: Vercel-ready static web app
+- Present the DevScope Air product and branding
+- Point users to the latest desktop release
+- Stay decoupled from Electron-only runtime code
 
-## What Is In This Package
+The landing app should resolve release downloads dynamically from GitHub releases rather than hardcoding versioned asset URLs.
 
-- A single-page landing experience in [`src/App.tsx`](./src/App.tsx)
-- Tailwind-driven styling and theme tokens in [`src/index.css`](./src/index.css)
-- Static assets served from [`public`](./public)
+## Stack
 
-## Available Scripts
+- Vite
+- React 19
+- TypeScript
+- Tailwind CSS 4
+
+## Scripts
 
 ```bash
 npm install
 npm run dev
 npm run build
 npm run preview
+npm run lint
 ```
 
-## Script Reference
+## Important Files
 
-- `npm run dev`: starts the Vite dev server.
-- `npm run build`: runs TypeScript build mode and creates the production bundle.
-- `npm run preview`: serves the production build locally.
-- `npm run lint`: runs ESLint for this package.
+- [`src/App.tsx`](C:\Users\elson\my_coding_play\devscope\apps\landing\devscope-web\src\App.tsx): main landing page composition
+- [`src/index.css`](C:\Users\elson\my_coding_play\devscope\apps\landing\devscope-web\src\index.css): landing styling
+- [`src/lib/release-download.ts`](C:\Users\elson\my_coding_play\devscope\apps\landing\devscope-web\src\lib\release-download.ts): release asset resolution logic
+- [`public`](C:\Users\elson\my_coding_play\devscope\apps\landing\devscope-web\public): static branding assets
 
-## Design Note
+## Boundary
 
-This landing app follows the same overall DevScope visual direction. The Sparkle-inspired design language used across the repo traces back to the original Sparkle project:
-
-- `https://github.com/thedogecraft/sparkle`
+Do not move desktop-only runtime behavior into this package. The landing app is marketing/distribution surface only.

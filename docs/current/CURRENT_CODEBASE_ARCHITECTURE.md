@@ -1,99 +1,86 @@
 # Current Codebase Architecture
 
-Last validated against code on March 8, 2026.
+Last validated against code on March 18, 2026.
 
 ## Runtime Layers
 
-1. Renderer (React)
-   - Main routes and pages in `src/renderer/src/App.tsx`.
-   - UI consumes `window.devscope` API.
-2. Preload Adapter Layer
-   - `src/preload/index.ts` exposes `window.devscope`.
-   - `src/preload/devscope-electron-adapter.ts` composes adapter modules.
-3. Main Process IPC Layer
-   - Handler registry in `src/main/ipc/handlers.ts`.
-   - Domain-specific handlers in `src/main/ipc/handlers/*`.
-4. Core + Services
-   - Core facade in `src/main/core/devscope-core.ts`.
-   - Project discovery/indexing service in `src/main/services/project-discovery-service.ts`.
-5. Shared Contracts
-   - Type surface in `src/shared/contracts/devscope-api.ts`.
-   - Update state/action contracts in `src/shared/contracts/devscope-api.ts`.
+1. Renderer (`src/renderer/src`)
+   React UI, route composition, page state, and interaction flows.
+2. Preload (`src/preload`)
+   Narrow Electron bridge that exposes `window.devscope`.
+3. Main-process IPC (`src/main/ipc`)
+   Handler registration plus domain-specific request translation.
+4. Main-process services (`src/main/*`)
+   Assistant service, project discovery, Git integrations, update manager, and system/task inspection.
+5. Shared contracts (`src/shared`)
+   Cross-process contract types and assistant/event contract definitions.
 
-## Renderer Route Surface
+## Active Route Surface
 
-From `src/renderer/src/App.tsx`:
+From `src/renderer/src/App.tsx`, the desktop app currently exposes:
 
 - `/home`
 - `/projects`
 - `/projects/:projectPath`
 - `/folder-browse/:folderPath`
-- `/settings` + subroutes for appearance/behavior/data/about/projects/ai/terminal/logs
+- `/assistant`
+- `/settings` and its subroutes
+- `/tasks` when task view is enabled in settings
+- `/explorer` when explorer is enabled in settings
 
-Legacy compatibility redirects remain for removed assistant routes, but they resolve back into the active app surface rather than rendering assistant pages.
+Legacy helper routes still redirect into the live assistant/settings surface instead of serving separate deprecated pages.
 
-## API Exposure Model
+## Main Process Domain Areas
 
-- Renderer receives one API object: `window.devscope`.
-- API type is `DevScopeApi` from `src/shared/contracts/devscope-api.ts`.
-- Preload builds this object from composed adapters:
-  - system
-  - settings/AI utilities
-  - projects/git/file operations
-  - desktop update operations
-  - window controls
-  - disabled stubs for unsupported capability groups
+`src/main/ipc/handlers.ts` registers handlers for:
 
-## IPC Composition
+- system metrics and readiness
+- startup settings and AI provider utilities
+- assistant sessions and assistant event streaming
+- project discovery and IDE launch flows
+- project details and running-process/session views
+- file tree, file reads, and file writes
+- external terminal launch plus preview-terminal and Python preview flows
+- Git read/write operations
+- desktop update state and install actions
 
-`src/main/ipc/handlers.ts` registers:
+## Assistant Architecture
 
-- System + metrics handlers
-- Settings + AI utility handlers
-- Desktop updater handlers
-- Project discovery/file/project-details handlers
-- Git read and write handlers
-- Terminal-open handler
-- Window control listeners/handlers
+The assistant is part of the active app, not a removed feature.
 
-## Core Separation State (Current)
+- Main service root: `src/main/assistant/*`
+- Main-process IPC bridge: `src/main/ipc/handlers/assistant-handlers.ts`
+- Shared contract: `src/shared/assistant/contracts/*`
+- Renderer route entry: `src/renderer/src/pages/Assistant.tsx`
 
-Current positive state:
+Current assistant capabilities include session lifecycle, model listing, connect/disconnect, prompt send, interrupt, approval responses, user-input responses, project-path association, and event subscription.
 
-- Project scanning and folder indexing already route through `devscopeCore.projects`.
-- Desktop updates route through `src/main/update/*` with a dedicated state machine and IPC bridge.
-- Git/file tree operations expose both project-scoped and global git configuration helpers through the shared contract.
+## Shared Contract Model
 
-Current gap:
+Two contract groups matter most:
 
-- Some business logic still lives directly in IPC handler modules.
-- Further cleanup should continue moving domain logic into `src/main/core` and `src/main/services`.
+- `src/shared/contracts/devscope-api.ts`
+  General desktop API surface for projects, files, Git, updates, system, and settings.
+- `src/shared/assistant/contracts/*`
+  Assistant IPC names, runtime/session types, and streamed read-model events.
 
-## Settings Persistence Model
+The intended architecture direction remains contract-first: define shared contract shape first, then wire adapters and clients around it.
 
-- Renderer settings store in `src/renderer/src/lib/settings.tsx`.
-- Persisted in localStorage key: `devscope-settings`.
-- Includes appearance, behavior, projects, git defaults/warnings, and AI provider settings.
+## Caching and Performance Shape
 
-## Update Model (Current)
+- Project discovery and indexing are centralized in main-process services with cache/dedupe behavior.
+- Renderer route state persists key navigation state in local storage and gates optional tabs through settings.
+- File preview and project details flows use narrower read operations to avoid unnecessary full reloads.
+- Update state is tracked in a dedicated main-process update subsystem instead of being ad hoc renderer state.
+- Assistant streaming batches text deltas before projection/broadcast, coalesces renderer event application to animation frames, batches main-to-renderer assistant event IPC, keeps hot persistence writes off the immediate UI interaction path, avoids deep-cloning hydrated thread history on every renderer store update, and relies on incremental off-screen row rendering plus exact history paging to keep long conversations responsive.
 
-- Main process updater tracks `disabled | idle | checking | available | downloading | downloaded | up-to-date | error`.
-- Renderer consumes update state through `window.devscope.updates`.
-- About/settings surfaces show current display version, release channel, and install/download actions.
-- GitHub Releases is the current update feed target for packaged builds.
+## Current Boundary Rules
 
-## Caching / Performance Notes (Current)
+- Keep renderer focused on UI state and presentation.
+- Keep preload narrow and explicit.
+- Keep main-process handlers thin and push domain behavior into services/core modules.
+- Keep shared contracts stable and reusable across future clients.
 
-- Project scanning has in-memory TTL cache and in-flight deduping in `src/main/services/project-discovery-service.ts`.
-- Renderer performs startup background indexing when enabled (`autoIndexOnStartup`) in `src/renderer/src/App.tsx`.
-- Search index cache is shared in renderer search logic (projects page) and reused across navigations.
-- File tree refresh now supports partial subtree loading to avoid unnecessary full-tree reloads.
+## Separate Package Boundary
 
-## Architecture Direction
-
-Preferred direction for multi-client growth:
-
-1. Contract-first changes in `src/shared/contracts`.
-2. Domain behavior in core/services.
-3. Thin transport adapters (Electron preload/IPC, future CLI, IDE).
-4. Client UI/UX remains separate from domain logic.
+`apps/landing/devscope-web` is a separate landing-site package. It is not part of the desktop runtime and should stay decoupled from Electron-only implementation details.

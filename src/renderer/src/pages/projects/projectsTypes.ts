@@ -4,6 +4,7 @@ export interface Project {
     name: string
     path: string
     type: string
+    projectIconPath?: string | null
     markers: string[]
     frameworks: string[]
     lastModified?: number

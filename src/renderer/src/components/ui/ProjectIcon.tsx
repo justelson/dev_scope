@@ -3,11 +3,12 @@
  * Renders project type and framework icons using Simple Icons CDN
  */
 
-import { ComponentProps, useState } from 'react'
+import { ComponentProps, useEffect, useState } from 'react'
 import {
     Folder, FolderOpen, FileCode, Box, Code,
     Server, Cpu, Smartphone, Globe, Terminal
 } from 'lucide-react'
+import { getFileUrl } from './file-preview/utils'
 
 // Inline data to avoid ESM import issues
 const PROJECT_TYPES_DATA: Record<string, { displayName: string; icon: string; themeColor: string }> = {
@@ -74,6 +75,7 @@ function getFrameworkById(id: string) {
 interface ProjectIconProps extends ComponentProps<'div'> {
     projectType?: string     // Project type ID (e.g., 'node', 'python')
     framework?: string       // Framework ID (e.g., 'react', 'nextjs')
+    customIconPath?: string | null
     size?: number
     className?: string
     showFallback?: boolean   // Show fallback icon if type/framework not found
@@ -100,12 +102,22 @@ const TYPE_FALLBACK_ICONS: Record<string, any> = {
 export default function ProjectIcon({
     projectType,
     framework,
+    customIconPath,
     size = 24,
     className,
     showFallback = true,
     ...props
 }: ProjectIconProps) {
-    const [imgError, setImgError] = useState(false)
+    const [customImgError, setCustomImgError] = useState(false)
+    const [genericImgError, setGenericImgError] = useState(false)
+
+    useEffect(() => {
+        setCustomImgError(false)
+    }, [customIconPath])
+
+    useEffect(() => {
+        setGenericImgError(false)
+    }, [framework, projectType])
 
     // Priority: framework icon > project type icon
     const frameworkData = framework ? getFrameworkById(framework) : undefined
@@ -116,7 +128,28 @@ export default function ProjectIcon({
     const displayName = frameworkData?.displayName || typeData?.displayName || projectType || 'Project'
 
     // Use Simple Icons CDN if we have an icon slug
-    if (iconSlug && !imgError) {
+    if (customIconPath && !customImgError) {
+        return (
+            <div
+                className={`relative flex items-center justify-center ${className}`}
+                style={{ width: size, height: size }}
+                title={displayName}
+                {...props}
+            >
+                <img
+                    src={getFileUrl(customIconPath)}
+                    alt={`${displayName} app icon`}
+                    width={size}
+                    height={size}
+                    className="w-full h-full object-contain"
+                    onError={() => setCustomImgError(true)}
+                    loading="lazy"
+                />
+            </div>
+        )
+    }
+
+    if (iconSlug && !genericImgError) {
         // Use the theme color directly instead of white, with fallback to white for dark mode
         const iconUrl = `https://cdn.simpleicons.org/${iconSlug}`
 
@@ -138,7 +171,7 @@ export default function ProjectIcon({
                         // Use CSS filter to adapt icon color based on theme
                         // In light mode, icons will be darker; in dark mode, they'll be lighter
                     }}
-                    onError={() => setImgError(true)}
+                    onError={() => setGenericImgError(true)}
                     loading="lazy"
                 />
             </div>

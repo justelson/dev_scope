@@ -1,276 +1,47 @@
-import { useEffect, useMemo, useState, type Dispatch, type MouseEvent, type SetStateAction } from 'react'
-import {
-    Check,
-    Copy,
-    File,
-    FileCode,
-    FileJson,
-    FileText,
-    Image,
-    RefreshCw,
-    Sparkles
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { DiffStats } from './DiffStats'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowUpRight, ChevronDown, RefreshCw, Sparkles } from 'lucide-react'
+import { resolvePreferredGitTextProvider } from '@/lib/gitAi'
+import { getProjectPullRequestConfig } from '@/lib/pullRequestWorkflow'
 import { FileDiffDetailModal } from './FileDiffDetailModal'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { Checkbox, Input } from '@/components/ui/FormControls'
+import { WorkingChangesSection } from './WorkingChangesSection'
+import type { DiffMode, WorkingChangeItem } from './workingChangesTypes'
+import { getDiffCounts, getDiffKey } from './workingChangesUtils'
 
-export interface WorkingChangeItem {
-    path: string
-    previousPath?: string
-    name: string
-    gitStatus?: 'modified' | 'untracked' | 'added' | 'deleted' | 'renamed' | 'ignored' | 'unknown'
-    additions: number
-    deletions: number
-    statsLoaded?: boolean
+function slugifyBranchSegment(value: string) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40)
 }
 
-type DiffMode = 'staged' | 'unstaged'
-const PAGE_SIZE = 10
+function buildBranchSeed(commitMessage: string) {
+    const fromCommit = slugifyBranchSegment(commitMessage)
+    if (fromCommit) return fromCommit
 
-function getStatusBadge(status?: WorkingChangeItem['gitStatus']) {
-    switch (status) {
-        case 'modified':
-            return { label: 'M', className: 'bg-[#E2C08D]/20 text-[#E2C08D]' }
-        case 'untracked':
-            return { label: 'U', className: 'bg-[#73C991]/20 text-[#73C991]' }
-        case 'added':
-            return { label: 'A', className: 'bg-[#73C991]/20 text-[#73C991]' }
-        case 'deleted':
-            return { label: 'D', className: 'bg-[#FF6B6B]/20 text-[#FF6B6B]' }
-        case 'renamed':
-            return { label: 'R', className: 'bg-blue-500/20 text-blue-300' }
-        case 'ignored':
-            return { label: 'I', className: 'bg-white/10 text-white/50' }
-        default:
-            return { label: '?', className: 'bg-white/10 text-white/50' }
-    }
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const dd = String(now.getDate()).padStart(2, '0')
+    const hh = String(now.getHours()).padStart(2, '0')
+    const min = String(now.getMinutes()).padStart(2, '0')
+    return `update-${yyyy}${mm}${dd}-${hh}${min}`
 }
 
-function getFileIcon(name: string) {
-    const ext = name.split('.').pop()?.toLowerCase()
-    switch (ext) {
-        case 'js':
-        case 'jsx':
-            return <FileCode size={16} className="text-yellow-400" />
-        case 'ts':
-        case 'tsx':
-            return <FileCode size={16} className="text-blue-400" />
-        case 'json':
-            return <FileJson size={16} className="text-yellow-500" />
-        case 'md':
-            return <FileText size={16} className="text-white/60" />
-        case 'png':
-        case 'jpg':
-        case 'jpeg':
-        case 'gif':
-        case 'svg':
-        case 'webp':
-            return <Image size={16} className="text-purple-400" />
-        default:
-            return <File size={16} className="text-white/40" />
-    }
-}
+function buildProposedBranchName(commitMessage: string, branchNames: string[]) {
+    const existing = new Set(branchNames.map((name) => String(name || '').trim().toLowerCase()).filter(Boolean))
+    const seed = buildBranchSeed(commitMessage)
+    const base = `feature/${seed}`
+    if (!existing.has(base.toLowerCase())) return base
 
-function getDiffKey(mode: DiffMode, path: string): string {
-    return `${mode}:${path}`
-}
-
-function Section({
-    title,
-    files,
-    copiedPath,
-    pendingActionPath,
-    loadingDiffKeys,
-    emptyText,
-    actionLabel,
-    diffMode,
-    onViewDiff,
-    onActionFile,
-    onActionAll,
-    onEnsureStats,
-    setCopiedPath,
-    onSetPendingActionPath
-}: {
-    title: string
-    files: WorkingChangeItem[]
-    copiedPath: string | null
-    pendingActionPath: string | null
-    loadingDiffKeys: Set<string>
-    emptyText: string
-    actionLabel: string
-    diffMode: DiffMode
-    onViewDiff: (file: WorkingChangeItem, mode: DiffMode) => Promise<void>
-    onActionFile: (path: string) => Promise<void>
-    onActionAll: () => Promise<void>
-    onEnsureStats?: (paths: string[]) => void
-    setCopiedPath: Dispatch<SetStateAction<string | null>>
-    onSetPendingActionPath: (path: string | null) => void
-}) {
-    const [currentPage, setCurrentPage] = useState(1)
-    const sectionAdditions = useMemo(
-        () => files.reduce((sum, file) => sum + Math.max(0, Number(file.additions) || 0), 0),
-        [files]
-    )
-    const sectionDeletions = useMemo(
-        () => files.reduce((sum, file) => sum + Math.max(0, Number(file.deletions) || 0), 0),
-        [files]
-    )
-    const totalLineChanges = sectionAdditions + sectionDeletions
-    const totalPages = Math.max(1, Math.ceil(files.length / PAGE_SIZE))
-    const paginatedFiles = useMemo(() => {
-        const start = (currentPage - 1) * PAGE_SIZE
-        return files.slice(start, start + PAGE_SIZE)
-    }, [files, currentPage])
-
-    useEffect(() => {
-        setCurrentPage((page) => Math.min(page, totalPages))
-    }, [totalPages])
-
-    useEffect(() => {
-        const missingStatsPaths = paginatedFiles
-            .filter((file) => file.statsLoaded !== true)
-            .map((file) => file.path)
-
-        if (missingStatsPaths.length > 0) {
-            onEnsureStats?.(missingStatsPaths)
-        }
-    }, [onEnsureStats, paginatedFiles])
-
-    const pageStart = files.length === 0 ? 0 : ((currentPage - 1) * PAGE_SIZE) + 1
-    const pageEnd = files.length === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, files.length)
-    const loadedStatsCount = useMemo(
-        () => files.filter((file) => file.statsLoaded === true).length,
-        [files]
-    )
-    const hasPartialStats = loadedStatsCount < files.length
-
-    const handleCopyPath = (path: string, e: MouseEvent) => {
-        e.stopPropagation()
-        navigator.clipboard.writeText(path)
-        setCopiedPath(path)
-        setTimeout(() => setCopiedPath(null), 1200)
+    for (let index = 2; index < 100; index += 1) {
+        const next = `${base}-${index}`
+        if (!existing.has(next.toLowerCase())) return next
     }
 
-    return (
-        <div className="space-y-2">
-            <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="text-sm font-medium text-white/85">{title}</h4>
-                            <span className="rounded-md border border-white/15 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/65">
-                                {files.length} files
-                            </span>
-                        </div>
-                        <p className="text-[11px] text-white/45">
-                            {hasPartialStats
-                                ? `Counting visible file changes... ${loadedStatsCount}/${files.length} files resolved`
-                                : `Totals across all files: ${totalLineChanges} lines changed`}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                        <DiffStats additions={sectionAdditions} deletions={sectionDeletions} loading={hasPartialStats} />
-                        <button
-                            onClick={() => { void onActionAll() }}
-                            disabled={files.length === 0 || pendingActionPath === '__all__'}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 text-white/70 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        >
-                            {pendingActionPath === '__all__' ? 'Working...' : `${actionLabel} All`}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {files.length === 0 ? (
-                <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/40">{emptyText}</div>
-            ) : paginatedFiles.map((file) => {
-                const badge = getStatusBadge(file.gitStatus)
-                const diffKey = getDiffKey(diffMode, file.path)
-                const isLoadingDiff = loadingDiffKeys.has(diffKey)
-
-                return (
-                    <div key={file.path} className="group bg-black/30 rounded-xl border border-white/5 hover:border-white/15 p-3 transition-all">
-                        <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-start gap-3 flex-1 min-w-0">
-                                <span className={cn('text-[10px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5', badge.className)}>
-                                    {badge.label}
-                                </span>
-                                {getFileIcon(file.name)}
-                                <div className="min-w-0">
-                                    <p className="text-sm font-mono text-white/80 truncate">{file.name}</p>
-                                    <p className="text-xs text-white/45 truncate">{file.path}</p>
-                                    {file.previousPath && (
-                                        <p className="text-[11px] text-blue-300/80 truncate">from {file.previousPath}</p>
-                                    )}
-                                </div>
-                                <button
-                                    onClick={(e) => handleCopyPath(file.path, e)}
-                                    className={cn(
-                                        'p-1 rounded transition-all shrink-0 opacity-0 group-hover:opacity-100',
-                                        copiedPath === file.path
-                                            ? 'text-emerald-400 bg-emerald-400/10'
-                                            : 'text-white/40 hover:text-white hover:bg-white/10'
-                                    )}
-                                    title={copiedPath === file.path ? 'Copied!' : `Copy path: ${file.path}`}
-                                >
-                                    {copiedPath === file.path ? <Check size={14} /> : <Copy size={14} />}
-                                </button>
-                            </div>
-
-                            <div className="flex items-center justify-end gap-2 shrink-0 min-w-[220px]">
-                                <DiffStats
-                                    additions={file.additions}
-                                    deletions={file.deletions}
-                                    compact
-                                    loading={file.statsLoaded !== true}
-                                />
-                                <button
-                                    onClick={() => { void onViewDiff(file, diffMode) }}
-                                    disabled={isLoadingDiff}
-                                    className="px-2 py-1 text-[11px] rounded border border-blue-400/25 text-blue-300 hover:text-blue-100 hover:bg-blue-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                                >
-                                    {isLoadingDiff ? 'Loading...' : 'View Diff'}
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        onSetPendingActionPath(file.path)
-                                        void onActionFile(file.path).finally(() => onSetPendingActionPath(null))
-                                    }}
-                                    disabled={pendingActionPath === file.path}
-                                    className="px-2 py-1 text-[11px] rounded border border-white/15 text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                                >
-                                    {pendingActionPath === file.path ? '...' : actionLabel}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            })}
-
-            {files.length > PAGE_SIZE && (
-                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/55">
-                    <span>Showing {pageStart}-{pageEnd} of {files.length}</span>
-                    <div className="flex items-center gap-1.5">
-                        <button
-                            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                            disabled={currentPage <= 1}
-                            className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
-                        >
-                            Prev
-                        </button>
-                        <span className="min-w-[54px] text-center text-white/65">{currentPage}/{totalPages}</span>
-                        <button
-                            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                            disabled={currentPage >= totalPages}
-                            className="rounded-md border border-white/15 px-2 py-1 text-white/75 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
-                        >
-                            Next
-                        </button>
-                    </div>
-                </div>
-            )}
-        </div>
-    )
+    return `${base}-${Date.now()}`
 }
 
 export function WorkingChangesView({
@@ -282,12 +53,22 @@ export function WorkingChangesView({
     handleGenerateCommitMessage,
     isGeneratingCommitMessage,
     isCommitting,
+    isStackedActionRunning,
+    hasGitHubRemote,
     settings,
+    updateSettings,
+    currentBranch,
+    branches,
+    showToast,
     handleCommit,
+    handleCommitPushAndCreatePullRequest,
+    handleDangerouslyStageCommitPushAndCreatePullRequest,
     handleStageFile,
     handleUnstageFile,
     handleStageAll,
     handleUnstageAll,
+    handleDiscardUnstagedFile,
+    handleDiscardUnstagedAll,
     ensureStatsForPaths
 }: {
     stagedFiles: WorkingChangeItem[]
@@ -298,22 +79,123 @@ export function WorkingChangesView({
     handleGenerateCommitMessage: () => Promise<void>
     isGeneratingCommitMessage: boolean
     isCommitting: boolean
+    isStackedActionRunning: boolean
+    hasGitHubRemote: boolean
     settings: any
+    updateSettings: (partial: any) => void
+    currentBranch: string
+    branches: Array<{ name: string }>
+    showToast: (message: string, actionLabel?: string, actionTo?: string, tone?: 'success' | 'error' | 'info') => void
     handleCommit: () => Promise<void>
+    handleCommitPushAndCreatePullRequest: () => Promise<void>
+    handleDangerouslyStageCommitPushAndCreatePullRequest: () => Promise<void>
     handleStageFile: (path: string) => Promise<void>
     handleUnstageFile: (path: string) => Promise<void>
     handleStageAll: () => Promise<void>
     handleUnstageAll: () => Promise<void>
+    handleDiscardUnstagedFile: (path: string) => Promise<void>
+    handleDiscardUnstagedAll: () => Promise<void>
     ensureStatsForPaths?: (paths: string[]) => void
 }) {
     const [fileDiffs, setFileDiffs] = useState<Map<string, string>>(new Map())
     const [loadingDiffKeys, setLoadingDiffKeys] = useState<Set<string>>(new Set())
     const [copiedPath, setCopiedPath] = useState<string | null>(null)
     const [pendingActionPath, setPendingActionPath] = useState<string | null>(null)
+    const [pendingRevertPath, setPendingRevertPath] = useState<string | null>(null)
     const [selectedDiffFile, setSelectedDiffFile] = useState<WorkingChangeItem | null>(null)
     const [selectedDiffMode, setSelectedDiffMode] = useState<DiffMode>('staged')
     const [selectedDiffContent, setSelectedDiffContent] = useState('')
     const [isDiffModalLoading, setIsDiffModalLoading] = useState(false)
+    const [revertTarget, setRevertTarget] = useState<{ file?: WorkingChangeItem; scope: 'file' | 'all' } | null>(null)
+    const [showDangerMenu, setShowDangerMenu] = useState(false)
+    const [stackedTaskStatusText, setStackedTaskStatusText] = useState('')
+    const [showBranchGuardModal, setShowBranchGuardModal] = useState(false)
+    const [branchGuardMode, setBranchGuardMode] = useState<'safe' | 'danger'>('safe')
+    const [proposedBranchName, setProposedBranchName] = useState('')
+    const [autoCreateNextTime, setAutoCreateNextTime] = useState(false)
+    const [branchGuardError, setBranchGuardError] = useState('')
+    const [isCreatingBranchForStackedFlow, setIsCreatingBranchForStackedFlow] = useState(false)
+    const dangerMenuRef = useRef<HTMLDivElement | null>(null)
+    const iconTheme = settings?.theme === 'light' ? 'light' : 'dark'
+    const resolvedProvider = resolvePreferredGitTextProvider(settings)
+    const hasProviderForAutoCommit = Boolean(resolvedProvider)
+    const hasOnlyStagedChanges = stagedFiles.length > 0 && unstagedFiles.length === 0
+    const hasAnyChanges = stagedFiles.length > 0 || unstagedFiles.length > 0
+
+    const runStackedActionByMode = async (mode: 'safe' | 'danger') => {
+        if (mode === 'danger') {
+            await handleDangerouslyStageCommitPushAndCreatePullRequest()
+            return
+        }
+        await handleCommitPushAndCreatePullRequest()
+    }
+
+    const maybePrepareBranchForStackedFlow = async (mode: 'safe' | 'danger') => {
+        const prConfig = getProjectPullRequestConfig(settings, projectPath)
+        const targetBranch = String(prConfig.targetBranch || '').trim() || 'main'
+        const normalizedCurrentBranch = String(currentBranch || '').trim()
+        if (!normalizedCurrentBranch || normalizedCurrentBranch === 'HEAD' || normalizedCurrentBranch !== targetBranch) {
+            await runStackedActionByMode(mode)
+            return
+        }
+
+        const proposed = buildProposedBranchName(
+            commitMessage,
+            Array.isArray(branches) ? branches.map((branch) => branch.name) : []
+        )
+
+        if (settings.gitAutoCreateBranchWhenTargetMatches === true) {
+            setIsCreatingBranchForStackedFlow(true)
+            try {
+                const createResult = await window.devscope.createBranch(projectPath, proposed, true)
+                if (!createResult?.success) {
+                    throw new Error(createResult?.error || 'Failed to create branch.')
+                }
+                showToast(`Created branch ${proposed}.`, undefined, undefined, 'success')
+                await runStackedActionByMode(mode)
+            } catch (err: any) {
+                showToast(err?.message || 'Failed to create branch.', undefined, undefined, 'error')
+            } finally {
+                setIsCreatingBranchForStackedFlow(false)
+            }
+            return
+        }
+
+        setBranchGuardMode(mode)
+        setProposedBranchName(proposed)
+        setAutoCreateNextTime(false)
+        setBranchGuardError('')
+        setShowBranchGuardModal(true)
+    }
+
+    const confirmBranchGuard = async () => {
+        const branchName = String(proposedBranchName || '').trim()
+        if (!branchName) {
+            setBranchGuardError('Branch name required.')
+            return
+        }
+
+        setIsCreatingBranchForStackedFlow(true)
+        setBranchGuardError('')
+        try {
+            const createResult = await window.devscope.createBranch(projectPath, branchName, true)
+            if (!createResult?.success) {
+                throw new Error(createResult?.error || 'Failed to create branch.')
+            }
+
+            if (autoCreateNextTime) {
+                updateSettings({ gitAutoCreateBranchWhenTargetMatches: true })
+            }
+
+            setShowBranchGuardModal(false)
+            showToast(`Created branch ${branchName}.`, undefined, undefined, 'success')
+            await runStackedActionByMode(branchGuardMode)
+        } catch (err: any) {
+            setBranchGuardError(err?.message || 'Failed to create branch.')
+        } finally {
+            setIsCreatingBranchForStackedFlow(false)
+        }
+    }
 
     const openFileDiffModal = async (file: WorkingChangeItem, mode: DiffMode) => {
         const key = getDiffKey(mode, file.path)
@@ -356,6 +238,139 @@ export function WorkingChangesView({
         }
     }
 
+    const buildRevertMessage = (target: { file?: WorkingChangeItem; scope: 'file' | 'all' }) => {
+        if (target.scope === 'all') {
+            return 'This will discard all unstaged changes and keep any staged changes. This cannot be undone.'
+        }
+
+        const file = target.file
+        if (!file) {
+            return 'This will discard the selected unstaged changes. This cannot be undone.'
+        }
+        if (file.staged) {
+            return `This will discard unstaged edits in ${file.name} and keep staged changes. This cannot be undone.`
+        }
+        if (file.gitStatus === 'untracked') {
+            return `This will permanently delete the untracked file ${file.name}. This cannot be undone.`
+        }
+        return `This will revert unstaged edits in ${file.name} to the last committed state. This cannot be undone.`
+    }
+
+    const confirmRevert = async () => {
+        if (!revertTarget) return
+
+        const scope = revertTarget.scope
+        const pendingKey = scope === 'all' ? '__all__' : revertTarget.file?.path
+        if (pendingKey) {
+            setPendingRevertPath(pendingKey)
+        }
+
+        try {
+            if (scope === 'all') {
+                await handleDiscardUnstagedAll()
+                return
+            }
+
+            const file = revertTarget.file
+            if (!file) return
+            await handleDiscardUnstagedFile(file.path)
+        } finally {
+            if (pendingKey) {
+                setPendingRevertPath(null)
+            }
+            setRevertTarget(null)
+        }
+    }
+
+    const commitButtonLabel = useMemo(
+        () => (isCommitting ? 'Committing...' : `Commit Staged (${stagedFiles.length})`),
+        [isCommitting, stagedFiles.length]
+    )
+    const stackedActionLabel = useMemo(() => {
+        if (isCreatingBranchForStackedFlow) return 'Creating branch...'
+        if (isStackedActionRunning) return stackedTaskStatusText || 'Starting...'
+        return 'Commit, Push & Create PR'
+    }, [isCreatingBranchForStackedFlow, isStackedActionRunning, stackedTaskStatusText])
+    const isPrimaryStackedActionDisabled = !hasGitHubRemote || !hasOnlyStagedChanges || isCommitting || isStackedActionRunning || isCreatingBranchForStackedFlow || (!commitMessage.trim() && !hasProviderForAutoCommit)
+    const isDangerousStackedActionDisabled = !hasGitHubRemote || !hasAnyChanges || isCommitting || isStackedActionRunning || isCreatingBranchForStackedFlow || (!commitMessage.trim() && !hasProviderForAutoCommit)
+
+    useEffect(() => {
+        if (!showDangerMenu) return
+
+        const handlePointerDown = (event: MouseEvent) => {
+            const target = event.target as Node | null
+            if (target && dangerMenuRef.current?.contains(target)) return
+            setShowDangerMenu(false)
+        }
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setShowDangerMenu(false)
+            }
+        }
+
+        document.addEventListener('pointerdown', handlePointerDown)
+        document.addEventListener('keydown', handleEscape)
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown)
+            document.removeEventListener('keydown', handleEscape)
+        }
+    }, [showDangerMenu])
+
+    useEffect(() => {
+        const normalizedProjectPath = String(projectPath || '').trim().toLowerCase()
+        if (!normalizedProjectPath) return
+
+        const applyTask = (task: any) => {
+            if (!task || task.type !== 'git.stacked') return false
+            if (String(task.projectPath || '').trim().toLowerCase() !== normalizedProjectPath) return false
+            if (task.status !== 'running') {
+                setStackedTaskStatusText('')
+                return true
+            }
+
+            const latestLog = Array.isArray(task.logs)
+                ? [...task.logs]
+                    .reverse()
+                    .map((entry) => String(entry?.message || '').trim())
+                    .find((message) => message && !/^Target branch:|^Auto-stage all:|^Commit message:/i.test(message))
+                : ''
+            setStackedTaskStatusText(latestLog || 'Starting...')
+            return true
+        }
+
+        void window.devscope.listActiveTasks?.(projectPath).then((result) => {
+            if (!result?.success || !Array.isArray(result.tasks)) return
+            const matchingTask = result.tasks.find((task: any) => applyTask(task))
+            if (!matchingTask) {
+                setStackedTaskStatusText('')
+            }
+        }).catch(() => undefined)
+
+        const unsubscribe = window.devscope.onTaskEvent?.((event) => {
+            if (event.type === 'remove') {
+                void window.devscope.listActiveTasks?.(projectPath).then((result) => {
+                    if (!result?.success || !Array.isArray(result.tasks)) {
+                        setStackedTaskStatusText('')
+                        return
+                    }
+                    const matchingTask = result.tasks.find((task: any) => applyTask(task))
+                    if (!matchingTask) {
+                        setStackedTaskStatusText('')
+                    }
+                }).catch(() => {
+                    setStackedTaskStatusText('')
+                })
+                return
+            }
+            if (event.type !== 'upsert' || !event.task) return
+            applyTask(event.task)
+        })
+
+        return () => {
+            unsubscribe?.()
+        }
+    }, [isStackedActionRunning, projectPath])
+
     return (
         <>
             <div className="space-y-5">
@@ -363,7 +378,7 @@ export function WorkingChangesView({
                     <h3 className="text-sm font-medium text-white/80 mb-3">Create Commit (Staged only {stagedFiles.length})</h3>
                     <textarea
                         value={commitMessage}
-                        onChange={(e) => setCommitMessage(e.target.value)}
+                        onChange={(event) => setCommitMessage(event.target.value)}
                         placeholder="Enter commit message..."
                         className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-[var(--accent-primary)]/50 resize-none mb-3"
                         rows={3}
@@ -371,7 +386,7 @@ export function WorkingChangesView({
                     <div className="mb-3 flex items-center justify-between gap-2">
                         <button
                             onClick={() => { void handleGenerateCommitMessage() }}
-                            disabled={isGeneratingCommitMessage || isCommitting || stagedFiles.length === 0}
+                            disabled={isGeneratingCommitMessage || isCommitting || isStackedActionRunning || stagedFiles.length === 0}
                             className="px-3 py-2 bg-violet-500/15 hover:bg-violet-500/25 disabled:opacity-50 disabled:cursor-not-allowed border border-violet-500/30 text-violet-300 text-xs font-medium rounded-lg transition-all flex items-center gap-2"
                         >
                             {isGeneratingCommitMessage ? (
@@ -388,20 +403,59 @@ export function WorkingChangesView({
                         </button>
                         <span className="text-[11px] text-white/40 uppercase tracking-wide">{settings.commitAIProvider}</span>
                     </div>
-                    <button
-                        onClick={() => { void handleCommit() }}
-                        disabled={!commitMessage.trim() || stagedFiles.length === 0 || isCommitting}
-                        className="w-full px-4 py-2.5 bg-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/80 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all"
-                    >
-                        {isCommitting ? 'Committing...' : `Commit Staged (${stagedFiles.length})`}
-                    </button>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                        <button
+                            onClick={() => { void handleCommit() }}
+                            disabled={!commitMessage.trim() || stagedFiles.length === 0 || isCommitting || isStackedActionRunning}
+                            className="w-full px-4 py-2.5 bg-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/80 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all"
+                        >
+                            {commitButtonLabel}
+                        </button>
+                        <div ref={dangerMenuRef} className="relative inline-flex w-full items-stretch rounded-lg border border-violet-500/30 bg-violet-500/15 shadow-sm transition-all hover:border-violet-500/40">
+                            <button
+                                onClick={() => { void maybePrepareBranchForStackedFlow('safe') }}
+                                disabled={isPrimaryStackedActionDisabled || isCreatingBranchForStackedFlow}
+                                className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-l-lg px-4 py-2.5 text-sm font-medium text-violet-100 transition-all hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {isStackedActionRunning || isCreatingBranchForStackedFlow ? <RefreshCw size={14} className="animate-spin" /> : <ArrowUpRight size={14} />}
+                                <span className="truncate">{stackedActionLabel}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowDangerMenu((current) => !current)}
+                                disabled={isCommitting || isStackedActionRunning || isCreatingBranchForStackedFlow}
+                                aria-expanded={showDangerMenu}
+                                title="More actions"
+                                className="inline-flex w-11 items-center justify-center rounded-r-lg border-l border-violet-400/20 text-violet-100 transition-all hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <ChevronDown size={14} className={showDangerMenu ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                            </button>
+                            {showDangerMenu ? (
+                                <div className="absolute inset-x-0 top-[calc(100%+0.4rem)] z-20 rounded-lg border border-red-500/25 bg-sparkle-card p-1 shadow-2xl shadow-black/60 backdrop-blur-xl">
+                                    <button
+                                        type="button"
+                                        disabled={isDangerousStackedActionDisabled}
+                                        onClick={() => {
+                                            setShowDangerMenu(false)
+                                            void maybePrepareBranchForStackedFlow('danger')
+                                        }}
+                                        className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm font-medium text-red-100 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-45"
+                                    >
+                                        <ArrowUpRight size={15} className="shrink-0 text-red-300" />
+                                        <span className="truncate">Stage all, commit, push & create PR</span>
+                                    </button>
+                                </div>
+                            ) : null}
+                        </div>
+                    </div>
                 </div>
 
-                <Section
+                <WorkingChangesSection
                     title="Staged Changes"
                     files={stagedFiles}
                     copiedPath={copiedPath}
                     pendingActionPath={pendingActionPath}
+                    pendingRevertPath={pendingRevertPath}
                     loadingDiffKeys={loadingDiffKeys}
                     emptyText="No staged files."
                     actionLabel="Unstage"
@@ -416,44 +470,134 @@ export function WorkingChangesView({
                     onEnsureStats={ensureStatsForPaths}
                     setCopiedPath={setCopiedPath}
                     onSetPendingActionPath={setPendingActionPath}
+                    iconTheme={iconTheme}
                 />
 
-                <Section
+                <WorkingChangesSection
                     title="Unstaged Changes"
                     files={unstagedFiles}
                     copiedPath={copiedPath}
                     pendingActionPath={pendingActionPath}
+                    pendingRevertPath={pendingRevertPath}
                     loadingDiffKeys={loadingDiffKeys}
                     emptyText="No unstaged files."
                     actionLabel="Stage"
+                    secondaryActionAllLabel="Revert All"
                     diffMode="unstaged"
                     onViewDiff={openFileDiffModal}
                     onActionFile={async (path) => handleStageFile(path)}
+                    onRevertFile={(file) => setRevertTarget({ scope: 'file', file })}
                     onActionAll={async () => {
                         setPendingActionPath('__all__')
                         await handleStageAll()
                         setPendingActionPath(null)
                     }}
+                    onSecondaryActionAll={async () => {
+                        setRevertTarget({ scope: 'all' })
+                    }}
                     onEnsureStats={ensureStatsForPaths}
                     setCopiedPath={setCopiedPath}
                     onSetPendingActionPath={setPendingActionPath}
+                    iconTheme={iconTheme}
                 />
             </div>
 
+            {showBranchGuardModal ? (
+                <div
+                    className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn"
+                    onClick={() => {
+                        if (isCreatingBranchForStackedFlow) return
+                        setShowBranchGuardModal(false)
+                    }}
+                >
+                    <div
+                        className="m-4 w-full max-w-lg rounded-2xl border border-white/10 bg-sparkle-card p-5 shadow-2xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-start gap-3">
+                            <div className="rounded-xl border border-amber-500/25 bg-amber-500/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">
+                                Same branch
+                            </div>
+                        </div>
+                        <h3 className="mt-4 text-lg font-semibold text-white">Create a branch first?</h3>
+                        <p className="mt-2 text-sm text-white/62">
+                            Current branch and target branch are both <span className="font-medium text-white">{currentBranch}</span>.
+                        </p>
+                        <div className="mt-4 space-y-3">
+                            <div>
+                                <div className="mb-2 text-xs uppercase tracking-wide text-white/42">Proposed branch</div>
+                                <Input
+                                    value={proposedBranchName}
+                                    onChange={(value) => {
+                                        setProposedBranchName(value)
+                                        if (branchGuardError) setBranchGuardError('')
+                                    }}
+                                    placeholder="feature/my-change"
+                                    disabled={isCreatingBranchForStackedFlow}
+                                />
+                            </div>
+                            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                                <Checkbox
+                                    checked={autoCreateNextTime}
+                                    onChange={setAutoCreateNextTime}
+                                    label="Don't show again"
+                                    description="Next time DevScope will create a branch automatically."
+                                    size="sm"
+                                    disabled={isCreatingBranchForStackedFlow}
+                                />
+                            </div>
+                            {branchGuardError ? (
+                                <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                                    {branchGuardError}
+                                </div>
+                            ) : null}
+                        </div>
+                        <div className="mt-5 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowBranchGuardModal(false)}
+                                disabled={isCreatingBranchForStackedFlow}
+                                className="rounded-lg border border-white/10 px-3 py-2 text-sm text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
+                            >
+                                Deny
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { void confirmBranchGuard() }}
+                                disabled={isCreatingBranchForStackedFlow}
+                                className="inline-flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/15 px-3.5 py-2 text-sm font-medium text-violet-100 transition-all hover:bg-violet-500/22 disabled:opacity-50"
+                            >
+                                {isCreatingBranchForStackedFlow ? <RefreshCw size={14} className="animate-spin" /> : null}
+                                Accept
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
             <FileDiffDetailModal
                 isOpen={Boolean(selectedDiffFile)}
                 filePath={selectedDiffFile?.path || ''}
                 diff={selectedDiffContent}
                 loading={isDiffModalLoading}
-                additions={selectedDiffFile?.additions || 0}
-                deletions={selectedDiffFile?.deletions || 0}
+                additions={selectedDiffFile ? getDiffCounts(selectedDiffFile, selectedDiffMode).additions : 0}
+                deletions={selectedDiffFile ? getDiffCounts(selectedDiffFile, selectedDiffMode).deletions : 0}
                 status={selectedDiffFile?.gitStatus}
                 subtitle={selectedDiffFile ? `${selectedDiffMode === 'staged' ? 'Staged' : 'Unstaged'} change` : undefined}
-                onClose={() => {
+                onClose={async () => {
                     setSelectedDiffFile(null)
                     setSelectedDiffContent('')
                     setIsDiffModalLoading(false)
                 }}
+            />
+            <ConfirmModal
+                isOpen={Boolean(revertTarget)}
+                title="Revert Unstaged Changes"
+                message={revertTarget ? buildRevertMessage(revertTarget) : ''}
+                confirmLabel="Revert"
+                cancelLabel="Cancel"
+                onConfirm={() => { void confirmRevert() }}
+                onCancel={() => setRevertTarget(null)}
+                variant="danger"
             />
         </>
     )

@@ -5,6 +5,8 @@ export const TASK_EVENT_CHANNEL = 'devscope:tasks:event'
 export type DevScopeTaskType =
     | 'git.commit'
     | 'git.push'
+    | 'git.pr'
+    | 'git.stacked'
     | 'git.fetch'
     | 'git.pull'
     | 'git.checkout'

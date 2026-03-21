@@ -1,137 +1,14 @@
-import type { FileTreeNode, GitCommit, GitStatusDetail } from './types'
-
-type RefreshGitOptions = {
-    quiet?: boolean
-    mode?: 'working' | 'unpushed' | 'pulls' | 'full'
-}
-
-interface GitActionParams {
-    decodedPath: string
-    commitMessage: string
-    changedFiles: Array<{ path: string }>
-    stagedFiles: Array<{ path: string }>
-    unstagedFiles: Array<{ path: string }>
-    gitUser: { name: string; email: string } | null
-    repoOwner: string | null
-    settings: any
-    unpushedCommits: GitCommit[]
-    targetBranch: string
-    currentBranch: string
-    branchName: 'main' | 'master' | 'custom'
-    customBranchName: string
-    createGitignore: boolean
-    gitignoreTemplate: string
-    selectedPatterns: Set<string>
-    createInitialCommit: boolean
-    initialCommitMessage: string
-    remoteUrl: string
-    projectPath?: string
-    refreshGitData: (refreshFileTree?: boolean, options?: RefreshGitOptions) => Promise<void>
-    showToast: (
-        message: string,
-        actionLabel?: string,
-        actionTo?: string,
-        tone?: 'success' | 'error' | 'info'
-    ) => void
-    setSelectedCommit: (commit: GitCommit | null) => void
-    setLoadingDiff: (loading: boolean) => void
-    setCommitDiff: (diff: string) => void
-    setShowAuthorMismatch: (show: boolean) => void
-    setIsGeneratingCommitMessage: (loading: boolean) => void
-    setCommitMessage: (value: string) => void
-    setIsCommitting: (loading: boolean) => void
-    setIsPushing: (loading: boolean) => void
-    setIsFetching: (loading: boolean) => void
-    setIsPulling: (loading: boolean) => void
-    setLastFetched: (timestamp: number | undefined) => void
-    setLastPulled: (timestamp: number | undefined) => void
-    setIsSwitchingBranch: (loading: boolean) => void
-    setIsInitializing: (loading: boolean) => void
-    setIsGitRepo: (value: boolean) => void
-    setInitStep: (step: 'config' | 'remote') => void
-    setRemoteUrl: (value: string) => void
-    setHasRemote: (value: boolean) => void
-    setShowInitModal: (value: boolean) => void
-    setIsAddingRemote: (value: boolean) => void
-    setGitStatusDetails: (
-        value: GitStatusDetail[] | ((prev: GitStatusDetail[]) => GitStatusDetail[])
-    ) => void
-    setGitStatusMap: (
-        value: Record<string, FileTreeNode['gitStatus']> | ((prev: Record<string, FileTreeNode['gitStatus']>) => Record<string, FileTreeNode['gitStatus']>)
-    ) => void
-}
-
-const PUSH_TRANSIENT_ERROR_PATTERNS: RegExp[] = [
-    /\bHTTP\s*408\b/i,
-    /\bcurl\s*22\b.*\b408\b/i,
-    /\bRPC failed\b/i,
-    /\bunexpected disconnect\b/i,
-    /\bremote end hung up unexpectedly\b/i,
-    /\bsideband packet\b/i,
-    /\btimed out\b/i
-]
-
-function isTransientPushError(message: string): boolean {
-    return PUSH_TRANSIENT_ERROR_PATTERNS.some((pattern) => pattern.test(message))
-}
-
-function summarizePushError(rawMessage: string): string {
-    const message = String(rawMessage || '').trim()
-    const compact = message.replace(/\s+/g, ' ')
-
-    if (/\bHTTP\s*408\b/i.test(message) || /\bcurl\s*22\b.*\b408\b/i.test(message)) {
-        return 'Push timed out (HTTP 408). Retry push. If it keeps failing, check network/VPN/proxy or remote status.'
-    }
-
-    if (isTransientPushError(message)) {
-        return 'Push connection dropped while uploading pack data. Retry push; if it repeats, verify network stability and remote availability.'
-    }
-
-    if (/\bAuthentication failed\b/i.test(message) || /\b403\b/.test(message) || /\b401\b/.test(message)) {
-        return 'Push was rejected by remote authentication. Re-authenticate Git credentials/token and retry.'
-    }
-
-    if (/\bnon-fast-forward\b/i.test(message) || /\brejected\b/i.test(message)) {
-        return 'Push rejected (non-fast-forward). Pull/rebase the latest remote changes, then push again.'
-    }
-
-    return compact || 'Failed to push commits'
-}
-
-function normalizePath(path: string): string {
-    return path.replace(/\\/g, '/').trim()
-}
-
-function buildStatusMap(details: GitStatusDetail[]): Record<string, FileTreeNode['gitStatus']> {
-    const statusMap: Record<string, FileTreeNode['gitStatus']> = {}
-    for (const detail of details) {
-        statusMap[detail.path] = detail.status
-        statusMap[detail.path.replace(/\//g, '\\')] = detail.status
-        if (detail.previousPath) {
-            statusMap[detail.previousPath] = 'renamed'
-            statusMap[detail.previousPath.replace(/\//g, '\\')] = 'renamed'
-        }
-    }
-    return statusMap
-}
-
-function toStagedDetail(detail: GitStatusDetail): GitStatusDetail {
-    return {
-        ...detail,
-        status: detail.status === 'untracked' ? 'added' : detail.status,
-        staged: true,
-        unstaged: false
-    }
-}
-
-function toUnstagedDetail(detail: GitStatusDetail): GitStatusDetail {
-    return {
-        ...detail,
-        status: detail.status === 'added' ? 'untracked' : detail.status,
-        staged: false,
-        unstaged: true
-    }
-}
+import { resolvePreferredGitTextProvider } from '@/lib/gitAi'
+import { buildGitPublishPlan, describeGitPublishSuccess, type GitPublishPlan } from '@/lib/gitPublishPlanner'
+import {
+    getProjectPullRequestConfig,
+    resolvePreferredPullRequestProvider,
+    resolvePullRequestGuideText
+} from '@/lib/pullRequestWorkflow'
+import type { GitCommit, GitStatusDetail } from './types'
+import type { GitActionParams } from './gitActionTypes'
+import { buildStatusMap, isTransientPushError, summarizePushError } from './gitActionHelpers'
+import { createGitWorkingTreeActions } from './gitWorkingTreeActions'
 
 export function createProjectGitActions(params: GitActionParams) {
     const bulkActionScope = params.settings.gitBulkActionScope === 'project' ? 'project' : 'repo'
@@ -210,92 +87,124 @@ export function createProjectGitActions(params: GitActionParams) {
 
         await performCommit()
     }
+    const {
+        handleStageFile,
+        handleUnstageFile,
+        handleStageAll,
+        handleUnstageAll,
+        handleDiscardUnstagedFile,
+        handleDiscardUnstagedAll
+    } = createGitWorkingTreeActions(params, bulkActionScope, applyOptimisticDetails)
 
-    const handleStageFile = async (filePath: string) => {
-        if (!params.decodedPath || !filePath.trim()) return
-        const normalizedTarget = normalizePath(filePath)
-        const rollback = applyOptimisticDetails((prev) => {
-            let changed = false
-            const next = prev.map((detail) => {
-                if (normalizePath(detail.path) !== normalizedTarget) return detail
-                changed = true
-                return toStagedDetail(detail)
-            })
-            return changed ? next : prev
-        })
-
-        try {
-            const result = await window.devscope.stageFiles(params.decodedPath, [filePath])
-            if (!result?.success) {
-                throw new Error(result?.error || 'Failed to stage file')
-            }
-            void params.refreshGitData(false, { quiet: true, mode: 'working' })
-        } catch (err: any) {
-            rollback()
-            params.showToast(`Failed to stage file: ${err.message}`, undefined, undefined, 'error')
-        }
-    }
-
-    const handleUnstageFile = async (filePath: string) => {
-        if (!params.decodedPath || !filePath.trim()) return
-        const normalizedTarget = normalizePath(filePath)
-        const rollback = applyOptimisticDetails((prev) => {
-            let changed = false
-            const next = prev.map((detail) => {
-                if (normalizePath(detail.path) !== normalizedTarget) return detail
-                changed = true
-                return toUnstagedDetail(detail)
-            })
-            return changed ? next : prev
-        })
-
-        try {
-            const result = await window.devscope.unstageFiles(params.decodedPath, [filePath])
-            if (!result?.success) {
-                throw new Error(result?.error || 'Failed to unstage file')
-            }
-            void params.refreshGitData(false, { quiet: true, mode: 'working' })
-        } catch (err: any) {
-            rollback()
-            params.showToast(`Failed to unstage file: ${err.message}`, undefined, undefined, 'error')
-        }
-    }
-
-    const handleStageAll = async () => {
-        if (!params.decodedPath || params.unstagedFiles.length === 0) return
-        const rollback = applyOptimisticDetails((prev) => {
-            const next = prev.map((detail) => (detail.unstaged ? toStagedDetail(detail) : detail))
-            return next
-        })
-
-        try {
-            const result = await window.devscope.stageFiles(params.decodedPath, [], { scope: bulkActionScope })
-            if (!result?.success) {
-                throw new Error(result?.error || 'Failed to stage all files')
-            }
-            void params.refreshGitData(false, { quiet: true, mode: 'working' })
-        } catch (err: any) {
-            rollback()
-            params.showToast(`Failed to stage files: ${err.message}`, undefined, undefined, 'error')
-        }
-    }
-
-    const handleUnstageAll = async () => {
+    const handleCommitPushAndCreatePullRequest = async () => {
         if (!params.decodedPath || params.stagedFiles.length === 0) return
-        const rollback = applyOptimisticDetails((prev) => {
-            const next = prev.map((detail) => (detail.staged ? toUnstagedDetail(detail) : detail))
-            return next
-        })
 
+        const provider = resolvePreferredPullRequestProvider(params.settings)
+        if (!params.commitMessage.trim() && !provider) {
+            params.showToast(
+                'Enter a commit message or configure an AI provider first.',
+                'Open AI Settings',
+                '/settings/ai',
+                'info'
+            )
+            return
+        }
+
+        params.setIsStackedActionRunning(true)
         try {
-            const result = await window.devscope.unstageFiles(params.decodedPath, [], { scope: bulkActionScope })
+            const prConfig = getProjectPullRequestConfig(params.settings, params.decodedPath)
+            const guideText = await resolvePullRequestGuideText(
+                params.settings,
+                params.decodedPath,
+                prConfig.guideSource,
+                prConfig.guide
+            )
+            const result = await window.devscope.commitPushAndCreatePullRequest(params.decodedPath, {
+                projectName: params.projectName,
+                commitMessage: params.commitMessage.trim() || undefined,
+                targetBranch: prConfig.targetBranch,
+                draft: prConfig.draft,
+                guideText,
+                provider: provider?.provider,
+                apiKey: provider?.apiKey,
+                model: provider?.model
+            })
+
             if (!result?.success) {
-                throw new Error(result?.error || 'Failed to unstage all files')
+                throw new Error(result?.error || 'Failed to commit, push, and create the pull request.')
             }
-            void params.refreshGitData(false, { quiet: true, mode: 'working' })
+
+            params.setCommitMessage('')
+            await params.refreshGitData(false, { mode: 'unpushed' })
+            void params.refreshGitData(false, { quiet: true, mode: 'full' })
+            window.open(result.pullRequest.url, '_blank', 'noopener,noreferrer')
+            const prNumberLabel = result.pullRequest.number > 0 ? ` #${result.pullRequest.number}` : ''
+            params.showToast(
+                result.status === 'opened_existing'
+                    ? `Committed changes and opened PR${prNumberLabel}.`
+                    : `Committed changes and created PR${prNumberLabel}.`
+            )
         } catch (err: any) {
-            rollback()
-            params.showToast(`Failed to unstage files: ${err.message}`, undefined, undefined, 'error')
+            params.showToast(`Failed to commit, push & create PR: ${err.message || 'Unknown error'}`, undefined, undefined, 'error')
+        } finally {
+            params.setIsStackedActionRunning(false)
+        }
+    }
+
+    const handleDangerouslyStageCommitPushAndCreatePullRequest = async () => {
+        if (!params.decodedPath || (params.stagedFiles.length === 0 && params.unstagedFiles.length === 0)) return
+
+        const provider = resolvePreferredPullRequestProvider(params.settings)
+        if (!params.commitMessage.trim() && !provider) {
+            params.showToast(
+                'Enter a commit message or configure an AI provider first.',
+                'Open AI Settings',
+                '/settings/ai',
+                'info'
+            )
+            return
+        }
+
+        params.setIsStackedActionRunning(true)
+        try {
+            const prConfig = getProjectPullRequestConfig(params.settings, params.decodedPath)
+            const guideText = await resolvePullRequestGuideText(
+                params.settings,
+                params.decodedPath,
+                prConfig.guideSource,
+                prConfig.guide
+            )
+            const result = await window.devscope.commitPushAndCreatePullRequest(params.decodedPath, {
+                projectName: params.projectName,
+                commitMessage: params.commitMessage.trim() || undefined,
+                targetBranch: prConfig.targetBranch,
+                draft: prConfig.draft,
+                guideText,
+                provider: provider?.provider,
+                apiKey: provider?.apiKey,
+                model: provider?.model,
+                autoStageAll: true,
+                stageScope: params.settings.gitBulkActionScope === 'project' ? 'project' : 'repo'
+            })
+
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to stage, commit, push, and create the pull request.')
+            }
+
+            params.setCommitMessage('')
+            await params.refreshGitData(false, { mode: 'unpushed' })
+            void params.refreshGitData(false, { quiet: true, mode: 'full' })
+            window.open(result.pullRequest.url, '_blank', 'noopener,noreferrer')
+            const prNumberLabel = result.pullRequest.number > 0 ? ` #${result.pullRequest.number}` : ''
+            params.showToast(
+                result.status === 'opened_existing'
+                    ? `Staged all changes, committed, and opened PR${prNumberLabel}.`
+                    : `Staged all changes, committed, and created PR${prNumberLabel}.`
+            )
+        } catch (err: any) {
+            params.showToast(`Failed to dangerously stage, commit, push & create PR: ${err.message || 'Unknown error'}`, undefined, undefined, 'error')
+        } finally {
+            params.setIsStackedActionRunning(false)
         }
     }
 
@@ -306,25 +215,16 @@ export function createProjectGitActions(params: GitActionParams) {
             return
         }
 
-        const providerOrder = params.settings.commitAIProvider === 'groq'
-            ? (['groq', 'gemini'] as const)
-            : (['gemini', 'groq'] as const)
-
-        const selectedProvider = providerOrder.find((provider) => {
-            if (provider === 'groq') return Boolean(params.settings.groqApiKey?.trim())
-            return Boolean(params.settings.geminiApiKey?.trim())
-        })
+        const selectedProvider = resolvePreferredGitTextProvider(params.settings)
 
         if (!selectedProvider) {
             params.showToast(
-                'No API key configured for commit generation.',
+                'No AI provider is configured for commit generation.',
                 'Open AI Settings',
                 '/settings/ai'
             )
             return
         }
-
-        const apiKey = selectedProvider === 'groq' ? params.settings.groqApiKey : params.settings.geminiApiKey
 
         params.setIsGeneratingCommitMessage(true)
         try {
@@ -339,9 +239,10 @@ export function createProjectGitActions(params: GitActionParams) {
             }
 
             const generateResult = await window.devscope.generateCommitMessage(
-                selectedProvider,
-                apiKey,
-                stagedDiff
+                selectedProvider.provider,
+                selectedProvider.apiKey || '',
+                stagedDiff,
+                selectedProvider.model
             )
 
             if (!generateResult?.success) {
@@ -360,17 +261,31 @@ export function createProjectGitActions(params: GitActionParams) {
         }
     }
 
-    const handlePush = async (mode: 'push' | 'publish' = 'push') => {
+    const handlePush = async (
+        publishPlanOverride?: GitPublishPlan,
+        options?: { commitHash?: string; commitMessage?: string },
+        pushOptions?: { remoteName?: string; branchName?: string }
+    ) => {
         if (!params.decodedPath) return
-        const hadUnpushedCommits = params.unpushedCommits.length > 0
+        const targetCommitHash = String(options?.commitHash || '').trim()
+        const publishPlan = publishPlanOverride ?? buildGitPublishPlan({
+            currentBranch: params.currentBranch,
+            branches: params.branches,
+            remotes: params.remotes,
+            unpushedCommits: params.unpushedCommits,
+            selectedCommitHash: targetCommitHash || undefined,
+            intent: targetCommitHash ? 'push-range' : 'push-all'
+        })
 
         params.setIsPushing(true)
         try {
             let retriedAfterTransientError = false
             const runPush = async () => {
-                const pushResult = await window.devscope.pushCommits(params.decodedPath)
+                const pushResult = targetCommitHash
+                    ? await window.devscope.pushSingleCommit(params.decodedPath, targetCommitHash, pushOptions)
+                    : await window.devscope.pushCommits(params.decodedPath, pushOptions)
                 if (!pushResult?.success) {
-                    throw new Error(pushResult?.error || 'Failed to push commits')
+                    throw new Error(pushResult?.error || (targetCommitHash ? 'Failed to push selected commit' : 'Failed to push commits'))
                 }
             }
 
@@ -391,11 +306,10 @@ export function createProjectGitActions(params: GitActionParams) {
 
             await params.refreshGitData(false, { mode: 'unpushed' })
             if (!retriedAfterTransientError) {
-                if (mode === 'publish' || !hadUnpushedCommits) {
-                    params.showToast(`Published branch "${params.currentBranch || 'current'}" to remote.`)
-                } else {
-                    params.showToast('Pushed commits to remote.')
-                }
+                params.showToast(describeGitPublishSuccess(
+                    publishPlan,
+                    { commitHash: targetCommitHash || undefined, currentBranch: params.currentBranch }
+                ))
             }
         } catch (err: any) {
             const rawMessage = String(err?.message || err || 'Failed to push commits')
@@ -537,19 +451,19 @@ export function createProjectGitActions(params: GitActionParams) {
         void performCommit()
     }
 
-    const handleFetch = async () => {
+    const handleFetch = async (remoteName?: string, successLabel?: string) => {
         if (!params.decodedPath) return
 
         params.setIsFetching(true)
         try {
-            const result = await window.devscope.fetchUpdates(params.decodedPath)
+            const result = await window.devscope.fetchUpdates(params.decodedPath, remoteName)
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to fetch updates')
             }
 
             params.setLastFetched(Date.now())
             await params.refreshGitData(false, { quiet: true, mode: 'pulls' })
-            params.showToast('Fetched remote updates.')
+            params.showToast(successLabel || (remoteName ? `Fetched ${remoteName}.` : 'Fetched remote updates.'))
         } catch (err: any) {
             params.showToast(`Failed to fetch: ${err.message}`, undefined, undefined, 'error')
         } finally {
@@ -557,19 +471,19 @@ export function createProjectGitActions(params: GitActionParams) {
         }
     }
 
-    const handlePull = async () => {
+    const handlePull = async (options?: { remoteName?: string; branchName?: string; pushRemoteName?: string; successLabel?: string }) => {
         if (!params.decodedPath) return
 
         params.setIsPulling(true)
         try {
-            const result = await window.devscope.pullUpdates(params.decodedPath)
+            const result = await window.devscope.pullUpdates(params.decodedPath, options)
             if (!result?.success) {
                 throw new Error(result?.error || 'Failed to pull updates')
             }
 
             params.setLastPulled(Date.now())
             await params.refreshGitData(true, { mode: 'full' })
-            params.showToast('Pulled remote updates successfully.')
+            params.showToast(options?.successLabel || 'Pulled remote updates successfully.')
         } catch (err: any) {
             params.showToast(`Failed to pull: ${err.message}`, undefined, undefined, 'error')
         } finally {
@@ -593,6 +507,8 @@ export function createProjectGitActions(params: GitActionParams) {
     return {
         handleCommitClick,
         handleCommit,
+        handleCommitPushAndCreatePullRequest,
+        handleDangerouslyStageCommitPushAndCreatePullRequest,
         handleGenerateCommitMessage,
         handleFetch,
         handlePush,
@@ -601,6 +517,8 @@ export function createProjectGitActions(params: GitActionParams) {
         handleUnstageFile,
         handleStageAll,
         handleUnstageAll,
+        handleDiscardUnstagedFile,
+        handleDiscardUnstagedAll,
         handleSwitchBranch,
         handleInitGit,
         handleAddRemote,

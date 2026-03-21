@@ -1,5 +1,7 @@
 # Desktop Release Versioning
 
+Last updated: March 18, 2026
+
 DevScope Air desktop releases use SemVer so Electron auto-updates can compare versions correctly.
 
 ## Tag and package format
@@ -56,4 +58,5 @@ The app formats prerelease versions for UI display:
 
 - Tag pushes matching `v*` trigger `.github/workflows/release.yml`.
 - Tags containing `-alpha.` or `-beta.` are published as GitHub prereleases.
+- Release title should be `DevScope Air <package-version>`.
 - Release assets must include the Windows installer plus update metadata (`*.yml`, `*.blockmap`).

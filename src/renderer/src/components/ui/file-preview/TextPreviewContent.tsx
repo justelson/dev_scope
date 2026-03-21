@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import MarkdownRenderer from '../MarkdownRenderer'
 import { HIGHLIGHT_MAX_CHARS, HIGHLIGHT_MAX_LINES } from './constants'
@@ -19,7 +19,7 @@ interface TextPreviewContentProps {
     isExpanded?: boolean
 }
 
-export default function TextPreviewContent({
+function TextPreviewContent({
     file,
     content,
     meta,
@@ -148,11 +148,13 @@ export default function TextPreviewContent({
             )}
 
             {file.type === 'csv' && (
-                <CsvPreviewTable
-                    content={content}
-                    language={file.language}
-                    useDistinctColumnColors={csvDistinctColorsEnabled}
-                />
+                <div className="w-full h-full min-h-0 flex-1">
+                    <CsvPreviewTable
+                        content={content}
+                        language={file.language}
+                        useDistinctColumnColors={csvDistinctColorsEnabled}
+                    />
+                </div>
             )}
 
             {file.type === 'code' && (
@@ -169,3 +171,19 @@ export default function TextPreviewContent({
         </div>
     )
 }
+
+export default memo(TextPreviewContent, (previous, next) => (
+    previous.file.path === next.file.path
+    && previous.file.type === next.file.type
+    && previous.file.language === next.file.language
+    && previous.content === next.content
+    && previous.meta.previewBytes === next.meta.previewBytes
+    && previous.meta.size === next.meta.size
+    && previous.meta.truncated === next.meta.truncated
+    && previous.projectPath === next.projectPath
+    && previous.onInternalLinkClick === next.onInternalLinkClick
+    && previous.gitDiffText === next.gitDiffText
+    && previous.csvDistinctColorsEnabled === next.csvDistinctColorsEnabled
+    && previous.focusLine === next.focusLine
+    && previous.isExpanded === next.isExpanded
+))

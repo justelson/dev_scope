@@ -1,4 +1,5 @@
-export type PreviewFileType = 'md' | 'html' | 'image' | 'video' | 'text' | 'code' | 'json' | 'csv'
+export type PreviewMediaType = 'image' | 'video' | 'audio'
+export type PreviewFileType = 'md' | 'html' | PreviewMediaType | 'text' | 'code' | 'json' | 'csv'
 
 export interface PreviewFile {
     name: string
@@ -6,6 +7,22 @@ export interface PreviewFile {
     type: PreviewFileType
     language?: string
     startInEditMode?: boolean
+}
+
+export interface PreviewMediaSource {
+    name: string
+    path: string
+    extension: string
+    thumbnailPath?: string | null
+}
+
+export interface PreviewMediaItem extends PreviewMediaSource {
+    type: PreviewMediaType
+}
+
+export interface PreviewOpenOptions {
+    startInEditMode?: boolean
+    mediaItems?: PreviewMediaSource[]
 }
 
 export interface PreviewMeta {
