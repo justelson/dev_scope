@@ -68,7 +68,7 @@ export default function AboutSettings() {
                         </div>
 
                         <p className="text-xs text-sparkle-text-muted mt-3">
-                            {updateState?.currentVersion || '1.5.1-alpha.5'}
+                            {updateState?.currentVersion || '1.0.0-beta.1'}
                             {updateState?.channel ? ` \u2022 ${updateState.channel} channel` : ''}
                         </p>
                         <a
