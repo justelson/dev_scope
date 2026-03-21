@@ -8,12 +8,12 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, Bug, RefreshCw, Trash2, CheckCircle, AlertCircle, Copy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type ProviderFilter = 'all' | 'groq' | 'gemini'
+type ProviderFilter = 'all' | 'groq' | 'gemini' | 'codex'
 
 interface AiDebugLogEntry {
     id: string
     timestamp: number
-    provider: 'groq' | 'gemini'
+    provider: 'groq' | 'gemini' | 'codex'
     action: 'generateCommitMessage' | 'testConnection'
     status: 'success' | 'error'
     model?: string
@@ -199,6 +199,17 @@ export default function LogsSettings({ embedded = false }: { embedded?: boolean 
                         >
                             Groq
                         </button>
+                        <button
+                            onClick={() => setFilter('codex')}
+                            className={cn(
+                                'px-3 py-1.5 rounded-lg text-sm border transition-colors',
+                                filter === 'codex'
+                                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                                    : 'bg-sparkle-bg border-sparkle-border text-sparkle-text-secondary hover:text-sparkle-text'
+                            )}
+                        >
+                            Codex
+                        </button>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -247,7 +258,9 @@ export default function LogsSettings({ embedded = false }: { embedded?: boolean 
                 {filteredLogs.map((entry) => {
                     const providerColor = entry.provider === 'gemini'
                         ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
-                        : 'text-violet-400 bg-violet-500/10 border-violet-500/20'
+                        : entry.provider === 'codex'
+                            ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20'
+                            : 'text-violet-400 bg-violet-500/10 border-violet-500/20'
 
                     return (
                         <div key={entry.id} className="bg-sparkle-card rounded-xl border border-sparkle-border p-4 space-y-3">

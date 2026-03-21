@@ -2,8 +2,8 @@
  * DevScope - Behavior Settings Page
  */
 
-import { useEffect, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
     Activity,
     ArrowLeft,
@@ -18,17 +18,24 @@ import {
     PanelRight,
     Play,
     Power,
+    SquareTerminal,
     TerminalSquare
 } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { ScrollPreviewModal } from './ScrollPreviewModal'
 
+type BehaviorTab = 'startup' | 'preview' | 'tasks' | 'terminal'
+
 export default function BehaviorSettings() {
     const { settings, updateSettings } = useSettings()
     const [startupStatus, setStartupStatus] = useState<string | null>(null)
-    const [activeTab, setActiveTab] = useState<'startup' | 'preview' | 'tasks'>('startup')
     const [showScrollPreview, setShowScrollPreview] = useState(false)
+    const [searchParams, setSearchParams] = useSearchParams()
+    const activeTab = useMemo<BehaviorTab>(() => {
+        const tab = String(searchParams.get('tab') || '').trim()
+        return tab === 'preview' || tab === 'tasks' || tab === 'terminal' ? tab : 'startup'
+    }, [searchParams])
 
     useEffect(() => {
         let isMounted = true
@@ -76,6 +83,16 @@ export default function BehaviorSettings() {
         }
     }
 
+    const setActiveTab = (nextTab: BehaviorTab) => {
+        const nextParams = new URLSearchParams(searchParams)
+        if (nextTab === 'startup') {
+            nextParams.delete('tab')
+        } else {
+            nextParams.set('tab', nextTab)
+        }
+        setSearchParams(nextParams, { replace: true })
+    }
+
     return (
         <div className="animate-fadeIn">
             <div className="mb-6">
@@ -86,7 +103,7 @@ export default function BehaviorSettings() {
                         </div>
                         <div>
                             <h1 className="text-xl font-semibold text-sparkle-text">Behavior</h1>
-                            <p className="text-sm text-sparkle-text-secondary">Startup, preview, and task controls</p>
+                            <p className="text-sm text-sparkle-text-secondary">Startup, preview, tasks, and terminal controls</p>
                         </div>
                     </div>
                     <Link
@@ -103,6 +120,7 @@ export default function BehaviorSettings() {
                 <BehaviorTabButton active={activeTab === 'startup'} onClick={() => setActiveTab('startup')} label="Startup & Scroll" />
                 <BehaviorTabButton active={activeTab === 'preview'} onClick={() => setActiveTab('preview')} label="File Preview" />
                 <BehaviorTabButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} label="Tasks" />
+                <BehaviorTabButton active={activeTab === 'terminal'} onClick={() => setActiveTab('terminal')} label="Terminal" />
             </div>
 
             <div className="space-y-6">
@@ -242,6 +260,58 @@ export default function BehaviorSettings() {
                                 description="Disabled state stops running-app and process-resource queries entirely."
                                 control={<ToggleSwitch checked={settings.tasksRunningAppsEnabled} onChange={(next) => updateSettings({ tasksRunningAppsEnabled: next })} disabled={!settings.tasksPageEnabled} />}
                             />
+                        </SettingsSection>
+                    </div>
+                )}
+
+                {activeTab === 'terminal' && (
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.82fr)]">
+                        <SettingsSection title="Default Shell" description="Choose which shell DevScope launches for terminal actions.">
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <TerminalChoiceCard
+                                    active={settings.defaultShell === 'powershell'}
+                                    accentClassName="border-blue-500/50 bg-blue-500/10 text-blue-100"
+                                    idleClassName="border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
+                                    glyphClassName="text-blue-300"
+                                    label="PowerShell"
+                                    caption="Recommended for Windows workflows"
+                                    glyph="PS"
+                                    onClick={() => updateSettings({ defaultShell: 'powershell' })}
+                                />
+                                <TerminalChoiceCard
+                                    active={settings.defaultShell === 'cmd'}
+                                    accentClassName="border-amber-500/50 bg-amber-500/10 text-amber-100"
+                                    idleClassName="border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
+                                    glyphClassName="text-amber-300"
+                                    label="Command Prompt"
+                                    caption="Classic shell fallback"
+                                    glyph="CMD"
+                                    onClick={() => updateSettings({ defaultShell: 'cmd' })}
+                                />
+                            </div>
+                        </SettingsSection>
+
+                        <SettingsSection title="Terminal Usage" description="How this shell choice is applied across the app.">
+                            <div className="space-y-4">
+                                <SettingRow
+                                    icon={<SquareTerminal size={20} className="text-sparkle-text-secondary" />}
+                                    title={`Current default: ${settings.defaultShell === 'cmd' ? 'Command Prompt' : 'PowerShell'}`}
+                                    description="Used whenever DevScope opens a terminal from projects, tasks, previews, or assistant actions."
+                                    control={(
+                                        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-sparkle-text">
+                                            {settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell'}
+                                        </span>
+                                    )}
+                                />
+                                <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+                                    <p className="text-sm font-medium text-sparkle-text">What changes</p>
+                                    <ul className="mt-2 space-y-2 text-xs leading-relaxed text-sparkle-text-secondary">
+                                        <li>Project and folder terminal launches use this shell by default.</li>
+                                        <li>Assistant and tool-triggered terminal actions inherit this choice.</li>
+                                        <li>Switching here applies immediately. No app restart is required.</li>
+                                    </ul>
+                                </div>
+                            </div>
                         </SettingsSection>
                     </div>
                 )}
@@ -389,6 +459,41 @@ function ToggleSwitch({
                     checked ? 'translate-x-6' : 'translate-x-1'
                 )}
             />
+        </button>
+    )
+}
+
+function TerminalChoiceCard({
+    active,
+    accentClassName,
+    idleClassName,
+    glyphClassName,
+    label,
+    caption,
+    glyph,
+    onClick
+}: {
+    active: boolean
+    accentClassName: string
+    idleClassName: string
+    glyphClassName: string
+    label: string
+    caption: string
+    glyph: string
+    onClick: () => void
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={cn(
+                'rounded-xl border p-5 text-left transition-all',
+                active ? accentClassName : idleClassName
+            )}
+        >
+            <div className={cn('text-2xl font-semibold', glyphClassName)}>{glyph}</div>
+            <p className="mt-3 text-sm font-medium text-sparkle-text">{label}</p>
+            <p className="mt-1 text-xs text-sparkle-text-secondary">{caption}</p>
         </button>
     )
 }

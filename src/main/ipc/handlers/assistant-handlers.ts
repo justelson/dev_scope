@@ -4,10 +4,12 @@ import type {
     AssistantClearLogsInput,
     AssistantConnectOptions,
     AssistantDeleteMessageInput,
+    AssistantPersistClipboardImageInput,
     AssistantSendPromptOptions,
     AssistantUserInputResponseInput
 } from '../../../shared/assistant/contracts'
 import { getAssistantService } from '../../assistant'
+import { persistAssistantClipboardImage } from '../../assistant/clipboard-attachments'
 
 async function withAssistantResult<T>(work: () => Promise<T> | T): Promise<T | { success: false; error: string }> {
     try {
@@ -29,12 +31,20 @@ export function handleAssistantUnsubscribe(event: Electron.IpcMainInvokeEvent) {
     return withAssistantResult(() => getAssistantService().unsubscribe(event.sender.id))
 }
 
+export async function handleAssistantBootstrap() {
+    return getAssistantService().getBootstrap()
+}
+
 export async function handleAssistantGetSnapshot() {
     return getAssistantService().getSnapshot()
 }
 
 export async function handleAssistantGetStatus() {
     return getAssistantService().getStatus()
+}
+
+export function handleAssistantGetAccountOverview() {
+    return withAssistantResult(() => getAssistantService().getAccountOverview())
 }
 
 export function handleAssistantListModels(_event: Electron.IpcMainInvokeEvent, forceRefresh?: boolean) {
@@ -90,6 +100,13 @@ export function handleAssistantClearLogs(_event: Electron.IpcMainInvokeEvent, in
 export function handleAssistantSetSessionProjectPath(_event: Electron.IpcMainInvokeEvent, sessionId: string, projectPath: string | null) {
     log.info('IPC: assistant:setSessionProjectPath', { sessionId, hasProjectPath: Boolean(projectPath) })
     return withAssistantResult(() => getAssistantService().setSessionProjectPath(sessionId, projectPath))
+}
+
+export function handleAssistantPersistClipboardImage(_event: Electron.IpcMainInvokeEvent, input: AssistantPersistClipboardImageInput) {
+    return withAssistantResult(async () => ({
+        success: true as const,
+        path: await persistAssistantClipboardImage(input)
+    }))
 }
 
 export function handleAssistantNewThread(_event: Electron.IpcMainInvokeEvent, sessionId?: string) {

@@ -75,7 +75,7 @@ export function ProjectDetailsGitUnpushedView(props: {
                     </div>
                     <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/62">
                         {hasGitHubRemote
-                            ? 'DevScope drafts the PR from this branch. Push the branch yourself when you are ready.'
+                            ? 'Create the PR from this branch once the branch is ready.'
                             : 'These commits stay local until you push them with your normal Git remote workflow.'}
                     </div>
                     <div className="mt-3 flex justify-end">

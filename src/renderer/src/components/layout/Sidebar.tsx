@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { createContext, useCallback, useEffect, useContext, type ReactNode } from 'react'
 import { useSettings } from '@/lib/settings'
 
+export const ASSISTANT_MAIN_SIDEBAR_COLLAPSED_STORAGE_KEY = 'assistant-main-sidebar-collapsed'
+
 interface SidebarContextType {
     isCollapsed: boolean
     setIsCollapsed: (collapsed: boolean) => void
@@ -106,6 +108,18 @@ export default function Sidebar() {
         if (item.id === 'explorer') return settings.explorerTabEnabled
         return true
     })
+
+    const handleToggleSidebar = useCallback(() => {
+        const nextCollapsed = !isCollapsed
+        if (isAssistantAreaPath(location.pathname)) {
+            try {
+                localStorage.setItem(ASSISTANT_MAIN_SIDEBAR_COLLAPSED_STORAGE_KEY, String(nextCollapsed))
+            } catch {
+                // Ignore storage write errors.
+            }
+        }
+        setIsCollapsed(nextCollapsed)
+    }, [isCollapsed, location.pathname, setIsCollapsed])
 
     useEffect(() => {
         if (!isProjectsAreaPath(location.pathname)) return
@@ -205,7 +219,7 @@ export default function Sidebar() {
                         </p>
                     )}
                     <button
-                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        onClick={handleToggleSidebar}
                         title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                         className={cn(
                             "p-1.5 rounded-md hover:bg-white/[0.04] text-sparkle-text-muted hover:text-[var(--accent-primary)] transition-all duration-300 shrink-0",

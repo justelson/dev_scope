@@ -27,6 +27,7 @@ export interface GitActionParams {
     createInitialCommit: boolean
     initialCommitMessage: string
     remoteUrl: string
+    projectName?: string
     projectPath?: string
     refreshGitData: (refreshFileTree?: boolean, options?: RefreshGitOptions) => Promise<void>
     showToast: (
@@ -42,6 +43,7 @@ export interface GitActionParams {
     setIsGeneratingCommitMessage: (loading: boolean) => void
     setCommitMessage: (value: string) => void
     setIsCommitting: (loading: boolean) => void
+    setIsStackedActionRunning: (loading: boolean) => void
     setIsPushing: (loading: boolean) => void
     setIsFetching: (loading: boolean) => void
     setIsPulling: (loading: boolean) => void

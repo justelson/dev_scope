@@ -1,4 +1,5 @@
 import log from 'electron-log'
+import { generateCodexText } from './codex'
 import { requestGenerateContent } from './gemini/request'
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -238,6 +239,30 @@ export async function generateGeminiPullRequestDraft(
         return { success: true, ...parsed }
     } catch (err: any) {
         log.error('[Gemini] Failed to generate pull request draft:', err)
+        return { success: false, error: err.message || 'Failed to generate pull request draft.' }
+    }
+}
+
+export async function generateCodexPullRequestDraft(
+    input: PullRequestDraftInput,
+    model?: string
+): Promise<{ success: boolean; title?: string; body?: string; error?: string }> {
+    try {
+        const prompt = buildPrompt(input)
+        const result = await generateCodexText(prompt, {
+            cwd: process.cwd(),
+            model,
+            timeoutMs: 45_000
+        })
+
+        if (!result.success || !result.text) {
+            return { success: false, error: result.error || 'Failed to generate pull request draft.' }
+        }
+
+        const parsed = parseDraftResponse(result.text)
+        return { success: true, ...parsed }
+    } catch (err: any) {
+        log.error('[Codex] Failed to generate pull request draft:', err)
         return { success: false, error: err.message || 'Failed to generate pull request draft.' }
     }
 }

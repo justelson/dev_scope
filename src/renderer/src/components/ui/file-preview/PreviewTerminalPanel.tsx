@@ -89,7 +89,7 @@ export function PreviewTerminalPanel({
                     <button type="button" onClick={onClear} className="rounded-md px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors">Clear</button>
                     <button type="button" onClick={onRestart} disabled={!currentSession} className="rounded-md px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Restart</button>
                     <button type="button" onClick={() => onStop()} disabled={!currentSession} className="rounded-md px-2 py-1 text-[10px] text-red-300 hover:bg-red-500/10 hover:text-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Stop</button>
-                    <button type="button" onClick={onMinimize} className="rounded-md px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors">Minimize</button>
+                    <button type="button" onClick={onMinimize} className="rounded-md px-2 py-1 text-[10px] text-sparkle-text-secondary hover:bg-sparkle-card-hover hover:text-sparkle-text transition-colors">Hide panel</button>
                 </div>
             </div>
             <div className="flex-1 min-h-0 p-2">

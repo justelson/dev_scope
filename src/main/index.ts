@@ -14,8 +14,9 @@ import { disposeSystemMetricsBridge } from './system-metrics/manager'
 import { disposeUpdater, initializeUpdater, registerUpdateWindow } from './update/manager'
 
 // Configure logging
+const verboseMainLogs = process.env.DEVSCOPE_VERBOSE_LOGS === '1'
 log.transports.file.level = 'info'
-log.transports.console.level = 'debug'
+log.transports.console.level = verboseMainLogs ? 'debug' : 'warn'
 console.log = log.log
 console.error = log.error
 console.warn = log.warn

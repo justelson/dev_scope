@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, Edit3, Expand, Eye, Minimize, PanelLeft, PanelRight, Play, Square, Terminal, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Copy, Edit3, Expand, Eye, PanelLeft, PanelRight, Play, Square, Terminal, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
@@ -394,21 +394,14 @@ export default function PreviewModalHeader({
                                     ? 'border-sky-400/30 bg-sky-500/12 text-sky-200'
                                     : 'border-transparent text-white/55 hover:bg-white/10 hover:text-white'
                             )}
-                            title={isExpanded ? 'Collapse workspace' : 'Expand workspace'}
+                            title={isExpanded ? 'Return to windowed view' : 'Expand workspace'}
                         >
                             <span className="relative block h-4 w-4">
                                 <Expand
                                     size={16}
                                     className={cn(
                                         'absolute inset-0 transition-all duration-250 ease-out',
-                                        isExpanded ? 'scale-75 -rotate-45 opacity-0' : 'scale-100 rotate-0 opacity-100'
-                                    )}
-                                />
-                                <Minimize
-                                    size={16}
-                                    className={cn(
-                                        'absolute inset-0 transition-all duration-250 ease-out',
-                                        isExpanded ? 'scale-100 rotate-0 opacity-100' : 'scale-75 rotate-45 opacity-0'
+                                        isExpanded ? 'scale-[0.9] rotate-180 opacity-100' : 'scale-100 rotate-0 opacity-100'
                                     )}
                                 />
                             </span>

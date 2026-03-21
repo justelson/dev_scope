@@ -28,6 +28,7 @@ const AboutSettings = lazy(() => import('./pages/settings/AboutSettings'))
 const ProjectsSettings = lazy(() => import('./pages/settings/ProjectsSettings'))
 const ExplorerSettings = lazy(() => import('./pages/settings/ExplorerSettings'))
 const AISettings = lazy(() => import('./pages/settings/AISettings'))
+const AssistantAccountSettings = lazy(() => import('./pages/settings/AssistantAccountSettings'))
 const GitSettings = lazy(() => import('./pages/settings/GitSettings'))
 const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
@@ -241,17 +242,23 @@ function MainContent() {
                     <Route path="/settings/data" element={<Navigate to="/settings" replace />} />
                     <Route path="/settings/about" element={<AboutSettings />} />
                     <Route path="/settings/projects" element={<ProjectsSettings />} />
-                    <Route path="/settings/explorer" element={<ExplorerSettings />} />
+                    <Route
+                        path="/settings/explorer"
+                        element={settings.betaSettingsEnabled ? <ExplorerSettings /> : <Navigate to="/settings" replace />}
+                    />
                     <Route path="/settings/ai" element={<AISettings />} />
-                    <Route path="/settings/git" element={<GitSettings />} />
+                    <Route path="/settings/account" element={<AssistantAccountSettings />} />
+                    <Route path="/settings/usage" element={<AssistantAccountSettings />} />
+                    <Route
+                        path="/settings/git"
+                        element={settings.betaSettingsEnabled ? <GitSettings /> : <Navigate to="/settings" replace />}
+                    />
                     <Route path="/settings/terminal" element={<TerminalSettings />} />
                     <Route path="/settings/logs" element={<LogsSettings />} />
                     <Route path="/assistant" element={<Assistant />} />
                     <Route path="/assistant/skills" element={<Navigate to="/assistant" replace />} />
                     <Route path="/skills" element={<Navigate to="/assistant" replace />} />
-                    <Route path="/settings/assistant" element={<Navigate to="/assistant" replace />} />
-                    <Route path="/settings/account" element={<Navigate to="/settings/ai" replace />} />
-                    <Route path="/settings/usage" element={<Navigate to="/settings/ai" replace />} />
+                    <Route path="/settings/assistant" element={<Navigate to="/settings/account" replace />} />
                     <Route path="*" element={<LaunchRedirect />} />
                 </Routes>
             </Suspense>

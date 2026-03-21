@@ -1,4 +1,10 @@
+import { resolvePreferredGitTextProvider } from '@/lib/gitAi'
 import { buildGitPublishPlan, describeGitPublishSuccess, type GitPublishPlan } from '@/lib/gitPublishPlanner'
+import {
+    getProjectPullRequestConfig,
+    resolvePreferredPullRequestProvider,
+    resolvePullRequestGuideText
+} from '@/lib/pullRequestWorkflow'
 import type { GitCommit, GitStatusDetail } from './types'
 import type { GitActionParams } from './gitActionTypes'
 import { buildStatusMap, isTransientPushError, summarizePushError } from './gitActionHelpers'
@@ -90,6 +96,118 @@ export function createProjectGitActions(params: GitActionParams) {
         handleDiscardUnstagedAll
     } = createGitWorkingTreeActions(params, bulkActionScope, applyOptimisticDetails)
 
+    const handleCommitPushAndCreatePullRequest = async () => {
+        if (!params.decodedPath || params.stagedFiles.length === 0) return
+
+        const provider = resolvePreferredPullRequestProvider(params.settings)
+        if (!params.commitMessage.trim() && !provider) {
+            params.showToast(
+                'Enter a commit message or configure an AI provider first.',
+                'Open AI Settings',
+                '/settings/ai',
+                'info'
+            )
+            return
+        }
+
+        params.setIsStackedActionRunning(true)
+        try {
+            const prConfig = getProjectPullRequestConfig(params.settings, params.decodedPath)
+            const guideText = await resolvePullRequestGuideText(
+                params.settings,
+                params.decodedPath,
+                prConfig.guideSource,
+                prConfig.guide
+            )
+            const result = await window.devscope.commitPushAndCreatePullRequest(params.decodedPath, {
+                projectName: params.projectName,
+                commitMessage: params.commitMessage.trim() || undefined,
+                targetBranch: prConfig.targetBranch,
+                draft: prConfig.draft,
+                guideText,
+                provider: provider?.provider,
+                apiKey: provider?.apiKey,
+                model: provider?.model
+            })
+
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to commit, push, and create the pull request.')
+            }
+
+            params.setCommitMessage('')
+            await params.refreshGitData(false, { mode: 'unpushed' })
+            void params.refreshGitData(false, { quiet: true, mode: 'full' })
+            window.open(result.pullRequest.url, '_blank', 'noopener,noreferrer')
+            const prNumberLabel = result.pullRequest.number > 0 ? ` #${result.pullRequest.number}` : ''
+            params.showToast(
+                result.status === 'opened_existing'
+                    ? `Committed changes and opened PR${prNumberLabel}.`
+                    : `Committed changes and created PR${prNumberLabel}.`
+            )
+        } catch (err: any) {
+            params.showToast(`Failed to commit, push & create PR: ${err.message || 'Unknown error'}`, undefined, undefined, 'error')
+        } finally {
+            params.setIsStackedActionRunning(false)
+        }
+    }
+
+    const handleDangerouslyStageCommitPushAndCreatePullRequest = async () => {
+        if (!params.decodedPath || (params.stagedFiles.length === 0 && params.unstagedFiles.length === 0)) return
+
+        const provider = resolvePreferredPullRequestProvider(params.settings)
+        if (!params.commitMessage.trim() && !provider) {
+            params.showToast(
+                'Enter a commit message or configure an AI provider first.',
+                'Open AI Settings',
+                '/settings/ai',
+                'info'
+            )
+            return
+        }
+
+        params.setIsStackedActionRunning(true)
+        try {
+            const prConfig = getProjectPullRequestConfig(params.settings, params.decodedPath)
+            const guideText = await resolvePullRequestGuideText(
+                params.settings,
+                params.decodedPath,
+                prConfig.guideSource,
+                prConfig.guide
+            )
+            const result = await window.devscope.commitPushAndCreatePullRequest(params.decodedPath, {
+                projectName: params.projectName,
+                commitMessage: params.commitMessage.trim() || undefined,
+                targetBranch: prConfig.targetBranch,
+                draft: prConfig.draft,
+                guideText,
+                provider: provider?.provider,
+                apiKey: provider?.apiKey,
+                model: provider?.model,
+                autoStageAll: true,
+                stageScope: params.settings.gitBulkActionScope === 'project' ? 'project' : 'repo'
+            })
+
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to stage, commit, push, and create the pull request.')
+            }
+
+            params.setCommitMessage('')
+            await params.refreshGitData(false, { mode: 'unpushed' })
+            void params.refreshGitData(false, { quiet: true, mode: 'full' })
+            window.open(result.pullRequest.url, '_blank', 'noopener,noreferrer')
+            const prNumberLabel = result.pullRequest.number > 0 ? ` #${result.pullRequest.number}` : ''
+            params.showToast(
+                result.status === 'opened_existing'
+                    ? `Staged all changes, committed, and opened PR${prNumberLabel}.`
+                    : `Staged all changes, committed, and created PR${prNumberLabel}.`
+            )
+        } catch (err: any) {
+            params.showToast(`Failed to dangerously stage, commit, push & create PR: ${err.message || 'Unknown error'}`, undefined, undefined, 'error')
+        } finally {
+            params.setIsStackedActionRunning(false)
+        }
+    }
+
     const handleGenerateCommitMessage = async () => {
         if (!params.decodedPath) return
         if (params.stagedFiles.length === 0) {
@@ -97,25 +215,16 @@ export function createProjectGitActions(params: GitActionParams) {
             return
         }
 
-        const providerOrder = params.settings.commitAIProvider === 'groq'
-            ? (['groq', 'gemini'] as const)
-            : (['gemini', 'groq'] as const)
-
-        const selectedProvider = providerOrder.find((provider) => {
-            if (provider === 'groq') return Boolean(params.settings.groqApiKey?.trim())
-            return Boolean(params.settings.geminiApiKey?.trim())
-        })
+        const selectedProvider = resolvePreferredGitTextProvider(params.settings)
 
         if (!selectedProvider) {
             params.showToast(
-                'No API key configured for commit generation.',
+                'No AI provider is configured for commit generation.',
                 'Open AI Settings',
                 '/settings/ai'
             )
             return
         }
-
-        const apiKey = selectedProvider === 'groq' ? params.settings.groqApiKey : params.settings.geminiApiKey
 
         params.setIsGeneratingCommitMessage(true)
         try {
@@ -130,9 +239,10 @@ export function createProjectGitActions(params: GitActionParams) {
             }
 
             const generateResult = await window.devscope.generateCommitMessage(
-                selectedProvider,
-                apiKey,
-                stagedDiff
+                selectedProvider.provider,
+                selectedProvider.apiKey || '',
+                stagedDiff,
+                selectedProvider.model
             )
 
             if (!generateResult?.success) {
@@ -397,6 +507,8 @@ export function createProjectGitActions(params: GitActionParams) {
     return {
         handleCommitClick,
         handleCommit,
+        handleCommitPushAndCreatePullRequest,
+        handleDangerouslyStageCommitPushAndCreatePullRequest,
         handleGenerateCommitMessage,
         handleFetch,
         handlePush,

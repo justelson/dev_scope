@@ -27,18 +27,44 @@ export type DevScopeGitStatusEntryStats = {
     statsLoaded: boolean
 }
 
-export type DevScopePullRequestDraft = {
+export type DevScopeGitTextProvider = 'groq' | 'gemini' | 'codex'
+
+export type DevScopePullRequestProvider = DevScopeGitTextProvider
+
+export type DevScopePullRequestDraftSource = 'provided' | 'ai' | 'fallback'
+
+export type DevScopePullRequestSummary = {
+    number: number
     title: string
-    body: string
+    url: string
+    baseBranch: string
+    headBranch: string
+    state: 'open' | 'closed' | 'merged'
 }
 
-export type DevScopePullRequestDraftInput = {
+export type DevScopeCreatePullRequestInput = {
     projectName?: string
-    currentBranch: string
-    targetBranch: string
-    scopeLabel: string
-    diff: string
+    targetBranch?: string
+    draft?: boolean
+    title?: string
+    body?: string
     guideText?: string
+    provider?: DevScopePullRequestProvider
+    apiKey?: string
+    model?: string
+}
+
+export type DevScopeCommitPushPullRequestInput = {
+    projectName?: string
+    commitMessage?: string
+    targetBranch?: string
+    draft?: boolean
+    guideText?: string
+    provider?: DevScopeGitTextProvider
+    apiKey?: string
+    model?: string
+    autoStageAll?: boolean
+    stageScope?: 'project' | 'repo'
 }
 
 export type DevScopeGitCommit = {

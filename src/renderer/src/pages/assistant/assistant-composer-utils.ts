@@ -169,16 +169,22 @@ export function buildPromptWithContextFiles(prompt: string, contextFiles: Compos
         const meta = getContextFileMeta(file)
         const inlineContent = meta.category === 'image' ? '' : String(file.content || '')
         const header = `${index + 1}. ${meta.name} [${getContentTypeTag(file)}]`
-        const details = [
-            file.path ? `path: ${file.path}` : '',
-            file.mimeType ? `mime: ${file.mimeType}` : '',
-            Number.isFinite(file.sizeBytes) ? `size: ${Number(file.sizeBytes)} bytes` : '',
-            file.previewText ? `preview: ${file.previewText}` : '',
-            inlineContent ? `content:\n${inlineContent}` : '',
-            meta.category === 'image' || (!inlineContent && file.previewDataUrl)
-                ? 'note: image attached in composer UI; inline image payload omitted in this compatibility mode.'
-                : ''
-        ].filter(Boolean)
+        const details = meta.category === 'image'
+            ? [
+                file.path ? `path: ${file.path}` : '',
+                file.mimeType ? `mime: ${file.mimeType}` : '',
+                Number.isFinite(file.sizeBytes) ? `size: ${Number(file.sizeBytes)} bytes` : ''
+            ].filter(Boolean)
+            : [
+                file.path ? `path: ${file.path}` : '',
+                file.mimeType ? `mime: ${file.mimeType}` : '',
+                Number.isFinite(file.sizeBytes) ? `size: ${Number(file.sizeBytes)} bytes` : '',
+                file.previewText ? `preview: ${file.previewText}` : '',
+                inlineContent ? `content:\n${inlineContent}` : '',
+                !inlineContent && file.previewDataUrl
+                    ? 'note: image attached in composer UI; inline image payload omitted in this compatibility mode.'
+                    : ''
+            ].filter(Boolean)
 
         return `${header}\n${details.join('\n')}`.trim()
     })

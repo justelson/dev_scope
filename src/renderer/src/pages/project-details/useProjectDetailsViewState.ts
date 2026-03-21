@@ -63,6 +63,7 @@ export function useProjectDetailsViewState(decodedPath: string, settings: any) {
     const [gitSyncStatus, setGitSyncStatus] = useState<GitSyncStatus | null>(null)
     const [commitMessage, setCommitMessage] = useState('')
     const [isCommitting, setIsCommitting] = useState(false)
+    const [isStackedActionRunning, setIsStackedActionRunning] = useState(false)
     const [isGeneratingCommitMessage, setIsGeneratingCommitMessage] = useState(false)
     const [isPushing, setIsPushing] = useState(false)
     const [isFetching, setIsFetching] = useState(false)
@@ -206,6 +207,8 @@ export function useProjectDetailsViewState(decodedPath: string, settings: any) {
         setCommitMessage,
         isCommitting,
         setIsCommitting,
+        isStackedActionRunning,
+        setIsStackedActionRunning,
         isGeneratingCommitMessage,
         setIsGeneratingCommitMessage,
         isPushing,

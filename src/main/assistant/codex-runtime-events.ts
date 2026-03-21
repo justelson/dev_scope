@@ -225,6 +225,7 @@ function handleNotification(
                     const step = asRecord(entry)
                     return {
                         step: asString(step?.['step']) || 'step',
+                        description: asString(step?.['description']) || undefined,
                         status: step?.['status'] === 'completed' || step?.['status'] === 'inProgress'
                             ? step['status'] as 'completed' | 'inProgress'
                             : 'pending'

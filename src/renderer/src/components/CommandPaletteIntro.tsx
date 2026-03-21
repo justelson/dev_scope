@@ -8,54 +8,56 @@ export function CommandPaletteIntro({
     onSelectQuery: (value: string) => void
 }) {
     return (
-        <div className="p-4 sm:p-5">
-            <div className="mb-6">
-                <div className="mb-3 flex items-center gap-2 px-1 text-[10px] font-mono font-bold uppercase tracking-widest text-[var(--accent-primary)]">
+        <div className="p-2">
+            <div className="mb-4">
+                <div className="mb-2 flex items-center gap-2 px-2 text-[11px] font-mono font-bold uppercase tracking-[0.12em] text-[var(--accent-primary)]">
                     <Slash size={12} className="opacity-70" /> Quick Search
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
                     <button
                         onClick={() => onSelectQuery('/ ')}
-                        className="group flex items-start gap-3 rounded-xl border border-sparkle-border bg-sparkle-bg p-3 text-left shadow-sm transition-all hover:border-[var(--accent-primary)]/40 hover:bg-sparkle-card-hover sm:p-4"
+                        className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-all hover:border-white/10 hover:bg-white/[0.03]"
                     >
-                        <div className="rounded-lg border border-sparkle-border bg-sparkle-card-hover p-2 text-sparkle-text-secondary transition-all group-hover:border-[var(--accent-primary)]/20 group-hover:bg-[var(--accent-primary)]/10 group-hover:text-[var(--accent-primary)]">
-                            <Folder size={18} className="stroke-[1.5]" />
+                        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-white/8 bg-white/[0.04] text-white/55 transition-all group-hover:border-[var(--accent-primary)]/20 group-hover:bg-[var(--accent-primary)]/10 group-hover:text-[var(--accent-primary)]">
+                            <Folder size={17} className="stroke-[1.5]" />
                         </div>
-                        <div>
-                            <div className="mb-0.5 text-[14px] font-semibold text-sparkle-text">Projects</div>
-                            <div className="text-[11px] text-sparkle-text-muted">Type <span className="rounded border border-sparkle-border bg-sparkle-card px-1 py-0.5 font-mono text-sparkle-text-secondary">/</span></div>
+                        <div className="min-w-0 flex-1">
+                            <div className="text-[14px] font-semibold text-sparkle-text">Projects</div>
+                            <div className="text-[12px] text-white/46">Jump directly into project details</div>
                         </div>
+                        <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-white/60">/</span>
                     </button>
                     <button
                         onClick={() => onSelectQuery('// ')}
-                        className="group flex items-start gap-3 rounded-xl border border-sparkle-border bg-sparkle-bg p-3 text-left shadow-sm transition-all hover:border-[var(--accent-primary)]/40 hover:bg-sparkle-card-hover sm:p-4"
+                        className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-all hover:border-white/10 hover:bg-white/[0.03]"
                     >
-                        <div className="rounded-lg border border-sparkle-border bg-sparkle-card-hover p-2 text-sparkle-text-secondary transition-all group-hover:border-[var(--accent-primary)]/20 group-hover:bg-[var(--accent-primary)]/10 group-hover:text-[var(--accent-primary)]">
-                            <File size={18} className="stroke-[1.5]" />
+                        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-white/8 bg-white/[0.04] text-white/55 transition-all group-hover:border-[var(--accent-primary)]/20 group-hover:bg-[var(--accent-primary)]/10 group-hover:text-[var(--accent-primary)]">
+                            <File size={17} className="stroke-[1.5]" />
                         </div>
-                        <div>
-                            <div className="mb-0.5 text-[14px] font-semibold text-sparkle-text">Files</div>
-                            <div className="text-[11px] text-sparkle-text-muted">Type <span className="rounded border border-sparkle-border bg-sparkle-card px-1 py-0.5 font-mono text-sparkle-text-secondary">//</span></div>
+                        <div className="min-w-0 flex-1">
+                            <div className="text-[14px] font-semibold text-sparkle-text">Files</div>
+                            <div className="text-[12px] text-white/46">Search indexed files across projects</div>
                         </div>
+                        <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-white/60">//</span>
                     </button>
                 </div>
             </div>
 
             {recent.length > 0 && (
                 <div>
-                    <div className="mb-2 flex items-center gap-2 px-1 text-[10px] font-mono font-bold uppercase tracking-widest text-[var(--accent-primary)]">History</div>
+                    <div className="mb-2 flex items-center gap-2 px-2 text-[11px] font-mono font-bold uppercase tracking-[0.12em] text-[var(--accent-primary)]">Recent Searches</div>
                     <div className="flex flex-col gap-1">
                         {recent.map((value) => (
                             <button
                                 key={value}
                                 onClick={() => onSelectQuery(`${value} `)}
-                                className="group flex w-full items-center justify-between rounded-lg border border-transparent px-3 py-2 text-left text-[13px] text-sparkle-text-secondary transition-colors hover:border-sparkle-border/40 hover:bg-sparkle-card-hover hover:text-sparkle-text"
+                                className="group flex w-full items-center justify-between rounded-xl border border-transparent px-3 py-2.5 text-left text-[13px] text-white/58 transition-colors hover:border-white/10 hover:bg-white/[0.03] hover:text-sparkle-text"
                             >
                                 <div className="flex items-center gap-2.5">
-                                    <div className="h-1.5 w-1.5 rounded-full bg-sparkle-text-muted transition-all group-hover:bg-[var(--accent-primary)]" />
+                                    <div className="h-1.5 w-1.5 rounded-full bg-white/24 transition-all group-hover:bg-[var(--accent-primary)]" />
                                     <span className="font-medium">{value}</span>
                                 </div>
-                                <ArrowRight size={14} className="text-[var(--accent-primary)] opacity-0 transition-opacity group-hover:opacity-100" />
+                                <ArrowRight size={14} className="text-white/28 opacity-0 transition-opacity group-hover:opacity-100 group-hover:text-[var(--accent-primary)]" />
                             </button>
                         ))}
                     </div>

@@ -4,6 +4,7 @@ import { ArrowLeft, GitBranch, GitPullRequest, Layers3, RefreshCw, Sparkles, Use
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/FormControls'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
+import { SettingsBetaBadge } from './SettingsBetaBadge'
 
 type GitSettingsTab = 'defaults' | 'workflow' | 'pull-requests' | 'identity' | 'related'
 
@@ -98,7 +99,10 @@ export default function GitSettings() {
                         <GitBranch className="text-orange-400" size={24} />
                     </div>
                     <div>
-                        <h1 className="text-xl font-semibold text-sparkle-text">Git</h1>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl font-semibold text-sparkle-text">Git</h1>
+                            <SettingsBetaBadge />
+                        </div>
                         <p className="text-sm text-sparkle-text-secondary">PR defaults, branch behavior, and Git identity live here.</p>
                     </div>
                 </div>
@@ -148,18 +152,6 @@ export default function GitSettings() {
                             </Field>
                             <Field label="Default target branch">
                                 <Input value={settings.gitPullRequestDefaultTargetBranch} onChange={(value) => updateSettings({ gitPullRequestDefaultTargetBranch: value.trim() || 'main' })} />
-                            </Field>
-                            <Field label="Default change source">
-                                <Select
-                                    value={settings.gitPullRequestDefaultChangeSource}
-                                    onChange={(value) => updateSettings({ gitPullRequestDefaultChangeSource: value as typeof settings.gitPullRequestDefaultChangeSource })}
-                                    options={[
-                                        { value: 'all-local-work', label: 'All local work' },
-                                        { value: 'unstaged', label: 'Unstaged changes' },
-                                        { value: 'staged', label: 'Staged changes' },
-                                        { value: 'local-commits', label: 'Local commits' }
-                                    ]}
-                                />
                             </Field>
                             <Field label="Default PR state">
                                 <div className="rounded-xl border border-white/10 bg-black/20 p-3">
@@ -337,21 +329,21 @@ export default function GitSettings() {
                             </button>
                         </div>
                     </Section>
-                    <Section title="Browser PR Drafting" description="DevScope now keeps PR help simple and browser-based.">
+                    <Section title="Pull Request Flow" description="DevScope now creates or reopens PRs through GitHub CLI.">
                         <div className="space-y-4">
                             <Notice>
-                                DevScope drafts the PR title and body from your repo context, then opens the GitHub PR page in your browser.
+                                DevScope uses the current branch, pushes it when needed, reuses an existing open PR when one already exists, and creates a new GitHub PR when it does not. The Changes view also supports a one-click staged commit → push → PR flow.
                             </Notice>
                             <div className="space-y-3 text-sm text-sparkle-text-secondary">
-                                <p>No GitHub token, CLI install, or fork automation is required for this flow.</p>
-                                <p>If the branch is still local-only, push it yourself first and then open the PR draft from DevScope.</p>
+                                <p>GitHub CLI (<code className="text-sparkle-text">gh</code>) must be installed and authenticated for the built-in PR flow.</p>
+                                <p>Fork PRs target the upstream repository automatically when origin points at a fork.</p>
                             </div>
                         </div>
                     </Section>
-                    <Section title="What This Does" description="Git author switching and remote provider sign-in are different layers.">
+                    <Section title="What This Does" description="Git author switching and GitHub auth are separate layers.">
                         <div className="space-y-3 text-sm text-sparkle-text-secondary">
                             <p>This updates your global <code className="text-sparkle-text">user.name</code> and <code className="text-sparkle-text">user.email</code>.</p>
-                            <p>PR drafting in DevScope is browser-based. Normal Git push auth still depends on your Git credentials, SSH keys, or credential manager.</p>
+                            <p>The PR flow still relies on your Git credentials for push plus your <code className="text-sparkle-text">gh</code> authentication for PR creation.</p>
                             <p>The next useful layer after this would be saved author profiles plus more repo-specific drafting presets.</p>
                         </div>
                     </Section>
@@ -364,7 +356,7 @@ export default function GitSettings() {
                         <div className="grid grid-cols-1 gap-3">
                             <Link to="/settings/ai" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.04]">
                                 <Sparkles size={16} className="text-violet-300" />
-                                AI providers and API keys
+                                AI providers, Codex model, and API keys
                             </Link>
                             <Link to="/settings/projects" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.04]">
                                 <Layers3 size={16} className="text-indigo-300" />

@@ -2,11 +2,14 @@ import type { SharedSystemMetrics } from '../system-metrics'
 import type { FullReport, ReadinessReport, SystemHealth, ToolingReport } from '../../main/inspectors/types'
 import type {
     AssistantApprovalResponseInput,
+    AssistantAccountOverviewPayload,
+    AssistantBootstrapPayload,
     AssistantClearLogsInput,
     AssistantConnectOptions,
     AssistantDeleteMessageInput,
     AssistantEventStreamPayload,
     AssistantModelInfo,
+    AssistantPersistClipboardImageInput,
     AssistantRuntimeStatus,
     AssistantSendPromptOptions,
     AssistantSnapshot,
@@ -25,8 +28,12 @@ import type {
     DevScopeGitSyncStatus,
     DevScopeGitTagSummary,
     DevScopeProjectGitOverviewItem,
-    DevScopePullRequestDraft,
-    DevScopePullRequestDraftInput
+    DevScopePullRequestDraftSource,
+    DevScopePullRequestProvider,
+    DevScopePullRequestSummary,
+    DevScopeCreatePullRequestInput,
+    DevScopeCommitPushPullRequestInput,
+    DevScopeGitTextProvider
 } from './devscope-git-contracts'
 import type {
     DevScopeFileItem,
@@ -78,6 +85,7 @@ export type DevScopePreviewTerminalSessionSummary = {
 export type DevScopeTaskType =
     | 'git.commit'
     | 'git.push'
+    | 'git.pr'
     | 'git.fetch'
     | 'git.pull'
     | 'git.checkout'
@@ -187,19 +195,22 @@ export interface DevScopeAgentScopeApi {
 export interface DevScopeAssistantApi {
     subscribe: () => Promise<DevScopeResult>
     unsubscribe: () => Promise<DevScopeResult>
+    bootstrap: () => Promise<AssistantBootstrapPayload>
     getSnapshot: () => Promise<AssistantSnapshot>
     getStatus: () => Promise<AssistantRuntimeStatus>
+    getAccountOverview: () => Promise<DevScopeResult<AssistantAccountOverviewPayload>>
     listModels: (forceRefresh?: boolean) => Promise<DevScopeResult<{ models: AssistantModelInfo[] }>>
     connect: (options?: AssistantConnectOptions) => Promise<DevScopeResult<{ threadId: string }>>
     disconnect: (sessionId?: string) => Promise<DevScopeResult>
     createSession: (title?: string, projectPath?: string) => Promise<DevScopeResult<{ sessionId: string }>>
-    selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string }>>
+    selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot: AssistantSnapshot }>>
     renameSession: (sessionId: string, title: string) => Promise<DevScopeResult>
     archiveSession: (sessionId: string, archived?: boolean) => Promise<DevScopeResult>
     deleteSession: (sessionId: string) => Promise<DevScopeResult>
     deleteMessage: (input: AssistantDeleteMessageInput) => Promise<DevScopeResult>
     clearLogs: (input?: AssistantClearLogsInput) => Promise<DevScopeResult>
     setSessionProjectPath: (sessionId: string, projectPath: string | null) => Promise<DevScopeResult>
+    persistClipboardImage: (input: AssistantPersistClipboardImageInput) => Promise<DevScopeResult<{ path: string }>>
     newThread: (sessionId?: string) => Promise<DevScopeResult<{ threadId: string }>>
     sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) =>
         Promise<DevScopeResult<{ sessionId: string; threadId: string; turnId: string }>>
@@ -229,12 +240,8 @@ export interface DevScopeApi {
     clearAiDebugLogs: () => Promise<DevScopeResult>
     testGroqConnection: (apiKey: string) => Promise<DevScopeResult>
     testGeminiConnection: (apiKey: string) => Promise<DevScopeResult>
-    generateCommitMessage: (provider: 'groq' | 'gemini', apiKey: string, diff: string) => Promise<DevScopeResult<{ message: string }>>
-    generatePullRequestDraft: (
-        provider: 'groq' | 'gemini',
-        apiKey: string,
-        input: DevScopePullRequestDraftInput
-    ) => Promise<DevScopeResult<DevScopePullRequestDraft>>
+    testCodexConnection: (model?: string) => Promise<DevScopeResult>
+    generateCommitMessage: (provider: DevScopeGitTextProvider, apiKey: string, diff: string, model?: string) => Promise<DevScopeResult<{ message: string }>>
 
     // Projects + Git
     selectFolder: () => Promise<DevScopeResult<{ folderPath?: string; cancelled?: boolean }>>
@@ -308,6 +315,28 @@ export interface DevScopeApi {
     getGitHubPublishContext: (
         projectPath: string
     ) => Promise<DevScopeResult<{ context: DevScopeGitHubPublishContext }>>
+    getCurrentBranchPullRequest: (
+        projectPath: string
+    ) => Promise<DevScopeResult<{ pullRequest: DevScopePullRequestSummary | null }>>
+    createOrOpenPullRequest: (
+        projectPath: string,
+        input: DevScopeCreatePullRequestInput
+    ) => Promise<DevScopeResult<{
+        status: 'created' | 'opened_existing'
+        draftSource: DevScopePullRequestDraftSource
+        provider?: DevScopePullRequestProvider
+        pullRequest: DevScopePullRequestSummary
+    }>>
+    commitPushAndCreatePullRequest: (
+        projectPath: string,
+        input: DevScopeCommitPushPullRequestInput
+    ) => Promise<DevScopeResult<{
+        status: 'created' | 'opened_existing'
+        draftSource: DevScopePullRequestDraftSource
+        provider?: DevScopePullRequestProvider
+        pullRequest: DevScopePullRequestSummary
+        commitMessage: string
+    }>>
     hasRemoteOrigin: (projectPath: string) => Promise<DevScopeResult<{ hasRemote: boolean }>>
     getProjectsGitOverview: (projectPaths: string[]) => Promise<DevScopeResult<{ items: DevScopeProjectGitOverviewItem[] }>>
     stageFiles: (

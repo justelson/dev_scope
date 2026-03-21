@@ -30,6 +30,8 @@ export function recoverPersistedSnapshot(snapshot: AssistantSnapshot): Assistant
             session.activeThreadId = session.threadIds[0] || null
         }
         for (const thread of session.threads) {
+            thread.messageCount = Number.isFinite(thread.messageCount) ? thread.messageCount : (thread.messages?.length || 0)
+            thread.lastSeenCompletedTurnId = thread.lastSeenCompletedTurnId || null
             thread.state = runtimeStateAfterRestore(thread.state)
             thread.pendingApprovals = clearResolvedApprovals(thread.pendingApprovals || [])
             thread.pendingUserInputs = clearResolvedUserInputs(thread.pendingUserInputs || [])

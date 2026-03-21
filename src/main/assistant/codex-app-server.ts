@@ -1,16 +1,27 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import readline from 'node:readline'
 import log from 'electron-log'
 import type {
+    AssistantAccountIdentity,
     AssistantApprovalDecision,
     AssistantInteractionMode,
     AssistantModelInfo,
+    AssistantRateLimitSnapshot,
     AssistantRuntimeEvent,
     AssistantRuntimeMode,
     AssistantThread
 } from '../../shared/assistant/contracts'
+import {
+    checkCodexAvailability,
+    parseAccount,
+    parseAuthMode,
+    parseModelList,
+    parseRateLimitSnapshot,
+    readBoolean,
+    requestFromEphemeralServer
+} from './codex-app-server-support'
 import { handleResponse, handleStdoutLine } from './codex-runtime-events'
 import {
     asRecord,
@@ -18,6 +29,7 @@ import {
     buildTurnParams,
     killChildTree,
     mapRuntimeMode,
+    readNumericValue,
     type JsonRpcMessage,
     type SessionContext
 } from './codex-runtime-protocol'
@@ -29,31 +41,22 @@ export class CodexAppServerRuntime extends EventEmitter {
     private modelCacheLoaded = false
     private modelListPromise: Promise<AssistantModelInfo[]> | null = null
     private availability: { available: boolean; reason: string | null } | null = null
+    private availabilityPromise: Promise<{ available: boolean; reason: string | null }> | null = null
 
     async checkAvailability(): Promise<{ available: boolean; reason: string | null }> {
         if (this.availability) return this.availability
+        if (this.availabilityPromise) return this.availabilityPromise
+
+        this.availabilityPromise = checkCodexAvailability(this.codexBinary).then((result) => {
+            this.availability = result
+            return result
+        })
+
         try {
-            const result = spawnSync(this.codexBinary, ['--version'], {
-                shell: process.platform === 'win32',
-                stdio: ['ignore', 'pipe', 'pipe'],
-                encoding: 'utf8',
-                timeout: 4000
-            })
-            if (result.status === 0) {
-                this.availability = { available: true, reason: null }
-            } else {
-                this.availability = {
-                    available: false,
-                    reason: (result.stderr || result.stdout || 'Codex CLI is unavailable.').trim()
-                }
-            }
-        } catch (error) {
-            this.availability = {
-                available: false,
-                reason: error instanceof Error ? error.message : 'Codex CLI is unavailable.'
-            }
+            return await this.availabilityPromise
+        } finally {
+            this.availabilityPromise = null
         }
-        return this.availability
     }
 
     async listModels(forceRefresh = false): Promise<AssistantModelInfo[]> {
@@ -66,25 +69,7 @@ export class CodexAppServerRuntime extends EventEmitter {
                 const response = session
                     ? await this.sendRequest<any>(session, 'model/list', {}, 8000)
                     : await this.listModelsFromEphemeralServer()
-                const models = Array.isArray(response?.data)
-                    ? response.data
-                    : Array.isArray(response?.models)
-                        ? response.models
-                        : Array.isArray(response)
-                            ? response
-                            : []
-                const parsed = models
-                    .map((entry: unknown) => {
-                        const record = asRecord(entry)
-                        const id = asString(record?.['model']) || asString(record?.['id']) || asString(entry)
-                        if (!id) return null
-                        return {
-                            id,
-                            label: asString(record?.['displayName']) || asString(record?.['title']) || id,
-                            description: asString(record?.['description'])
-                        } satisfies AssistantModelInfo
-                    })
-                    .filter((entry: AssistantModelInfo | null): entry is AssistantModelInfo => Boolean(entry))
+                const parsed = parseModelList(response)
                 if (parsed.length > 0) {
                     this.modelCache = parsed
                     this.modelCacheLoaded = true
@@ -101,74 +86,73 @@ export class CodexAppServerRuntime extends EventEmitter {
     }
 
     private async listModelsFromEphemeralServer(): Promise<Record<string, unknown>> {
-        const child = spawn(this.codexBinary, ['app-server'], {
-            cwd: process.cwd(),
-            shell: process.platform === 'win32',
-            stdio: ['pipe', 'pipe', 'pipe']
+        return requestFromEphemeralServer<Record<string, unknown>>({
+            codexBinary: this.codexBinary,
+            modelId: this.modelCache[0]?.id,
+            method: 'model/list',
+            params: {},
+            timeoutMs: 8000,
+            sendRequest: (context, method, params, timeoutMs) => this.sendRequest(context, method, params, timeoutMs),
+            writeMessage: (context, message) => this.writeMessage(context, message)
         })
-        const output = readline.createInterface({ input: child.stdout })
-        const context: SessionContext = {
-            child,
-            output,
-            pending: new Map(),
-            pendingApprovals: new Map(),
-            pendingUserInputs: new Map(),
-            nextRequestId: 1,
-            stopping: false,
-            thread: {
-                id: '__ephemeral-model-list__',
-                providerThreadId: null,
-                model: this.modelCache[0]?.id || '',
-                cwd: process.cwd(),
-                runtimeMode: 'approval-required',
-                interactionMode: 'default',
-                state: 'starting',
-                lastError: null,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                latestTurn: null,
-                activePlan: null,
-                messages: [],
-                proposedPlans: [],
-                activities: [],
-                pendingApprovals: [],
-                pendingUserInputs: []
+    }
+
+    async getAccount(): Promise<{ account: AssistantAccountIdentity | null; authMode: 'apikey' | 'chatgpt' | 'chatgptAuthTokens' | null; requiresOpenaiAuth: boolean }> {
+        const response = await this.requestFromAvailableServer<Record<string, unknown>>('account/read', { refreshToken: true }, 8000)
+        return {
+            account: parseAccount(asRecord(response?.['account'])),
+            authMode: parseAuthMode(response?.['authMode']) ?? parseAuthMode(asRecord(response?.['account'])?.['authMode']),
+            requiresOpenaiAuth: readBoolean(response?.['requiresOpenaiAuth']) ?? false
+        }
+    }
+
+    async getAccountRateLimits(): Promise<{
+        rateLimits: AssistantRateLimitSnapshot | null
+        rateLimitsByLimitId: Record<string, AssistantRateLimitSnapshot>
+    }> {
+        const response = await this.requestFromAvailableServer<Record<string, unknown>>('account/rateLimits/read', {}, 8000)
+        const rateLimitsByLimitIdRecord = asRecord(response?.['rateLimitsByLimitId'])
+        const rateLimitsByLimitId = Object.entries(rateLimitsByLimitIdRecord || {}).reduce<Record<string, AssistantRateLimitSnapshot>>((accumulator, [limitId, value]) => {
+            const snapshot = parseRateLimitSnapshot(asRecord(value))
+            if (snapshot) {
+                accumulator[limitId] = snapshot
             }
+            return accumulator
+        }, {})
+
+        return {
+            rateLimits: parseRateLimitSnapshot(asRecord(response?.['rateLimits'])),
+            rateLimitsByLimitId
+        }
+    }
+
+    private async requestFromAvailableServer<T>(method: string, params: Record<string, unknown>, timeoutMs = 8000): Promise<T> {
+        const session = this.sessions.values().next().value as SessionContext | undefined
+        if (!session) {
+            return requestFromEphemeralServer<T>({
+                codexBinary: this.codexBinary,
+                modelId: this.modelCache[0]?.id,
+                method,
+                params,
+                timeoutMs,
+                sendRequest: (context, requestMethod, requestParams, requestTimeoutMs) => this.sendRequest(context, requestMethod, requestParams, requestTimeoutMs),
+                writeMessage: (context, message) => this.writeMessage(context, message)
+            })
         }
 
-        output.on('line', (line) => {
-            try {
-                const parsed = JSON.parse(line) as JsonRpcMessage
-                if (parsed['id'] !== undefined && parsed['method'] === undefined) {
-                    handleResponse(context, parsed)
-                }
-            } catch {
-                // Ignore malformed lines from ephemeral model discovery.
-            }
-        })
-
         try {
-            await this.sendRequest(context, 'initialize', {
-                clientInfo: {
-                    name: 'devscope_air',
-                    title: 'DevScope Air',
-                    version: '0.1.0'
-                },
-                capabilities: {
-                    experimentalApi: true
-                }
-            }, 8000)
-            this.writeMessage(context, { method: 'initialized' })
-            return await this.sendRequest<Record<string, unknown>>(context, 'model/list', {}, 8000)
-        } finally {
-            for (const pending of context.pending.values()) {
-                clearTimeout(pending.timer)
-            }
-            context.pending.clear()
-            output.close()
-            if (!child.killed) {
-                killChildTree(child)
-            }
+            return await this.sendRequest<T>(session, method, params, timeoutMs)
+        } catch (error) {
+            log.warn(`[Assistant] ${method} failed on active session, retrying with ephemeral server`, error)
+            return requestFromEphemeralServer<T>({
+                codexBinary: this.codexBinary,
+                modelId: this.modelCache[0]?.id,
+                method,
+                params,
+                timeoutMs,
+                sendRequest: (context, requestMethod, requestParams, requestTimeoutMs) => this.sendRequest(context, requestMethod, requestParams, requestTimeoutMs),
+                writeMessage: (context, message) => this.writeMessage(context, message)
+            })
         }
     }
 
@@ -232,7 +216,9 @@ export class CodexAppServerRuntime extends EventEmitter {
             }
         })
         this.writeMessage(context, { method: 'initialized' })
-        void this.listModels(true)
+        if (!this.modelCacheLoaded || this.modelCache.length === 0) {
+            void this.listModels(false)
+        }
 
         const sessionOverrides = {
             cwd,

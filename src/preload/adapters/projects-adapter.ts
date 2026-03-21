@@ -54,6 +54,37 @@ export function createProjectsAdapter() {
         getRepoOwner: (projectPath: string) => ipcRenderer.invoke('devscope:getRepoOwner', projectPath),
         getGitHubPublishContext: (projectPath: string) =>
             ipcRenderer.invoke('devscope:getGitHubPublishContext', projectPath),
+        getCurrentBranchPullRequest: (projectPath: string) =>
+            ipcRenderer.invoke('devscope:getCurrentBranchPullRequest', projectPath),
+        createOrOpenPullRequest: (
+            projectPath: string,
+            input: {
+                projectName?: string
+                targetBranch?: string
+                draft?: boolean
+                title?: string
+                body?: string
+                guideText?: string
+                provider?: 'groq' | 'gemini' | 'codex'
+                apiKey?: string
+                model?: string
+            }
+        ) => ipcRenderer.invoke('devscope:createOrOpenPullRequest', projectPath, input),
+        commitPushAndCreatePullRequest: (
+            projectPath: string,
+            input: {
+                projectName?: string
+                commitMessage?: string
+                targetBranch?: string
+                draft?: boolean
+                guideText?: string
+                provider?: 'groq' | 'gemini' | 'codex'
+                apiKey?: string
+                model?: string
+                autoStageAll?: boolean
+                stageScope?: 'project' | 'repo'
+            }
+        ) => ipcRenderer.invoke('devscope:commitPushAndCreatePullRequest', projectPath, input),
         hasRemoteOrigin: (projectPath: string) => ipcRenderer.invoke('devscope:hasRemoteOrigin', projectPath),
         getProjectsGitOverview: (projectPaths: string[]) => ipcRenderer.invoke('devscope:getProjectsGitOverview', projectPaths),
         stageFiles: (

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { AssistantInteractionMode, AssistantRuntimeMode } from '@shared/assistant/contracts'
 import type { DevScopeGitBranchSummary } from '@shared/contracts/devscope-api'
+import { useSettings } from '@/lib/settings'
 import {
     searchMentionIndex,
     type MentionCandidate
@@ -12,16 +13,18 @@ import {
     type InlineMentionTag
 } from './assistant-composer-inline-mentions'
 import { useAssistantComposerProjectData } from './useAssistantComposerProjectData'
+import type { AssistantComposerPreferenceEffort } from './assistant-composer-preferences'
 import {
-    mergeAssistantComposerPreferences,
-    readAssistantComposerPreferences,
-    subscribeAssistantComposerPreferences,
-    type AssistantComposerPreferenceEffort
-} from './assistant-composer-preferences'
+    areAssistantComposerSessionStatesEqual,
+    readAssistantComposerSessionState,
+    writeAssistantComposerSessionState,
+    type AssistantComposerSessionState
+} from './assistant-composer-session-state'
 import type { AssistantComposerProps, ComposerContextFile } from './assistant-composer-types'
 import { getContextFileMeta, DRAFT_STORAGE_KEY } from './assistant-composer-utils'
 
 const EFFORT_OPTIONS: AssistantComposerPreferenceEffort[] = ['low', 'medium', 'high', 'xhigh']
+const COMPOSER_SESSION_PERSIST_DEBOUNCE_MS = 180
 
 export const EFFORT_LABELS: Record<(typeof EFFORT_OPTIONS)[number], string> = {
     low: 'Low',
@@ -32,12 +35,22 @@ export const EFFORT_LABELS: Record<(typeof EFFORT_OPTIONS)[number], string> = {
 
 const getProfileLabel = (runtimeMode: AssistantRuntimeMode) => runtimeMode === 'full-access' ? 'Full access' : 'Safe'
 
+function readLegacyComposerSessionState(): AssistantComposerSessionState {
+    try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY)
+    } catch {}
+    return {}
+}
+
 export function useAssistantComposerController(props: AssistantComposerProps) {
+    const { settings } = useSettings()
     const {
+        sessionId,
         onSend,
         disabled,
         isSending,
         isThinking,
+        thinkingLabel = 'Working...',
         isConnected,
         activeModel,
         modelOptions,
@@ -51,8 +64,29 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         compact = false
     } = props
 
-    const initialComposerPreferences = useMemo(() => readAssistantComposerPreferences(), [])
-    const [text, setText] = useState('')
+    const globalDefaultComposerState = useMemo<AssistantComposerSessionState>(() => ({
+        model: settings.assistantDefaultModel.trim() || undefined,
+        runtimeMode: settings.assistantDefaultRuntimeMode,
+        interactionMode: settings.assistantDefaultInteractionMode,
+        effort: settings.assistantDefaultEffort,
+        fastModeEnabled: settings.assistantDefaultFastMode
+    }), [
+        settings.assistantDefaultEffort,
+        settings.assistantDefaultFastMode,
+        settings.assistantDefaultInteractionMode,
+        settings.assistantDefaultModel,
+        settings.assistantDefaultRuntimeMode
+    ])
+    const baseRuntimeMode: AssistantRuntimeMode = globalDefaultComposerState.runtimeMode || runtimeMode || (activeProfile === 'yolo-fast' ? 'full-access' : 'approval-required')
+    const baseInteractionMode: AssistantInteractionMode = globalDefaultComposerState.interactionMode || interactionMode || 'default'
+    const resolvedModel = String(globalDefaultComposerState.model || activeModel || '').trim()
+    const availableModelOptions = modelOptions?.length ? modelOptions : (resolvedModel ? [{ id: resolvedModel, label: resolvedModel }] : [])
+    const legacyComposerSessionState = useMemo(() => readLegacyComposerSessionState(), [])
+    const initialComposerSessionState = useMemo(
+        () => readAssistantComposerSessionState(sessionId, { ...globalDefaultComposerState, ...legacyComposerSessionState }),
+        [globalDefaultComposerState, legacyComposerSessionState, sessionId]
+    )
+    const [text, setText] = useState(initialComposerSessionState.draft || '')
     const [inlineMentionTags, setInlineMentionTags] = useState<InlineMentionTag[]>([])
     const [contextFiles, setContextFiles] = useState<ComposerContextFile[]>([])
     const [sentPromptHistory, setSentPromptHistory] = useState<string[]>([])
@@ -82,11 +116,11 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     const [mentionRecentModifiedAtByPath, setMentionRecentModifiedAtByPath] = useState<Record<string, number>>({})
     const [modelCanScrollUp, setModelCanScrollUp] = useState(false)
     const [modelCanScrollDown, setModelCanScrollDown] = useState(false)
-    const [selectedEffort, setSelectedEffort] = useState<AssistantComposerPreferenceEffort>(initialComposerPreferences.effort || 'high')
-    const [fastModeEnabled, setFastModeEnabled] = useState(initialComposerPreferences.fastModeEnabled ?? false)
+    const [selectedEffort, setSelectedEffort] = useState<AssistantComposerPreferenceEffort>(initialComposerSessionState.effort || globalDefaultComposerState.effort || 'high')
+    const [fastModeEnabled, setFastModeEnabled] = useState(initialComposerSessionState.fastModeEnabled ?? globalDefaultComposerState.fastModeEnabled ?? false)
     const [isCompactFooter, setIsCompactFooter] = useState(compact)
+    const [loadedSessionId, setLoadedSessionId] = useState<string | null>(sessionId || null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
-    const textareaOverlayRef = useRef<HTMLDivElement>(null)
     const filePickerRef = useRef<HTMLInputElement>(null)
     const composerRootRef = useRef<HTMLDivElement>(null)
     const modelDropdownRef = useRef<HTMLDivElement>(null)
@@ -96,14 +130,11 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     const mentionListRef = useRef<HTMLDivElement>(null)
     const traitsDropdownRef = useRef<HTMLDivElement>(null)
     const didAutoRefreshModelsRef = useRef(false)
+    const persistedSessionStateRef = useRef<AssistantComposerSessionState>(initialComposerSessionState)
 
-    const baseRuntimeMode: AssistantRuntimeMode = runtimeMode || (activeProfile === 'yolo-fast' ? 'full-access' : 'approval-required')
-    const baseInteractionMode: AssistantInteractionMode = interactionMode || 'default'
-    const resolvedModel = String(activeModel || '').trim()
-    const availableModelOptions = modelOptions?.length ? modelOptions : (resolvedModel ? [{ id: resolvedModel, label: resolvedModel }] : [])
-    const [selectedModel, setSelectedModel] = useState(initialComposerPreferences.model || resolvedModel)
-    const [selectedRuntimeMode, setSelectedRuntimeMode] = useState<AssistantRuntimeMode>(initialComposerPreferences.runtimeMode || baseRuntimeMode)
-    const [selectedInteractionMode, setSelectedInteractionMode] = useState<AssistantInteractionMode>(initialComposerPreferences.interactionMode || baseInteractionMode)
+    const [selectedModel, setSelectedModel] = useState(initialComposerSessionState.model || resolvedModel)
+    const [selectedRuntimeMode, setSelectedRuntimeMode] = useState<AssistantRuntimeMode>(initialComposerSessionState.runtimeMode || baseRuntimeMode)
+    const [selectedInteractionMode, setSelectedInteractionMode] = useState<AssistantInteractionMode>(initialComposerSessionState.interactionMode || baseInteractionMode)
     const latestModelId = availableModelOptions[0]?.id || null
     const selectedModelLabel = availableModelOptions.find((entry) => entry.id === selectedModel)?.label || selectedModel || 'Select model'
     const currentBranch = branches.find((branch) => branch.current)?.name || null
@@ -114,9 +145,11 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         if (cursorInsideInlineMention || cursorRightAfterMention) return null
         return getMentionQuery(text, composerCursor)
     }, [composerCursor, inlineMentionTags, text])
+    const deferredMentionQuery = useDeferredValue(mentionState?.query || '')
     const displayedProfile = selectedRuntimeMode === baseRuntimeMode ? (activeProfile || getProfileLabel(baseRuntimeMode)) : getProfileLabel(selectedRuntimeMode)
     const mentionCandidates = useMemo(() => {
-        const query = String(mentionState?.query || '').trim()
+        if (!mentionState) return []
+        const query = String(deferredMentionQuery || '').trim()
         const baseCandidates = searchMentionIndex(projectNodes, query, 16)
         return baseCandidates.map((candidate, index) => {
             const relativeKey = normalizeMentionLookupPath(candidate.relativePath || candidate.path)
@@ -135,7 +168,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
             if (!query && candidate.type === 'file') score += 12
             return { candidate, index, score }
         }).sort((left, right) => right.score - left.score || left.index - right.index).slice(0, 8).map((entry) => entry.candidate)
-    }, [mentionChangedStateByPath, mentionRecentModifiedAtByPath, mentionState?.query, projectNodes])
+    }, [deferredMentionQuery, mentionChangedStateByPath, mentionRecentModifiedAtByPath, mentionState, projectNodes])
     const filteredModelOptions = useMemo(() => {
         const normalizedQuery = modelQuery.trim().toLowerCase()
         if (!normalizedQuery) return availableModelOptions
@@ -178,11 +211,28 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         }
     }
     const syncComposerCursor = (element: HTMLTextAreaElement | null) => setComposerCursor(element?.selectionStart ?? 0)
-    const syncTextareaOverlayScroll = (element: HTMLTextAreaElement | null) => {
-        if (!element || !textareaOverlayRef.current) return
-        textareaOverlayRef.current.scrollTop = element.scrollTop
-        textareaOverlayRef.current.scrollLeft = element.scrollLeft
-    }
+
+    useEffect(() => {
+        const nextState = readAssistantComposerSessionState(sessionId, { ...globalDefaultComposerState, ...legacyComposerSessionState })
+        persistedSessionStateRef.current = nextState
+        setLoadedSessionId(null)
+        setText(nextState.draft || '')
+        setInlineMentionTags([])
+        setContextFiles([])
+        setSentPromptHistory([])
+        setHistoryCursor(null)
+        setDraftBeforeHistory('')
+        setShowMentionMenu(false)
+        setPreviewAttachment(null)
+        setRemovingAttachmentIds([])
+        setSelectedModel(nextState.model || resolvedModel)
+        setSelectedRuntimeMode(nextState.runtimeMode || baseRuntimeMode)
+        setSelectedInteractionMode(nextState.interactionMode || baseInteractionMode)
+        setSelectedEffort(nextState.effort || globalDefaultComposerState.effort || 'high')
+        setFastModeEnabled(nextState.fastModeEnabled ?? globalDefaultComposerState.fastModeEnabled ?? false)
+        setComposerCursor(0)
+        setLoadedSessionId(sessionId || null)
+    }, [globalDefaultComposerState, legacyComposerSessionState, resolvedModel, baseRuntimeMode, baseInteractionMode, sessionId])
 
     useEffect(() => { setSelectedRuntimeMode((current) => current || baseRuntimeMode) }, [baseRuntimeMode])
     useEffect(() => { setSelectedInteractionMode((current) => current || baseInteractionMode) }, [baseInteractionMode])
@@ -191,31 +241,23 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         if (!selectedModel && availableModelOptions.length > 0) setSelectedModel(availableModelOptions[0].id)
     }, [availableModelOptions, selectedModel])
     useEffect(() => {
-        mergeAssistantComposerPreferences({ model: selectedModel || undefined, runtimeMode: selectedRuntimeMode, interactionMode: selectedInteractionMode, effort: selectedEffort, fastModeEnabled })
-    }, [fastModeEnabled, selectedEffort, selectedInteractionMode, selectedModel, selectedRuntimeMode])
-    useEffect(() => subscribeAssistantComposerPreferences((preferences) => {
-        if (preferences.model !== undefined) setSelectedModel(preferences.model)
-        if (preferences.runtimeMode !== undefined) setSelectedRuntimeMode(preferences.runtimeMode)
-        if (preferences.interactionMode !== undefined) setSelectedInteractionMode(preferences.interactionMode)
-        if (preferences.effort !== undefined) setSelectedEffort(preferences.effort)
-        if (preferences.fastModeEnabled !== undefined) setFastModeEnabled(preferences.fastModeEnabled)
-    }), [])
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem(DRAFT_STORAGE_KEY)
-            if (saved?.trim()) {
-                setText(saved)
-                setInlineMentionTags([])
-            }
-        } catch {}
-    }, [])
-    useEffect(() => {
-        try {
-            if (text.trim()) localStorage.setItem(DRAFT_STORAGE_KEY, text)
-            else localStorage.removeItem(DRAFT_STORAGE_KEY)
-        } catch {}
-    }, [text])
-    useEffect(() => { syncTextareaOverlayScroll(textareaRef.current) }, [inlineMentionTags, text])
+        if (!sessionId || loadedSessionId !== sessionId) return
+        const nextState: AssistantComposerSessionState = {
+            draft: text.trim() ? text : undefined,
+            model: selectedModel || undefined,
+            runtimeMode: selectedRuntimeMode,
+            interactionMode: selectedInteractionMode,
+            effort: selectedEffort,
+            fastModeEnabled
+        }
+        if (areAssistantComposerSessionStatesEqual(persistedSessionStateRef.current, nextState)) return
+
+        const timeoutId = window.setTimeout(() => {
+            persistedSessionStateRef.current = writeAssistantComposerSessionState(sessionId, nextState)
+        }, COMPOSER_SESSION_PERSIST_DEBOUNCE_MS)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [fastModeEnabled, loadedSessionId, selectedEffort, selectedInteractionMode, selectedModel, selectedRuntimeMode, sessionId, text])
     useEffect(() => { setShowMentionMenu(Boolean(mentionState)); setActiveMentionIndex(0) }, [mentionState?.query, mentionState?.start])
     useEffect(() => { if (!showModelDropdown) { setModelQuery(''); setActiveModelIndex(0) } }, [showModelDropdown])
     useEffect(() => { if (!showBranchDropdown) { setBranchQuery(''); setActiveBranchIndex(0) } }, [showBranchDropdown])
@@ -344,14 +386,14 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         setComposerCursor,
         removingAttachmentIds,
         setRemovingAttachmentIds,
-        textareaRef,
-        syncTextareaOverlayScroll
+        textareaRef
     })
 
     return {
         disabled,
         isConnected,
         isThinking,
+        thinkingLabel,
         modelsLoading,
         modelsError,
         compact,
@@ -395,7 +437,6 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         setFastModeEnabled,
         isCompactFooter,
         textareaRef,
-        textareaOverlayRef,
         filePickerRef,
         composerRootRef,
         modelDropdownRef,
@@ -425,7 +466,6 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         activeMentionCandidate,
         syncScrollAffordance,
         syncComposerCursor,
-        syncTextareaOverlayScroll,
         setComposerCursor,
         modelQuery,
         setModelQuery,

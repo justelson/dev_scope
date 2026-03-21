@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Columns3, Copy, RefreshCw, Rows3, X } from 'lucide-react'
 import type { FileDiffMetadata } from '@pierre/diffs/react'
+import { RawPatchFallback } from '@/components/ui/diff-viewer/RawPatchFallback'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
@@ -211,14 +212,10 @@ export function FileDiffDetailModal({
                         resolvedFileDiff ? (
                             <PatchDiffViewer fileDiff={resolvedFileDiff} mode={renderMode} />
                         ) : parsedDiff.error ? (
-                            <div className="h-full overflow-auto overscroll-contain custom-scrollbar px-5 py-4 [scrollbar-gutter:stable]">
-                                <p className="mb-3 text-xs text-amber-300/80">
-                                    Falling back to raw diff view because patch parsing failed.
-                                </p>
-                                <pre className="whitespace-pre-wrap break-words rounded-xl border border-white/10 bg-black/30 p-4 font-mono text-[12px] leading-5 text-white/75">
-                                    {parsedDiff.patch}
-                                </pre>
-                            </div>
+                            <RawPatchFallback
+                                patch={parsedDiff.patch}
+                                notice="Falling back to raw diff view because patch parsing failed."
+                            />
                         ) : (
                             <PatchDiffViewer patch={parsedDiff.patch} mode={renderMode} />
                         )

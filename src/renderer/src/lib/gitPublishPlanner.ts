@@ -1,5 +1,4 @@
 import type { DevScopeGitHubPublishContext } from '@shared/contracts/devscope-api'
-import type { PullRequestChangeSource } from './settings'
 
 type BranchLike = {
     name: string
@@ -28,16 +27,6 @@ export type GitPublishPlan = {
     summaryLines: string[]
 }
 
-export type PullRequestExecutionPlan = {
-    changeSourceLabel: string
-    requiresStaging: false
-    requiresCommit: false
-    requiresPush: false
-    missingReason: string
-    summaryLines: string[]
-    publishPlan: GitPublishPlan
-}
-
 export function getPreferredGitRemote<T extends RemoteLike>(remotes: T[]): T | null {
     return remotes.find((remote) => remote.name === 'origin' && String(remote.pushUrl || '').trim())
         ?? remotes.find((remote) => String(remote.pushUrl || '').trim())
@@ -48,13 +37,6 @@ function getSelectedCommitCount<T extends CommitLike>(commits: T[], selectedComm
     if (!selectedCommitHash) return commits.length
     const selectedIndex = commits.findIndex((commit) => commit.hash === selectedCommitHash)
     return selectedIndex >= 0 ? commits.slice(selectedIndex).length : 0
-}
-
-function getPullRequestChangeSourceSummary(changeSource: PullRequestChangeSource) {
-    if (changeSource === 'unstaged') return 'Unstaged changes'
-    if (changeSource === 'staged') return 'Staged changes'
-    if (changeSource === 'local-commits') return 'Local commits'
-    return 'All local work'
 }
 
 export function getCurrentBranchPublishState<TBranch extends BranchLike, TRemote extends RemoteLike>(args: {
@@ -107,8 +89,8 @@ export function buildGitPublishPlan<TBranch extends BranchLike, TRemote extends 
             commitCount: 0,
             actionLabel: 'Add Remote',
             title: 'Remote required',
-            description: 'Add a remote before opening a PR draft in the browser.',
-            summaryLines: ['Add a remote repository before opening a PR draft.']
+            description: 'Add a remote before opening a pull request.',
+            summaryLines: ['Add a remote repository before opening a pull request.']
         }
     }
 
@@ -121,10 +103,10 @@ export function buildGitPublishPlan<TBranch extends BranchLike, TRemote extends 
             commitCount,
             actionLabel: 'Publish Branch',
             title: 'Current branch is local only',
-            description: `Push "${args.currentBranch || 'current'}" yourself before opening a PR draft.`,
+            description: `Publish "${args.currentBranch || 'current'}" before opening a PR.`,
             summaryLines: [
                 `Current branch "${args.currentBranch || 'current'}" is local only.`,
-                `Push it to ${publishState.remoteName || 'remote'} before opening the PR draft in GitHub.`
+                `Publish it to ${publishState.remoteName || 'remote'} before opening a PR.`
             ]
         }
     }
@@ -138,12 +120,12 @@ export function buildGitPublishPlan<TBranch extends BranchLike, TRemote extends 
             commitCount,
             actionLabel: isPartialRange ? `Review ${commitCount} Commit${commitCount === 1 ? '' : 's'}` : 'Review Local Commits',
             title: isPartialRange ? 'Selected local commit range' : 'Local commits',
-            description: 'DevScope will only draft the PR. Push the branch yourself when you are ready.',
+            description: 'These local commits will be included when you create a PR from this branch.',
             summaryLines: [
                 isPartialRange
-                    ? `Selected ${commitCount} local commit${commitCount === 1 ? '' : 's'} for draft context.`
-                    : `${commitCount} local commit${commitCount === 1 ? '' : 's'} are available for draft context.`,
-                `DevScope will not push commits automatically.`
+                    ? `Selected ${commitCount} local commit${commitCount === 1 ? '' : 's'} for this branch.`
+                    : `${commitCount} local commit${commitCount === 1 ? '' : 's'} are ready on this branch.`,
+                'Create the PR when the branch is ready.'
             ]
         }
     }
@@ -154,72 +136,10 @@ export function buildGitPublishPlan<TBranch extends BranchLike, TRemote extends 
         hasRemote: true,
         currentBranchNeedsPublish: false,
         commitCount: 0,
-        actionLabel: 'Open PR Draft',
-        title: 'Browser draft only',
-        description: 'DevScope will open the GitHub PR page for the current branch.',
-        summaryLines: ['DevScope will open the GitHub PR page in your browser.']
-    }
-}
-
-export function buildPullRequestExecutionPlan<TBranch extends BranchLike, TRemote extends RemoteLike, TCommit extends CommitLike>(args: {
-    changeSource: PullRequestChangeSource
-    draftMode: boolean
-    currentBranch: string
-    branches: TBranch[]
-    remotes: TRemote[]
-    unstagedFiles: Array<{ path: string }>
-    stagedFiles: Array<{ path: string }>
-    unpushedCommits: TCommit[]
-    selectedCommitHash?: string | null
-    headBranch: string
-    githubPublishContext?: DevScopeGitHubPublishContext | null
-}): PullRequestExecutionPlan {
-    const hasUnstagedChanges = args.unstagedFiles.length > 0
-    const hasStagedChanges = args.stagedFiles.length > 0
-    const hasLocalCommits = args.unpushedCommits.length > 0
-    const changeSourceLabel = getPullRequestChangeSourceSummary(args.changeSource)
-    const selectedCommitCount = getSelectedCommitCount(args.unpushedCommits, args.selectedCommitHash)
-
-    const missingReason = args.changeSource === 'unstaged'
-        ? (hasUnstagedChanges ? '' : 'Make some unstaged changes first.')
-        : args.changeSource === 'staged'
-            ? (hasStagedChanges ? '' : 'Stage some files first.')
-            : args.changeSource === 'local-commits'
-                ? (hasLocalCommits ? '' : 'Create local commits first.')
-                : (hasUnstagedChanges || hasStagedChanges || hasLocalCommits ? '' : 'There is no local work ready for a PR draft yet.')
-
-    const publishPlan = buildGitPublishPlan({
-        currentBranch: args.currentBranch,
-        branches: args.branches,
-        remotes: args.remotes,
-        unpushedCommits: args.unpushedCommits,
-        selectedCommitHash: args.changeSource === 'local-commits' ? args.selectedCommitHash : undefined,
-        intent: args.changeSource === 'local-commits' ? 'push-range' : 'push-all',
-        githubPublishContext: args.githubPublishContext
-    })
-
-    const summaryLines = [
-        args.changeSource === 'unstaged'
-            ? `Use ${args.unstagedFiles.length} unstaged file${args.unstagedFiles.length === 1 ? '' : 's'} for the draft context.`
-            : args.changeSource === 'staged'
-                ? `Use ${args.stagedFiles.length} staged file${args.stagedFiles.length === 1 ? '' : 's'} for the draft context.`
-                : args.changeSource === 'local-commits'
-                    ? `Use ${selectedCommitCount || args.unpushedCommits.length} local commit${(selectedCommitCount || args.unpushedCommits.length) === 1 ? '' : 's'} for the draft context.`
-                    : 'Use all local work on this branch for the draft context.',
-        ...publishPlan.summaryLines,
-        publishPlan.hasRemote
-            ? `Open a ${args.draftMode ? 'draft ' : ''}GitHub PR in the browser for ${args.currentBranch || 'the current branch'}.`
-            : 'GitHub remote required before DevScope can open the PR flow.'
-    ]
-
-    return {
-        changeSourceLabel,
-        requiresStaging: false,
-        requiresCommit: false,
-        requiresPush: false,
-        missingReason,
-        summaryLines,
-        publishPlan
+        actionLabel: 'Create PR',
+        title: 'Current branch',
+        description: 'Create or reopen the GitHub pull request for the current branch.',
+        summaryLines: ['Create or reopen the GitHub pull request for the current branch.']
     }
 }
 

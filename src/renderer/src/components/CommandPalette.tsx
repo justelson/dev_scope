@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, ReactNode, useCallback, useDeferredValue } from 'react'
-import { Search, Slash, X, Folder, File, ArrowRight } from 'lucide-react'
+import { Search, X, Folder, File, ArrowRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useCommandPalette } from '@/lib/commandPalette'
 import { useSettings } from '@/lib/settings'
@@ -14,7 +14,6 @@ type Result = {
     title: string
     subtitle?: string
     badge?: string
-    color?: string
     icon?: ReactNode
     action: () => void
     group: string
@@ -27,8 +26,6 @@ function getParentPath(filePath: string): string {
     if (sep === 2 && /^[A-Za-z]:[\\/]/.test(normalized)) return normalized.slice(0, 3)
     return normalized.slice(0, sep)
 }
-
-// Quick chips component removed, functionality integrated directly into main markup
 
 const MAX_PER_GROUP = 8
 const RECENT_KEY = 'devscope:palette:recent'
@@ -50,18 +47,20 @@ export function CommandPalette() {
     const [recent, setRecent] = useState<string[]>([])
     const [isClosing, setIsClosing] = useState(false)
     const closeTimerRef = useRef<number | null>(null)
+
     const paletteRoots = useMemo(() => {
         return Array.from(new Set([
             settings.projectsFolder,
             ...(settings.additionalFolders || [])
         ].filter((root): root is string => typeof root === 'string' && root.trim().length > 0)))
     }, [settings.projectsFolder, settings.additionalFolders])
+
     const paletteRootsKey = useMemo(() => paletteRoots.join('||'), [paletteRoots])
 
     useEffect(() => {
         if (isOpen) {
             setIsClosing(false)
-            setTimeout(() => inputRef.current?.focus(), 10)
+            window.setTimeout(() => inputRef.current?.focus(), 10)
         } else {
             setQuery('')
             setSelectedIndex(0)
@@ -81,7 +80,7 @@ export function CommandPalette() {
         closeTimerRef.current = window.setTimeout(() => {
             closeTimerRef.current = null
             close()
-        }, 200) // Match animation duration
+        }, 200)
     }, [close, isClosing])
 
     useEffect(() => {
@@ -105,7 +104,7 @@ export function CommandPalette() {
     const pushRecent = (value: string) => {
         if (!value) return
         const normalized = value.trim()
-        const next = [normalized, ...recent.filter(r => r !== normalized)].slice(0, 7)
+        const next = [normalized, ...recent.filter((item) => item !== normalized)].slice(0, 7)
         setRecent(next)
         try {
             localStorage.setItem(RECENT_KEY, JSON.stringify(next))
@@ -133,7 +132,7 @@ export function CommandPalette() {
                 loadedProjectsRootsKeyRef.current = paletteRootsKey
                 setProjects(merged)
             })
-            .catch(err => console.error('scanProjects failed', err))
+            .catch((err) => console.error('scanProjects failed', err))
     }, [isOpen, paletteRoots, paletteRootsKey, projects.length])
 
     useEffect(() => {
@@ -144,7 +143,7 @@ export function CommandPalette() {
     useEffect(() => {
         fileIndexCacheRef.current.clear()
         fileIndexLoadingRef.current.clear()
-        setFileIndexVersion(prev => prev + 1)
+        setFileIndexVersion((prev) => prev + 1)
     }, [paletteRoots])
 
     const parsed = useMemo(() => {
@@ -153,6 +152,7 @@ export function CommandPalette() {
         if (trimmed.startsWith('/')) return { domain: 'projects' as Domain, term: trimmed.slice(1).trim() }
         return { domain: 'mixed' as Domain, term: trimmed }
     }, [query])
+
     const deferredSearchTerm = useDeferredValue(parsed.term)
     const parsedFileQuery = useMemo(() => parseFileSearchQuery(deferredSearchTerm), [deferredSearchTerm])
 
@@ -167,7 +167,7 @@ export function CommandPalette() {
             const tree = (treeRes as { tree?: unknown } | null | undefined)?.tree
             if (treeRes?.success === false || !Array.isArray(tree)) return
             fileIndexCacheRef.current.set(project.path, buildFileSearchIndex(tree as SearchTreeNode[]))
-            setFileIndexVersion(prev => prev + 1)
+            setFileIndexVersion((prev) => prev + 1)
         } catch (err) {
             console.error('file index load failed', err)
         } finally {
@@ -180,10 +180,10 @@ export function CommandPalette() {
         let cancelled = false
 
         const warmup = async () => {
-            const BATCH_SIZE = 2
-            for (let i = 0; i < projects.length; i += BATCH_SIZE) {
+            const batchSize = 2
+            for (let index = 0; index < projects.length; index += batchSize) {
                 if (cancelled) break
-                const batch = projects.slice(i, i + BATCH_SIZE)
+                const batch = projects.slice(index, index + batchSize)
                 await Promise.all(batch.map((project) => ensureFileIndex(project)))
             }
             if (!cancelled) {
@@ -212,12 +212,14 @@ export function CommandPalette() {
 
         let cancelled = false
         setLoadingFiles(true)
+
         const loadMissing = async () => {
             await Promise.all(missing.map((project) => ensureFileIndex(project)))
             if (!cancelled) {
                 setLoadingFiles(false)
             }
         }
+
         void loadMissing()
         return () => {
             cancelled = true
@@ -228,7 +230,7 @@ export function CommandPalette() {
         if (parsed.domain !== 'files') return []
         if (!parsedFileQuery.term && !parsedFileQuery.hasExtensionFilter) return []
 
-        const results: { name: string; path: string; project: string }[] = []
+        const matches: { name: string; path: string; project: string }[] = []
         const seenPaths = new Set<string>()
         const targetProjects = projects.slice(0, 8)
 
@@ -245,215 +247,254 @@ export function CommandPalette() {
             for (const match of searchResult.matches) {
                 if (match.type !== 'file' || seenPaths.has(match.path)) continue
                 seenPaths.add(match.path)
-                results.push({
+                matches.push({
                     name: match.name,
                     path: match.path,
                     project: project.name
                 })
-                if (results.length >= MAX_PER_GROUP) {
-                    return results
+                if (matches.length >= MAX_PER_GROUP) {
+                    return matches
                 }
             }
         }
 
-        return results
+        return matches
     }, [parsed.domain, parsedFileQuery, projects, fileIndexVersion])
 
     const results = useMemo<Result[]>(() => {
         const term = deferredSearchTerm.toLowerCase()
 
         const addProjects = () => projects
-            .filter((p: any) => p.name.toLowerCase().includes(term))
+            .filter((project: any) => project.name.toLowerCase().includes(term))
             .slice(0, MAX_PER_GROUP)
-            .map(p => ({
-                id: `proj-${p.path}`,
-                title: p.name,
-                subtitle: p.type,
+            .map((project) => ({
+                id: `proj-${project.path}`,
+                title: project.name,
+                subtitle: project.type,
                 badge: '/ Project',
-                color: '#38bdf8',
                 icon: <Folder size={16} />,
                 group: 'Projects',
-                action: () => navigate(`/projects/${encodeURIComponent(p.path)}`)
+                action: () => navigate(`/projects/${encodeURIComponent(project.path)}`)
             }))
 
-        const addFiles = () => files
-            .map(f => ({
-                id: `file-${f.path}`,
-                title: f.name,
-                subtitle: f.project,
-                badge: '// File',
-                color: '#fbbf24',
-                icon: <File size={16} />,
-                group: 'Files',
-                action: () => navigate(`/folder-browse/${encodeURIComponent(getParentPath(f.path))}`)
-            }))
+        const addFiles = () => files.map((file) => ({
+            id: `file-${file.path}`,
+            title: file.name,
+            subtitle: file.project,
+            badge: '// File',
+            icon: <File size={16} />,
+            group: 'Files',
+            action: () => navigate(`/folder-browse/${encodeURIComponent(getParentPath(file.path))}`)
+        }))
 
         if (parsed.domain === 'projects') return addProjects()
         if (parsed.domain === 'files') return addFiles()
-
         return addProjects().slice(0, 6)
     }, [parsed.domain, deferredSearchTerm, projects, files, navigate])
 
     useEffect(() => {
+        setSelectedIndex((current) => Math.min(current, Math.max(results.length - 1, 0)))
+    }, [results.length])
+
+    const selectResult = (result?: Result) => {
+        if (!result) return
+        result.action()
+        pushRecent(query)
+        handleClose()
+    }
+
+    useEffect(() => {
         if (!isOpen) return
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault()
-                setSelectedIndex(i => Math.min(i + 1, Math.max(results.length - 1, 0)))
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault()
-                setSelectedIndex(i => Math.max(i - 1, 0))
-            } else if (e.key === 'Enter') {
-                if (results[selectedIndex]) {
-                    results[selectedIndex].action()
-                    pushRecent(query)
-                    handleClose()
-                }
-            } else if (e.key === 'Escape') {
+
+        const handler = (event: KeyboardEvent) => {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setSelectedIndex((current) => Math.min(current + 1, Math.max(results.length - 1, 0)))
+                return
+            }
+            if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setSelectedIndex((current) => Math.max(current - 1, 0))
+                return
+            }
+            if (event.key === 'Enter') {
+                selectResult(results[selectedIndex])
+                return
+            }
+            if (event.key === 'Escape') {
                 handleClose()
             }
         }
+
         window.addEventListener('keydown', handler)
         return () => window.removeEventListener('keydown', handler)
-    }, [isOpen, results, selectedIndex, query])
+    }, [isOpen, results, selectedIndex, query, recent, handleClose])
 
     if (!isOpen) return null
 
     return (
         <div
             className={cn(
-                "fixed inset-0 z-[60] bg-sparkle-bg/80 backdrop-blur-xl flex items-start justify-center pt-[10vh] sm:pt-[15vh] px-4",
-                isClosing ? "animate-modal-backdrop-out" : "animate-fadeIn"
+                'fixed inset-0 z-[60] flex items-start justify-center bg-sparkle-bg/80 px-4 pt-[11vh] backdrop-blur-lg sm:px-6 sm:pt-[14vh]',
+                isClosing ? 'animate-modal-backdrop-out' : 'animate-fadeIn'
             )}
             onClick={handleClose}
         >
             <div
                 className={cn(
-                    "flex flex-col w-full max-w-2xl bg-sparkle-card border border-sparkle-border rounded-[14px] overflow-hidden shadow-2xl mx-4",
-                    isClosing ? "animate-modal-out" : "animate-fadeIn"
+                    'relative mx-4 flex w-full max-w-[720px] flex-col overflow-hidden rounded-[24px] border border-white/10 bg-sparkle-card shadow-[0_24px_70px_-34px_rgba(0,0,0,0.42)]',
+                    isClosing ? 'animate-modal-out' : 'animate-fadeIn'
                 )}
-                onClick={e => e.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
             >
-                {/* Search Header */}
-                <div className="relative flex items-center gap-3 px-4 py-3.5 sm:px-5">
-                    {/* Subtle top glow */}
-                    <div className="absolute top-0 inset-x-0 h-[80px] bg-gradient-to-b from-[var(--accent-primary)]/10 to-transparent pointer-events-none opacity-50 hidden dark:block" />
-
-                    <Search size={18} className="text-[var(--accent-primary)]/80 stroke-[2] ml-1" />
+                <div className="relative bg-sparkle-card">
+                    <Search
+                        size={18}
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--accent-primary)]"
+                    />
                     <input
                         ref={inputRef}
                         value={query}
-                        onChange={e => setQuery(e.target.value)}
-                        placeholder="What are you looking for?"
-                        className="flex-1 bg-transparent text-sparkle-text placeholder:text-sparkle-text-muted/60 text-[16px] xl:text-[18px] font-medium outline-none ml-2"
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Search projects or type // for files"
+                        className="h-[58px] w-full bg-transparent pl-12 pr-28 text-[16px] font-medium text-sparkle-text outline-none placeholder:text-white/34"
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2">
                         {query && (
                             <button
                                 onClick={() => setQuery('')}
-                                className="p-1.5 rounded-full hover:bg-sparkle-bg text-sparkle-text-muted hover:text-sparkle-text transition-colors"
+                                className="rounded-lg p-2 text-white/42 transition-colors hover:bg-white/[0.05] hover:text-white"
+                                title="Clear search"
                             >
                                 <X size={16} />
                             </button>
                         )}
-                        <kbd className="hidden sm:inline-flex items-center justify-center h-6 px-1.5 border border-sparkle-border/60 rounded bg-sparkle-bg text-[10px] font-medium text-sparkle-text-secondary shadow-sm">Esc</kbd>
+                        <kbd className="hidden h-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] px-2 text-[10px] font-semibold uppercase tracking-wide text-white/45 sm:inline-flex">
+                            Esc
+                        </kbd>
                     </div>
                 </div>
 
-                <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-sparkle-border/40 to-transparent" />
+                <div className="h-px w-full bg-gradient-to-r from-transparent via-white/6 to-transparent" />
 
-                {/* Main Content Area */}
-                <div className="relative max-h-[55vh] overflow-y-auto custom-scrollbar flex flex-col bg-sparkle-bg/30">
+                <div className="custom-scrollbar relative flex max-h-[46vh] flex-col overflow-y-auto bg-sparkle-card">
                     {query.trim() === '' && (
                         <CommandPaletteIntro recent={recent} onSelectQuery={setQuery} />
                     )}
 
                     {results.length > 0 && (
-                        <div className="p-2 sm:p-3 flex-1 pb-3">
-                            {results.map((r, idx) => {
-                                const isSelected = idx === selectedIndex;
+                        <div className="flex-1 p-2">
+                            {results.map((result, index) => {
+                                const isSelected = index === selectedIndex
+                                const showGroupLabel = index === 0 || results[index - 1]?.group !== result.group
+
                                 return (
-                                    <button
-                                        key={r.id}
-                                        onClick={() => { r.action(); pushRecent(query); handleClose() }}
-                                        className={cn(
-                                            'group w-full flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 text-left transition-all outline-none rounded-xl mb-0.5',
-                                            isSelected
-                                                ? 'bg-sparkle-card border-l-[3px] border-l-[var(--accent-primary)] bg-[var(--accent-primary)]/5 shadow-sm'
-                                                : 'hover:bg-sparkle-bg border-l-[3px] border-l-transparent border border-transparent hover:border-sparkle-border/40'
+                                    <div key={result.id} className="mb-1.5 last:mb-0">
+                                        {showGroupLabel && (
+                                            <div className="mb-1 flex items-center gap-3 px-2 pt-2">
+                                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/34">
+                                                    {result.group}
+                                                </span>
+                                            </div>
                                         )}
-                                    >
-                                        <div className={cn(
-                                            "flex items-center justify-center transition-colors",
-                                            isSelected ? "text-[var(--accent-primary)]" : "text-sparkle-text-secondary group-hover:text-sparkle-text"
-                                        )}>
-                                            {r.icon || <Folder size={18} className="stroke-[1.5]" />}
-                                        </div>
 
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-0.5">
-                                                <span className={cn(
-                                                    "text-[14px] font-medium truncate transition-colors",
-                                                    isSelected ? "text-[var(--accent-primary)]" : "text-sparkle-text group-hover:text-[var(--accent-primary)]"
-                                                )}>{r.title}</span>
+                                        <button
+                                            onClick={() => selectResult(result)}
+                                            onMouseEnter={() => setSelectedIndex(index)}
+                                            className={cn(
+                                                'group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left outline-none transition-all',
+                                                isSelected
+                                                    ? 'border-white/12 bg-white/[0.04]'
+                                                    : 'border-transparent bg-transparent hover:border-white/10 hover:bg-white/[0.03]'
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                'flex h-10 w-10 items-center justify-center rounded-[10px] border transition-colors',
+                                                isSelected
+                                                    ? 'border-[var(--accent-primary)]/18 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]'
+                                                    : 'border-white/8 bg-white/[0.035] text-white/56 group-hover:border-white/12 group-hover:text-white/80'
+                                            )}>
+                                                {result.icon || <Folder size={18} className="stroke-[1.6]" />}
+                                            </div>
 
-                                                {r.badge && (
+                                            <div className="min-w-0 flex-1">
+                                                <div className="mb-1 flex items-center gap-2">
                                                     <span className={cn(
-                                                        "text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-widest leading-none drop-shadow-sm border",
-                                                        isSelected
-                                                            ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-primary)]/20"
-                                                            : "bg-sparkle-bg text-sparkle-text-muted border-sparkle-border"
-                                                    )}>{r.badge}</span>
+                                                        'truncate text-[14px] font-semibold transition-colors',
+                                                        isSelected ? 'text-white' : 'text-sparkle-text'
+                                                    )}>
+                                                        {result.title}
+                                                    </span>
+                                                    {result.badge && (
+                                                        <span className={cn(
+                                                            'rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]',
+                                                            isSelected
+                                                                ? 'border-[var(--accent-primary)]/18 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]'
+                                                                : 'border-white/8 bg-white/[0.03] text-white/42'
+                                                        )}>
+                                                            {result.badge}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {result.subtitle && (
+                                                    <p className={cn(
+                                                        'truncate text-[12px] transition-colors',
+                                                        isSelected ? 'text-white/62' : 'text-white/42'
+                                                    )}>
+                                                        {result.subtitle}
+                                                    </p>
                                                 )}
                                             </div>
-                                            {r.subtitle && (
-                                                <p className={cn(
-                                                    "text-[12px] truncate transition-colors",
-                                                    isSelected ? "text-[var(--accent-primary)]/70" : "text-sparkle-text-muted"
-                                                )}>{r.subtitle}</p>
-                                            )}
-                                        </div>
 
-                                        <div className={cn(
-                                            "flex items-center transition-opacity",
-                                            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                                        )}>
-                                            <ArrowRight size={16} className={isSelected ? "text-[var(--accent-primary)]/80" : "text-sparkle-text-muted/50"} />
-                                        </div>
-                                    </button>
+                                            <ArrowRight
+                                                size={16}
+                                                className={cn(
+                                                    'transition-colors',
+                                                    isSelected ? 'text-white/60' : 'text-white/20 group-hover:text-white/45'
+                                                )}
+                                            />
+                                        </button>
+                                    </div>
                                 )
                             })}
                         </div>
                     )}
 
                     {results.length === 0 && query.trim() !== '' && !loadingFiles && (
-                        <div className="p-16 text-center flex flex-col items-center justify-center opacity-60">
-                            <div className="p-4 rounded-3xl bg-sparkle-card border border-sparkle-border/40 shadow-sm mb-5">
-                                <Search size={32} className="text-sparkle-text-muted stroke-[1.5]" />
+                        <div className="flex flex-col items-center justify-center p-12 text-center">
+                            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+                                <Search size={24} className="stroke-[1.5] text-white/40" />
                             </div>
-                            <div className="text-sparkle-text text-xl font-medium mb-1">No results found</div>
-                            <div className="text-sparkle-text-muted text-[14px] max-w-[280px]">We couldn't find anything matching "{query}". Try adjusting your search.</div>
+                            <div className="mb-1 text-base font-semibold text-sparkle-text">No results found</div>
+                            <div className="max-w-[280px] text-[13px] text-white/46">
+                                No match for "{query}". Try a broader term, or switch modes with `/` and `//`.
+                            </div>
                         </div>
                     )}
 
                     {loadingFiles && (
-                        <div className="p-16 text-center flex flex-col items-center justify-center opacity-60">
-                            <div className="w-10 h-10 rounded-full border-2 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] animate-spin mb-5" />
-                            <div className="text-sparkle-text font-medium text-lg">Scanning folders...</div>
+                        <div className="flex flex-col items-center justify-center p-12 text-center">
+                            <div className="mb-4 h-10 w-10 animate-spin rounded-full border-2 border-white/12 border-t-[var(--accent-primary)]" />
+                            <div className="text-sm font-semibold text-sparkle-text">Scanning folders...</div>
                         </div>
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="h-10 border-t border-sparkle-border border-x-0 border-b-0 bg-sparkle-bg/50 px-4 sm:px-5 flex items-center justify-between">
-                    <div className="text-[10px] font-medium text-sparkle-text-muted flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)] animate-pulse shadow-[0_0_8px_var(--accent-primary)]" />
-                        DevScope Command Flow
+                <div className="h-px w-full bg-gradient-to-r from-transparent via-white/6 to-transparent" />
+
+                <div className="flex items-center justify-between gap-4 bg-sparkle-card px-4 py-3 text-[11px] text-white/40">
+                    <div className="flex items-center gap-3">
+                        <span className="flex items-center gap-1.5">
+                            <kbd className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono">Up</kbd>
+                            <kbd className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono">Down</kbd>
+                            Navigate
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <kbd className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono">Enter</kbd>
+                            Open
+                        </span>
                     </div>
-                    <div className="flex items-center gap-4 text-[10px] text-sparkle-text-muted font-medium">
-                        <span className="flex items-center gap-1.5"><kbd className="font-mono bg-sparkle-card px-1.5 py-0.5 rounded border border-sparkle-border/60 shadow-sm">↑</kbd> <kbd className="font-mono bg-sparkle-card px-1.5 py-0.5 rounded border border-sparkle-border/60 shadow-sm">↓</kbd> Navigate</span>
-                        <span className="flex items-center gap-1.5"><kbd className="font-mono bg-sparkle-card px-1.5 py-0.5 rounded border border-sparkle-border/60 shadow-sm">↵</kbd> Select</span>
-                    </div>
+                    <span className="hidden sm:inline text-white/32">Use `/` for projects and `//` for files</span>
                 </div>
             </div>
         </div>

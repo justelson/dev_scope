@@ -1,7 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { AssistantActivity, AssistantMessage } from '@shared/assistant/contracts'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import type { AssistantActivity, AssistantMessage, AssistantTurnUsage } from '@shared/assistant/contracts'
+import { FilePreviewModal } from '@/components/ui/FilePreviewModal'
+import { useFilePreview } from '@/components/ui/file-preview/useFilePreview'
 import { useAssistantStore } from '@/lib/assistant/store'
+import { isAssistantThreadActivelyWorking } from '@/lib/assistant/selectors'
+import { ASSISTANT_MAIN_SIDEBAR_COLLAPSED_STORAGE_KEY, useSidebar } from '@/components/layout/Sidebar'
+import { ConnectedAssistantSessionsRail } from './AssistantConnectedSessionsRail'
 import { AssistantConversationPane } from './AssistantConversationPane'
+import { AssistantDiffPanel } from './AssistantDiffPanel'
+import { AssistantPlanPanel } from './AssistantPlanPanel'
 import {
     DeleteHistoryConfirm,
     formatCompactMetric,
@@ -14,26 +22,22 @@ import {
     type LogDetailsTab,
     type UsageMetricTone
 } from './AssistantPageHelpers'
-import { AssistantSessionsRail } from './AssistantSessionsRail'
 import { AssistantThreadDetailsPanel } from './AssistantThreadDetailsPanel'
+import type { AssistantDiffTarget } from './assistant-diff-types'
+import { getAssistantActivePlanProgress, hasAssistantPlanPanelContent } from './assistant-plan-utils'
 import {
-    readAssistantComposerPreferences,
-    subscribeAssistantComposerPreferences,
-    type AssistantComposerPreferenceEffort,
-    type AssistantComposerPreferences
-} from './assistant-composer-preferences'
-
-const LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'assistant-left-sidebar-collapsed'
-const LEFT_SIDEBAR_WIDTH_STORAGE_KEY = 'assistant-left-sidebar-width'
-const RIGHT_SIDEBAR_OPEN_STORAGE_KEY = 'assistant-right-sidebar-open'
-const TIMELINE_AUTO_SCROLL_THRESHOLD_PX = 350
-
-const SIDEBAR_EFFORT_LABELS: Record<AssistantComposerPreferenceEffort, string> = {
-    low: 'Low',
-    medium: 'Medium',
-    high: 'High',
-    xhigh: 'Extra High'
-}
+    subscribeAssistantComposerSessionState,
+    readAssistantComposerSessionState,
+    type AssistantComposerSessionState
+} from './assistant-composer-session-state'
+import { formatAssistantModelLabel } from './assistant-model-labels'
+import {
+    SIDEBAR_EFFORT_LABELS,
+    useAssistantPageSidebarState,
+    type AssistantRightPanelMode
+} from './useAssistantPageSidebarState'
+import { getAssistantLinkBaseFilePath, openAssistantFileTarget } from './assistant-file-navigation'
+import { useAssistantPageTimelineScroll } from './useAssistantPageTimelineScroll'
 
 type IssueActivityGroup = {
     activity: AssistantActivity
@@ -41,51 +45,113 @@ type IssueActivityGroup = {
     count: number
 }
 
+function readAssistantMainSidebarCollapsedPreference(): boolean {
+    try {
+        const stored = localStorage.getItem(ASSISTANT_MAIN_SIDEBAR_COLLAPSED_STORAGE_KEY)
+        return stored == null ? true : stored === 'true'
+    } catch {
+        return true
+    }
+}
+
 export default function AssistantPage() {
+    const navigate = useNavigate()
     const controller = useAssistantStore()
+    const preview = useFilePreview()
+    const { isCollapsed: mainSidebarCollapsed, setIsCollapsed: setMainSidebarCollapsed } = useSidebar()
     const headerMenuRef = useRef<HTMLDivElement | null>(null)
     const autoConnectAttemptedSessionRef = useRef<string | null>(null)
-    const timelineScrollRef = useRef<HTMLDivElement | null>(null)
-    const shouldAutoScrollRef = useRef(true)
-    const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => localStorage.getItem(LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true')
-    const [leftSidebarWidth, setLeftSidebarWidth] = useState(() => {
-        const saved = Number(localStorage.getItem(LEFT_SIDEBAR_WIDTH_STORAGE_KEY))
-        return Number.isFinite(saved) && saved > 0 ? saved : 320
-    })
-    const [rightSidebarOpen, setRightSidebarOpen] = useState(() => {
-        const saved = localStorage.getItem(RIGHT_SIDEBAR_OPEN_STORAGE_KEY)
-        return saved !== null ? saved === 'true' : true
-    })
+    const lastUsageByThreadRef = useRef<Map<string, AssistantTurnUsage>>(new Map())
+    const mainSidebarBeforeAssistantRef = useRef<boolean | null>(null)
+    const previousMainSidebarCollapsedRef = useRef(mainSidebarCollapsed)
+    const autoCollapsedInnerSidebarRef = useRef(false)
+    const previousRightPanelModeRef = useRef<AssistantRightPanelMode>('none')
+    const {
+        leftSidebarCollapsed,
+        setLeftSidebarCollapsed,
+        leftSidebarWidth,
+        setLeftSidebarWidth,
+        rightPanelMode,
+        setRightPanelMode
+    } = useAssistantPageSidebarState()
     const [showHeaderMenu, setShowHeaderMenu] = useState(false)
     const [selectedLogActivity, setSelectedLogActivity] = useState<AssistantActivity | null>(null)
+    const [selectedDiffTarget, setSelectedDiffTarget] = useState<AssistantDiffTarget | null>(null)
     const [pendingMessageDelete, setPendingMessageDelete] = useState<AssistantMessage | null>(null)
     const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null)
     const [logDetailsTab, setLogDetailsTab] = useState<LogDetailsTab>('rendered')
     const [copiedLogId, setCopiedLogId] = useState<string | null>(null)
     const [copyErrorByLogId, setCopyErrorByLogId] = useState<Record<string, string | null>>({})
-    const [showScrollToBottom, setShowScrollToBottom] = useState(false)
     const [projectPathCopied, setProjectPathCopied] = useState(false)
     const [showFullProjectPath, setShowFullProjectPath] = useState(false)
     const [allLogsCopied, setAllLogsCopied] = useState(false)
     const [clearingLogs, setClearingLogs] = useState(false)
     const [logsExpanded, setLogsExpanded] = useState(false)
-    const [composerPreferences, setComposerPreferences] = useState<AssistantComposerPreferences>(() => readAssistantComposerPreferences())
+    const [composerSessionState, setComposerSessionState] = useState<AssistantComposerSessionState>({})
 
     useEffect(() => {
-        localStorage.setItem(LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, String(leftSidebarCollapsed))
-    }, [leftSidebarCollapsed])
+        const selectedSessionId = controller.selectedSession?.id || null
+        setComposerSessionState(readAssistantComposerSessionState(selectedSessionId))
+    }, [controller.selectedSession?.id])
+
+    useEffect(() => subscribeAssistantComposerSessionState((updatedSessionId, nextState) => {
+        if (!controller.selectedSession?.id || updatedSessionId !== controller.selectedSession.id) return
+        setComposerSessionState(nextState)
+    }), [controller.selectedSession?.id])
 
     useEffect(() => {
-        localStorage.setItem(LEFT_SIDEBAR_WIDTH_STORAGE_KEY, String(leftSidebarWidth))
-    }, [leftSidebarWidth])
+        const threadId = controller.activeThread?.id
+        const usage = controller.activeThread?.latestTurn?.usage
+        if (!threadId || !usage) return
+        lastUsageByThreadRef.current.set(threadId, usage)
+    }, [controller.activeThread?.id, controller.activeThread?.latestTurn?.usage])
 
     useEffect(() => {
-        localStorage.setItem(RIGHT_SIDEBAR_OPEN_STORAGE_KEY, String(rightSidebarOpen))
-    }, [rightSidebarOpen])
+        mainSidebarBeforeAssistantRef.current = mainSidebarCollapsed
+        const preferredCollapsed = readAssistantMainSidebarCollapsedPreference()
+        if (mainSidebarCollapsed !== preferredCollapsed) {
+            setMainSidebarCollapsed(preferredCollapsed)
+        }
 
-    useEffect(() => subscribeAssistantComposerPreferences((preferences) => {
-        setComposerPreferences(preferences)
-    }), [])
+        return () => {
+            const previousCollapsed = mainSidebarBeforeAssistantRef.current
+            mainSidebarBeforeAssistantRef.current = null
+            if (typeof previousCollapsed === 'boolean') {
+                setMainSidebarCollapsed(previousCollapsed)
+            }
+        }
+    // Intentionally run on assistant page mount/unmount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    useEffect(() => {
+        const previousMode = previousRightPanelModeRef.current
+        previousRightPanelModeRef.current = rightPanelMode
+
+        if (rightPanelMode !== 'none') {
+            if (previousMode === 'none' && !leftSidebarCollapsed && !mainSidebarCollapsed) {
+                autoCollapsedInnerSidebarRef.current = true
+                setLeftSidebarCollapsed(true)
+            }
+            return
+        }
+
+        if (previousMode !== 'none' && autoCollapsedInnerSidebarRef.current) {
+            autoCollapsedInnerSidebarRef.current = false
+            setLeftSidebarCollapsed(false)
+        }
+    }, [leftSidebarCollapsed, mainSidebarCollapsed, rightPanelMode, setLeftSidebarCollapsed])
+
+    useEffect(() => {
+        const previousMainCollapsed = previousMainSidebarCollapsedRef.current
+        previousMainSidebarCollapsedRef.current = mainSidebarCollapsed
+
+        if (!previousMainCollapsed || mainSidebarCollapsed) return
+        if (leftSidebarCollapsed || rightPanelMode === 'none') return
+
+        autoCollapsedInnerSidebarRef.current = true
+        setLeftSidebarCollapsed(true)
+    }, [leftSidebarCollapsed, mainSidebarCollapsed, rightPanelMode, setLeftSidebarCollapsed])
 
     useEffect(() => {
         if (!showHeaderMenu) return
@@ -104,6 +170,16 @@ export default function AssistantPage() {
     }, [showHeaderMenu])
 
     const selectedProjectPath = String(controller.selectedSession?.projectPath || controller.activeThread?.cwd || '').trim()
+    const assistantMessageFilePath = useMemo(
+        () => getAssistantLinkBaseFilePath(selectedProjectPath),
+        [selectedProjectPath]
+    )
+    const planPanelAvailable = hasAssistantPlanPanelContent(controller.activePlan, controller.latestProposedPlan)
+    const activePlanProgress = getAssistantActivePlanProgress(controller.activePlan, controller.activeThread?.latestTurn || null)
+    const planProgressLabel = activePlanProgress ? `${activePlanProgress.currentStepNumber}/${activePlanProgress.totalSteps}` : null
+    const planIsComplete = activePlanProgress?.isComplete === true
+    const shouldShowWorkingIndicator = isAssistantThreadActivelyWorking(controller.activeThread)
+        && !controller.timelineMessages.some((message) => message.role === 'assistant' && message.streaming)
     const selectedProjectLabel = selectedProjectPath
         ? selectedProjectPath.split(/[\\/]/).filter(Boolean).pop() || selectedProjectPath
         : 'not set'
@@ -112,15 +188,21 @@ export default function AssistantPage() {
         : ''
     const displayProjectPath = showFullProjectPath ? selectedProjectPathWithTilde : selectedProjectLabel
     const availableModels = useMemo(() => {
-        if (controller.snapshot.knownModels.length > 0) return controller.snapshot.knownModels
+        if (controller.knownModels.length > 0) return controller.knownModels
         const activeModel = String(controller.activeThread?.model || '').trim()
         return activeModel ? [{ id: activeModel, label: activeModel }] : []
-    }, [controller.activeThread?.model, controller.snapshot.knownModels])
-    const sidebarSelectedModel = composerPreferences.model || controller.activeThread?.model || availableModels[0]?.id || ''
-    const latestTurnUsage = controller.activeThread?.latestTurn?.usage || null
+    }, [controller.activeThread?.model, controller.knownModels])
+    const sidebarSelectedModel = formatAssistantModelLabel(composerSessionState.model || controller.activeThread?.model || availableModels[0]?.id || '')
+    const latestTurnUsage = useMemo(() => {
+        const threadId = controller.activeThread?.id
+        if (!threadId) return null
+        return controller.activeThread?.latestTurn?.usage
+            || lastUsageByThreadRef.current.get(threadId)
+            || null
+    }, [controller.activeThread?.id, controller.activeThread?.latestTurn?.usage])
     const contextUsedTokens = latestTurnUsage?.totalTokens ?? null
     const contextWindowTokens = latestTurnUsage?.modelContextWindow ?? null
-    const sessionSidebarWidth = leftSidebarCollapsed ? 56 : Math.max(180, Math.min(520, Math.round(leftSidebarWidth)))
+    const sessionSidebarWidth = leftSidebarCollapsed ? 0 : Math.max(180, Math.min(520, Math.round(leftSidebarWidth)))
     const sidebarMetricChips = [
         {
             label: 'Input tokens',
@@ -153,9 +235,10 @@ export default function AssistantPage() {
             tone: resolveUsageMetricTone(contextUsedTokens, contextWindowTokens, { normal: 0, high: 0 })
         }
     ].filter((entry): entry is { label: string; value: string; tone: UsageMetricTone } => Boolean(entry.value))
-    const selectedThinkingLabel = SIDEBAR_EFFORT_LABELS[composerPreferences.effort || 'high']
-    const selectedSpeedLabel = composerPreferences.fastModeEnabled ? 'Fast' : 'Standard'
-    const selectedRuntimeLabel = controller.activeThread?.runtimeMode === 'full-access' ? 'Full access' : 'Supervised'
+    const selectedThinkingLabel = SIDEBAR_EFFORT_LABELS[composerSessionState.effort || 'high']
+    const selectedSpeedLabel = composerSessionState.fastModeEnabled ? 'Fast' : 'Standard'
+    const selectedRuntimeMode = composerSessionState.runtimeMode || controller.activeThread?.runtimeMode || 'approval-required'
+    const selectedRuntimeLabel = selectedRuntimeMode === 'full-access' ? 'Full access' : 'Supervised'
     const contextUsedDisplay = contextUsedTokens != null ? formatCompactMetric(contextUsedTokens) : controller.activeThread?.latestTurn ? 'Not reported' : 'No turn yet'
     const contextAvailableDisplay = contextWindowTokens != null ? formatCompactMetric(contextWindowTokens) : controller.activeThread?.latestTurn ? 'Not reported' : 'No turn yet'
     const contextPercentage = contextUsedTokens != null && contextWindowTokens != null && contextWindowTokens > 0
@@ -166,7 +249,10 @@ export default function AssistantPage() {
         : 'text-sparkle-text'
     const lastTimelineMessage = controller.timelineMessages[controller.timelineMessages.length - 1] || null
     const latestTimelineActivity = controller.activityFeed[0] || null
+    const shouldComputeIssueActivities = rightPanelMode === 'details' || Boolean(selectedLogActivity)
     const issueActivities = useMemo(() => {
+        if (!shouldComputeIssueActivities) return []
+
         const nextActivities = [...getIssueActivities(controller.activityFeed)]
         if (controller.commandError) {
             nextActivities.unshift({
@@ -186,7 +272,8 @@ export default function AssistantPage() {
         controller.activeThread?.latestTurn?.id,
         controller.activeThread?.updatedAt,
         controller.selectedSession?.updatedAt,
-        latestTimelineActivity?.createdAt
+        latestTimelineActivity?.createdAt,
+        shouldComputeIssueActivities
     ])
     const groupedIssueActivities = useMemo<IssueActivityGroup[]>(() => {
         const groups: IssueActivityGroup[] = []
@@ -203,10 +290,38 @@ export default function AssistantPage() {
     }, [issueActivities])
     const latestIssueGroup = groupedIssueActivities[0] || null
     const olderIssueGroups = groupedIssueActivities.slice(1)
+    const { timelineScrollRef, onScrollTimeline, onScrollToBottom } = useAssistantPageTimelineScroll({
+        sessionId: controller.selectedSession?.id || null,
+        threadId: controller.activeThread?.id || null,
+        loading: controller.loading,
+        timelineMessageCount: controller.timelineMessages.length,
+        lastTimelineMessageId: lastTimelineMessage?.id || null,
+        lastTimelineMessageUpdatedAt: lastTimelineMessage?.updatedAt || null,
+        activityFeedCount: controller.activityFeed.length,
+        latestTimelineActivityId: latestTimelineActivity?.id || null,
+        latestTimelineActivityCreatedAt: latestTimelineActivity?.createdAt || null,
+        shouldShowWorkingIndicator,
+        latestTurnStartedAt: controller.activeThread?.latestTurn?.startedAt || null,
+        latestTurnState: controller.activeThread?.latestTurn?.state || null,
+        threadState: controller.activeThread?.state || null
+    })
 
     useEffect(() => {
         if (olderIssueGroups.length === 0 && logsExpanded) setLogsExpanded(false)
     }, [logsExpanded, olderIssueGroups.length])
+
+    useEffect(() => {
+        if (rightPanelMode === 'plan' && !planPanelAvailable) setRightPanelMode('none')
+    }, [planPanelAvailable, rightPanelMode])
+
+    useEffect(() => {
+        if (rightPanelMode === 'diff' && !selectedDiffTarget) setRightPanelMode('none')
+    }, [rightPanelMode, selectedDiffTarget])
+
+    useEffect(() => {
+        setSelectedDiffTarget(null)
+        if (rightPanelMode === 'diff') setRightPanelMode('none')
+    }, [controller.selectedSession?.id, controller.activeThread?.id])
 
     useEffect(() => {
         if (!controller.bootstrapped || !controller.status?.available || controller.status?.connected || controller.commandPending) return
@@ -223,54 +338,29 @@ export default function AssistantPage() {
         controller.connect
     ])
 
-    const isTimelineNearBottom = (element: HTMLDivElement) => element.scrollHeight - element.scrollTop - element.clientHeight <= TIMELINE_AUTO_SCROLL_THRESHOLD_PX
-    const syncTimelineScrollState = (element: HTMLDivElement) => {
-        const nearBottom = isTimelineNearBottom(element)
-        shouldAutoScrollRef.current = nearBottom
-        setShowScrollToBottom(!nearBottom)
-    }
-    const scrollTimelineToBottom = (behavior: ScrollBehavior = 'instant') => {
-        const element = timelineScrollRef.current
-        if (!element) return
-        if (behavior === 'instant') element.scrollTop = element.scrollHeight
-        else element.scrollTo({ top: element.scrollHeight, behavior })
-    }
+    const openAssistantTarget = useCallback(async (target: string, startInEditMode = false) => {
+        const opened = await openAssistantFileTarget({
+            target,
+            projectPath: selectedProjectPath,
+            navigate,
+            openPreview: preview.openPreview,
+            previewOptions: startInEditMode ? { startInEditMode: true } : undefined
+        })
+        return opened
+    }, [navigate, preview.openPreview, selectedProjectPath])
 
-    useLayoutEffect(() => {
-        const element = timelineScrollRef.current
-        if (element) syncTimelineScrollState(element)
+    const handleOpenAssistantInternalLink = useCallback(async (href: string) => {
+        await openAssistantTarget(href)
+    }, [openAssistantTarget])
+
+    const handleOpenEditedFile = useCallback(async (filePath: string) => {
+        await openAssistantTarget(filePath, true)
+    }, [openAssistantTarget])
+
+    const handleViewActivityDiff = useCallback((target: AssistantDiffTarget) => {
+        setSelectedDiffTarget(target)
+        setRightPanelMode('diff')
     }, [])
-
-    useLayoutEffect(() => {
-        const element = timelineScrollRef.current
-        if (!element) return
-        const isNearBottom = isTimelineNearBottom(element)
-        const hasNoScroll = element.scrollTop === 0 && element.scrollHeight > element.clientHeight
-        if (isNearBottom || hasNoScroll) {
-            shouldAutoScrollRef.current = true
-            setShowScrollToBottom(false)
-            scrollTimelineToBottom('instant')
-        }
-        syncTimelineScrollState(element)
-    }, [controller.selectedSession?.id, controller.activeThread?.id, controller.loading])
-
-    useLayoutEffect(() => {
-        const element = timelineScrollRef.current
-        if (!element) return
-        if (!shouldAutoScrollRef.current && !isTimelineNearBottom(element)) {
-            setShowScrollToBottom(true)
-            return
-        }
-        scrollTimelineToBottom('instant')
-        if (timelineScrollRef.current) syncTimelineScrollState(timelineScrollRef.current)
-    }, [
-        controller.timelineMessages.length,
-        lastTimelineMessage?.id,
-        lastTimelineMessage?.updatedAt,
-        controller.activityFeed.length,
-        latestTimelineActivity?.id,
-        latestTimelineActivity?.createdAt
-    ])
 
     const handleDeleteUserMessage = async () => {
         if (!pendingMessageDelete) return
@@ -329,49 +419,72 @@ export default function AssistantPage() {
         }
     }
 
+    const handleToggleAssistantLeftSidebar = useCallback(() => {
+        autoCollapsedInnerSidebarRef.current = false
+        setLeftSidebarCollapsed((current) => {
+            const nextCollapsed = !current
+            if (!nextCollapsed && rightPanelMode !== 'none' && !mainSidebarCollapsed) {
+                setMainSidebarCollapsed(true)
+            }
+            return nextCollapsed
+        })
+    }, [mainSidebarCollapsed, rightPanelMode, setLeftSidebarCollapsed, setMainSidebarCollapsed])
+
     return (
         <div className="-m-6 flex h-[calc(100vh-46px)] min-h-[calc(100vh-46px)] flex-col overflow-hidden animate-fadeIn [--accent-primary:var(--color-primary)] [--accent-secondary:var(--color-secondary)]">
             <div className="min-h-0 flex-1 overflow-hidden">
                 <div className="flex h-full">
-                    <AssistantSessionsRail
+                    <ConnectedAssistantSessionsRail
                         collapsed={leftSidebarCollapsed}
                         width={sessionSidebarWidth}
-                        compact={false}
-                        sessions={controller.snapshot.sessions}
-                        activeSessionId={controller.selectedSession?.id || null}
-                        commandPending={controller.commandPending}
-                        onSetCollapsed={setLeftSidebarCollapsed}
                         onWidthChange={setLeftSidebarWidth}
-                        onCreateSession={(projectPath) => controller.createSession(undefined, projectPath)}
-                        onSelectSession={controller.selectSession}
-                        onRenameSession={controller.renameSession}
-                        onArchiveSession={controller.archiveSession}
-                        onDeleteSession={controller.deleteSession}
-                        onChooseProjectPath={controller.createProjectSession}
                     />
                     <div className="flex min-w-0 flex-1">
                         <AssistantConversationPane
-                            rightSidebarOpen={rightSidebarOpen}
+                            rightPanelOpen={rightPanelMode !== 'none'}
+                            rightPanelMode={rightPanelMode}
+                            planPanelAvailable={planPanelAvailable}
+                            planProgressLabel={planProgressLabel}
+                            planIsComplete={planIsComplete}
                             showHeaderMenu={showHeaderMenu}
                             setShowHeaderMenu={setShowHeaderMenu}
                             headerMenuRef={headerMenuRef}
                             timelineScrollRef={timelineScrollRef}
-                            showScrollToBottom={showScrollToBottom}
                             deletingMessageId={deletingMessageId}
                             latestProjectLabel={selectedProjectLabel}
+                            assistantMessageFilePath={assistantMessageFilePath || null}
+                            leftSidebarCollapsed={leftSidebarCollapsed}
+                            onToggleLeftSidebar={handleToggleAssistantLeftSidebar}
                             availableModels={availableModels}
                             controller={controller}
-                            onScrollTimeline={syncTimelineScrollState}
-                            onScrollToBottom={() => {
-                                shouldAutoScrollRef.current = true
-                                setShowScrollToBottom(false)
-                                scrollTimelineToBottom('smooth')
-                            }}
+                            onScrollTimeline={onScrollTimeline}
+                            onScrollToBottom={onScrollToBottom}
                             onRequestDeleteUserMessage={setPendingMessageDelete}
-                            onToggleRightSidebar={() => setRightSidebarOpen((current) => !current)}
+                            onToggleRightSidebar={() => setRightPanelMode((current) => current === 'details' ? 'none' : 'details')}
+                            onTogglePlanPanel={() => setRightPanelMode((current) => current === 'plan' ? 'none' : 'plan')}
+                            onOpenAssistantLink={handleOpenAssistantInternalLink}
+                            onOpenEditedFile={handleOpenEditedFile}
+                            onViewDiff={handleViewActivityDiff}
+                        />
+                        <AssistantDiffPanel
+                            open={rightPanelMode === 'diff'}
+                            selectedDiff={selectedDiffTarget}
+                            onClose={() => {
+                                setRightPanelMode('none')
+                                setSelectedDiffTarget(null)
+                            }}
+                        />
+                        <AssistantPlanPanel
+                            open={rightPanelMode === 'plan'}
+                            activePlan={controller.activePlan}
+                            latestTurn={controller.activeThread?.latestTurn || null}
+                            latestProposedPlan={controller.latestProposedPlan}
+                            markdownFilePath={assistantMessageFilePath || null}
+                            onClose={() => setRightPanelMode('none')}
+                            onOpenInternalLink={handleOpenAssistantInternalLink}
                         />
                         <AssistantThreadDetailsPanel
-                            open={rightSidebarOpen}
+                            open={rightPanelMode === 'details'}
                             selectedProjectPath={selectedProjectPath}
                             selectedProjectLabel={selectedProjectLabel}
                             displayProjectPath={displayProjectPath}
@@ -397,7 +510,10 @@ export default function AssistantPage() {
                             clearingLogs={clearingLogs}
                             logsExpanded={logsExpanded}
                             selectedSessionId={controller.selectedSession?.id || null}
-                            onClose={() => setRightSidebarOpen(false)}
+                            assistantConnected={Boolean(controller.status?.connected)}
+                            assistantAvailable={Boolean(controller.status?.available)}
+                            commandPending={controller.commandPending}
+                            onClose={() => setRightPanelMode('none')}
                             onToggleProjectPath={() => setShowFullProjectPath((current) => !current)}
                             onCopyProjectPath={() => void handleCopyProjectPath()}
                             onToggleLogsExpanded={() => setLogsExpanded((current) => !current)}
@@ -407,6 +523,13 @@ export default function AssistantPage() {
                             onShowLogDetails={(activity) => {
                                 setSelectedLogActivity(activity)
                                 setLogDetailsTab('rendered')
+                            }}
+                            onToggleAssistantConnection={() => {
+                                if (controller.status?.connected) {
+                                    void controller.disconnect(controller.selectedSession?.id || undefined)
+                                } else {
+                                    void controller.connect(controller.selectedSession?.id || undefined)
+                                }
                             }}
                         />
                     </div>
@@ -427,6 +550,21 @@ export default function AssistantPage() {
                     setPendingMessageDelete(null)
                 }}
             />
+            {preview.previewFile ? (
+                <FilePreviewModal
+                    file={preview.previewFile}
+                    content={preview.previewContent}
+                    loading={preview.loadingPreview}
+                    truncated={preview.previewTruncated}
+                    size={preview.previewSize}
+                    previewBytes={preview.previewBytes}
+                    modifiedAt={preview.previewModifiedAt}
+                    projectPath={selectedProjectPath || undefined}
+                    onOpenLinkedPreview={preview.openPreview}
+                    mediaItems={preview.previewMediaItems}
+                    onClose={preview.closePreview}
+                />
+            ) : null}
         </div>
     )
 }

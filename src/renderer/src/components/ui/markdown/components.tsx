@@ -99,6 +99,7 @@ export function createMarkdownComponents(
     filePath?: string,
     options?: {
         codeBlockMaxLines?: number
+        plainCodeBlocks?: boolean
         onInternalLinkClick?: (href: string) => Promise<void> | void
     }
 ): Components {
@@ -188,6 +189,16 @@ export function createMarkdownComponents(
 
             if (isInline) {
                 return <InlineCode>{children}</InlineCode>
+            }
+
+            if (options?.plainCodeBlocks) {
+                return (
+                    <pre className="my-4 overflow-x-auto rounded-lg border border-white/10 bg-sparkle-card p-4">
+                        <code className="whitespace-pre text-sm font-mono leading-6 text-sparkle-text-dark">
+                            {String(children).replace(/\n$/, '')}
+                        </code>
+                    </pre>
+                )
             }
 
             return (

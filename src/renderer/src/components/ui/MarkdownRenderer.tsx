@@ -15,18 +15,23 @@ interface MarkdownRendererProps {
     className?: string
     filePath?: string
     codeBlockMaxLines?: number
+    lightweight?: boolean
     onInternalLinkClick?: (href: string) => Promise<void> | void
 }
 
-function MarkdownRenderer({ content, className, filePath, codeBlockMaxLines, onInternalLinkClick }: MarkdownRendererProps) {
+function MarkdownRenderer({ content, className, filePath, codeBlockMaxLines, lightweight = false, onInternalLinkClick }: MarkdownRendererProps) {
     const components = useMemo(
-        () => createMarkdownComponents(filePath, { codeBlockMaxLines, onInternalLinkClick }),
-        [filePath, codeBlockMaxLines, onInternalLinkClick]
+        () => createMarkdownComponents(filePath, {
+            codeBlockMaxLines,
+            onInternalLinkClick,
+            plainCodeBlocks: lightweight
+        }),
+        [filePath, codeBlockMaxLines, lightweight, onInternalLinkClick]
     )
 
     return (
         <div className={cn('markdown-body break-words [overflow-wrap:anywhere] [word-break:break-word]', className)}>
-            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={components}>
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={lightweight ? [] : [rehypeRaw]} components={components}>
                 {content}
             </Markdown>
         </div>
@@ -40,5 +45,6 @@ export default memo(
         previous.className === next.className &&
         previous.filePath === next.filePath &&
         previous.codeBlockMaxLines === next.codeBlockMaxLines &&
+        previous.lightweight === next.lightweight &&
         previous.onInternalLinkClick === next.onInternalLinkClick
 )

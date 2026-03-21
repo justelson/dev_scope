@@ -1,35 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-    buildPullRequestExecutionPlan,
-    getPreferredGitRemote
-} from '@/lib/gitPublishPlanner'
-import {
-    buildGitHubPullRequestUrl,
     getProjectPullRequestConfig,
-    getPullRequestChangeSourceLabel,
     mergeProjectPullRequestConfig,
     resolvePreferredPullRequestProvider,
     resolvePullRequestGuideText
 } from '@/lib/pullRequestWorkflow'
 import type {
-    PullRequestChangeSource,
     PullRequestGuideMode,
     PullRequestGuideSource
 } from '@/lib/settings'
-import { buildPushRangeSummary } from '../PushRangeConfirmModal'
 import { type PullRequestModalProps, type StatusMessage } from './types'
-import {
-    buildDiffContext,
-    getPathTail
-} from './utils'
-
-type EnsuredDraftResult = {
-    title: string
-    body: string
-    source: 'existing' | 'template' | 'ai' | 'ai-fallback'
-    provider?: 'groq' | 'gemini'
-    error?: string
-}
 
 export function usePullRequestModalController(props: PullRequestModalProps) {
     const {
@@ -38,54 +18,51 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
         projectPath,
         currentBranch,
         branches,
-        remotes,
         unstagedFiles,
         stagedFiles,
-        unpushedCommits,
         settings,
         updateSettings,
-        showToast
+        showToast,
+        githubPublishContext
     } = props
 
-    const preferredRemote = useMemo(() => getPreferredGitRemote(remotes), [remotes])
     const projectDefaults = useMemo(
         () => getProjectPullRequestConfig(settings, projectPath),
         [projectPath, settings]
     )
 
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
-    const [isDraftEditorOpen, setIsDraftEditorOpen] = useState(false)
     const [guideSource, setGuideSource] = useState<PullRequestGuideSource>(projectDefaults.guideSource)
     const [guideMode, setGuideMode] = useState<PullRequestGuideMode>(projectDefaults.guide.mode)
     const [guideText, setGuideText] = useState(projectDefaults.guide.text)
     const [guideFilePath, setGuideFilePath] = useState(projectDefaults.guide.filePath)
     const [targetBranch, setTargetBranch] = useState(projectDefaults.targetBranch)
     const [draftMode, setDraftMode] = useState(projectDefaults.draft)
-    const [changeSource, setChangeSource] = useState<PullRequestChangeSource>(projectDefaults.changeSource)
-    const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(unpushedCommits[0]?.hash ?? null)
-    const [draftTitle, setDraftTitle] = useState('')
-    const [draftBody, setDraftBody] = useState('')
     const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
-    const [isGenerating, setIsGenerating] = useState(false)
     const [isExecuting, setIsExecuting] = useState(false)
+    const [isLoadingPullRequest, setIsLoadingPullRequest] = useState(false)
+    const [existingPullRequest, setExistingPullRequest] = useState<{
+        number: number
+        title: string
+        url: string
+        baseBranch: string
+        headBranch: string
+        state: 'open' | 'closed' | 'merged'
+    } | null>(null)
 
     useEffect(() => {
         if (!isOpen) return
         const nextDefaults = getProjectPullRequestConfig(settings, projectPath)
         setIsAdvancedOpen(false)
-        setIsDraftEditorOpen(false)
         setGuideSource(nextDefaults.guideSource)
         setGuideMode(nextDefaults.guide.mode)
         setGuideText(nextDefaults.guide.text)
         setGuideFilePath(nextDefaults.guide.filePath)
         setTargetBranch(nextDefaults.targetBranch)
         setDraftMode(nextDefaults.draft)
-        setChangeSource(nextDefaults.changeSource)
-        setSelectedCommitHash(unpushedCommits[0]?.hash ?? null)
-        setDraftTitle('')
-        setDraftBody('')
         setStatusMessage(null)
-    }, [currentBranch, isOpen, projectPath, settings, unpushedCommits])
+        setExistingPullRequest(null)
+    }, [isOpen, projectPath, settings])
 
     useEffect(() => {
         if (!isOpen || typeof document === 'undefined') return
@@ -97,19 +74,48 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
     }, [isOpen])
 
     useEffect(() => {
-        if (selectedCommitHash && unpushedCommits.some((commit) => commit.hash === selectedCommitHash)) return
-        setSelectedCommitHash(unpushedCommits[0]?.hash ?? null)
-    }, [selectedCommitHash, unpushedCommits])
+        if (!isOpen) return
+        let cancelled = false
 
-    const selectedPushSummary = useMemo(
-        () => (selectedCommitHash ? buildPushRangeSummary(unpushedCommits, selectedCommitHash) : null),
-        [selectedCommitHash, unpushedCommits]
-    )
+        async function loadCurrentPullRequest() {
+            setIsLoadingPullRequest(true)
+            try {
+                const result = await window.devscope.getCurrentBranchPullRequest(projectPath)
+                if (cancelled) return
+                if (!result?.success) {
+                    setExistingPullRequest(null)
+                    return
+                }
+                const nextPullRequest = result.pullRequest ?? null
+                setExistingPullRequest(nextPullRequest)
+                if (nextPullRequest?.state === 'open') {
+                    setStatusMessage({
+                        tone: 'info',
+                        text: `Open PR #${nextPullRequest.number} already exists for this branch.`
+                    })
+                }
+            } catch {
+                if (!cancelled) {
+                    setExistingPullRequest(null)
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingPullRequest(false)
+                }
+            }
+        }
+
+        void loadCurrentPullRequest()
+        return () => {
+            cancelled = true
+        }
+    }, [isOpen, projectPath])
+
     const projectGuideConfig = useMemo(
         () => ({ mode: guideMode, text: guideText, filePath: guideFilePath }),
         [guideFilePath, guideMode, guideText]
     )
-    const changeSourceLabel = getPullRequestChangeSourceLabel(changeSource)
+
     const targetBranchOptions = useMemo(() => {
         const names = branches.filter((branch) => branch.name).map((branch) => branch.name)
         return [...new Set([targetBranch, 'main', 'dev', ...names].map((name) => String(name || '').trim()).filter(Boolean))].map((name) => ({
@@ -117,43 +123,21 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
             label: name
         }))
     }, [branches, targetBranch])
-    const executionPlan = useMemo(
-        () => buildPullRequestExecutionPlan({
-            changeSource,
-            draftMode,
-            currentBranch,
-            branches,
-            remotes,
-            unstagedFiles,
-            stagedFiles,
-            unpushedCommits,
-            selectedCommitHash,
-            headBranch: currentBranch,
-            githubPublishContext: props.githubPublishContext
-        }),
-        [
-            branches,
-            changeSource,
-            currentBranch,
-            draftMode,
-            props.githubPublishContext,
-            remotes,
-            selectedCommitHash,
-            stagedFiles,
-            unstagedFiles,
-            unpushedCommits
-        ]
-    )
-    const hasGitHubRemote = Boolean(preferredRemote?.pushUrl && buildGitHubPullRequestUrl({
-        remoteUrl: preferredRemote.pushUrl,
-        baseBranch: targetBranch || 'main',
-        headBranch: currentBranch || 'head',
-        title: draftTitle || 'Draft PR',
-        body: draftBody || 'Draft body',
-        draft: draftMode
-    }))
-    const publishPreview = executionPlan.publishPlan
-    const primaryActionLabel = 'Open PR Draft'
+
+    const hasGitHubRemote = Boolean(githubPublishContext?.canOpenPullRequest)
+    const hasWorkingTreeChanges = unstagedFiles.length > 0 || stagedFiles.length > 0
+    const isDetachedHead = !currentBranch || currentBranch === 'HEAD'
+    const validationError = !hasGitHubRemote
+        ? 'Add a GitHub remote before creating a PR.'
+        : isDetachedHead
+            ? 'Detached HEAD: checkout a branch before creating a PR.'
+            : hasWorkingTreeChanges
+                ? 'Commit local changes before creating a PR.'
+                : ''
+
+    const primaryActionLabel = existingPullRequest?.state === 'open' ? 'View PR' : 'Create PR'
+    const isPrimaryActionDisabled = isExecuting
+        || (!existingPullRequest && (isLoadingPullRequest || Boolean(validationError)))
 
     function persistProjectConfig() {
         updateSettings({
@@ -161,15 +145,9 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
                 guideSource,
                 guide: projectGuideConfig,
                 targetBranch,
-                draft: draftMode,
-                changeSource
+                draft: draftMode
             })
         })
-    }
-
-    function applyDraft(nextDraft: { title: string; body: string }) {
-        setDraftTitle(nextDraft.title)
-        setDraftBody(nextDraft.body)
     }
 
     async function handlePickGuideFile() {
@@ -183,155 +161,21 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
         setGuideFilePath(result.filePath)
         setStatusMessage({
             tone: 'info',
-            text: `Using ${getPathTail(result.filePath)} as the project PR guide.`
+            text: `Using ${result.filePath.split(/[/\\]/).pop() || result.filePath} as the project PR guide.`
         })
     }
 
-    async function ensureDraft(): Promise<EnsuredDraftResult> {
-        if (draftTitle.trim() && draftBody.trim()) {
-            return {
-                title: draftTitle.trim(),
-                body: draftBody.trim(),
-                source: 'existing'
-            }
-        }
-
-        const guideTextValue = await resolvePullRequestGuideText(settings, projectPath, guideSource, projectGuideConfig)
-        const diffContext = await buildDiffContext({
-            projectName,
-            currentBranch,
-            targetBranch,
-            scopeLabel: changeSourceLabel,
-            projectPath,
-            changeSource,
-            unstagedFiles,
-            stagedFiles,
-            unpushedCommits,
-            selectedCommitHash,
-            guideText: guideTextValue
-        })
-        const provider = resolvePreferredPullRequestProvider(settings)
-        const fallbackDraft: EnsuredDraftResult = {
-            title: diffContext.fallbackDraft.title,
-            body: diffContext.fallbackDraft.body,
-            source: provider ? 'ai-fallback' : 'template',
-            provider: provider?.provider
-        }
-
-        if (!provider) {
-            applyDraft(fallbackDraft)
-            return fallbackDraft
-        }
-
-        try {
-            const result = await window.devscope.generatePullRequestDraft(provider.provider, provider.apiKey, {
-                projectName,
-                currentBranch,
-                targetBranch,
-                scopeLabel: changeSourceLabel,
-                diff: diffContext.diff,
-                guideText: guideTextValue
-            })
-
-            if (!result?.success) {
-                applyDraft(fallbackDraft)
-                return {
-                    ...fallbackDraft,
-                    error: result?.error || 'Failed to generate the PR draft.'
-                }
-            }
-
-            const nextDraft = {
-                title: String(result.title || '').trim(),
-                body: String(result.body || '').trim()
-            }
-            if (!nextDraft.title || !nextDraft.body) {
-                applyDraft(fallbackDraft)
-                return {
-                    ...fallbackDraft,
-                    error: 'PR draft generation returned empty content.'
-                }
-            }
-
-            applyDraft(nextDraft)
-            return {
-                ...nextDraft,
-                source: 'ai',
-                provider: provider.provider
-            }
-        } catch (err: any) {
-            applyDraft(fallbackDraft)
-            return {
-                ...fallbackDraft,
-                error: err?.message || 'Failed to generate the PR draft.'
-            }
-        }
-    }
-
-    async function handleGenerateDraft() {
-        if (executionPlan.missingReason) {
-            setStatusMessage({ tone: 'error', text: executionPlan.missingReason })
-            return null
-        }
-
-        persistProjectConfig()
-        setIsGenerating(true)
-        setStatusMessage(null)
-        try {
-            const draft = await ensureDraft()
-            setStatusMessage({
-                tone: draft.source === 'ai-fallback' ? 'info' : 'success',
-                text: draft.source === 'ai'
-                    ? `Draft generated with ${draft.provider === 'groq' ? 'Groq' : 'Gemini'}.`
-                    : draft.source === 'ai-fallback'
-                        ? `${draft.provider === 'groq' ? 'Groq' : 'Gemini'} returned an unusable draft, so DevScope used the built-in template.`
-                        : draft.source === 'template'
-                            ? 'No AI key was configured, so DevScope used the built-in draft template.'
-                            : 'Using the current PR draft.'
-            })
-            if (draft.source === 'ai-fallback' && draft.error) {
-                showToast(draft.error, undefined, undefined, 'warning')
-            }
-            return draft
-        } catch (err: any) {
-            const message = err?.message || 'Failed to generate the PR draft.'
-            setStatusMessage({ tone: 'error', text: message })
-            showToast(message, undefined, undefined, 'error')
-            return null
-        } finally {
-            setIsGenerating(false)
-        }
-    }
-
-    async function handleCopyDraft() {
-        const title = draftTitle.trim()
-        const body = draftBody.trim()
-        if (!title || !body) {
-            setStatusMessage({ tone: 'error', text: 'Generate or write the PR title and body first.' })
+    async function openOrCreatePullRequest() {
+        if (existingPullRequest?.state === 'open') {
+            persistProjectConfig()
+            window.open(existingPullRequest.url, '_blank', 'noopener,noreferrer')
+            showToast(`Opened PR #${existingPullRequest.number}.`)
+            props.onClose()
             return
         }
 
-        try {
-            const copyResult = await window.devscope.copyToClipboard(`# ${title}\n\n${body}`)
-            if (!copyResult?.success) throw new Error(copyResult?.error || 'Failed to copy the PR draft.')
-            setStatusMessage({ tone: 'success', text: 'Copied the PR draft to the clipboard.' })
-            showToast('Copied PR draft to the clipboard.')
-        } catch (err: any) {
-            const message = err?.message || 'Failed to copy the PR draft.'
-            setStatusMessage({ tone: 'error', text: message })
-            showToast(message, undefined, undefined, 'error')
-        }
-    }
-
-    async function openGitHubPr() {
-        if (!hasGitHubRemote || !preferredRemote?.pushUrl) {
-            const message = 'This flow currently opens GitHub PRs only. Add a GitHub remote first.'
-            setStatusMessage({ tone: 'error', text: message })
-            showToast(message, undefined, undefined, 'error')
-            return
-        }
-        if (executionPlan.missingReason) {
-            setStatusMessage({ tone: 'error', text: executionPlan.missingReason })
+        if (validationError) {
+            setStatusMessage({ tone: 'error', text: validationError })
             return
         }
 
@@ -339,26 +183,38 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
         setStatusMessage(null)
         try {
             persistProjectConfig()
-            const ensuredDraft = await ensureDraft()
-            if (!ensuredDraft.title || !ensuredDraft.body) {
-                throw new Error('Generate or write the PR title and body first.')
-            }
-
-            const prUrl = buildGitHubPullRequestUrl({
-                remoteUrl: preferredRemote.pushUrl,
-                baseBranch: targetBranch,
-                headBranch: currentBranch,
-                title: ensuredDraft.title,
-                body: ensuredDraft.body,
-                draft: draftMode
+            const guideTextValue = await resolvePullRequestGuideText(settings, projectPath, guideSource, projectGuideConfig)
+            const provider = resolvePreferredPullRequestProvider(settings)
+            const result = await window.devscope.createOrOpenPullRequest(projectPath, {
+                projectName,
+                targetBranch,
+                draft: draftMode,
+                guideText: guideTextValue,
+                provider: provider?.provider,
+                apiKey: provider?.apiKey,
+                model: provider?.model
             })
 
-            if (!prUrl) throw new Error('Could not build the GitHub PR URL for this remote.')
-            window.open(prUrl, '_blank', 'noopener,noreferrer')
-            showToast(draftMode ? 'Opened GitHub draft PR page.' : 'Opened GitHub PR page.')
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to create the pull request.')
+            }
+
+            setExistingPullRequest(result.pullRequest)
+            const prNumberLabel = result.pullRequest.number > 0 ? ` #${result.pullRequest.number}` : ''
+            const statusText = result.status === 'opened_existing'
+                ? `Opened existing PR${prNumberLabel}.`
+                : result.draftSource === 'ai' && result.provider
+                    ? `Created PR${prNumberLabel} with ${result.provider === 'groq' ? 'Groq' : result.provider === 'gemini' ? 'Gemini' : 'Codex'} draft content.`
+                    : result.draftSource === 'fallback'
+                        ? `Created PR${prNumberLabel} with the built-in draft template.`
+                        : `Created PR${prNumberLabel}.`
+
+            setStatusMessage({ tone: 'success', text: statusText })
+            window.open(result.pullRequest.url, '_blank', 'noopener,noreferrer')
+            showToast(statusText)
             props.onClose()
         } catch (err: any) {
-            const message = err?.message || 'Failed to open the PR flow.'
+            const message = err?.message || 'Failed to create the pull request.'
             setStatusMessage({ tone: 'error', text: message })
             showToast(message, undefined, undefined, 'error')
         } finally {
@@ -367,46 +223,31 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
     }
 
     return {
-        preferredRemote,
-        projectGuideConfig,
-        selectedPushSummary,
-        changeSourceLabel,
-        targetBranchOptions,
-        hasGitHubRemote,
-        executionPlan,
-        publishPreview,
-        primaryActionLabel,
         isAdvancedOpen,
-        isDraftEditorOpen,
         guideSource,
         guideMode,
         guideText,
         guideFilePath,
         targetBranch,
         draftMode,
-        changeSource,
-        selectedCommitHash,
-        draftTitle,
-        draftBody,
         statusMessage,
-        isGenerating,
         isExecuting,
+        isLoadingPullRequest,
+        existingPullRequest,
+        hasGitHubRemote,
+        validationError,
+        targetBranchOptions,
+        primaryActionLabel,
+        isPrimaryActionDisabled,
         setIsAdvancedOpen,
-        setIsDraftEditorOpen,
         setGuideSource,
         setGuideMode,
         setGuideText,
         setGuideFilePath,
         setTargetBranch,
         setDraftMode,
-        setChangeSource,
-        setSelectedCommitHash,
-        setDraftTitle,
-        setDraftBody,
         persistProjectConfig,
         handlePickGuideFile,
-        handleGenerateDraft,
-        handleCopyDraft,
-        openGitHubPr
+        openOrCreatePullRequest
     }
 }

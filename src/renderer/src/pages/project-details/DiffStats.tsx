@@ -7,6 +7,7 @@ interface DiffStatsProps {
     className?: string
     loading?: boolean
     preserveValuesWhileLoading?: boolean
+    showBar?: boolean
 }
 
 export function DiffStats({
@@ -15,7 +16,8 @@ export function DiffStats({
     compact = false,
     className,
     loading = false,
-    preserveValuesWhileLoading = false
+    preserveValuesWhileLoading = false,
+    showBar = true
 }: DiffStatsProps) {
     const safeAdditions = Math.max(0, additions)
     const safeDeletions = Math.max(0, deletions)
@@ -32,9 +34,11 @@ export function DiffStats({
                 <span className={cn(compact ? 'text-[10px]' : 'text-xs', 'font-mono text-white/35 animate-pulse')}>
                     -...
                 </span>
-                <div className={cn(compact ? 'h-1.5 w-16' : 'h-2 w-24', 'overflow-hidden rounded-none border border-white/10 bg-white/5')}>
-                    <div className="h-full w-full animate-pulse bg-white/12" />
-                </div>
+                {showBar ? (
+                    <div className={cn(compact ? 'h-1.5 w-16' : 'h-2 w-24', 'overflow-hidden rounded-none border border-white/10 bg-white/5')}>
+                        <div className="h-full w-full animate-pulse bg-white/12" />
+                    </div>
+                ) : null}
             </div>
         )
     }
@@ -55,23 +59,25 @@ export function DiffStats({
             )}>
                 -{safeDeletions}
             </span>
-            <div className={cn(
-                compact ? 'h-1.5 w-16' : 'h-2 w-24',
-                'overflow-hidden rounded-none bg-white/10 border border-white/10',
-                loading && preserveValuesWhileLoading && 'relative'
-            )}>
-                {total > 0 ? (
-                    <div className="flex h-full w-full">
-                        <div className="h-full bg-emerald-500/90" style={{ width: `${addRatio}%` }} />
-                        <div className="h-full bg-rose-500/90" style={{ width: `${delRatio}%` }} />
-                    </div>
-                ) : (
-                    <div className="h-full w-full bg-white/15" />
-                )}
-                {loading && preserveValuesWhileLoading ? (
-                    <div className="pointer-events-none absolute inset-0 animate-pulse bg-white/8" />
-                ) : null}
-            </div>
+            {showBar ? (
+                <div className={cn(
+                    compact ? 'h-1.5 w-16' : 'h-2 w-24',
+                    'overflow-hidden rounded-none bg-white/10 border border-white/10',
+                    loading && preserveValuesWhileLoading && 'relative'
+                )}>
+                    {total > 0 ? (
+                        <div className="flex h-full w-full">
+                            <div className="h-full bg-emerald-500/90" style={{ width: `${addRatio}%` }} />
+                            <div className="h-full bg-rose-500/90" style={{ width: `${delRatio}%` }} />
+                        </div>
+                    ) : (
+                        <div className="h-full w-full bg-white/15" />
+                    )}
+                    {loading && preserveValuesWhileLoading ? (
+                        <div className="pointer-events-none absolute inset-0 animate-pulse bg-white/8" />
+                    ) : null}
+                </div>
+            ) : null}
         </div>
     )
 }

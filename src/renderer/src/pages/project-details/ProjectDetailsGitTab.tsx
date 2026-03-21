@@ -56,8 +56,11 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         handleGenerateCommitMessage,
         isGeneratingCommitMessage,
         isCommitting,
+        isStackedActionRunning,
         settings,
         handleCommit,
+        handleCommitPushAndCreatePullRequest,
+        handleDangerouslyStageCommitPushAndCreatePullRequest,
         handleStageFile,
         handleUnstageFile,
         handleStageAll,
@@ -197,8 +200,16 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         handleGenerateCommitMessage={handleGenerateCommitMessage}
                         isGeneratingCommitMessage={isGeneratingCommitMessage}
                         isCommitting={isCommitting}
+                        isStackedActionRunning={isStackedActionRunning}
+                        hasGitHubRemote={hasGitHubRemote}
                         settings={settings}
+                        updateSettings={updateSettings}
+                        currentBranch={currentBranch}
+                        branches={branches}
+                        showToast={showToast}
                         handleCommit={handleCommit}
+                        handleCommitPushAndCreatePullRequest={handleCommitPushAndCreatePullRequest}
+                        handleDangerouslyStageCommitPushAndCreatePullRequest={handleDangerouslyStageCommitPushAndCreatePullRequest}
                         handleStageFile={handleStageFile}
                         handleUnstageFile={handleUnstageFile}
                         handleStageAll={handleStageAll}

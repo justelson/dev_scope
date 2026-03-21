@@ -3,13 +3,15 @@ import type {
     AssistantInteractionMode,
     AssistantRuntimeMode
 } from './runtime'
-import type { AssistantDomainEvent } from './read-model'
+import type { AssistantAccountOverview, AssistantDomainEvent, AssistantRuntimeStatus, AssistantSnapshot } from './read-model'
 
 export const ASSISTANT_IPC = {
     subscribe: 'devscope:assistant:subscribe',
     unsubscribe: 'devscope:assistant:unsubscribe',
+    bootstrap: 'devscope:assistant:bootstrap',
     getSnapshot: 'devscope:assistant:getSnapshot',
     getStatus: 'devscope:assistant:getStatus',
+    getAccountOverview: 'devscope:assistant:getAccountOverview',
     listModels: 'devscope:assistant:listModels',
     connect: 'devscope:assistant:connect',
     disconnect: 'devscope:assistant:disconnect',
@@ -21,6 +23,7 @@ export const ASSISTANT_IPC = {
     deleteMessage: 'devscope:assistant:deleteMessage',
     clearLogs: 'devscope:assistant:clearLogs',
     setSessionProjectPath: 'devscope:assistant:setSessionProjectPath',
+    persistClipboardImage: 'devscope:assistant:persistClipboardImage',
     newThread: 'devscope:assistant:newThread',
     sendPrompt: 'devscope:assistant:sendPrompt',
     interruptTurn: 'devscope:assistant:interruptTurn',
@@ -35,6 +38,15 @@ export interface AssistantConnectOptions {
     sessionId?: string
 }
 
+export interface AssistantBootstrapPayload {
+    snapshot: AssistantSnapshot
+    status: AssistantRuntimeStatus
+}
+
+export interface AssistantAccountOverviewPayload {
+    overview: AssistantAccountOverview
+}
+
 export interface AssistantSendPromptOptions {
     sessionId?: string
     model?: string
@@ -47,6 +59,12 @@ export interface AssistantSendPromptOptions {
 export interface AssistantDeleteMessageInput {
     sessionId?: string
     messageId: string
+}
+
+export interface AssistantPersistClipboardImageInput {
+    dataUrl: string
+    fileName?: string
+    mimeType?: string
 }
 
 export interface AssistantClearLogsInput {
@@ -64,7 +82,8 @@ export interface AssistantUserInputResponseInput {
 }
 
 export interface AssistantEventStreamPayload {
-    event: AssistantDomainEvent
+    event?: AssistantDomainEvent
+    events?: AssistantDomainEvent[]
 }
 
 export function assertAssistantIpcContract(): void {

@@ -1,10 +1,11 @@
-import { Check, ChevronDown, ChevronRight, Copy, Loader2, Trash2 } from 'lucide-react'
+import { memo } from 'react'
+import { Check, ChevronDown, ChevronRight, Copy, Loader2, PlugZap, Trash2 } from 'lucide-react'
 import type { AssistantActivity } from '@shared/assistant/contracts'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { cn } from '@/lib/utils'
 import { IssueLogRow, copyTextToClipboard, getUsageMetricDotClass, getUsageMetricToneClass, type UsageMetricTone } from './AssistantPageHelpers'
 
-export function AssistantThreadDetailsPanel(props: {
+export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsPanel(props: {
     open: boolean
     selectedProjectPath: string
     selectedProjectLabel: string
@@ -31,6 +32,9 @@ export function AssistantThreadDetailsPanel(props: {
     clearingLogs: boolean
     logsExpanded: boolean
     selectedSessionId?: string | null
+    assistantConnected: boolean
+    assistantAvailable: boolean
+    commandPending: boolean
     onClose: () => void
     onToggleProjectPath: () => void
     onCopyProjectPath: () => void
@@ -39,14 +43,32 @@ export function AssistantThreadDetailsPanel(props: {
     onClearLogs: () => void
     onCopyLog: (activity: AssistantActivity) => void
     onShowLogDetails: (activity: AssistantActivity) => void
+    onToggleAssistantConnection: () => void
 }) {
-    const { open, selectedProjectPath, selectedProjectLabel, displayProjectPath, showFullProjectPath, projectPathCopied, contextPercentage, contextColor, contextUsedDisplay, contextAvailableDisplay, pendingApprovalsCount, pendingUserInputsCount, sidebarSelectedModel, selectedRuntimeLabel, selectedThinkingLabel, selectedSpeedLabel, sidebarMetricChips, issueActivities, latestIssueGroup, olderIssueGroups, copiedLogId, copyErrorByLogId, allLogsCopied, clearingLogs, logsExpanded, selectedSessionId, onClose, onToggleProjectPath, onCopyProjectPath, onToggleLogsExpanded, onCopyAllLogs, onClearLogs, onCopyLog, onShowLogDetails } = props
+    const { open, selectedProjectPath, selectedProjectLabel, displayProjectPath, showFullProjectPath, projectPathCopied, contextPercentage, contextColor, contextUsedDisplay, contextAvailableDisplay, pendingApprovalsCount, pendingUserInputsCount, sidebarSelectedModel, selectedRuntimeLabel, selectedThinkingLabel, selectedSpeedLabel, sidebarMetricChips, issueActivities, latestIssueGroup, olderIssueGroups, copiedLogId, copyErrorByLogId, allLogsCopied, clearingLogs, logsExpanded, selectedSessionId, assistantConnected, assistantAvailable, commandPending, onClose, onToggleProjectPath, onCopyProjectPath, onToggleLogsExpanded, onCopyAllLogs, onClearLogs, onCopyLog, onShowLogDetails, onToggleAssistantConnection } = props
 
     return (
         <div className={cn('relative overflow-hidden transition-all duration-300', open ? 'opacity-100' : 'opacity-0 pointer-events-none')} style={{ width: open ? '380px' : '0px' }}>
             <aside className="flex h-full min-h-0 flex-col bg-sparkle-bg">
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-                    <h2 className="text-sm font-semibold text-sparkle-text">Thread Details</h2>
+                    <div className="flex min-w-0 items-center gap-2">
+                        <h2 className="text-sm font-semibold text-sparkle-text">Thread Details</h2>
+                        <button
+                            type="button"
+                            onClick={onToggleAssistantConnection}
+                            disabled={!assistantAvailable || commandPending}
+                            className={cn(
+                                'inline-flex size-7 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                                assistantConnected
+                                    ? 'border-emerald-500/25 bg-emerald-500/[0.10] text-emerald-200 hover:border-emerald-400/35 hover:bg-emerald-500/[0.14]'
+                                    : 'border-red-500/25 bg-red-500/[0.10] text-red-200 hover:border-red-400/35 hover:bg-red-500/[0.14]'
+                            )}
+                            title={assistantConnected ? 'Disconnect assistant' : 'Connect assistant'}
+                            aria-label={assistantConnected ? 'Disconnect assistant' : 'Connect assistant'}
+                        >
+                            <PlugZap size={13} />
+                        </button>
+                    </div>
                     <button type="button" onClick={onClose} className="rounded-md border border-white/10 bg-white/[0.03] p-1.5 text-sparkle-text-secondary transition-colors hover:border-white/20 hover:bg-white/[0.05] hover:text-sparkle-text" title="Close panel"><ChevronRight size={14} /></button>
                 </div>
                 <div className="shrink-0 space-y-3 border-b border-white/10 px-4 py-4">
@@ -114,4 +136,4 @@ export function AssistantThreadDetailsPanel(props: {
             </aside>
         </div>
     )
-}
+}, (prev, next) => !prev.open && !next.open)

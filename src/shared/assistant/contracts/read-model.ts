@@ -88,6 +88,8 @@ export interface AssistantThread {
     providerThreadId: string | null
     model: string
     cwd: string | null
+    messageCount: number
+    lastSeenCompletedTurnId: string | null
     runtimeMode: AssistantRuntimeMode
     interactionMode: AssistantInteractionMode
     state: AssistantThreadState
@@ -119,6 +121,56 @@ export interface AssistantModelInfo {
     id: string
     label: string
     description?: string
+}
+
+export type AssistantAccountPlanType =
+    | 'free'
+    | 'go'
+    | 'plus'
+    | 'pro'
+    | 'team'
+    | 'business'
+    | 'enterprise'
+    | 'edu'
+    | 'unknown'
+
+export type AssistantAuthMode = 'apikey' | 'chatgpt' | 'chatgptAuthTokens'
+
+export interface AssistantAccountIdentity {
+    type: 'apiKey' | 'chatgpt'
+    email: string | null
+    planType: AssistantAccountPlanType | null
+}
+
+export interface AssistantCreditsSnapshot {
+    hasCredits: boolean
+    unlimited: boolean
+    balance: string | null
+}
+
+export interface AssistantRateLimitWindow {
+    usedPercent: number
+    remainingPercent: number
+    windowDurationMins: number | null
+    resetsAt: number | null
+}
+
+export interface AssistantRateLimitSnapshot {
+    limitId: string | null
+    limitName: string | null
+    primary: AssistantRateLimitWindow | null
+    secondary: AssistantRateLimitWindow | null
+    credits: AssistantCreditsSnapshot | null
+    planType: AssistantAccountPlanType | null
+}
+
+export interface AssistantAccountOverview {
+    account: AssistantAccountIdentity | null
+    authMode: AssistantAuthMode | null
+    requiresOpenaiAuth: boolean
+    rateLimits: AssistantRateLimitSnapshot | null
+    rateLimitsByLimitId: Record<string, AssistantRateLimitSnapshot>
+    fetchedAt: string
 }
 
 export interface AssistantRuntimeStatus {
@@ -164,4 +216,3 @@ export interface AssistantDomainEvent {
     threadId?: string
     payload: Record<string, unknown>
 }
-

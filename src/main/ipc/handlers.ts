@@ -22,24 +22,27 @@ import {
     handleGenerateCommitMessage,
     handleGetAiDebugLogs,
     handleGetStartupSettings,
-    handleGeneratePullRequestDraft,
     handleSetStartupSettings,
+    handleTestCodexConnection,
     handleTestGeminiConnection,
     handleTestGroqConnection
 } from './handlers/settings-ai-handlers'
 import {
     handleAssistantArchiveSession,
+    handleAssistantBootstrap,
     handleAssistantClearLogs,
     handleAssistantConnect,
     handleAssistantCreateSession,
     handleAssistantDeleteMessage,
     handleAssistantDeleteSession,
     handleAssistantDisconnect,
+    handleAssistantGetAccountOverview,
     handleAssistantGetSnapshot,
     handleAssistantGetStatus,
     handleAssistantInterruptTurn,
     handleAssistantListModels,
     handleAssistantNewThread,
+    handleAssistantPersistClipboardImage,
     handleAssistantRenameSession,
     handleAssistantRespondApproval,
     handleAssistantRespondUserInput,
@@ -113,6 +116,7 @@ import {
     handleGetGitStatus,
     handleGetGitStatusDetailed,
     handleGetGitHubPublishContext,
+    handleGetCurrentBranchPullRequest,
     handleGetGlobalGitUser,
     handleGetGitUser,
     handleGetGitignorePatterns,
@@ -132,6 +136,8 @@ import {
     handleCheckoutBranch,
     handleCreateBranch,
     handleCreateCommit,
+    handleCreateOrOpenPullRequest,
+    handleCommitPushAndCreatePullRequest,
     handleCreateInitialCommit,
     handleCreateStash,
     handleCreateTag,
@@ -184,14 +190,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getStartupSettings', handleGetStartupSettings)
     ipcMain.handle('devscope:testGroqConnection', handleTestGroqConnection)
     ipcMain.handle('devscope:testGeminiConnection', handleTestGeminiConnection)
+    ipcMain.handle('devscope:testCodexConnection', handleTestCodexConnection)
     ipcMain.handle('devscope:generateCommitMessage', handleGenerateCommitMessage)
-    ipcMain.handle('devscope:generatePullRequestDraft', handleGeneratePullRequestDraft)
     ipcMain.handle('devscope:getAiDebugLogs', handleGetAiDebugLogs)
     ipcMain.handle('devscope:clearAiDebugLogs', handleClearAiDebugLogs)
     ipcMain.handle(ASSISTANT_IPC.subscribe, handleAssistantSubscribe)
     ipcMain.handle(ASSISTANT_IPC.unsubscribe, handleAssistantUnsubscribe)
+    ipcMain.handle(ASSISTANT_IPC.bootstrap, handleAssistantBootstrap)
     ipcMain.handle(ASSISTANT_IPC.getSnapshot, handleAssistantGetSnapshot)
     ipcMain.handle(ASSISTANT_IPC.getStatus, handleAssistantGetStatus)
+    ipcMain.handle(ASSISTANT_IPC.getAccountOverview, handleAssistantGetAccountOverview)
     ipcMain.handle(ASSISTANT_IPC.listModels, handleAssistantListModels)
     ipcMain.handle(ASSISTANT_IPC.connect, handleAssistantConnect)
     ipcMain.handle(ASSISTANT_IPC.disconnect, handleAssistantDisconnect)
@@ -203,6 +211,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle(ASSISTANT_IPC.deleteMessage, handleAssistantDeleteMessage)
     ipcMain.handle(ASSISTANT_IPC.clearLogs, handleAssistantClearLogs)
     ipcMain.handle(ASSISTANT_IPC.setSessionProjectPath, handleAssistantSetSessionProjectPath)
+    ipcMain.handle(ASSISTANT_IPC.persistClipboardImage, handleAssistantPersistClipboardImage)
     ipcMain.handle(ASSISTANT_IPC.newThread, handleAssistantNewThread)
     ipcMain.handle(ASSISTANT_IPC.sendPrompt, handleAssistantSendPrompt)
     ipcMain.handle(ASSISTANT_IPC.interruptTurn, handleAssistantInterruptTurn)
@@ -262,6 +271,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getGlobalGitUser', handleGetGlobalGitUser)
     ipcMain.handle('devscope:getRepoOwner', handleGetRepoOwner)
     ipcMain.handle('devscope:getGitHubPublishContext', handleGetGitHubPublishContext)
+    ipcMain.handle('devscope:getCurrentBranchPullRequest', handleGetCurrentBranchPullRequest)
     ipcMain.handle('devscope:hasRemoteOrigin', handleHasRemoteOrigin)
     ipcMain.handle('devscope:getProjectsGitOverview', handleGetProjectsGitOverview)
     ipcMain.handle('devscope:checkIsGitRepo', handleCheckIsGitRepo)
@@ -270,6 +280,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:unstageFiles', handleUnstageFiles)
     ipcMain.handle('devscope:discardChanges', handleDiscardChanges)
     ipcMain.handle('devscope:createCommit', handleCreateCommit)
+    ipcMain.handle('devscope:createOrOpenPullRequest', handleCreateOrOpenPullRequest)
+    ipcMain.handle('devscope:commitPushAndCreatePullRequest', handleCommitPushAndCreatePullRequest)
     ipcMain.handle('devscope:setGlobalGitUser', handleSetGlobalGitUser)
     ipcMain.handle('devscope:pushCommits', handlePushCommits)
     ipcMain.handle('devscope:pushSingleCommit', handlePushSingleCommit)

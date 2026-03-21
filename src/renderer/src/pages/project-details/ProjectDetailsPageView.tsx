@@ -137,7 +137,10 @@ export function ProjectDetailsPageView(props: any) {
         handleGenerateCommitMessage,
         isGeneratingCommitMessage,
         isCommitting,
+        isStackedActionRunning,
         handleCommit,
+        handleCommitPushAndCreatePullRequest,
+        handleDangerouslyStageCommitPushAndCreatePullRequest,
         handleStageFile,
         handleUnstageFile,
         handleStageAll,
@@ -387,8 +390,11 @@ export function ProjectDetailsPageView(props: any) {
                 handleGenerateCommitMessage={handleGenerateCommitMessage}
                 isGeneratingCommitMessage={isGeneratingCommitMessage}
                 isCommitting={isCommitting}
+                isStackedActionRunning={isStackedActionRunning}
                 settings={settings}
                 handleCommit={handleCommit}
+                handleCommitPushAndCreatePullRequest={handleCommitPushAndCreatePullRequest}
+                handleDangerouslyStageCommitPushAndCreatePullRequest={handleDangerouslyStageCommitPushAndCreatePullRequest}
                 handleStageFile={handleStageFile}
                 handleUnstageFile={handleUnstageFile}
                 handleStageAll={handleStageAll}

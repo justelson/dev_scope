@@ -25,6 +25,8 @@ export function createAssistantThread(createdAt: string, previousThread?: Assist
         providerThreadId: null,
         model: previousThread?.model || '',
         cwd: cwd !== undefined ? cwd : (previousThread?.cwd || null),
+        messageCount: 0,
+        lastSeenCompletedTurnId: null,
         runtimeMode: previousThread?.runtimeMode || 'approval-required',
         interactionMode: previousThread?.interactionMode || 'default',
         state: 'idle',

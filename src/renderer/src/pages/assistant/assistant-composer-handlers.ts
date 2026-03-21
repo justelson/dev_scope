@@ -15,12 +15,10 @@ import {
     buildAttachmentPath,
     buildTextAttachmentFromPaste,
     createAttachmentId,
-    DRAFT_STORAGE_KEY,
     getContextFileMeta,
     inferImageExtensionFromMimeType,
     isLargeTextPaste,
     MAX_ATTACHMENT_CONTENT_CHARS,
-    MAX_IMAGE_DATA_URL_CHARS,
     readFileAsDataUrl,
     summarizeTextPreview
 } from './assistant-composer-utils'
@@ -81,7 +79,6 @@ export type AssistantComposerHandlersArgs = {
     removingAttachmentIds: string[]
     setRemovingAttachmentIds: SetStringArrayState
     textareaRef: RefObject<HTMLTextAreaElement | null>
-    syncTextareaOverlayScroll: (element: HTMLTextAreaElement | null) => void
 }
 
 export function createAssistantComposerHandlers(args: AssistantComposerHandlersArgs) {
@@ -127,8 +124,7 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         setComposerCursor,
         removingAttachmentIds,
         setRemovingAttachmentIds,
-        textareaRef,
-        syncTextareaOverlayScroll
+        textareaRef
     } = args
 
     const upsertAttachment = (attachment: ComposerContextFile) => {
@@ -169,7 +165,6 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
             setComposerCursor(nextCursor)
             textareaRef.current?.focus()
             textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
-            syncTextareaOverlayScroll(textareaRef.current)
         })
     }
 
@@ -183,19 +178,30 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         const looksLikeImageByName = /\.(png|jpe?g|gif|webp|svg|bmp|ico|tiff?|avif|apng|heic|heif|jfif|jxl)$/i.test(name)
         const needsInlineImageContent = source === 'paste' || !electronPath || metaPath.startsWith('clipboard://')
 
-        const addImageAttachment = (dataUrl: string, resolvedMimeType: string) => {
+        const addImageAttachment = async (dataUrl: string, resolvedMimeType: string) => {
+            let attachmentPath = metaPath
+            if (source === 'paste') {
+                const saveResult = await window.devscope.assistant.persistClipboardImage({
+                    dataUrl,
+                    fileName: name,
+                    mimeType: resolvedMimeType
+                })
+                if (!saveResult.success || !saveResult.path) {
+                    const errorMessage = saveResult.success ? 'Clipboard image path was not returned.' : saveResult.error
+                    throw new Error(errorMessage || 'Failed to save clipboard image.')
+                }
+                attachmentPath = saveResult.path
+            }
             upsertAttachment({
                 id: createAttachmentId(),
-                path: metaPath,
+                path: attachmentPath,
                 name,
                 mimeType: resolvedMimeType,
                 sizeBytes: file.size,
                 kind: 'image',
                 previewDataUrl: dataUrl,
-                content: needsInlineImageContent ? dataUrl : undefined,
-                previewText: source === 'paste'
-                    ? (dataUrl.length <= MAX_IMAGE_DATA_URL_CHARS ? 'Pasted image from clipboard.' : 'Pasted image from clipboard (large image, sent as full payload).')
-                    : 'Attached image file.',
+                content: needsInlineImageContent && source !== 'paste' ? dataUrl : undefined,
+                previewText: source === 'paste' ? 'Pasted image from clipboard.' : 'Attached image file.',
                 source,
                 animateIn: true
             })
@@ -205,7 +211,7 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
             try {
                 const dataUrl = await readFileAsDataUrl(file)
                 const dataUrlMimeMatch = dataUrl.match(/^data:([^;,]+)[;,]/i)
-                addImageAttachment(dataUrl, String(dataUrlMimeMatch?.[1] || '').trim().toLowerCase() || (mimeType.startsWith('image/') ? mimeType : 'image/png'))
+                await addImageAttachment(dataUrl, String(dataUrlMimeMatch?.[1] || '').trim().toLowerCase() || (mimeType.startsWith('image/') ? mimeType : 'image/png'))
             } catch {}
             return
         }
@@ -216,7 +222,7 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
                 const dataUrlMimeMatch = dataUrl.match(/^data:([^;,]+)[;,]/i)
                 const dataUrlMimeType = String(dataUrlMimeMatch?.[1] || '').trim().toLowerCase()
                 if (dataUrlMimeType.startsWith('image/')) {
-                    addImageAttachment(dataUrl, dataUrlMimeType)
+                    await addImageAttachment(dataUrl, dataUrlMimeType)
                     return
                 }
             } catch {}
@@ -278,7 +284,6 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         setContextFiles([])
         setHistoryCursor(null)
         setDraftBeforeHistory('')
-        try { localStorage.removeItem(DRAFT_STORAGE_KEY) } catch {}
         const success = await onSend(prompt, contextFilesForSend, {
             model: selectedModel || undefined,
             runtimeMode: selectedRuntimeMode,
@@ -350,7 +355,6 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
                 window.requestAnimationFrame(() => {
                     textareaRef.current?.focus()
                     textareaRef.current?.setSelectionRange(rangeStart, rangeStart)
-                    syncTextareaOverlayScroll(textareaRef.current)
                 })
                 return
             }

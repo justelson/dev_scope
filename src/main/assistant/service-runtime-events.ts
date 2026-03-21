@@ -13,6 +13,15 @@ interface AssistantRuntimeEventHandlerDeps {
     planBuffers: Map<string, string>
     findSessionByThreadId: (threadId: string) => AssistantSession | null
     requireThread: (threadId: string) => AssistantThread
+    queueAssistantTextDelta: (entry: {
+        sessionId: string
+        threadId: string
+        messageId: string
+        delta: string
+        turnId: string | null
+        occurredAt: string
+    }) => void
+    flushAssistantTextDelta: (target?: { threadId: string; messageId: string }) => void
     appendEvent: (
         type: AssistantDomainEvent['type'],
         occurredAt: string,
@@ -148,18 +157,21 @@ export function handleAssistantRuntimeEvent(event: AssistantRuntimeEvent, deps: 
 
     if (event.type === 'content.delta' && event.payload.streamKind === 'assistant_text') {
         const messageId = `assistant-message-${event.itemId || event.turnId || event.eventId}`
-        deps.appendEvent('thread.message.assistant.delta', event.createdAt, {
+        deps.queueAssistantTextDelta({
+            sessionId: session.id,
             threadId: event.threadId,
             messageId,
             delta: event.payload.delta,
-            turnId: event.turnId || null
-        }, session.id, event.threadId)
+            turnId: event.turnId || null,
+            occurredAt: event.createdAt
+        })
         deps.updateLatestTurnAssistantMessage(session.id, event.threadId, messageId, event.createdAt)
         return
     }
 
     if (event.type === 'content.completed' && event.payload.streamKind === 'assistant_text') {
         const messageId = `assistant-message-${event.itemId || event.turnId || event.eventId}`
+        deps.flushAssistantTextDelta({ threadId: event.threadId, messageId })
         const existing = deps.requireThread(event.threadId).messages.find((message) => message.id === messageId)
         if (!existing && event.payload.text) {
             deps.appendEvent('thread.message.assistant.delta', event.createdAt, {

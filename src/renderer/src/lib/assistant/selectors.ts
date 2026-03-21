@@ -1,5 +1,6 @@
 import type {
     AssistantActivePlan,
+    AssistantActivity,
     AssistantMessage,
     AssistantPendingApproval,
     AssistantPendingUserInput,
@@ -37,27 +38,54 @@ export function getAssistantActivePlan(thread: AssistantThread | null): Assistan
 
 export function getAssistantLatestProposedPlan(thread: AssistantThread | null) {
     if (!thread || thread.proposedPlans.length === 0) return null
-    return [...thread.proposedPlans].sort((left, right) =>
-        right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id)
-    )[0]
+
+    let latest = thread.proposedPlans[0] || null
+    for (let index = 1; index < thread.proposedPlans.length; index += 1) {
+        const candidate = thread.proposedPlans[index]
+        if (!candidate || !latest) continue
+        if (
+            candidate.updatedAt.localeCompare(latest.updatedAt) > 0
+            || (candidate.updatedAt === latest.updatedAt && candidate.id.localeCompare(latest.id) > 0)
+        ) {
+            latest = candidate
+        }
+    }
+
+    return latest
 }
 
 export function getAssistantTimelineMessages(thread: AssistantThread | null): AssistantMessage[] {
-    if (!thread) return []
-    return [...thread.messages].sort((left, right) =>
-        left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id)
-    )
+    return thread?.messages || []
 }
+
+const activityFeedCache = new WeakMap<AssistantActivity[], AssistantActivity[]>()
 
 export function getAssistantActivityFeed(thread: AssistantThread | null) {
     if (!thread) return []
-    return [...thread.activities].sort((left, right) =>
-        right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
-    )
+    const source = thread.activities
+    if (source.length < 2) return source
+
+    const cached = activityFeedCache.get(source)
+    if (cached) return cached
+
+    const reversed = [...source].reverse()
+    activityFeedCache.set(source, reversed)
+    return reversed
 }
 
+export type AssistantThreadPhaseKey =
+    | 'idle'
+    | 'starting'
+    | 'ready'
+    | 'running'
+    | 'waiting'
+    | 'waiting-approval'
+    | 'waiting-input'
+    | 'error'
+    | 'stopped'
+
 export function getAssistantThreadPhase(thread: AssistantThread | null): {
-    key: 'idle' | 'starting' | 'running' | 'waiting-approval' | 'waiting-input' | 'error' | 'stopped'
+    key: AssistantThreadPhaseKey
     label: string
 } {
     if (!thread) return { key: 'idle', label: 'No active thread' }
@@ -72,13 +100,13 @@ export function getAssistantThreadPhase(thread: AssistantThread | null): {
         case 'idle':
             return { key: 'idle', label: 'Idle' }
         case 'starting':
-            return { key: 'starting', label: 'Starting' }
+            return { key: 'starting', label: 'Connecting' }
         case 'ready':
-            return { key: 'starting', label: 'Ready' }
+            return { key: 'ready', label: 'Idle' }
         case 'running':
             return { key: 'running', label: 'Running' }
         case 'waiting':
-            return { key: 'running', label: 'Waiting' }
+            return { key: 'waiting', label: 'Working' }
         case 'interrupted':
             return { key: 'stopped', label: 'Interrupted' }
         case 'stopped':
@@ -92,6 +120,11 @@ export function getAssistantThreadPhase(thread: AssistantThread | null): {
 
 export function getAssistantThreadPhaseLabel(thread: AssistantThread | null): string {
     return getAssistantThreadPhase(thread).label
+}
+
+export function isAssistantThreadActivelyWorking(thread: AssistantThread | null): boolean {
+    const phase = getAssistantThreadPhase(thread)
+    return phase.key === 'starting' || phase.key === 'running' || phase.key === 'waiting'
 }
 
 export function getAssistantSessionSubtitle(session: AssistantSession): string {

@@ -303,6 +303,48 @@ export function extractFilePatch(patch: string, targetPath: string, previousPath
     return lines.slice(matchingSection.startLine, matchingSection.endLine).join('\n')
 }
 
+function patchHasExplicitFileHeaders(normalizedPatch: string): boolean {
+    if (!normalizedPatch) return false
+
+    return normalizedPatch.startsWith('diff --git ')
+        || normalizedPatch.startsWith('--- ')
+        || normalizedPatch.startsWith('Binary files ')
+}
+
+function escapePatchPathSegment(value: string): string {
+    if (!/\s/.test(value)) return value
+    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+function normalizeRenderablePatchPath(value: string): string {
+    return value.replace(/\\/g, '/').trim()
+}
+
+export function buildSyntheticSingleFilePatch(
+    patch: string,
+    filePath: string,
+    previousPath?: string,
+    options?: { isNew?: boolean }
+): string {
+    const normalizedPatch = normalizePatchText(patch)
+    const normalizedFilePath = normalizeRenderablePatchPath(filePath)
+    const normalizedPreviousPath = normalizeRenderablePatchPath(previousPath || filePath)
+    if (!normalizedPatch || !normalizedFilePath) return ''
+
+    if (patchHasExplicitFileHeaders(normalizedPatch)) return ''
+
+    const currentPath = escapePatchPathSegment(normalizedFilePath)
+    const previousPathValue = escapePatchPathSegment(normalizedPreviousPath)
+
+    return [
+        `diff --git a/${previousPathValue} b/${currentPath}`,
+        options?.isNew ? 'new file mode 100644' : null,
+        `--- ${options?.isNew ? '/dev/null' : `a/${previousPathValue}`}`,
+        `+++ b/${currentPath}`,
+        normalizedPatch
+    ].filter((line): line is string => Boolean(line)).join('\n')
+}
+
 export function parsePatchForRendering(patch: string, scope: string): ParsedPatchRenderResult {
     const normalizedPatch = normalizePatchText(patch)
     if (!normalizedPatch) {

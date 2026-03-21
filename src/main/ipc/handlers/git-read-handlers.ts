@@ -24,6 +24,7 @@ import {
     hasRemoteOrigin
 } from '../../inspectors/git'
 import { getGitHubPublishContext } from '../../services/github-publish'
+import { getCurrentBranchPullRequest, logPullRequestError } from '../../services/github-pull-request'
 
 export async function handleGetGitHistory(
     _event: Electron.IpcMainInvokeEvent,
@@ -205,6 +206,19 @@ export async function handleGetGitHubPublishContext(
     } catch (err: any) {
         log.error('Failed to get GitHub publish context:', err)
         return { success: false, error: err.message }
+    }
+}
+
+export async function handleGetCurrentBranchPullRequest(
+    _event: Electron.IpcMainInvokeEvent,
+    projectPath: string
+) {
+    try {
+        const pullRequest = await getCurrentBranchPullRequest(projectPath)
+        return { success: true, pullRequest }
+    } catch (err: any) {
+        const normalized = logPullRequestError('failed to read current branch pull request', err)
+        return { success: false, error: normalized.message }
     }
 }
 

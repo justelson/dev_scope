@@ -4,6 +4,7 @@ import { ArrowLeft, FolderTree, FolderOpen, Compass, ExternalLink } from 'lucide
 import { resolveExplorerHomePath, useDefaultExplorerHomePath } from '@/lib/explorerHome'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
+import { SettingsBetaBadge } from './SettingsBetaBadge'
 
 export default function ExplorerSettings() {
     const { settings, updateSettings } = useSettings()
@@ -49,7 +50,10 @@ export default function ExplorerSettings() {
                             <FolderTree className="text-amber-300" size={24} />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-semibold text-sparkle-text">Explorer</h1>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-semibold text-sparkle-text">Explorer</h1>
+                                <SettingsBetaBadge />
+                            </div>
                             <p className="text-sparkle-text-secondary">Turn DevScope into an opt-in file browser tab.</p>
                         </div>
                     </div>

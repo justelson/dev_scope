@@ -3,7 +3,7 @@
  * Keeps an in-memory ring buffer of AI request/response traces for Settings > Logs.
  */
 
-export type AiLogProvider = 'groq' | 'gemini'
+export type AiLogProvider = 'groq' | 'gemini' | 'codex'
 export type AiLogAction = 'generateCommitMessage' | 'testConnection'
 export type AiLogStatus = 'success' | 'error'
 

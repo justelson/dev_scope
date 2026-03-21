@@ -123,7 +123,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                             </h3>
                             <p className="mt-1 text-xs text-white/48">
                                 {hasGitHubRemote
-                                    ? 'Review the local work to include, the target branch, and the browser draft summary before DevScope opens the GitHub PR page.'
+                                    ? 'Create or reopen the PR for the current branch using GitHub CLI.'
                                     : 'Add a GitHub remote to use the built-in PR flow. Standard Git push and pull still work with any remote.'}
                             </p>
                         </div>

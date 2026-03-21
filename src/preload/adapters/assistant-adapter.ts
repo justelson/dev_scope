@@ -5,6 +5,7 @@ import type {
     AssistantConnectOptions,
     AssistantDeleteMessageInput,
     AssistantEventStreamPayload,
+    AssistantPersistClipboardImageInput,
     AssistantSendPromptOptions,
     AssistantUserInputResponseInput
 } from '../../shared/assistant/contracts'
@@ -21,8 +22,10 @@ export function createAssistantAdapter() {
         assistant: {
             subscribe: () => ipcRenderer.invoke(ASSISTANT_IPC.subscribe),
             unsubscribe: () => ipcRenderer.invoke(ASSISTANT_IPC.unsubscribe),
+            bootstrap: () => ipcRenderer.invoke(ASSISTANT_IPC.bootstrap),
             getSnapshot: () => ipcRenderer.invoke(ASSISTANT_IPC.getSnapshot),
             getStatus: () => ipcRenderer.invoke(ASSISTANT_IPC.getStatus),
+            getAccountOverview: () => ipcRenderer.invoke(ASSISTANT_IPC.getAccountOverview),
             listModels: (forceRefresh = false) => ipcRenderer.invoke(ASSISTANT_IPC.listModels, forceRefresh),
             connect: (options?: AssistantConnectOptions) => ipcRenderer.invoke(ASSISTANT_IPC.connect, options),
             disconnect: (sessionId?: string) => ipcRenderer.invoke(ASSISTANT_IPC.disconnect, sessionId),
@@ -35,6 +38,8 @@ export function createAssistantAdapter() {
             clearLogs: (input?: AssistantClearLogsInput) => ipcRenderer.invoke(ASSISTANT_IPC.clearLogs, input),
             setSessionProjectPath: (sessionId: string, projectPath: string | null) =>
                 ipcRenderer.invoke(ASSISTANT_IPC.setSessionProjectPath, sessionId, projectPath),
+            persistClipboardImage: (input: AssistantPersistClipboardImageInput) =>
+                ipcRenderer.invoke(ASSISTANT_IPC.persistClipboardImage, input),
             newThread: (sessionId?: string) => ipcRenderer.invoke(ASSISTANT_IPC.newThread, sessionId),
             sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) => ipcRenderer.invoke(ASSISTANT_IPC.sendPrompt, prompt, options),
             interruptTurn: (turnId?: string, sessionId?: string) => ipcRenderer.invoke(ASSISTANT_IPC.interruptTurn, turnId, sessionId),

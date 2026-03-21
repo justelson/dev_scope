@@ -3,11 +3,12 @@ import { cn } from '@/lib/utils'
 import TextPreviewContent from './TextPreviewContent'
 import MediaPreviewContent from './MediaPreviewContent'
 import type { PreviewFile, PreviewMediaItem, PreviewMeta } from './types'
-import { formatPreviewBytes, getFileUrl, isMediaPreviewType, isTextLikeFileType } from './utils'
+import { formatPreviewBytes, isMediaPreviewType, isTextLikeFileType } from './utils'
 import type { ViewportPreset, ViewportPresetConfig } from './viewport'
 import SyntaxPreview from './SyntaxPreview'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import type { GitLineMarker } from './gitDiff'
+import HtmlRenderedPreview from './HtmlRenderedPreview'
 
 interface PreviewBodyProps {
     file: PreviewFile
@@ -193,24 +194,13 @@ export default function PreviewBody({
     }
 
     return (
-        <div
-            className={cn(
-                'bg-white overflow-hidden transition-[width,height] duration-300 ease-out will-change-[width,height]',
-                useFullBleed ? 'rounded-none shadow-none' : 'rounded-lg shadow-2xl'
-            )}
-            style={{
-                width: viewport === 'responsive' ? '100%' : `${presetConfig.width}px`,
-                height: useFullBleed ? '100%' : (viewport === 'responsive' ? '100%' : `${presetConfig.height}px`),
-                minHeight: useFullBleed ? '100%' : '400px',
-                maxHeight: '100%',
-                maxWidth: '100%'
-            }}
-        >
-            <iframe
-                src={getFileUrl(file.path)}
-                title={`${file.name} preview`}
-                style={{ width: '100%', height: '100%', background: 'white', border: 'none', display: 'block' }}
-            />
-        </div>
+        <HtmlRenderedPreview
+            filePath={file.path}
+            fileName={file.name}
+            content={content}
+            viewport={viewport}
+            presetConfig={presetConfig}
+            isExpanded={useFullBleed}
+        />
     )
 }

@@ -139,57 +139,61 @@ export default function AboutSettings() {
                     <InfoCard label="License" value="MIT" />
                 </div>
 
-                <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                            <Heart size={20} className="text-white" />
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                    <div className="space-y-4">
+                        <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                                    <Heart size={20} className="text-white" />
+                                </div>
+                                <div>
+                                    <p className="text-sm text-sparkle-text-secondary">Created by</p>
+                                    <a
+                                        href="https://github.com/justelson"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="font-semibold text-sparkle-text transition-colors hover:text-[var(--accent-primary)]"
+                                    >
+                                        justelson
+                                    </a>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-sm text-sparkle-text-secondary">Created by</p>
-                            <a
+
+                        <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
+                            <h3 className="mb-4 font-semibold text-sparkle-text">Built With</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {['Electron', 'React', 'TypeScript', 'Tailwind CSS', 'Vite', 'Lucide Icons'].map((tech) => (
+                                    <span
+                                        key={tech}
+                                        className="px-3 py-1 rounded-full bg-sparkle-accent text-sm text-sparkle-text-secondary"
+                                    >
+                                        {tech}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
+                        <h3 className="mb-4 font-semibold text-sparkle-text">Links</h3>
+                        <div className="space-y-2">
+                            <LinkRow
+                                icon={<Github size={18} />}
+                                label="Creator GitHub"
                                 href="https://github.com/justelson"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-semibold text-sparkle-text transition-colors hover:text-[var(--accent-primary)]"
-                            >
-                                justelson
-                            </a>
+                            />
+                            <LinkRow
+                                icon={<Github size={18} />}
+                                label="Source Code"
+                                href="https://github.com/justelson/dev_scope"
+                            />
+                            <LinkRow
+                                icon={<ExternalLink size={18} />}
+                                label="Report an Issue"
+                                href="https://github.com/justelson/dev_scope/issues"
+                            />
                         </div>
-                    </div>
-                </div>
-
-                <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
-                    <h3 className="font-semibold text-sparkle-text mb-4">Links</h3>
-                    <div className="space-y-2">
-                        <LinkRow
-                            icon={<Github size={18} />}
-                            label="Creator GitHub"
-                            href="https://github.com/justelson"
-                        />
-                        <LinkRow
-                            icon={<Github size={18} />}
-                            label="Source Code"
-                            href="https://github.com/justelson/dev_scope"
-                        />
-                        <LinkRow
-                            icon={<ExternalLink size={18} />}
-                            label="Report an Issue"
-                            href="https://github.com/justelson/dev_scope/issues"
-                        />
-                    </div>
-                </div>
-
-                <div className="bg-sparkle-card rounded-xl border border-white/10 p-5">
-                    <h3 className="font-semibold text-sparkle-text mb-4">Built With</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {['Electron', 'React', 'TypeScript', 'Tailwind CSS', 'Vite', 'Lucide Icons'].map((tech) => (
-                            <span
-                                key={tech}
-                                className="px-3 py-1 rounded-full bg-sparkle-accent text-sm text-sparkle-text-secondary"
-                            >
-                                {tech}
-                            </span>
-                        ))}
                     </div>
                 </div>
             </div>

@@ -35,6 +35,7 @@ export type AssistantPlanStepStatus = 'pending' | 'inProgress' | 'completed'
 
 export interface AssistantPlanStep {
     step: string
+    description?: string
     status: AssistantPlanStepStatus
 }
 
@@ -170,4 +171,3 @@ export type AssistantRuntimeEvent =
             data?: Record<string, unknown>
         }
     })
-

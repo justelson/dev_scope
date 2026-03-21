@@ -240,8 +240,8 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
     )
 
     const modalContent = (
-        <div className={cn('fixed z-[80] flex transition-[background-color,padding,backdrop-filter] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]', isExpanded ? 'top-[46px] left-0 right-0 bottom-0 z-[45] items-stretch justify-stretch bg-sparkle-bg' : 'inset-0 items-center justify-center bg-black/70 backdrop-blur-md')} onClick={isExpanded ? undefined : handleCloseRequest} style={isExpanded ? undefined : { animation: 'fadeIn 0.18s ease-out' }} onWheel={(event) => event.stopPropagation()}>
-            <div className={cn(isExpanded ? 'bg-sparkle-card w-full h-full max-h-none max-w-none flex flex-col m-0 overflow-hidden rounded-none border-0 shadow-none transition-[width,max-width,height,max-height,border-radius,margin,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]' : 'bg-sparkle-card border border-white/10 rounded-2xl shadow-2xl w-full max-w-[95vw] max-h-[90vh] flex flex-col m-4 overflow-hidden transition-[width,max-width,height,max-height,border-radius,margin,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]')} onClick={isExpanded ? undefined : (event => event.stopPropagation())} style={modalStyle}>
+        <div className={cn('fixed z-[80] flex transition-[background-color,padding,backdrop-filter] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]', isExpanded ? 'top-[46px] left-0 right-0 bottom-0 z-[45] items-stretch justify-stretch bg-sparkle-bg' : 'inset-0 items-center justify-center bg-black/70 backdrop-blur-md')} onClick={isExpanded ? undefined : handleCloseRequest} style={isExpanded ? undefined : { animation: 'fadeIn 0.18s ease-out' }} onWheel={(event) => event.stopPropagation()}>
+            <div className={cn('will-change-[opacity,width,height,max-width,max-height,border-radius,margin,box-shadow,border-color] transition-[width,max-width,height,max-height,border-radius,margin,box-shadow,border-color,opacity] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]', isExpanded ? 'bg-sparkle-card h-full w-full max-h-none max-w-none opacity-100 m-0 flex flex-col overflow-hidden rounded-none border-0 shadow-none' : 'bg-sparkle-card m-4 flex w-full max-h-[90vh] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-white/10 opacity-100 shadow-2xl')} onClick={isExpanded ? undefined : (event => event.stopPropagation())} style={modalStyle}>
                 <PreviewModalHeader
                     file={file}
                     gitDiffSummary={gitDiffSummary}
@@ -312,7 +312,7 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
                                 <div data-preview-resize-side="left" className={cn('pointer-events-none absolute left-1/2 top-1/2 h-16 w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-200', leftPanelOpen ? 'bg-sparkle-border-secondary/80 opacity-70 group-hover:h-24 group-hover:bg-[var(--accent-primary)]/70 group-hover:opacity-100' : 'opacity-0')} />
                             </div>
                         </aside>
-                        <div ref={previewSurfaceRef} className={cn('flex-1 min-w-0 custom-scrollbar flex', centerHtmlRenderedPreview ? 'items-center justify-center' : 'items-stretch justify-start', isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-0', mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || hasBottomPanel ? 'overflow-hidden' : 'overflow-auto')} style={{ overscrollBehavior: 'contain' }}>
+                        <div ref={previewSurfaceRef} className={cn('flex-1 min-w-0 custom-scrollbar flex', centerHtmlRenderedPreview ? 'items-center justify-center' : 'items-stretch justify-start', isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-0', mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || (isHtml && htmlViewMode === 'rendered') || hasBottomPanel ? 'overflow-hidden' : 'overflow-auto')} style={{ overscrollBehavior: 'contain' }}>
                             <div className="w-full h-full min-h-0 flex flex-col">
                                 <div className={cn('min-h-0', hasBottomPanel ? 'flex-1' : 'h-full', hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : '', centerHtmlRenderedPreview ? 'flex items-center justify-center' : '')}>
                                     {renderPreviewBody(isExpanded && mode === 'edit')}
@@ -346,7 +346,7 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
                         </aside>
                     </div>
                 ) : (
-                    <div ref={previewSurfaceRef} className={cn('flex-1 custom-scrollbar flex items-stretch justify-center bg-sparkle-bg', flushResponsiveHtmlPreview ? 'p-0' : (isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-4'), mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || hasBottomPanel ? 'overflow-hidden' : 'overflow-auto')} style={{ overscrollBehavior: 'contain' }}>
+                    <div ref={previewSurfaceRef} className={cn('flex-1 custom-scrollbar flex items-stretch justify-center bg-sparkle-bg', flushResponsiveHtmlPreview ? 'p-0' : (isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-4'), mode === 'edit' || isCsv || (isHtml && htmlViewMode === 'code') || (isHtml && htmlViewMode === 'rendered') || hasBottomPanel ? 'overflow-hidden' : 'overflow-auto')} style={{ overscrollBehavior: 'contain' }}>
                         <div className="w-full h-full min-h-0 flex flex-col"><div className={cn('min-h-0', hasBottomPanel ? 'flex-1' : 'h-full', hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : '', centerHtmlRenderedPreview ? 'flex items-center justify-center' : '')}>{renderPreviewBody(false)}</div></div>
                     </div>
                 )}

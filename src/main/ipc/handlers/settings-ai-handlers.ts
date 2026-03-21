@@ -1,11 +1,10 @@
 import { app } from 'electron'
 import log from 'electron-log'
 import { clearAiDebugLogs, getAiDebugLogs } from '../../ai/ai-debug-log'
-import { generateGeminiCommitMessage, testGeminiConnection } from '../../ai/gemini'
-import { generateCommitMessage as generateGroqCommitMessage, testGroqConnection } from '../../ai/groq'
-import { generateGeminiPullRequestDraft, generateGroqPullRequestDraft } from '../../ai/pull-request'
+import { generateGitCommitMessageWithProvider, testGitTextProviderConnection } from '../../ai/git-text'
+import type { DevScopeGitTextProvider } from '../../../shared/contracts/devscope-git-contracts'
 
-type CommitAIProvider = 'groq' | 'gemini'
+type CommitAIProvider = DevScopeGitTextProvider
 
 export async function handleSetStartupSettings(_event: Electron.IpcMainInvokeEvent, settings: { openAtLogin: boolean; openAsHidden: boolean }) {
     log.info('IPC: setStartupSettings', settings)
@@ -42,49 +41,28 @@ export async function handleGetStartupSettings() {
 
 export async function handleTestGroqConnection(_event: Electron.IpcMainInvokeEvent, apiKey: string) {
     log.info('IPC: testGroqConnection')
-    return await testGroqConnection(apiKey)
+    return await testGitTextProviderConnection({ provider: 'groq', apiKey })
 }
 
 export async function handleTestGeminiConnection(_event: Electron.IpcMainInvokeEvent, apiKey: string) {
     log.info('IPC: testGeminiConnection')
-    return await testGeminiConnection(apiKey)
+    return await testGitTextProviderConnection({ provider: 'gemini', apiKey })
+}
+
+export async function handleTestCodexConnection(_event: Electron.IpcMainInvokeEvent, model?: string) {
+    log.info('IPC: testCodexConnection')
+    return await testGitTextProviderConnection({ provider: 'codex', model })
 }
 
 export async function handleGenerateCommitMessage(
     _event: Electron.IpcMainInvokeEvent,
     provider: CommitAIProvider,
     apiKey: string,
-    diff: string
+    diff: string,
+    model?: string
 ) {
-    log.info('IPC: generateCommitMessage', { provider })
-
-    if (provider === 'groq') {
-        return await generateGroqCommitMessage(apiKey, diff)
-    }
-
-    return await generateGeminiCommitMessage(apiKey, diff)
-}
-
-export async function handleGeneratePullRequestDraft(
-    _event: Electron.IpcMainInvokeEvent,
-    provider: CommitAIProvider,
-    apiKey: string,
-    input: {
-        projectName?: string
-        currentBranch: string
-        targetBranch: string
-        scopeLabel: string
-        diff: string
-        guideText?: string
-    }
-) {
-    log.info('IPC: generatePullRequestDraft', { provider, currentBranch: input?.currentBranch, targetBranch: input?.targetBranch })
-
-    if (provider === 'groq') {
-        return await generateGroqPullRequestDraft(apiKey, input)
-    }
-
-    return await generateGeminiPullRequestDraft(apiKey, input)
+    log.info('IPC: generateCommitMessage', { provider, model })
+    return await generateGitCommitMessageWithProvider({ provider, apiKey, diff, model })
 }
 
 export async function handleGetAiDebugLogs(_event: Electron.IpcMainInvokeEvent, limit?: number) {

@@ -23,10 +23,12 @@ export type AssistantComposerSendOptions = {
 }
 
 export type AssistantComposerProps = {
+    sessionId?: string | null
     onSend: (prompt: string, contextFiles: ComposerContextFile[], options: AssistantComposerSendOptions) => Promise<boolean>
     disabled: boolean
     isSending: boolean
     isThinking: boolean
+    thinkingLabel?: string
     isConnected: boolean
     activeModel?: string
     modelOptions?: Array<{ id: string; label: string; description?: string }>

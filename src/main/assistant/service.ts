@@ -1,23 +1,35 @@
-import { webContents } from 'electron'
 import log from 'electron-log'
 import type {
+    AssistantAccountOverview,
     AssistantClearLogsInput,
     AssistantConnectOptions,
     AssistantDeleteMessageInput,
     AssistantDomainEvent,
-    AssistantEventStreamPayload,
     AssistantLatestTurn,
     AssistantMessage,
     AssistantRuntimeStatus,
     AssistantSendPromptOptions,
-    AssistantSession,
     AssistantThread
 } from '../../shared/assistant/contracts'
-import { ASSISTANT_IPC } from '../../shared/assistant/contracts'
+import { AssistantTextDeltaBuffer } from './assistant-text-delta-buffer'
 import { CodexAppServerRuntime } from './codex-app-server'
 import { AssistantPersistence } from './persistence'
 import { applyDomainEvent, createDefaultSnapshot } from './projector'
+import {
+    broadcastAssistantPayload,
+    createAssistantDomainEvent,
+    ensureAssistantSession,
+    markActiveThreadCompletionSeen,
+    trimAssistantEvents,
+    updateLatestTurnAssistantMessage
+} from './service-helpers'
 import { handleAssistantRuntimeEvent } from './service-runtime-events'
+import { buildDeleteMessagePlan } from './service-history'
+import {
+    createAssistantSessionRecord,
+    createAssistantUserMessage,
+    createRunningLatestTurn
+} from './service-records'
 import {
     type AssistantStateRecord,
     createAssistantThread,
@@ -40,18 +52,34 @@ import {
 } from './utils'
 
 export class AssistantService {
+    private static readonly MAX_IN_MEMORY_EVENTS = 256
+    private static readonly ASSISTANT_TEXT_DELTA_FLUSH_MS = 40
+    private static readonly ASSISTANT_EVENT_BROADCAST_BATCH_MS = 16
     private readonly runtime = new CodexAppServerRuntime()
     private readonly persistence = new AssistantPersistence()
+    private readonly assistantTextDeltaBuffer = new AssistantTextDeltaBuffer({
+        flushDelayMs: AssistantService.ASSISTANT_TEXT_DELTA_FLUSH_MS,
+        onFlush: (entry) => {
+            this.appendEvent('thread.message.assistant.delta', entry.occurredAt, {
+                threadId: entry.threadId,
+                messageId: entry.messageId,
+                delta: entry.delta,
+                turnId: entry.turnId
+            }, entry.sessionId, entry.threadId)
+        }
+    })
     private readonly subscribers = new Set<number>()
-    private state: AssistantStateRecord
+    private state: AssistantStateRecord = {
+        snapshot: createDefaultSnapshot(),
+        events: []
+    }
     private readonly planBuffers = new Map<string, string>()
+    private pendingBroadcastEvents: AssistantDomainEvent[] = []
+    private pendingBroadcastTimer: NodeJS.Timeout | null = null
+    private readonly readyPromise: Promise<void>
 
     constructor() {
-        const loaded = this.persistence.load()
-        this.state = {
-            snapshot: loaded.snapshot || createDefaultSnapshot(),
-            events: loaded.events || []
-        }
+        this.readyPromise = this.initialize()
         this.runtime.on('runtime', (event) => {
             this.handleRuntimeEvent(event)
         })
@@ -67,10 +95,22 @@ export class AssistantService {
         return { success: true as const }
     }
 
-    getSnapshot() {
+    async getSnapshot() {
+        await this.ensureReady()
         return structuredClone(this.state.snapshot)
     }
+
+    async getBootstrap() {
+        await this.ensureReady()
+        const status = await this.getStatus()
+        return {
+            snapshot: structuredClone(this.state.snapshot),
+            status
+        }
+    }
+
     async getStatus(): Promise<AssistantRuntimeStatus> {
+        await this.ensureReady()
         const availability = await this.runtime.checkAvailability()
         const session = getSelectedSession(this.state.snapshot)
         const thread = getActiveThread(session)
@@ -85,22 +125,46 @@ export class AssistantService {
     }
 
     async listModels(forceRefresh = false) {
+        await this.ensureReady()
         const models = await this.runtime.listModels(forceRefresh)
         this.state.snapshot.knownModels = models
-        this.persist()
+        this.persistence.updateMetadata(this.state.snapshot)
         return { success: true as const, models }
     }
 
+    async getAccountOverview() {
+        await this.ensureReady()
+        const [accountPayload, rateLimitPayload] = await Promise.all([
+            this.runtime.getAccount(),
+            this.runtime.getAccountRateLimits()
+        ])
+
+        const overview: AssistantAccountOverview = {
+            account: accountPayload.account,
+            authMode: accountPayload.authMode,
+            requiresOpenaiAuth: accountPayload.requiresOpenaiAuth,
+            rateLimits: rateLimitPayload.rateLimits,
+            rateLimitsByLimitId: rateLimitPayload.rateLimitsByLimitId,
+            fetchedAt: nowIso()
+        }
+
+        return { success: true as const, overview }
+    }
+
     async connect(options?: AssistantConnectOptions) {
+        await this.ensureReady()
         const session = options?.sessionId
             ? requireSession(this.state.snapshot, options.sessionId)
-            : getSelectedSession(this.state.snapshot) || this.ensureSession()
+            : getSelectedSession(this.state.snapshot) || ensureAssistantSession(this.state.snapshot, (type, occurredAt, payload, sessionId, threadId) => {
+                this.appendEvent(type, occurredAt, payload, sessionId, threadId)
+            })
         const thread = requireActiveThread(session)
         await this.runtime.connect(thread, session.projectPath || process.cwd())
         return { success: true as const, threadId: thread.id }
     }
 
-    disconnect(sessionId?: string) {
+    async disconnect(sessionId?: string) {
+        await this.ensureReady()
         const session = sessionId
             ? requireSession(this.state.snapshot, sessionId)
             : getSelectedSession(this.state.snapshot)
@@ -112,33 +176,38 @@ export class AssistantService {
         return { success: true as const }
     }
 
-    createSession(title?: string, projectPath?: string) {
+    async createSession(title?: string, projectPath?: string) {
+        await this.ensureReady()
         const createdAt = nowIso()
         const sessionId = createAssistantId('assistant-session')
         const thread = createAssistantThread(createdAt, null, projectPath || null)
-        const session: AssistantSession = {
-            id: sessionId,
+        const session = createAssistantSessionRecord({
+            sessionId,
             title: title?.trim() || 'New Session',
             projectPath: projectPath?.trim() || null,
-            archived: false,
             createdAt,
-            updatedAt: createdAt,
-            activeThreadId: thread.id,
-            threadIds: [thread.id],
-            threads: [thread]
-        }
+            thread
+        })
         this.appendEvent('session.created', createdAt, { session }, sessionId, thread.id)
         this.appendEvent('session.selected', createdAt, { sessionId }, sessionId, thread.id)
         return { success: true as const, sessionId }
     }
 
-    selectSession(sessionId: string) {
+    async selectSession(sessionId: string) {
+        await this.ensureReady()
         requireSession(this.state.snapshot, sessionId)
-        this.appendEvent('session.selected', nowIso(), { sessionId }, sessionId)
-        return { success: true as const, sessionId }
+        this.state.snapshot = await this.persistence.hydrateSelectedSession(this.state.snapshot, sessionId)
+        const session = requireSession(this.state.snapshot, sessionId)
+        const occurredAt = nowIso()
+        this.appendEvent('session.selected', occurredAt, { sessionId }, sessionId)
+        markActiveThreadCompletionSeen(session, occurredAt, (type, eventOccurredAt, payload, eventSessionId, threadId) => {
+            this.appendEvent(type, eventOccurredAt, payload, eventSessionId, threadId)
+        })
+        return { success: true as const, sessionId, snapshot: structuredClone(this.state.snapshot) }
     }
 
-    renameSession(sessionId: string, title: string) {
+    async renameSession(sessionId: string, title: string) {
+        await this.ensureReady()
         const session = requireSession(this.state.snapshot, sessionId)
         this.appendEvent('session.updated', nowIso(), {
             sessionId,
@@ -150,7 +219,8 @@ export class AssistantService {
         return { success: true as const }
     }
 
-    archiveSession(sessionId: string, archived = true) {
+    async archiveSession(sessionId: string, archived = true) {
+        await this.ensureReady()
         requireSession(this.state.snapshot, sessionId)
         this.appendEvent('session.updated', nowIso(), {
             sessionId,
@@ -162,7 +232,8 @@ export class AssistantService {
         return { success: true as const }
     }
 
-    deleteSession(sessionId: string) {
+    async deleteSession(sessionId: string) {
+        await this.ensureReady()
         const session = requireSession(this.state.snapshot, sessionId)
         const thread = getActiveThread(session)
         if (thread) {
@@ -171,7 +242,9 @@ export class AssistantService {
         this.appendEvent('session.deleted', nowIso(), { sessionId }, sessionId)
         return { success: true as const }
     }
-    clearLogs(input?: AssistantClearLogsInput) {
+
+    async clearLogs(input?: AssistantClearLogsInput) {
+        await this.ensureReady()
         const session = input?.sessionId
             ? requireSession(this.state.snapshot, input.sessionId)
             : requireSession(this.state.snapshot, this.state.snapshot.selectedSessionId || '')
@@ -188,83 +261,34 @@ export class AssistantService {
 
         return { success: true as const }
     }
+
     async deleteMessage(input: AssistantDeleteMessageInput) {
+        await this.ensureReady()
         const session = input?.sessionId
             ? requireSession(this.state.snapshot, input.sessionId)
             : requireSession(this.state.snapshot, this.state.snapshot.selectedSessionId || '')
         const thread = requireActiveThread(session)
-        const messages = [...thread.messages].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
-        const targetIndex = messages.findIndex((message) => message.id === input.messageId && message.role === 'user')
-        if (targetIndex < 0) throw new Error('User message not found.')
+        const occurredAt = nowIso()
+        const deletePlan = buildDeleteMessagePlan(thread, input.messageId, occurredAt)
 
-        const inferTurnIdForUserMessage = (index: number): string | null => {
-            for (let cursor = index + 1; cursor < messages.length; cursor += 1) {
-                if (messages[cursor].role === 'user') break
-                if (messages[cursor].turnId) return messages[cursor].turnId
-            }
-            return messages[index].id === input.messageId ? (thread.latestTurn?.id || null) : null
-        }
-
-        const userTurnEntries = messages
-            .map((message, index) => message.role === 'user' ? { message, index, turnId: inferTurnIdForUserMessage(index) } : null)
-            .filter((entry): entry is { message: AssistantMessage; index: number; turnId: string | null } => Boolean(entry))
-
-        const targetEntry = userTurnEntries.find((entry) => entry.message.id === input.messageId)
-        if (!targetEntry) throw new Error('Unable to resolve message turn.')
-
-        const orderedTurnIds = userTurnEntries
-            .map((entry) => entry.turnId)
-            .filter((turnId, index, array): turnId is string => Boolean(turnId) && array.indexOf(turnId) === index)
-
-        const targetTurnIndex = targetEntry.turnId ? orderedTurnIds.indexOf(targetEntry.turnId) : -1
-        if (targetEntry.turnId && targetTurnIndex >= 0) {
+        if (deletePlan.rollbackTurnCount) {
             try {
-                await this.runtime.rollbackThread(thread.id, Math.max(1, orderedTurnIds.length - targetTurnIndex))
+                await this.runtime.rollbackThread(thread.id, deletePlan.rollbackTurnCount)
             } catch (error) {
                 log.warn('[Assistant] rollbackThread failed during deleteMessage; applying local history trim only', error)
             }
         }
 
-        const removedTurnIds = new Set(targetTurnIndex >= 0 ? orderedTurnIds.slice(targetTurnIndex) : [])
-        const keptMessages = messages.slice(0, targetIndex)
-        const remainingTurnIds = orderedTurnIds.filter((turnId) => !removedTurnIds.has(turnId))
-        const latestRemainingTurnId = remainingTurnIds[remainingTurnIds.length - 1] || null
-        const latestRemainingAssistantMessage = latestRemainingTurnId
-            ? [...keptMessages].reverse().find((message) => message.role === 'assistant' && message.turnId === latestRemainingTurnId) || null
-            : null
-        const occurredAt = nowIso()
-
         this.appendEvent('thread.updated', occurredAt, {
             threadId: thread.id,
-            patch: {
-                messages: keptMessages,
-                activities: thread.activities.filter((activity) => !activity.turnId || !removedTurnIds.has(activity.turnId)),
-                proposedPlans: thread.proposedPlans.filter((plan) => !plan.turnId || !removedTurnIds.has(plan.turnId)),
-                pendingApprovals: thread.pendingApprovals.filter((approval) => !approval.turnId || !removedTurnIds.has(approval.turnId)),
-                pendingUserInputs: thread.pendingUserInputs.filter((entry) => !entry.turnId || !removedTurnIds.has(entry.turnId)),
-                activePlan: thread.activePlan && thread.activePlan.turnId && removedTurnIds.has(thread.activePlan.turnId) ? null : thread.activePlan,
-                latestTurn: latestRemainingTurnId
-                    ? {
-                        id: latestRemainingTurnId,
-                        state: 'completed',
-                        requestedAt: latestRemainingAssistantMessage?.createdAt || occurredAt,
-                        startedAt: latestRemainingAssistantMessage?.createdAt || null,
-                        completedAt: latestRemainingAssistantMessage?.updatedAt || occurredAt,
-                        assistantMessageId: latestRemainingAssistantMessage?.id || null,
-                        effort: null,
-                        serviceTier: null,
-                        usage: null
-                    }
-                    : null,
-                state: 'ready',
-                lastError: null,
-                updatedAt: occurredAt
-            }
+            patch: deletePlan.patch
         }, session.id, thread.id)
 
         return { success: true as const }
     }
-    setSessionProjectPath(sessionId: string, projectPath: string | null) {
+
+    async setSessionProjectPath(sessionId: string, projectPath: string | null) {
+        await this.ensureReady()
         requireSession(this.state.snapshot, sessionId)
         this.appendEvent('session.updated', nowIso(), {
             sessionId,
@@ -275,17 +299,25 @@ export class AssistantService {
         }, sessionId)
         return { success: true as const }
     }
-    newThread(sessionId?: string) {
+
+    async newThread(sessionId?: string) {
+        await this.ensureReady()
         const session = sessionId
             ? requireSession(this.state.snapshot, sessionId)
-            : getSelectedSession(this.state.snapshot) || this.ensureSession()
+            : getSelectedSession(this.state.snapshot) || ensureAssistantSession(this.state.snapshot, (type, occurredAt, payload, eventSessionId, threadId) => {
+                this.appendEvent(type, occurredAt, payload, eventSessionId, threadId)
+            })
         const previousThread = getActiveThread(session)
         if (previousThread) {
             this.runtime.disconnect(previousThread.id)
         }
 
         const createdAt = nowIso()
-        const thread = createAssistantThread(createdAt, previousThread)
+        const thread = createAssistantThread(
+            createdAt,
+            previousThread,
+            session.projectPath ?? previousThread?.cwd ?? null
+        )
         this.appendEvent('thread.created', createdAt, { sessionId: session.id, thread }, session.id, thread.id)
         this.appendEvent('session.updated', createdAt, {
             sessionId: session.id,
@@ -296,13 +328,17 @@ export class AssistantService {
         }, session.id, thread.id)
         return { success: true as const, threadId: thread.id }
     }
+
     async sendPrompt(prompt: string, options?: AssistantSendPromptOptions) {
+        await this.ensureReady()
         const input = String(prompt || '').trim()
         if (!input) throw new Error('Prompt is required.')
 
         const session = options?.sessionId
             ? requireSession(this.state.snapshot, options.sessionId)
-            : this.ensureSession()
+            : ensureAssistantSession(this.state.snapshot, (type, occurredAt, payload, sessionId, threadId) => {
+                this.appendEvent(type, occurredAt, payload, sessionId, threadId)
+            })
         const thread = requireActiveThread(session)
         const occurredAt = nowIso()
         const title = isDefaultSessionTitle(session.title) ? deriveSessionTitleFromPrompt(input) : session.title
@@ -316,15 +352,7 @@ export class AssistantService {
             }, session.id, thread.id)
         }
 
-        const userMessage: AssistantMessage = {
-            id: createAssistantId('assistant-message'),
-            role: 'user',
-            text: input,
-            turnId: null,
-            streaming: false,
-            createdAt: occurredAt,
-            updatedAt: occurredAt
-        }
+        const userMessage = createAssistantUserMessage(input, occurredAt, createAssistantId('assistant-message'))
         this.appendEvent('thread.message.user', occurredAt, { threadId: thread.id, message: userMessage }, session.id, thread.id)
 
         const runtimeCwd = session.projectPath || thread.cwd || process.cwd()
@@ -349,17 +377,7 @@ export class AssistantService {
                 effort: options?.effort,
                 serviceTier: options?.serviceTier
             })
-            const latestTurn: AssistantLatestTurn = {
-                id: result.turnId,
-                state: 'running',
-                requestedAt: occurredAt,
-                startedAt: occurredAt,
-                completedAt: null,
-                assistantMessageId: null,
-                effort: options?.effort || null,
-                serviceTier: options?.serviceTier || null,
-                usage: null
-            }
+            const latestTurn = createRunningLatestTurn(result.turnId, occurredAt, options)
             this.appendEvent('thread.latest-turn.updated', occurredAt, { threadId: thread.id, latestTurn }, session.id, thread.id)
             return { success: true as const, sessionId: session.id, threadId: thread.id, turnId: result.turnId }
         } catch (error) {
@@ -389,6 +407,7 @@ export class AssistantService {
     }
 
     async interruptTurn(turnId?: string, sessionId?: string) {
+        await this.ensureReady()
         const session = requireSession(this.state.snapshot, sessionId)
         const thread = requireActiveThread(session)
         const effectiveTurnId = turnId || thread.latestTurn?.id
@@ -399,6 +418,7 @@ export class AssistantService {
     }
 
     async respondApproval(input: { requestId: string; decision: 'acceptForSession' | 'decline' }) {
+        await this.ensureReady()
         const target = findThreadForApproval(this.state.snapshot, input.requestId)
         if (!target) throw new Error(`Unknown approval request ${input.requestId}.`)
         await this.runtime.respondApproval(target.thread.id, input.requestId, input.decision)
@@ -406,39 +426,54 @@ export class AssistantService {
     }
 
     async respondUserInput(input: { requestId: string; answers: Record<string, string | string[]> }) {
+        await this.ensureReady()
         const target = findThreadForUserInput(this.state.snapshot, input.requestId)
         if (!target) throw new Error(`Unknown user-input request ${input.requestId}.`)
         await this.runtime.respondUserInput(target.thread.id, input.requestId, input.answers)
         return { success: true as const }
     }
-
     dispose() {
+        this.assistantTextDeltaBuffer.dispose()
         this.runtime.dispose()
-        this.persistence.flush()
+        void this.persistence.flush()
     }
 
-    private persist() {
-        this.persistence.replace({
-            version: 1,
-            snapshot: this.state.snapshot,
-            events: this.state.events
-        })
+    private async initialize() {
+        const loaded = await this.persistence.load()
+        this.state = {
+            snapshot: loaded.snapshot || createDefaultSnapshot(),
+            events: loaded.events || []
+        }
+    }
+
+    private async ensureReady() {
+        await this.readyPromise
     }
 
     private appendEvent(type: AssistantDomainEvent['type'], occurredAt: string, payload: Record<string, unknown>, sessionId?: string, threadId?: string) {
-        const event: AssistantDomainEvent = {
-            sequence: this.state.snapshot.snapshotSequence + 1,
-            eventId: createAssistantId('assistant-event'),
-            type,
-            occurredAt,
-            ...(sessionId ? { sessionId } : {}),
-            ...(threadId ? { threadId } : {}),
-            payload
-        }
+        const event = createAssistantDomainEvent(this.state.snapshot.snapshotSequence, type, occurredAt, payload, sessionId, threadId)
         this.state.events.push(event)
+        this.state.events = trimAssistantEvents(this.state.events, AssistantService.MAX_IN_MEMORY_EVENTS)
         this.state.snapshot = applyDomainEvent(this.state.snapshot, event)
-        this.persist()
-        this.broadcast({ event })
+        this.persistence.appendEvent(event, this.state.snapshot)
+        this.queueBroadcastEvent(event)
+    }
+
+    private queueBroadcastEvent(event: AssistantDomainEvent): void {
+        this.pendingBroadcastEvents.push(event)
+        if (this.pendingBroadcastTimer) return
+
+        this.pendingBroadcastTimer = setTimeout(() => {
+            this.pendingBroadcastTimer = null
+            this.flushBroadcastEvents()
+        }, AssistantService.ASSISTANT_EVENT_BROADCAST_BATCH_MS)
+        this.pendingBroadcastTimer.unref?.()
+    }
+
+    private flushBroadcastEvents(): void {
+        if (this.pendingBroadcastEvents.length === 0) return
+        const events = this.pendingBroadcastEvents.splice(0, this.pendingBroadcastEvents.length)
+        broadcastAssistantPayload(this.subscribers, events.length === 1 ? { event: events[0] } : { events })
     }
 
     private handleRuntimeEvent(event: Parameters<typeof handleAssistantRuntimeEvent>[0]) {
@@ -446,54 +481,29 @@ export class AssistantService {
             planBuffers: this.planBuffers,
             findSessionByThreadId: (threadId) => findSessionByThreadId(this.state.snapshot, threadId),
             requireThread: (threadId) => requireThread(this.state.snapshot, threadId),
+            queueAssistantTextDelta: (entry) => this.assistantTextDeltaBuffer.queue(entry),
+            flushAssistantTextDelta: (target) => this.assistantTextDeltaBuffer.flush(target),
             appendEvent: (type, occurredAt, payload, sessionId, threadId) => this.appendEvent(type, occurredAt, payload, sessionId, threadId),
             updateLatestTurnAssistantMessage: (sessionId, threadId, assistantMessageId, occurredAt) => {
-                this.updateLatestTurnAssistantMessage(sessionId, threadId, assistantMessageId, occurredAt)
+                updateLatestTurnAssistantMessage(this.state.snapshot, sessionId, threadId, assistantMessageId, occurredAt, (type, eventOccurredAt, payload, eventSessionId, eventThreadId) => {
+                    this.appendEvent(type, eventOccurredAt, payload, eventSessionId, eventThreadId)
+                })
             }
         })
-    }
 
-    private broadcast(payload: AssistantEventStreamPayload) {
-        for (const senderId of [...this.subscribers]) {
-            const target = webContents.fromId(senderId)
-            if (!target || target.isDestroyed()) {
-                this.subscribers.delete(senderId)
-                continue
+        if (event.type !== 'turn.completed') return
+
+        const selectedSession = getSelectedSession(this.state.snapshot)
+        const activeThread = getActiveThread(selectedSession)
+        if (!selectedSession || !activeThread || activeThread.id !== event.threadId) return
+        if (!activeThread.latestTurn || activeThread.latestTurn.state !== 'completed') return
+        if (activeThread.lastSeenCompletedTurnId === activeThread.latestTurn.id) return
+
+        this.appendEvent('thread.updated', event.createdAt, {
+            threadId: activeThread.id,
+            patch: {
+                lastSeenCompletedTurnId: activeThread.latestTurn.id
             }
-            target.send(ASSISTANT_IPC.eventStream, payload)
-        }
-    }
-
-    private updateLatestTurnAssistantMessage(sessionId: string, threadId: string, assistantMessageId: string, occurredAt: string) {
-        const thread = requireThread(this.state.snapshot, threadId)
-        if (!thread.latestTurn) return
-        this.appendEvent('thread.latest-turn.updated', occurredAt, {
-            threadId,
-            latestTurn: {
-                ...thread.latestTurn,
-                assistantMessageId
-            }
-        }, sessionId, threadId)
-    }
-
-    private ensureSession() {
-        const selected = getSelectedSession(this.state.snapshot)
-        if (selected) return selected
-
-        const createdAt = nowIso()
-        const thread = createAssistantThread(createdAt)
-        const session: AssistantSession = {
-            id: createAssistantId('assistant-session'),
-            title: 'New Session',
-            projectPath: null,
-            archived: false,
-            createdAt,
-            updatedAt: createdAt,
-            activeThreadId: thread.id,
-            threadIds: [thread.id],
-            threads: [thread]
-        }
-        this.appendEvent('session.created', createdAt, { session }, session.id, thread.id)
-        return requireSession(this.state.snapshot, session.id)
+        }, selectedSession.id, activeThread.id)
     }
 }
