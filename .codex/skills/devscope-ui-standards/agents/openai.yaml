@@ -1,0 +1,3 @@
+display_name: DevScope UI Standards
+short_description: Border, divider, and assistant-surface styling standards for DevScope.
+default_prompt: Follow the DevScope UI standards, read the referenced UI docs first, and keep border and divider treatment aligned with the current app.

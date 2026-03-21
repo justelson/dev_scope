@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on March 18, 2026.
+Last validated against code on March 20, 2026.
 
 ## Status Legend
 
@@ -33,18 +33,28 @@ Last validated against code on March 18, 2026.
 
 - Read flows for status, history, sync, remotes, tags, stashes, repo owner, publish context, and working diff: `Implemented`
 - Write flows for stage, unstage, discard, branch/tag actions, stash actions, fetch, pull, push, and repo init/setup: `Implemented`
-- AI-generated commit message flow: `Implemented`
-- AI-generated pull request draft flow: `Implemented`
+- AI-generated commit message flow with Groq, Gemini, or Codex model selection: `Implemented`
+- One-click staged `commit -> push -> create/open PR` flow for GitHub remotes: `Implemented`
+- GitHub CLI-backed pull request create/open flow with AI-or-template draft generation: `Implemented`
 
 ## Assistant
 
 - Assistant page in renderer: `Implemented`
 - Session create/select/rename/archive/delete: `Implemented`
+- Assistant sidebar project grouping with newest-first chats for new sessions, progressive 5-chat "Show more" expansion, and drag reordering: `Implemented`
 - Connect/disconnect and model listing: `Implemented`
-- Prompt send and interrupt: `Implemented`
+- Prompt send and interrupt: `Implemented` (empty composer text falls back to a default send prompt)
 - Approval response and user-input response handling: `Implemented`
+- Active-plan progress panel and proposed-plan sidebar toggle in the assistant header: `Implemented`
+- Assistant header project Git change summary with total uncommitted +/- stats: `Implemented`
+- Pending AI follow-up question panel with inline option response flow: `Implemented`
 - Session project-path association and new thread flow: `Implemented`
 - Event subscription and snapshot/status reads: `Implemented`
+- Session switching with cached selected-thread hydration: `Implemented`
+- Assistant persistence auto-recovers corrupt SQLite state by backing it up, rebuilding, and maintaining a JSON fallback snapshot for recovery: `Implemented`
+- Assistant markdown file links and edited-file entries opening in-app preview: `Implemented`
+- App-level assistant defaults for model, chat/plan mode, supervised/full-access mode, reasoning level, and fast mode: `Implemented`
+- Assistant account overview surface with auth mode, plan, and rate-limit reads: `Implemented`
 
 ## Settings and Navigation
 

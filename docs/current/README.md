@@ -8,6 +8,8 @@ The source-of-truth runtime is the Windows Electron app at the repository root. 
 
 - [`CURRENT_CODEBASE_ARCHITECTURE.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CODEBASE_ARCHITECTURE.md)
   Runtime layers, route surface, IPC/main boundaries, and active module ownership.
+- [`REPO_BOUNDARIES.md`](C:\Users\elson\my_coding_play\devscope\docs\current\REPO_BOUNDARIES.md)
+  Focused runtime ownership and layering rules for refactors and cross-process changes.
 - [`CURRENT_CAPABILITIES_MATRIX.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CAPABILITIES_MATRIX.md)
   What the app exposes today, including assistant, Git, project, file, and update flows.
 - [`ENGINEERING_QUALITY_STANDARDS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\ENGINEERING_QUALITY_STANDARDS.md)
@@ -16,14 +18,25 @@ The source-of-truth runtime is the Windows Electron app at the repository root. 
   Scope and layering rules for changes.
 - [`CHANGE_VALIDATION_CHECKLIST.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CHANGE_VALIDATION_CHECKLIST.md)
   Lightweight validation guidance.
+- [`BRANCH_WORKFLOW.md`](C:\Users\elson\my_coding_play\devscope\docs\current\BRANCH_WORKFLOW.md)
+  Default branch intent for `main` versus `dev`.
 - [`RELEASE_VERSIONING.md`](C:\Users\elson\my_coding_play\devscope\docs\current\RELEASE_VERSIONING.md)
   Release naming/versioning rules.
 - [`RELEASE_OPERATIONS_PLAYBOOK.md`](C:\Users\elson\my_coding_play\devscope\docs\current\RELEASE_OPERATIONS_PLAYBOOK.md)
   Packaging and release operations.
+- [`UI_BORDER_AND_DIVIDER_STANDARDS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\UI_BORDER_AND_DIVIDER_STANDARDS.md)
+  Canonical border, divider, and subtle-line treatment for the current UI.
 - [`UPDATE_TESTING_PLAYBOOK.md`](C:\Users\elson\my_coding_play\devscope\docs\current\UPDATE_TESTING_PLAYBOOK.md)
   Updater validation workflow.
 - [`BRANDING_ASSETS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\BRANDING_ASSETS.md)
   Branding asset roles and generation flow.
+
+## Task-Specific Skills
+
+- [`../.codex/skills/devscope-release/SKILL.md`](C:\Users\elson\my_coding_play\devscope\.codex\skills\devscope-release\SKILL.md)
+  Trigger for release/version/tag/publish/download tasks.
+- [`../.codex/skills/devscope-ui-standards/SKILL.md`](C:\Users\elson\my_coding_play\devscope\.codex\skills\devscope-ui-standards\SKILL.md)
+  Trigger for assistant/app-chrome border, divider, and subtle-surface styling tasks.
 
 ## What Does Not Live Here
 

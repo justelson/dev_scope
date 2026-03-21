@@ -72,6 +72,7 @@ The intended architecture direction remains contract-first: define shared contra
 - Renderer route state persists key navigation state in local storage and gates optional tabs through settings.
 - File preview and project details flows use narrower read operations to avoid unnecessary full reloads.
 - Update state is tracked in a dedicated main-process update subsystem instead of being ad hoc renderer state.
+- Assistant streaming batches text deltas before projection/broadcast, coalesces renderer event application to animation frames, batches main-to-renderer assistant event IPC, keeps hot persistence writes off the immediate UI interaction path, avoids deep-cloning hydrated thread history on every renderer store update, and relies on incremental off-screen row rendering plus exact history paging to keep long conversations responsive.
 
 ## Current Boundary Rules
 
