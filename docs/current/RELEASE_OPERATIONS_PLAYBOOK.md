@@ -47,6 +47,16 @@ For Windows releases, the published GitHub release must include:
 
 If any of those are missing, treat the release as incomplete.
 
+## Updater Feed Resolution
+
+The desktop app resolves update feeds directly from GitHub releases:
+
+- stable builds look for the newest non-draft stable release with Windows updater assets
+- alpha/beta builds allow prereleases and pick the newest non-draft matching release with Windows updater assets
+- the updater then reads `latest.yml` from that exact release tag path on GitHub
+
+This keeps the updater working from public GitHub releases without requiring a paid release-management service.
+
 ## Local Build Output Layout
 
 Local release artifacts must be organized by version:

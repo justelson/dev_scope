@@ -58,6 +58,12 @@ Point test builds at that lane with:
 
 That lets packaged test builds exercise the full updater path without polluting the main release history.
 
+Updater behavior to verify in packaged tests:
+
+- stable builds resolve the newest stable GitHub release feed
+- prerelease builds resolve the newest prerelease-capable GitHub release feed
+- the resolved release still contains `latest.yml`, the installer `.exe`, and the installer `.blockmap`
+
 ### 4. Real Release
 
 Only release from `main` after:

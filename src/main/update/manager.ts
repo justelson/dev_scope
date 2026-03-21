@@ -22,6 +22,7 @@ import {
     resolveReleaseChannel,
     shouldBroadcastDownloadProgress
 } from './update-state'
+import { resolveGitHubReleaseFeed } from './github-release-feed'
 
 export const UPDATE_STATE_CHANNEL = 'devscope:updates:state'
 export const UPDATE_GET_STATE_CHANNEL = 'devscope:updates:getState'
@@ -54,6 +55,7 @@ let updateDownloadInFlight = false
 let isInstallingUpdate = false
 let updaterConfigured = false
 let updaterInitialized = false
+let configuredFeedTagName: string | null = null
 let updateState: DevScopeUpdateState = createInitialUpdateState(
     app.getVersion(),
     releaseRepository,
@@ -135,6 +137,37 @@ function getUpdaterUnavailableMessage(): string {
     return updateState.disabledReason || updateState.message || 'Updater is not ready in this build yet.'
 }
 
+async function configureAutoUpdaterFeed(autoUpdater: AutoUpdater): Promise<void> {
+    const allowPrerelease = resolveReleaseChannel(app.getVersion()) !== 'stable'
+    const feed = await resolveGitHubReleaseFeed({
+        repository: releaseRepository,
+        currentVersion: app.getVersion(),
+        allowPrerelease
+    })
+
+    if (!feed) {
+        configuredFeedTagName = null
+        return
+    }
+
+    if (configuredFeedTagName !== feed.tagName) {
+        autoUpdater.setFeedURL({
+            provider: 'generic',
+            url: feed.feedUrl
+        })
+        configuredFeedTagName = feed.tagName
+        log.info(`[updater] using GitHub release feed ${feed.tagName}`)
+    }
+
+    autoUpdater.previousBlockmapBaseUrlOverride = feed.previousBlockmapBaseUrlOverride
+    if (updateState.releasePageUrl !== feed.releasePageUrl) {
+        updateState = {
+            ...updateState,
+            releasePageUrl: feed.releasePageUrl
+        }
+    }
+}
+
 export function registerUpdateWindow(window: BrowserWindow): void {
     const windowId = window.id
     trackedWindowIds.add(windowId)
@@ -199,6 +232,22 @@ async function performUpdaterInitialization(): Promise<void> {
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false
     autoUpdater.allowPrerelease = resolveReleaseChannel(app.getVersion()) !== 'stable'
+
+    try {
+        await configureAutoUpdaterFeed(autoUpdater)
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setUpdateState({
+            ...updateState,
+            status: 'error',
+            checkedAt: nowIso(),
+            message: `Failed to resolve GitHub release feed: ${message}`,
+            errorContext: 'check',
+            canRetry: true
+        })
+        log.error('[updater] failed to resolve GitHub release feed', error)
+        return
+    }
 
     autoUpdater.on('checking-for-update', () => {
         log.info('[updater] checking for updates')
@@ -284,6 +333,7 @@ export async function checkForAppUpdates(_reason: string = 'manual'): Promise<De
     setUpdateState(reduceUpdateStateOnCheckStart(updateState, nowIso()))
 
     try {
+        await configureAutoUpdaterFeed(autoUpdaterRef)
         await autoUpdaterRef.checkForUpdates()
         return buildActionResult(true, true)
     } catch (error) {
