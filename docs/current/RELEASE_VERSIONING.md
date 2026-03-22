@@ -58,5 +58,8 @@ The app formats prerelease versions for UI display using a simplified label:
 
 - Tag pushes matching `v*` trigger `.github/workflows/release.yml`.
 - Tags containing `-alpha.` or `-beta.` are published as GitHub prereleases.
-- Release title should be `DevScope Air <package-version>`.
+- Release title should use the cleaner human label derived from the package version.
+- Examples:
+  - `1.5.0` -> `DevScope Air v1.5.0`
+  - `1.5.0-beta.1` -> `DevScope Air v1.5.0 beta`
 - Release assets must include the Windows installer plus update metadata (`*.yml`, `*.blockmap`).

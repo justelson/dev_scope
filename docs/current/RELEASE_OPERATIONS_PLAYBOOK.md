@@ -29,9 +29,10 @@ Every desktop release should leave the repo and GitHub in a state that is:
 
 ## Required GitHub Release Name
 
-GitHub release names must follow:
+GitHub release names must follow the human-facing title format derived from the package version:
 
-- `DevScope Air <package-version>`
+- stable: `DevScope Air v<major>.<minor>.<patch>`
+- prerelease: `DevScope Air v<major>.<minor>.<patch> <channel>`
 
 Examples:
 
@@ -91,7 +92,7 @@ After any release task:
 3. Confirm release type is correct:
    - prerelease for `-alpha.*` and `-beta.*`
    - normal release for plain stable tags
-4. Confirm the release title is `DevScope Air <package-version>`.
+4. Confirm the release title matches the expected human-facing format for that version.
 5. Confirm expected Windows assets exist.
 6. Confirm `latest.yml` points at the actual uploaded installer filename.
 7. If the landing page download button is meant to target the newest release, verify it still resolves correctly.

@@ -23,7 +23,6 @@ const owner = publishConfig.owner
 const repo = publishConfig.repo
 const version = packageJson.version
 const tagName = `v${version}`
-const releaseName = `DevScope Air ${version}`
 const releaseDir = path.join(rootDir, 'dist', 'releases', `v${version}`)
 const installerName = `DevScope-Air-Setup-${version}.exe`
 const blockmapName = `${installerName}.blockmap`
@@ -37,6 +36,23 @@ const shouldSkipAssetUpload = args.has('--skip-assets')
 function log(message) {
     console.log(`[publish-local-release] ${message}`)
 }
+
+function formatReleaseTitle(versionString) {
+    const match = String(versionString).trim().match(/^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)\.?(\d+)?)?$/i)
+    if (!match) {
+        return `DevScope Air ${versionString}`
+    }
+
+    const [, major, minor, patch, channel] = match
+    const displayVersion = `v${major}.${minor}.${patch}`
+    if (!channel) {
+        return `DevScope Air ${displayVersion}`
+    }
+
+    return `DevScope Air ${displayVersion} ${channel.toLowerCase()}`
+}
+
+const releaseName = formatReleaseTitle(version)
 
 function runCommand(command, commandArgs, options = {}) {
     return new Promise((resolve, reject) => {
