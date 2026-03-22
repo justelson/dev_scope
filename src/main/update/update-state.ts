@@ -11,15 +11,13 @@ export function formatDisplayVersion(version: string): string {
     const match = version.trim().match(/^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)\.?(\d+)?)?$/i)
     if (!match) return `v${version}`
 
-    const [, major, minor, patch, prerelease, prereleaseNumber] = match
+    const [, major, minor, patch, prerelease] = match
     const semverLabel = `v${major}.${minor}.${patch}`
     if (!prerelease) {
         return semverLabel
     }
 
-    const label = prerelease.charAt(0).toUpperCase() + prerelease.slice(1).toLowerCase()
-    const counter = prereleaseNumber ? ` ${prereleaseNumber}` : ''
-    return `${label}${counter} (${semverLabel})`
+    return `${semverLabel} ${prerelease.toLowerCase()}`
 }
 
 export function createInitialUpdateState(

@@ -22,6 +22,7 @@ Every desktop release should leave the repo and GitHub in a state that is:
 
 1. Update package version in `package.json`.
 2. Keep release-facing UI/documentation in sync with that version when needed.
+   Human-facing app labels should use the simplified display format, for example `v1.5.0 beta`, while package/tag versions remain full SemVer.
 3. Create and push tag `v<package-version>`.
 4. Verify GitHub Actions release workflow status or use the local publisher path when intentionally doing a local publish.
 5. Verify GitHub release exists, has the correct title, and expected assets are attached.

@@ -47,11 +47,11 @@ DevScope Air desktop releases use SemVer so Electron auto-updates can compare ve
 
 ## Human-facing labels
 
-The app formats prerelease versions for UI display:
+The app formats prerelease versions for UI display using a simplified label:
 
-- `1.0.0-alpha.1` -> `Alpha 1 (v1.0.0)`
-- `1.5.0-alpha.5` -> `Alpha 5 (v1.5.0)`
-- `5.1.0-beta.2` -> `Beta 2 (v5.1.0)`
+- `1.0.0-alpha.1` -> `v1.0.0 alpha`
+- `1.5.0-alpha.5` -> `v1.5.0 alpha`
+- `5.1.0-beta.2` -> `v5.1.0 beta`
 - `10.0.0` -> `v10.0.0`
 
 ## GitHub Releases
