@@ -45,15 +45,20 @@ Last validated against code on March 20, 2026.
 - Connect/disconnect and model listing: `Implemented`
 - Prompt send and interrupt: `Implemented` (empty composer text falls back to a default send prompt)
 - Approval response and user-input response handling: `Implemented`
-- Active-plan progress panel and proposed-plan sidebar toggle in the assistant header: `Implemented`
+- Active-plan progress panel, proposed-plan sidebar toggle, and inline proposed-plan history blocks with collapsed preview, show-more/show-less controls, sidebar-open action, and explicit implement action: `Implemented`
 - Assistant header project Git change summary with total uncommitted +/- stats: `Implemented`
+- Assistant composer branch switcher with upward dropdown, branch search, current/default markers, and in-place checkout: `Implemented`
 - Pending AI follow-up question panel with inline option response flow: `Implemented`
+- Resolved guided-input responses persist as a tool-style `Consulted user` history row with expandable question/answer detail: `Implemented`
 - Session project-path association and new thread flow: `Implemented`
 - Event subscription and snapshot/status reads: `Implemented`
 - Session switching with cached selected-thread hydration: `Implemented`
 - Assistant persistence auto-recovers corrupt SQLite state by backing it up, rebuilding, and maintaining a JSON fallback snapshot for recovery: `Implemented`
 - Assistant markdown file links and edited-file entries opening in-app preview: `Implemented`
-- App-level assistant defaults for model, chat/plan mode, supervised/full-access mode, reasoning level, and fast mode: `Implemented`
+- Assistant text inputs expose native right-click spelling suggestions and edit actions: `Implemented`
+- Assistant composer exposes optional voice input with mic start/stop control: browser speech streams live on supported runtimes, local Vosk MVP records locally with rolling draft updates plus a final pass on stop, and browser-speech network failures can route directly into highlighted transcription settings: `Implemented`
+- Assistant defaults/settings page exposes transcription enablement, browser-vs-local engine selection, local Vosk model download/install prep, and highlight-targeted deep linking from assistant error recovery flows: `Implemented`
+- App-level assistant defaults for starter prompt template, model, chat/plan mode, supervised/full-access mode, reasoning level, and fast mode: `Implemented`
 - Assistant account overview surface with auth mode, plan, and rate-limit reads: `Implemented`
 
 ## Settings and Navigation

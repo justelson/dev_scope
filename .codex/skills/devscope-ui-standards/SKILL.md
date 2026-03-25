@@ -12,7 +12,10 @@ Read these files before making UI styling changes in the covered surfaces:
 
 ## Workflow
 
-- Use the current white-border pattern, not `border-sparkle-border`, for the supported UI surfaces.
+- Do not introduce white-border chrome by default on supported UI surfaces.
+- Do not use `border-sparkle-border` as the fallback border treatment either.
+- Prefer the existing surface language first: transparent borders, subtle fills, and state changes through background, opacity, and motion.
+- Only use visible white borders when the surrounding surface already depends on that treatment for structure or separation.
 - Check `src/renderer/src/pages/project-details/ProjectDetailsHeaderSection.tsx` before choosing border values.
 - Keep default, hover, active, collapsed, and expanded states visually consistent.
 - Match the existing subtle divider behavior before introducing a new one.
