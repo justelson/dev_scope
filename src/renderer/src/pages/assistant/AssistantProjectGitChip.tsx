@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { DiffStats } from '../project-details/DiffStats'
 
@@ -29,7 +29,7 @@ function GitHubMark({ className }: { className?: string }) {
     )
 }
 
-export function AssistantProjectGitChip({ projectPath, refreshToken }: AssistantProjectGitChipProps) {
+export const AssistantProjectGitChip = memo(function AssistantProjectGitChip({ projectPath, refreshToken }: AssistantProjectGitChipProps) {
     const normalizedProjectPath = useMemo(() => String(projectPath || '').trim(), [projectPath])
     const requestIdRef = useRef(0)
     const [state, setState] = useState<GitSummaryState>(INITIAL_STATE)
@@ -122,4 +122,4 @@ export function AssistantProjectGitChip({ projectPath, refreshToken }: Assistant
             />
         </div>
     )
-}
+})

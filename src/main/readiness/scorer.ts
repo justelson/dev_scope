@@ -7,7 +7,6 @@ import log from 'electron-log'
 import type {
     DetectedTool,
     ToolingReport,
-    AIRuntimeReport,
     ReadinessReport,
     ReadinessLevel,
     Warning,
@@ -60,17 +59,14 @@ const RECOMMENDATIONS: Record<string, { title: string; description: string; inst
  * Calculate readiness score from 0-100
  */
 function calculateScore(
-    tooling: ToolingReport,
-    aiRuntime: AIRuntimeReport
+    tooling: ToolingReport
 ): number {
     const allTools: DetectedTool[] = [
         ...tooling.languages,
         ...tooling.packageManagers,
         ...tooling.buildTools,
         ...tooling.containers,
-        ...tooling.versionControl,
-        ...aiRuntime.gpuAcceleration,
-        ...aiRuntime.aiFrameworks
+        ...tooling.versionControl
     ]
 
     const installedCount = allTools.filter(t => t.installed).length
@@ -101,8 +97,7 @@ function getReadinessLevel(score: number, warnings: Warning[]): ReadinessLevel {
  * Generate warnings for issues
  */
 function generateWarnings(
-    tooling: ToolingReport,
-    aiRuntime: AIRuntimeReport
+    tooling: ToolingReport
 ): Warning[] {
     const warnings: Warning[] = []
     let id = 1
@@ -165,8 +160,7 @@ function generateWarnings(
  * Generate recommendations for missing tools
  */
 function generateRecommendations(
-    tooling: ToolingReport,
-    aiRuntime: AIRuntimeReport
+    tooling: ToolingReport
 ): Recommendation[] {
     const recommendations: Recommendation[] = []
     let priority = 1
@@ -175,8 +169,7 @@ function generateRecommendations(
         ...tooling.languages,
         ...tooling.packageManagers,
         ...tooling.containers,
-        ...tooling.versionControl,
-        ...aiRuntime.llmRuntimes
+        ...tooling.versionControl
     ]
 
     for (const [toolId, rec] of Object.entries(RECOMMENDATIONS)) {
@@ -201,14 +194,13 @@ function generateRecommendations(
  * Calculate readiness report
  */
 export function calculateReadiness(
-    tooling: ToolingReport,
-    aiRuntime: AIRuntimeReport
+    tooling: ToolingReport
 ): ReadinessReport {
     log.info('Calculating readiness score...')
 
-    const warnings = generateWarnings(tooling, aiRuntime)
-    const recommendations = generateRecommendations(tooling, aiRuntime)
-    const score = calculateScore(tooling, aiRuntime)
+    const warnings = generateWarnings(tooling)
+    const recommendations = generateRecommendations(tooling)
+    const score = calculateScore(tooling)
     const level = getReadinessLevel(score, warnings)
 
     const allTools: DetectedTool[] = [

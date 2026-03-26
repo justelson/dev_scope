@@ -1,14 +1,24 @@
+import { app } from 'electron'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import log from 'electron-log'
 import type {
     AssistantAccountOverview,
+    AssistantApprovePendingPlaygroundLabRequestInput,
+    AssistantAttachSessionToPlaygroundLabInput,
     AssistantClearLogsInput,
     AssistantConnectOptions,
+    AssistantCreatePlaygroundLabInput,
+    AssistantCreateSessionInput,
+    AssistantDeclinePendingPlaygroundLabRequestInput,
     AssistantDeleteMessageInput,
     AssistantDomainEvent,
+    AssistantGetSessionTurnUsageInput,
     AssistantLatestTurn,
     AssistantMessage,
     AssistantRuntimeStatus,
     AssistantSendPromptOptions,
+    AssistantSessionTurnUsagePayload,
     AssistantThread
 } from '../../shared/assistant/contracts'
 import { AssistantTextDeltaBuffer } from './assistant-text-delta-buffer'
@@ -30,6 +40,11 @@ import {
     createAssistantUserMessage,
     createRunningLatestTurn
 } from './service-records'
+import {
+    createPlaygroundLabRecord,
+    derivePlaygroundLabTitle,
+    ensurePlaygroundLabExists
+} from './playground-service'
 import {
     type AssistantStateRecord,
     createAssistantThread,
@@ -151,6 +166,39 @@ export class AssistantService {
         return { success: true as const, overview }
     }
 
+    async getSessionTurnUsage(input?: AssistantGetSessionTurnUsageInput) {
+        await this.ensureReady()
+        const session = input?.sessionId
+            ? requireSession(this.state.snapshot, input.sessionId)
+            : requireSession(this.state.snapshot, this.state.snapshot.selectedSessionId || '')
+        const persistedTurns = await this.persistence.readSessionTurnUsage(session.id)
+        const turnMap = new Map(persistedTurns.map((turn) => [turn.id, turn]))
+        for (const thread of session.threads) {
+            if (!thread.latestTurn) continue
+            turnMap.set(thread.latestTurn.id, {
+                id: thread.latestTurn.id,
+                sessionId: session.id,
+                threadId: thread.id,
+                model: thread.model,
+                state: thread.latestTurn.state,
+                requestedAt: thread.latestTurn.requestedAt,
+                startedAt: thread.latestTurn.startedAt,
+                completedAt: thread.latestTurn.completedAt,
+                assistantMessageId: thread.latestTurn.assistantMessageId,
+                effort: thread.latestTurn.effort,
+                serviceTier: thread.latestTurn.serviceTier,
+                usage: thread.latestTurn.usage || null,
+                updatedAt: thread.latestTurn.completedAt || thread.latestTurn.startedAt || thread.latestTurn.requestedAt
+            })
+        }
+        const usage: AssistantSessionTurnUsagePayload = {
+            sessionId: session.id,
+            turns: [...turnMap.values()].sort((left, right) => left.requestedAt.localeCompare(right.requestedAt) || left.id.localeCompare(right.id)),
+            fetchedAt: nowIso()
+        }
+        return { success: true as const, usage }
+    }
+
     async connect(options?: AssistantConnectOptions) {
         await this.ensureReady()
         const session = options?.sessionId
@@ -159,7 +207,7 @@ export class AssistantService {
                 this.appendEvent(type, occurredAt, payload, sessionId, threadId)
             })
         const thread = requireActiveThread(session)
-        await this.runtime.connect(thread, session.projectPath || process.cwd())
+        await this.runtime.connect(thread, this.getSessionRuntimeCwd(session, thread))
         return { success: true as const, threadId: thread.id }
     }
 
@@ -176,15 +224,23 @@ export class AssistantService {
         return { success: true as const }
     }
 
-    async createSession(title?: string, projectPath?: string) {
+    async createSession(input?: AssistantCreateSessionInput) {
         await this.ensureReady()
         const createdAt = nowIso()
         const sessionId = createAssistantId('assistant-session')
+        const mode = input?.mode === 'playground' ? 'playground' : 'work'
+        const playgroundLabId = mode === 'playground' ? input?.playgroundLabId || null : null
+        const playgroundLab = playgroundLabId ? ensurePlaygroundLabExists(this.state.snapshot.playground.labs, playgroundLabId) : null
+        const projectPath = mode === 'playground'
+            ? (playgroundLab?.rootPath || null)
+            : (input?.projectPath?.trim() || null)
         const thread = createAssistantThread(createdAt, null, projectPath || null)
         const session = createAssistantSessionRecord({
             sessionId,
-            title: title?.trim() || 'New Session',
-            projectPath: projectPath?.trim() || null,
+            title: input?.title?.trim() || (mode === 'playground' ? 'New Playground Chat' : 'New Session'),
+            mode,
+            projectPath,
+            playgroundLabId,
             createdAt,
             thread
         })
@@ -281,7 +337,8 @@ export class AssistantService {
 
         this.appendEvent('thread.updated', occurredAt, {
             threadId: thread.id,
-            patch: deletePlan.patch
+            patch: deletePlan.patch,
+            removedTurnIds: deletePlan.removedTurnIds
         }, session.id, thread.id)
 
         return { success: true as const }
@@ -294,10 +351,78 @@ export class AssistantService {
             sessionId,
             patch: {
                 projectPath: sanitizeOptionalPath(projectPath),
+                playgroundLabId: null,
+                pendingLabRequest: null,
                 updatedAt: nowIso()
             }
         }, sessionId)
         return { success: true as const }
+    }
+
+    async setPlaygroundRoot(input: { rootPath: string | null }) {
+        await this.ensureReady()
+        const rootPath = sanitizeOptionalPath(input.rootPath)
+        this.appendEvent('playground.updated', nowIso(), {
+            playground: {
+                ...this.state.snapshot.playground,
+                rootPath
+            }
+        })
+        return { success: true as const, playground: structuredClone(this.state.snapshot.playground) }
+    }
+
+    async createPlaygroundLab(input: AssistantCreatePlaygroundLabInput) {
+        await this.ensureReady()
+        const rootPath = this.state.snapshot.playground.rootPath
+        if (!rootPath) throw new Error('Choose a Playground root first.')
+
+        const lab = await createPlaygroundLabRecord({
+            rootPath,
+            title: input.title,
+            source: input.source,
+            repoUrl: input.repoUrl,
+            existingFolderPath: input.existingFolderPath
+        })
+        const nextPlayground = {
+            ...this.state.snapshot.playground,
+            labs: [lab, ...this.state.snapshot.playground.labs]
+        }
+        const occurredAt = nowIso()
+        this.appendEvent('playground.updated', occurredAt, { playground: nextPlayground })
+
+        let sessionId: string | null = null
+        if (input.openSession) {
+            const created = await this.createSession({
+                title: lab.title,
+                mode: 'playground',
+                playgroundLabId: lab.id
+            })
+            sessionId = created.sessionId
+        }
+
+        return {
+            success: true as const,
+            labId: lab.id,
+            sessionId,
+            playground: structuredClone(this.state.snapshot.playground)
+        }
+    }
+
+    async attachSessionToPlaygroundLab(input: AssistantAttachSessionToPlaygroundLabInput) {
+        await this.ensureReady()
+        const session = requireSession(this.state.snapshot, input.sessionId)
+        const lab = ensurePlaygroundLabExists(this.state.snapshot.playground.labs, input.labId)
+        this.appendEvent('session.updated', nowIso(), {
+            sessionId: session.id,
+            patch: {
+                mode: 'playground',
+                projectPath: lab.rootPath,
+                playgroundLabId: lab.id,
+                pendingLabRequest: null,
+                updatedAt: nowIso()
+            }
+        }, session.id, session.activeThreadId || undefined)
+        return { success: true as const, playground: structuredClone(this.state.snapshot.playground) }
     }
 
     async newThread(sessionId?: string) {
@@ -340,6 +465,39 @@ export class AssistantService {
                 this.appendEvent(type, occurredAt, payload, sessionId, threadId)
             })
         const thread = requireActiveThread(session)
+        const labRequest = this.maybeBuildPendingPlaygroundLabRequest(session, input)
+        if (labRequest) {
+            const occurredAt = nowIso()
+            this.appendEvent('session.updated', occurredAt, {
+                sessionId: session.id,
+                patch: {
+                    pendingLabRequest: labRequest,
+                    updatedAt: occurredAt
+                }
+            }, session.id, thread.id)
+            this.appendEvent('thread.activity.appended', occurredAt, {
+                threadId: thread.id,
+                activity: {
+                    id: createAssistantId('assistant-activity'),
+                    kind: 'playground.lab-requested',
+                    tone: 'info',
+                    summary: labRequest.kind === 'clone-repo' ? 'Playground repo clone requested' : 'Playground lab requested',
+                    detail: labRequest.kind === 'clone-repo'
+                        ? `Approve creating a Playground lab by cloning ${labRequest.repoUrl || 'the provided repository'}.`
+                        : 'Approve creating a Playground lab before filesystem work continues.',
+                    turnId: null,
+                    createdAt: occurredAt,
+                    payload: {
+                        requestId: labRequest.id,
+                        kind: labRequest.kind,
+                        repoUrl: labRequest.repoUrl,
+                        suggestedLabName: labRequest.suggestedLabName
+                    }
+                }
+            }, session.id, thread.id)
+            return { success: true as const, sessionId: session.id, threadId: thread.id, turnId: labRequest.id }
+        }
+
         const occurredAt = nowIso()
         const title = isDefaultSessionTitle(session.title) ? deriveSessionTitleFromPrompt(input) : session.title
         if (title !== session.title) {
@@ -355,7 +513,7 @@ export class AssistantService {
         const userMessage = createAssistantUserMessage(input, occurredAt, createAssistantId('assistant-message'))
         this.appendEvent('thread.message.user', occurredAt, { threadId: thread.id, message: userMessage }, session.id, thread.id)
 
-        const runtimeCwd = session.projectPath || thread.cwd || process.cwd()
+        const runtimeCwd = this.getSessionRuntimeCwd(session, thread)
         const updatedThreadPatch: Partial<AssistantThread> & Pick<AssistantThread, 'model' | 'runtimeMode' | 'interactionMode' | 'cwd' | 'state' | 'lastError' | 'activePlan' | 'updatedAt'> = {
             model: options?.model || thread.model,
             runtimeMode: options?.runtimeMode || thread.runtimeMode,
@@ -432,6 +590,66 @@ export class AssistantService {
         await this.runtime.respondUserInput(target.thread.id, input.requestId, input.answers)
         return { success: true as const }
     }
+
+    async approvePendingPlaygroundLabRequest(input: AssistantApprovePendingPlaygroundLabRequestInput) {
+        await this.ensureReady()
+        const session = requireSession(this.state.snapshot, input.sessionId)
+        const pendingLabRequest = session.pendingLabRequest
+        if (!pendingLabRequest) throw new Error('There is no pending Playground lab request for this chat.')
+
+        const result = await this.createPlaygroundLab({
+            title: input.title || pendingLabRequest.suggestedLabName,
+            source: input.source,
+            repoUrl: input.repoUrl || pendingLabRequest.repoUrl || undefined,
+            openSession: false
+        })
+        const lab = ensurePlaygroundLabExists(this.state.snapshot.playground.labs, result.labId)
+        this.appendEvent('session.updated', nowIso(), {
+            sessionId: session.id,
+            patch: {
+                mode: 'playground',
+                projectPath: lab.rootPath,
+                playgroundLabId: lab.id,
+                pendingLabRequest: null,
+                updatedAt: nowIso()
+            }
+        }, session.id, session.activeThreadId || undefined)
+        await this.sendPrompt(pendingLabRequest.prompt, { sessionId: session.id })
+        return {
+            success: true as const,
+            sessionId: session.id,
+            labId: lab.id,
+            playground: structuredClone(this.state.snapshot.playground)
+        }
+    }
+
+    async declinePendingPlaygroundLabRequest(input: AssistantDeclinePendingPlaygroundLabRequestInput) {
+        await this.ensureReady()
+        const session = requireSession(this.state.snapshot, input.sessionId)
+        if (!session.pendingLabRequest) return { success: true as const }
+        const thread = requireActiveThread(session)
+        const occurredAt = nowIso()
+        this.appendEvent('session.updated', occurredAt, {
+            sessionId: session.id,
+            patch: {
+                pendingLabRequest: null,
+                updatedAt: occurredAt
+            }
+        }, session.id, thread.id)
+        this.appendEvent('thread.activity.appended', occurredAt, {
+            threadId: thread.id,
+            activity: {
+                id: createAssistantId('assistant-activity'),
+                kind: 'playground.lab-request.declined',
+                tone: 'warning',
+                summary: 'Playground lab request declined',
+                detail: 'The assistant cannot continue filesystem work for this Playground chat without a lab.',
+                turnId: null,
+                createdAt: occurredAt
+            }
+        }, session.id, thread.id)
+        return { success: true as const }
+    }
     dispose() {
         this.assistantTextDeltaBuffer.dispose()
         this.runtime.dispose()
@@ -448,6 +666,43 @@ export class AssistantService {
 
     private async ensureReady() {
         await this.readyPromise
+    }
+
+    private getSessionRuntimeCwd(session: ReturnType<typeof requireSession>, thread: AssistantThread): string {
+        if (session.mode === 'playground') {
+            return sanitizeOptionalPath(session.projectPath)
+                || sanitizeOptionalPath(thread.cwd)
+                || this.getDetachedPlaygroundChatRoot()
+        }
+        return session.projectPath || thread.cwd || process.cwd()
+    }
+
+    private getDetachedPlaygroundChatRoot(): string {
+        const rootPath = join(app.getPath('userData'), 'assistant', 'playground-chat-only')
+        mkdirSync(rootPath, { recursive: true })
+        return rootPath
+    }
+
+    private maybeBuildPendingPlaygroundLabRequest(session: ReturnType<typeof requireSession>, prompt: string) {
+        if (session.mode !== 'playground') return null
+        if (session.playgroundLabId || sanitizeOptionalPath(session.projectPath)) return null
+        if (session.pendingLabRequest) return null
+
+        const repoUrlMatch = prompt.match(/https?:\/\/[^\s]+(?:\.git)?/i)
+        const repoUrl = repoUrlMatch ? repoUrlMatch[0] : null
+        const needsWorkspace = repoUrl
+            || /\b(create|build|make|scaffold|generate|implement|code|repo|repository|project|app|workspace|files?)\b/i.test(prompt)
+
+        if (!needsWorkspace) return null
+
+        return {
+            id: createAssistantId('assistant-playground-lab-request'),
+            kind: repoUrl ? 'clone-repo' as const : 'create-empty' as const,
+            prompt,
+            suggestedLabName: derivePlaygroundLabTitle(undefined, repoUrl, undefined),
+            repoUrl,
+            createdAt: nowIso()
+        }
     }
 
     private appendEvent(type: AssistantDomainEvent['type'], occurredAt: string, payload: Record<string, unknown>, sessionId?: string, threadId?: string) {

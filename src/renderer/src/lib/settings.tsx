@@ -38,6 +38,7 @@ export type AssistantTextStreamingMode = 'stream' | 'chunks'
 export type AssistantDefaultRuntimeMode = 'approval-required' | 'full-access'
 export type AssistantDefaultInteractionMode = 'default' | 'plan'
 export type AssistantDefaultEffort = 'low' | 'medium' | 'high' | 'xhigh'
+export type AssistantTranscriptionEngine = 'browser' | 'vosk'
 
 export interface PullRequestGuideConfig {
     mode: PullRequestGuideMode
@@ -138,10 +139,13 @@ export interface Settings {
     assistantUsageDisplayMode: AssistantUsageDisplayMode
     assistantTextStreamingMode: AssistantTextStreamingMode
     assistantDefaultModel: string
+    assistantDefaultPromptTemplate: string
     assistantDefaultRuntimeMode: AssistantDefaultRuntimeMode
     assistantDefaultInteractionMode: AssistantDefaultInteractionMode
     assistantDefaultEffort: AssistantDefaultEffort
     assistantDefaultFastMode: boolean
+    assistantTranscriptionEnabled: boolean
+    assistantTranscriptionEngine: AssistantTranscriptionEngine
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -197,10 +201,13 @@ const DEFAULT_SETTINGS: Settings = {
     assistantUsageDisplayMode: 'remaining',
     assistantTextStreamingMode: 'stream',
     assistantDefaultModel: '',
+    assistantDefaultPromptTemplate: '',
     assistantDefaultRuntimeMode: 'approval-required',
     assistantDefaultInteractionMode: 'default',
     assistantDefaultEffort: 'high',
-    assistantDefaultFastMode: false
+    assistantDefaultFastMode: false,
+    assistantTranscriptionEnabled: false,
+    assistantTranscriptionEngine: 'browser'
 }
 
 const STORAGE_KEY = 'devscope-settings'
@@ -340,10 +347,15 @@ function loadSettings(): Settings {
                 assistantUsageDisplayMode: candidate.assistantUsageDisplayMode === 'used' ? 'used' : 'remaining',
                 assistantTextStreamingMode: candidate.assistantTextStreamingMode === 'chunks' ? 'chunks' : 'stream',
                 assistantDefaultModel: typeof candidate.assistantDefaultModel === 'string' ? candidate.assistantDefaultModel.trim() : '',
+                assistantDefaultPromptTemplate: typeof candidate.assistantDefaultPromptTemplate === 'string'
+                    ? candidate.assistantDefaultPromptTemplate
+                    : '',
                 assistantDefaultRuntimeMode: sanitizeAssistantDefaultRuntimeMode(candidate.assistantDefaultRuntimeMode),
                 assistantDefaultInteractionMode: sanitizeAssistantDefaultInteractionMode(candidate.assistantDefaultInteractionMode),
                 assistantDefaultEffort: sanitizeAssistantDefaultEffort(candidate.assistantDefaultEffort),
-                assistantDefaultFastMode: !!candidate.assistantDefaultFastMode
+                assistantDefaultFastMode: !!candidate.assistantDefaultFastMode,
+                assistantTranscriptionEnabled: candidate.assistantTranscriptionEnabled === true,
+                assistantTranscriptionEngine: candidate.assistantTranscriptionEngine === 'vosk' ? 'vosk' : 'browser'
             }
         }
     } catch (e) {

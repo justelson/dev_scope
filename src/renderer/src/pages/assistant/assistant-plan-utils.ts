@@ -6,6 +6,7 @@ export type AssistantActivePlanProgress = {
     completedSteps: number
     activeStepIndex: number | null
     isComplete: boolean
+    executionState: 'idle' | 'running' | 'stopped' | 'completed'
     steps: AssistantPlanStep[]
 }
 
@@ -38,6 +39,16 @@ export function getAssistantActivePlanProgress(
     const completedSteps = steps.filter((step) => step.status === 'completed').length
     const isComplete = completedSteps === steps.length
     const fallbackStepNumber = Math.min(steps.length, Math.max(1, completedSteps + 1))
+    const sameTurn = !activePlan?.turnId || !latestTurn?.id || activePlan.turnId === latestTurn.id
+    const executionState: AssistantActivePlanProgress['executionState'] = isComplete
+        ? 'completed'
+        : sameTurn && latestTurn?.state === 'running' && activeStepIndex >= 0
+            ? 'running'
+            : sameTurn && (latestTurn?.state === 'interrupted' || latestTurn?.state === 'error') && activeStepIndex >= 0
+                ? 'stopped'
+                : sameTurn && latestTurn?.state === 'completed'
+                    ? 'completed'
+                    : 'idle'
 
     return {
         currentStepNumber: isComplete ? steps.length : activeStepIndex >= 0 ? activeStepIndex + 1 : fallbackStepNumber,
@@ -45,6 +56,7 @@ export function getAssistantActivePlanProgress(
         completedSteps,
         activeStepIndex: activeStepIndex >= 0 ? activeStepIndex : null,
         isComplete,
+        executionState,
         steps
     }
 }

@@ -7,13 +7,15 @@ type UseFilePreviewChromeParams = {
     defaultStartExpanded: boolean
     defaultLeftPanelOpen: boolean
     defaultRightPanelOpen: boolean
+    initialFocusLine?: number | null
 }
 
 export function useFilePreviewChrome({
     resetKey,
     defaultStartExpanded,
     defaultLeftPanelOpen,
-    defaultRightPanelOpen
+    defaultRightPanelOpen,
+    initialFocusLine = null
 }: UseFilePreviewChromeParams) {
     const [viewport, setViewport] = useState<ViewportPreset>('responsive')
     const [isExpanded, setIsExpanded] = useState(defaultStartExpanded)
@@ -28,7 +30,7 @@ export function useFilePreviewChrome({
     const [editorFontSize, setEditorFontSize] = useState(13)
     const [findRequestToken, setFindRequestToken] = useState(0)
     const [replaceRequestToken, setReplaceRequestToken] = useState(0)
-    const [focusLine, setFocusLine] = useState<number | null>(null)
+    const [focusLine, setFocusLine] = useState<number | null>(initialFocusLine)
 
     const previewSurfaceRef = useRef<HTMLDivElement | null>(null)
     const panelResizeRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
@@ -47,8 +49,8 @@ export function useFilePreviewChrome({
         setEditorFontSize(13)
         setFindRequestToken(0)
         setReplaceRequestToken(0)
-        setFocusLine(null)
-    }, [defaultLeftPanelOpen, defaultRightPanelOpen, defaultStartExpanded, resetKey])
+        setFocusLine(initialFocusLine)
+    }, [defaultLeftPanelOpen, defaultRightPanelOpen, defaultStartExpanded, initialFocusLine, resetKey])
 
     useEffect(() => {
         if (!isExpanded) return

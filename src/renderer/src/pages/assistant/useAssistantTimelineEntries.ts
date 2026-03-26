@@ -1,10 +1,11 @@
 import { useMemo, useRef } from 'react'
-import type { AssistantActivity, AssistantMessage } from '@shared/assistant/contracts'
+import type { AssistantActivity, AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
 import { getTimelineEntries, type TimelineEntry } from './assistant-timeline-helpers'
 
 type TimelineEntriesCache = {
     messages: AssistantMessage[]
     activities: AssistantActivity[]
+    proposedPlans: AssistantProposedPlan[]
     entries: TimelineEntry[]
 }
 
@@ -26,17 +27,21 @@ function haveStableMessagePrefix(previous: AssistantMessage[], next: AssistantMe
     return true
 }
 
-export function useAssistantTimelineEntries(messages: AssistantMessage[], activities: AssistantActivity[]): TimelineEntry[] {
+export function useAssistantTimelineEntries(
+    messages: AssistantMessage[],
+    activities: AssistantActivity[],
+    proposedPlans: AssistantProposedPlan[] = []
+): TimelineEntry[] {
     const cacheRef = useRef<TimelineEntriesCache | null>(null)
 
     return useMemo(() => {
         const cached = cacheRef.current
         if (cached) {
-            if (cached.messages === messages && cached.activities === activities) {
+            if (cached.messages === messages && cached.activities === activities && cached.proposedPlans === proposedPlans) {
                 return cached.entries
             }
 
-            if (cached.activities === activities && cached.messages.length > 0) {
+            if (cached.activities === activities && cached.proposedPlans === proposedPlans && cached.messages.length > 0) {
                 const previousLastMessage = cached.messages[cached.messages.length - 1]
                 const nextLastMessage = messages[messages.length - 1]
 
@@ -56,7 +61,7 @@ export function useAssistantTimelineEntries(messages: AssistantMessage[], activi
                             type: 'message',
                             message: nextLastMessage
                         }
-                        cacheRef.current = { messages, activities, entries: nextEntries }
+                        cacheRef.current = { messages, activities, proposedPlans, entries: nextEntries }
                         return nextEntries
                     }
                 }
@@ -75,14 +80,14 @@ export function useAssistantTimelineEntries(messages: AssistantMessage[], activi
                             message: appendedMessage
                         }
                     ]
-                    cacheRef.current = { messages, activities, entries: nextEntries }
+                    cacheRef.current = { messages, activities, proposedPlans, entries: nextEntries }
                     return nextEntries
                 }
             }
         }
 
-        const entries = getTimelineEntries(messages, activities)
-        cacheRef.current = { messages, activities, entries }
+        const entries = getTimelineEntries(messages, activities, proposedPlans)
+        cacheRef.current = { messages, activities, proposedPlans, entries }
         return entries
-    }, [activities, messages])
+    }, [activities, messages, proposedPlans])
 }

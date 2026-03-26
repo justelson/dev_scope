@@ -182,6 +182,10 @@ export function createDefaultAssistantSnapshot(): AssistantSnapshot {
         snapshotSequence: 0,
         updatedAt: new Date(0).toISOString(),
         selectedSessionId: null,
+        playground: {
+            rootPath: null,
+            labs: []
+        },
         sessions: [],
         knownModels: []
     }
@@ -225,6 +229,10 @@ function applyAssistantDomainEventInternal(snapshot: AssistantSnapshot, event: A
             next.sessions = previousSessions.filter((session) => session.id !== sessionId)
             next.selectedSessionId = pickNextSelectedSessionId(next.sessions, snapshot.selectedSessionId, sessionId)
             shouldSortSessions = true
+            break
+        }
+        case 'playground.updated': {
+            next.playground = event.payload['playground'] as AssistantSnapshot['playground']
             break
         }
         case 'thread.created': {

@@ -1,7 +1,12 @@
 import type {
     AssistantApprovalResponseInput,
+    AssistantApprovePendingPlaygroundLabRequestInput,
+    AssistantAttachSessionToPlaygroundLabInput,
     AssistantClearLogsInput,
     AssistantConnectOptions,
+    AssistantCreatePlaygroundLabInput,
+    AssistantCreateSessionInput,
+    AssistantDeclinePendingPlaygroundLabRequestInput,
     AssistantDeleteMessageInput,
     AssistantDomainEvent,
     AssistantModelInfo,
@@ -16,6 +21,7 @@ import { collapseAssistantDeltaEvents } from './event-batching'
 import {
     applyCachedSessionSelection,
     cacheHydratedSelectedSession,
+    hasCachedSessionSelection,
     type CachedHydratedThreadState
 } from './session-hydration-cache'
 
@@ -37,6 +43,8 @@ const INITIAL_STATUS: AssistantRuntimeStatus = {
     state: 'disconnected',
     reason: null
 }
+
+const ASSISTANT_DELTA_EVENT_FLUSH_DELAY_MS = 64
 
 function deriveAssistantRuntimeStatus(snapshot: AssistantSnapshot, currentStatus: AssistantRuntimeStatus): AssistantRuntimeStatus {
     const selectedSession = snapshot.sessions.find((session) => session.id === snapshot.selectedSessionId) || null
@@ -70,6 +78,7 @@ class AssistantStore {
     private modelRefreshPromise: Promise<DevScopeResult<{ models: AssistantModelInfo[] }>> | null = null
     private pendingAssistantEvents: AssistantDomainEvent[] = []
     private pendingAssistantEventFlushFrame: number | null = null
+    private pendingAssistantEventFlushTimeout: number | null = null
 
     subscribe = (listener: () => void) => {
         this.listeners.add(listener)
@@ -173,8 +182,8 @@ class AssistantStore {
         await this.hydrate()
     }
 
-    async createSession(title?: string, projectPath?: string) {
-        return this.runAction(() => window.devscope.assistant.createSession(title, projectPath), true)
+    async createSession(input?: AssistantCreateSessionInput) {
+        return this.runAction(() => window.devscope.assistant.createSession(input), true)
     }
 
     async selectSession(sessionId: string, options?: { force?: boolean }) {
@@ -183,11 +192,12 @@ class AssistantStore {
             return { success: true as const, snapshot: this.state.snapshot }
         }
 
+        const canHydrateFromCache = hasCachedSessionSelection(this.state.snapshot, sessionId, this.hydratedSessionCache)
         this.setState((current) => {
             const snapshot = applyCachedSessionSelection(current.snapshot, sessionId, this.hydratedSessionCache)
             return {
                 error: null,
-                commandPending: true,
+                commandPending: !canHydrateFromCache,
                 snapshot,
                 status: deriveAssistantRuntimeStatus(snapshot, current.status)
             }
@@ -234,6 +244,26 @@ class AssistantStore {
 
     async setSessionProjectPath(sessionId: string, projectPath: string | null) {
         return this.runAction(() => window.devscope.assistant.setSessionProjectPath(sessionId, projectPath), false)
+    }
+
+    async setPlaygroundRoot(rootPath: string | null) {
+        return this.runAction(() => window.devscope.assistant.setPlaygroundRoot({ rootPath }), true)
+    }
+
+    async createPlaygroundLab(input: AssistantCreatePlaygroundLabInput) {
+        return this.runAction(() => window.devscope.assistant.createPlaygroundLab(input), true)
+    }
+
+    async attachSessionToPlaygroundLab(input: AssistantAttachSessionToPlaygroundLabInput) {
+        return this.runAction(() => window.devscope.assistant.attachSessionToPlaygroundLab(input), true)
+    }
+
+    async approvePendingPlaygroundLabRequest(input: AssistantApprovePendingPlaygroundLabRequestInput) {
+        return this.runAction(() => window.devscope.assistant.approvePendingPlaygroundLabRequest(input), true)
+    }
+
+    async declinePendingPlaygroundLabRequest(input: AssistantDeclinePendingPlaygroundLabRequestInput) {
+        return this.runAction(() => window.devscope.assistant.declinePendingPlaygroundLabRequest(input), true)
     }
 
     async newThread(sessionId?: string) {
@@ -321,6 +351,19 @@ class AssistantStore {
 
     private queueAssistantEvent(event: AssistantDomainEvent) {
         this.pendingAssistantEvents.push(event)
+        if (event.type === 'thread.message.assistant.delta') {
+            if (this.pendingAssistantEventFlushFrame !== null || this.pendingAssistantEventFlushTimeout !== null) return
+            this.pendingAssistantEventFlushTimeout = window.setTimeout(() => {
+                this.pendingAssistantEventFlushTimeout = null
+                this.flushPendingAssistantEvents()
+            }, ASSISTANT_DELTA_EVENT_FLUSH_DELAY_MS)
+            return
+        }
+
+        if (this.pendingAssistantEventFlushTimeout !== null) {
+            window.clearTimeout(this.pendingAssistantEventFlushTimeout)
+            this.pendingAssistantEventFlushTimeout = null
+        }
         if (this.pendingAssistantEventFlushFrame !== null) return
 
         this.pendingAssistantEventFlushFrame = window.requestAnimationFrame(() => {
@@ -333,6 +376,10 @@ class AssistantStore {
         if (this.pendingAssistantEventFlushFrame !== null) {
             window.cancelAnimationFrame(this.pendingAssistantEventFlushFrame)
             this.pendingAssistantEventFlushFrame = null
+        }
+        if (this.pendingAssistantEventFlushTimeout !== null) {
+            window.clearTimeout(this.pendingAssistantEventFlushTimeout)
+            this.pendingAssistantEventFlushTimeout = null
         }
         if (this.pendingAssistantEvents.length === 0) return
 
@@ -352,10 +399,17 @@ class AssistantStore {
             window.cancelAnimationFrame(this.pendingAssistantEventFlushFrame)
             this.pendingAssistantEventFlushFrame = null
         }
+        if (this.pendingAssistantEventFlushTimeout !== null) {
+            window.clearTimeout(this.pendingAssistantEventFlushTimeout)
+            this.pendingAssistantEventFlushTimeout = null
+        }
         this.pendingAssistantEvents = []
     }
 
-    private async runAction<T extends DevScopeResult>(work: () => Promise<T>, _refreshStatusAfter: boolean) {
+    private async runAction<T = Record<string, unknown>>(
+        work: () => Promise<DevScopeResult<T>>,
+        _refreshStatusAfter: boolean
+    ): Promise<DevScopeResult<T>> {
         this.setState({ error: null, commandPending: true })
         try {
             const result = await work()
@@ -367,7 +421,7 @@ class AssistantStore {
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Assistant command failed.'
             this.setState({ error: message })
-            return { success: false as const, error: message } as T
+            return { success: false as const, error: message }
         } finally {
             this.setState({ commandPending: false })
         }

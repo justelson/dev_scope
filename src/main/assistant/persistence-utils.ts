@@ -15,10 +15,11 @@ export interface AssistantMetaRow {
     snapshotSequence: number
     updatedAt: string
     selectedSessionId: string | null
+    playgroundRootPath: string | null
     knownModels: AssistantSnapshot['knownModels']
 }
 
-export const PERSISTENCE_VERSION = 3
+export const PERSISTENCE_VERSION = 5
 export const PERSISTENCE_FLUSH_DEBOUNCE_MS = 1500
 
 export function jsonStringify(value: unknown): string {
@@ -91,7 +92,10 @@ export function initializeAssistantPersistenceSchema(db: SqlDatabase): void {
         CREATE TABLE IF NOT EXISTS assistant_sessions (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
+            mode TEXT NOT NULL DEFAULT 'work',
             project_path TEXT,
+            playground_lab_id TEXT,
+            pending_lab_request_json TEXT,
             archived INTEGER NOT NULL,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
@@ -114,6 +118,21 @@ export function initializeAssistantPersistenceSchema(db: SqlDatabase): void {
             latest_turn_json TEXT,
             active_plan_json TEXT,
             FOREIGN KEY(session_id) REFERENCES assistant_sessions(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS assistant_turns (
+            id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL,
+            model TEXT NOT NULL,
+            state TEXT NOT NULL,
+            requested_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            assistant_message_id TEXT,
+            effort TEXT,
+            service_tier TEXT,
+            usage_json TEXT,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(thread_id) REFERENCES assistant_threads(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS assistant_messages (
             id TEXT PRIMARY KEY,
@@ -175,11 +194,32 @@ export function initializeAssistantPersistenceSchema(db: SqlDatabase): void {
             resolved_at TEXT,
             FOREIGN KEY(thread_id) REFERENCES assistant_threads(id) ON DELETE CASCADE
         );
+        CREATE TABLE IF NOT EXISTS assistant_playground_labs (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            root_path TEXT NOT NULL,
+            source TEXT NOT NULL,
+            repo_url TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         CREATE INDEX IF NOT EXISTS idx_assistant_threads_session ON assistant_threads(session_id, updated_at DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_assistant_turns_thread ON assistant_turns(thread_id, requested_at ASC, id ASC);
         CREATE INDEX IF NOT EXISTS idx_assistant_messages_thread ON assistant_messages(thread_id, created_at ASC, id ASC);
         CREATE INDEX IF NOT EXISTS idx_assistant_activities_thread ON assistant_activities(thread_id, created_at ASC, id ASC);
         CREATE INDEX IF NOT EXISTS idx_assistant_plans_thread ON assistant_proposed_plans(thread_id, created_at ASC, id ASC);
         CREATE INDEX IF NOT EXISTS idx_assistant_approvals_thread ON assistant_pending_approvals(thread_id, created_at ASC, id ASC);
         CREATE INDEX IF NOT EXISTS idx_assistant_user_inputs_thread ON assistant_pending_user_inputs(thread_id, created_at ASC, id ASC);
+        CREATE INDEX IF NOT EXISTS idx_assistant_playground_labs_updated ON assistant_playground_labs(updated_at DESC, id DESC);
     `)
+    ensureTableColumn(db, 'assistant_sessions', 'mode', `TEXT NOT NULL DEFAULT 'work'`)
+    ensureTableColumn(db, 'assistant_sessions', 'playground_lab_id', 'TEXT')
+    ensureTableColumn(db, 'assistant_sessions', 'pending_lab_request_json', 'TEXT')
+}
+
+function ensureTableColumn(db: SqlDatabase, tableName: string, columnName: string, definition: string): void {
+    const rows = db.exec(`PRAGMA table_info(${tableName})`)[0]?.values || []
+    const hasColumn = rows.some((row) => String(row[1] || '') === columnName)
+    if (hasColumn) return
+    db.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`)
 }

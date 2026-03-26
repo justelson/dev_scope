@@ -5,8 +5,10 @@ const LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'assistant-left-sidebar-collapsed'
 const LEFT_SIDEBAR_WIDTH_STORAGE_KEY = 'assistant-left-sidebar-width'
 const RIGHT_SIDEBAR_OPEN_STORAGE_KEY = 'assistant-right-sidebar-open'
 const RIGHT_PANEL_MODE_STORAGE_KEY = 'assistant-right-panel-mode'
+const RAIL_MODE_STORAGE_KEY = 'assistant-rail-mode'
 
 export type AssistantRightPanelMode = 'none' | 'details' | 'plan' | 'diff'
+export type AssistantRailMode = 'work' | 'playground'
 
 export const SIDEBAR_EFFORT_LABELS: Record<AssistantComposerPreferenceEffort, string> = {
     low: 'Low',
@@ -28,6 +30,10 @@ export function useAssistantPageSidebarState() {
         const legacySaved = localStorage.getItem(RIGHT_SIDEBAR_OPEN_STORAGE_KEY)
         return legacySaved !== null ? (legacySaved === 'true' ? 'details' : 'none') : 'details'
     })
+    const [railMode, setRailMode] = useState<AssistantRailMode>(() => {
+        const savedMode = localStorage.getItem(RAIL_MODE_STORAGE_KEY)
+        return savedMode === 'playground' ? 'playground' : 'work'
+    })
 
     useEffect(() => {
         localStorage.setItem(LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, String(leftSidebarCollapsed))
@@ -42,12 +48,18 @@ export function useAssistantPageSidebarState() {
         localStorage.setItem(RIGHT_SIDEBAR_OPEN_STORAGE_KEY, String(rightPanelMode === 'details'))
     }, [rightPanelMode])
 
+    useEffect(() => {
+        localStorage.setItem(RAIL_MODE_STORAGE_KEY, railMode)
+    }, [railMode])
+
     return {
         leftSidebarCollapsed,
         setLeftSidebarCollapsed,
         leftSidebarWidth,
         setLeftSidebarWidth,
         rightPanelMode,
-        setRightPanelMode
+        setRightPanelMode,
+        railMode,
+        setRailMode
     }
 }

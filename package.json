@@ -158,6 +158,7 @@
         "nsis": {
             "oneClick": false,
             "allowToChangeInstallationDirectory": true,
+            "include": "build/installer.nsh",
             "installerIcon": "resources/icon.ico",
             "uninstallerIcon": "resources/icon.ico"
         }

@@ -30,6 +30,10 @@ From `src/renderer/src/App.tsx`, the desktop app currently exposes:
 
 Legacy helper routes still redirect into the live assistant/settings surface instead of serving separate deprecated pages.
 
+The renderer also includes a dedicated `/quick-open` preview route for file-association and shell file launches. That route bypasses the main app shell and now renders inside its own frameless preview window with renderer-owned chrome instead of native Electron frame chrome.
+
+Windows shell folder launches route into `/explorer/:folderPath` with a transient session-level allowance so explicit File Explorer context-menu opens still work even if the optional Explorer sidebar tab is currently disabled in settings.
+
 ## Main Process Domain Areas
 
 `src/main/ipc/handlers.ts` registers handlers for:
@@ -41,6 +45,7 @@ Legacy helper routes still redirect into the live assistant/settings surface ins
 - project details and running-process/session views
 - file tree, file reads, and file writes
 - external terminal launch plus preview-terminal and Python preview flows
+- Windows shell launch routing for file previews and folder opens
 - Git read/write operations
 - desktop update state and install actions
 
@@ -54,6 +59,10 @@ The assistant is part of the active app, not a removed feature.
 - Renderer route entry: `src/renderer/src/pages/Assistant.tsx`
 
 Current assistant capabilities include session lifecycle, model listing, connect/disconnect, prompt send, interrupt, approval responses, user-input responses, project-path association, and event subscription.
+
+Assistant timeline tool-call cards also support path-aware file navigation: edited-file rows and plain file-path lines in tool results can open directly into the shared file-preview renderer.
+
+Assistant conversation status labels are phase-driven from the active thread state; generic pending UI actions should not be treated as thread connection state.
 
 ## Shared Contract Model
 
@@ -72,7 +81,7 @@ The intended architecture direction remains contract-first: define shared contra
 - Renderer route state persists key navigation state in local storage and gates optional tabs through settings.
 - File preview and project details flows use narrower read operations to avoid unnecessary full reloads.
 - Update state is tracked in a dedicated main-process update subsystem instead of being ad hoc renderer state.
-- Assistant streaming batches text deltas before projection/broadcast, coalesces renderer event application to animation frames, batches main-to-renderer assistant event IPC, keeps hot persistence writes off the immediate UI interaction path, avoids deep-cloning hydrated thread history on every renderer store update, and relies on incremental off-screen row rendering plus exact history paging to keep long conversations responsive.
+- Assistant streaming batches text deltas before projection/broadcast, coalesces renderer event application behind a short delta-flush window plus animation-frame delivery for non-delta events, batches main-to-renderer assistant event IPC, keeps hot persistence writes off the immediate UI interaction path, avoids deep-cloning hydrated thread history on every renderer store update, splits renderer subscriptions so the assistant page shell, conversation pane, and right-side panels do not all rerender on live timeline churn, relies on a sliding tail history window plus per-row deferred rendering to keep long conversations responsive while still allowing explicit older-history expansion, and now persists per-turn usage in a dedicated `assistant_turns` ledger that the thread-details panel fetches on demand instead of inflating the hot assistant snapshot.
 
 ## Current Boundary Rules
 

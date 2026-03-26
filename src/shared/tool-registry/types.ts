@@ -5,7 +5,7 @@
 
 // Define ToolCategory locally or in a shared types file to avoid circular deps
 // For now we will define it here or import from a clean shared type location
-export type ToolCategory = 'language' | 'package_manager' | 'build_tool' | 'container' | 'version_control' | 'browser' | 'database' | 'ai_runtime' | 'ai_agent' | 'gpu_acceleration' | 'ai_framework' | 'unknown'
+export type ToolCategory = 'language' | 'package_manager' | 'build_tool' | 'container' | 'version_control' | 'browser' | 'database' | 'unknown'
 
 export interface DetectionConfig {
     strategy: 'cli' | 'process' | 'registry' | 'custom'
@@ -38,4 +38,3 @@ export interface ToolDefinition {
     logoUrl?: string // Optional direct logo URL
     detection?: DetectionConfig
 }
-

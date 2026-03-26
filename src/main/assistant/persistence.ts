@@ -6,11 +6,16 @@ import log from 'electron-log'
 import initSqlJs, { type Database as SqlDatabase } from 'sql.js/dist/sql-asm.js'
 import type {
     AssistantDomainEvent,
+    AssistantSessionTurnUsageEntry,
     AssistantSnapshot
 } from '../../shared/assistant/contracts'
 import { createDefaultSnapshot, recoverPersistedSnapshot } from './projector'
 import { hydrateFocusedSessionSnapshot } from './persistence-snapshot'
-import { readActiveThreadDetails, readAssistantPersistenceRecord } from './persistence-read'
+import {
+    readActiveThreadDetails,
+    readAssistantPersistenceRecord,
+    readAssistantSessionTurnUsage
+} from './persistence-read'
 import {
     initializeAssistantPersistenceSchema,
     PERSISTENCE_FLUSH_DEBOUNCE_MS,
@@ -95,6 +100,11 @@ export class AssistantPersistence {
             sessionId,
             readActiveThreadDetails(this.requireDb(), sessionId, snapshot)
         ))
+    }
+
+    async readSessionTurnUsage(sessionId: string): Promise<AssistantSessionTurnUsageEntry[]> {
+        await this.ensureInitialized()
+        return this.enqueue(() => readAssistantSessionTurnUsage(this.requireDb(), sessionId))
     }
 
     async flush(): Promise<void> {

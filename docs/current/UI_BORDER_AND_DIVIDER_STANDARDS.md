@@ -1,6 +1,6 @@
 # UI Border And Divider Standards
 
-Last updated: March 19, 2026
+Last updated: March 24, 2026
 
 This document defines the default border and subtle-separator treatment for the current DevScope UI.
 
@@ -11,9 +11,17 @@ Use it together with:
 
 ## Primary Rule
 
-Use white-border patterns for application UI borders.
+Do not use white-border chrome as the default treatment for current UI work.
 
-Do not use `border-sparkle-border` as the default border treatment for current UI work.
+Do not use `border-sparkle-border` as the default border treatment either.
+
+Prefer:
+
+- transparent or near-invisible borders for controls that do not need structural separation
+- subtle fills and opacity changes for idle states
+- motion, tint, and background changes for hover/active emphasis
+
+Use visible white borders only when the surrounding surface already relies on them for containment, grouping, or separation.
 
 ## Reference Pattern
 
@@ -21,7 +29,7 @@ Reference component:
 
 - `src/renderer/src/pages/project-details/ProjectDetailsHeaderSection.tsx`
 
-Canonical values:
+Canonical values for cases where a visible border is actually needed:
 
 - default border: `border-white/10`
 - hover border: `hover:border-white/20`
@@ -29,6 +37,13 @@ Canonical values:
 - very subtle compact border: `border-white/6` to `border-white/8`
 - bordered surface background: `bg-sparkle-card` or `bg-white/[0.03]`
 - hover surface background: `hover:bg-white/[0.03]` or `hover:bg-white/10`
+
+Preferred values for non-structural controls:
+
+- idle border: `border-transparent`
+- idle surface: `bg-white/[0.02]` to `bg-white/[0.03]`
+- idle text: muted or reduced-opacity foreground
+- hover emphasis: background/tint change first, border second
 
 ## Where This Applies
 
@@ -55,10 +70,11 @@ For subtle separators, dividers, and timeline guides:
 When touching these surfaces:
 
 1. check the reference component first
-2. keep border tokens consistent across default, hover, active, collapsed, and expanded states
+2. do not add a visible white border unless the control actually needs structural definition
 3. search for stray `border-sparkle-border` usage in the edited surface
-4. verify compact and non-compact modes
-5. verify hover and active states
+4. keep state styling consistent across default, hover, active, collapsed, and expanded states
+5. verify compact and non-compact modes
+6. verify hover and active states
 
 ## When To Update This Doc
 

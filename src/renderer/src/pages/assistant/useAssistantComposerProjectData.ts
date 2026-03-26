@@ -13,6 +13,7 @@ type ChangedState = Record<string, 'staged' | 'unstaged' | 'both'>
 
 export function useAssistantComposerProjectData(args: {
     projectPath?: string | null
+    refreshToken?: number
     projectNodes: MentionCandidate[]
     mentionChangedStateByPath: ChangedState
     setIsGitRepo: Dispatch<SetStateAction<boolean>>
@@ -23,7 +24,7 @@ export function useAssistantComposerProjectData(args: {
     setMentionChangedStateByPath: Dispatch<SetStateAction<ChangedState>>
     setMentionRecentModifiedAtByPath: Dispatch<SetStateAction<Record<string, number>>>
 }) {
-    const { projectPath, projectNodes, mentionChangedStateByPath, setIsGitRepo, setBranches, setBranchesLoading, setProjectNodes, setMentionLoading, setMentionChangedStateByPath, setMentionRecentModifiedAtByPath } = args
+    const { projectPath, refreshToken = 0, projectNodes, mentionChangedStateByPath, setIsGitRepo, setBranches, setBranchesLoading, setProjectNodes, setMentionLoading, setMentionChangedStateByPath, setMentionRecentModifiedAtByPath } = args
 
     useEffect(() => {
         const trimmedPath = String(projectPath || '').trim()
@@ -58,7 +59,7 @@ export function useAssistantComposerProjectData(args: {
         }
         void loadBranchState()
         return () => { cancelled = true }
-    }, [projectPath, setBranches, setBranchesLoading, setIsGitRepo])
+    }, [projectPath, refreshToken, setBranches, setBranchesLoading, setIsGitRepo])
 
     useEffect(() => {
         const trimmedPath = String(projectPath || '').trim()
@@ -78,7 +79,7 @@ export function useAssistantComposerProjectData(args: {
             if (!cancelled) setMentionLoading(false)
         })
         return () => { cancelled = true }
-    }, [projectPath, setMentionLoading, setProjectNodes])
+    }, [projectPath, refreshToken, setMentionLoading, setProjectNodes])
 
     useEffect(() => {
         const trimmedPath = String(projectPath || '').trim()
@@ -114,7 +115,7 @@ export function useAssistantComposerProjectData(args: {
         }
         void loadChangedMentionFiles()
         return () => { cancelled = true }
-    }, [projectPath, setMentionChangedStateByPath])
+    }, [projectPath, refreshToken, setMentionChangedStateByPath])
 
     useEffect(() => {
         const trimmedPath = String(projectPath || '').trim()
@@ -161,5 +162,5 @@ export function useAssistantComposerProjectData(args: {
         }
         void loadRecentMentionFiles()
         return () => { cancelled = true }
-    }, [mentionChangedStateByPath, projectNodes, projectPath, setMentionRecentModifiedAtByPath])
+    }, [mentionChangedStateByPath, projectNodes, projectPath, refreshToken, setMentionRecentModifiedAtByPath])
 }

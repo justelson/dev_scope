@@ -4,7 +4,6 @@
  */
 
 import { app } from 'electron'
-import path from 'path'
 
 export const electronApp = {
     setAppUserModelId: (id: string) => {
@@ -12,10 +11,6 @@ export const electronApp = {
             app.setAppUserModelId(id)
         }
     }
-}
-
-export const optimizer = {
-    // Placeholder for optimizer utilities
 }
 
 export const is = {

@@ -67,12 +67,8 @@ export type ToolCategory =
     | 'build_tool'
     | 'container'
     | 'version_control'
-    | 'ai_runtime'
-    | 'ai_agent'
     | 'browser'
     | 'database'
-    | 'gpu_acceleration'
-    | 'ai_framework'
     | 'unknown'
 
 export interface DetectedTool {
@@ -97,24 +93,6 @@ export interface ToolingReport {
     buildTools: DetectedTool[]
     containers: DetectedTool[]
     versionControl: DetectedTool[]
-    timestamp: number
-}
-
-// ============================================================================
-// AI Runtime Types
-// ============================================================================
-
-export interface AIRuntimeInfo extends DetectedTool {
-    running?: boolean
-    port?: number
-    models?: string[]
-    endpoint?: string
-}
-
-export interface AIRuntimeReport {
-    llmRuntimes: AIRuntimeInfo[]
-    gpuAcceleration: DetectedTool[]
-    aiFrameworks: DetectedTool[]
     timestamp: number
 }
 
@@ -162,19 +140,6 @@ export interface ReadinessReport {
 export interface FullReport {
     system: SystemHealth
     tooling: ToolingReport
-    aiRuntime: AIRuntimeReport
     readiness: ReadinessReport
     timestamp: number
-}
-
-// ============================================================================
-// IPC API Types
-// ============================================================================
-
-export interface DevScopeAPI {
-    getSystemOverview: () => Promise<SystemHealth>
-    getDeveloperTooling: () => Promise<ToolingReport>
-    getAIRuntimeStatus: () => Promise<AIRuntimeReport>
-    getReadinessReport: () => Promise<ReadinessReport>
-    refreshAll: () => Promise<FullReport>
 }

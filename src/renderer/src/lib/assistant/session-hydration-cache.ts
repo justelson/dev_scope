@@ -106,3 +106,15 @@ export function applyCachedSessionSelection(
         sessions: nextSessions
     }
 }
+
+export function hasCachedSessionSelection(
+    snapshot: AssistantSnapshot,
+    sessionId: string,
+    cache: Map<string, CachedHydratedThreadState>
+): boolean {
+    const cached = cache.get(sessionId)
+    if (!cached) return false
+
+    const session = snapshot.sessions.find((entry) => entry.id === sessionId)
+    return Boolean(session?.activeThreadId && session.activeThreadId === cached.threadId)
+}

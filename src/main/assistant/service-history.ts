@@ -8,6 +8,7 @@ type UserTurnEntry = {
 
 type AssistantDeleteMessagePlan = {
     rollbackTurnCount: number | null
+    removedTurnIds: string[]
     patch: Pick<
         AssistantThread,
         | 'messages'
@@ -95,6 +96,7 @@ export function buildDeleteMessagePlan(thread: AssistantThread, messageId: strin
 
     return {
         rollbackTurnCount: targetTurnIndex >= 0 ? Math.max(1, orderedTurnIds.length - targetTurnIndex) : null,
+        removedTurnIds: [...removedTurnIds],
         patch: {
             messages: keptMessages,
             activities: thread.activities.filter((activity) => !activity.turnId || !removedTurnIds.has(activity.turnId)),

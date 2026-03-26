@@ -1,12 +1,15 @@
-import type { AssistantActivity, AssistantMessage } from '@shared/assistant/contracts'
+import type { AssistantActivity, AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
+import { stripProposedPlanBlocks } from './assistant-proposed-plan'
 
 export type TimelineEntry =
     | { id: string; createdAt: string; type: 'message'; message: AssistantMessage }
+    | { id: string; createdAt: string; type: 'plan'; plan: AssistantProposedPlan; canImplement: boolean }
     | { id: string; createdAt: string; type: 'activity'; activity: AssistantActivity }
     | { id: string; createdAt: string; type: 'activity-group'; activities: AssistantActivity[] }
 
 export type TimelineRenderRow =
     | { kind: 'message'; id: string; createdAt: string; message: AssistantMessage }
+    | { kind: 'plan'; id: string; createdAt: string; plan: AssistantProposedPlan; canImplement: boolean }
     | { kind: 'activity'; id: string; createdAt: string; activity: AssistantActivity }
     | { kind: 'activity-group'; id: string; createdAt: string; activities: AssistantActivity[] }
     | { kind: 'working'; id: string; createdAt: string | null }
@@ -224,57 +227,39 @@ export function formatWorkingTimer(startIso: string, endIso: string): string | n
     return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
 }
 
-export function getTimelineEntries(messages: AssistantMessage[], activities: AssistantActivity[]): TimelineEntry[] {
+export function getTimelineEntries(
+    messages: AssistantMessage[],
+    activities: AssistantActivity[],
+    proposedPlans: AssistantProposedPlan[] = []
+): TimelineEntry[] {
     const renderedActivities = activities.filter(shouldRenderActivity)
-    const allEntries: TimelineEntry[] = []
-    let messageIndex = 0
-    let activityIndex = renderedActivities.length - 1
-
-    while (messageIndex < messages.length || activityIndex >= 0) {
-        const message = messageIndex < messages.length ? messages[messageIndex] : null
-        const activity = activityIndex >= 0 ? renderedActivities[activityIndex] : null
-
-        if (!activity) {
-            allEntries.push({
-                id: message!.id,
-                createdAt: message!.createdAt,
-                type: 'message',
-                message: message!
-            })
-            messageIndex += 1
-            continue
-        }
-
-        if (!message) {
-            allEntries.push({
-                id: activity.id,
-                createdAt: activity.createdAt,
-                type: 'activity',
-                activity
-            })
-            activityIndex -= 1
-            continue
-        }
-
-        if (compareTimelinePosition(message.createdAt, message.id, activity.createdAt, activity.id) <= 0) {
-            allEntries.push({
-                id: message.id,
-                createdAt: message.createdAt,
-                type: 'message',
-                message
-            })
-            messageIndex += 1
-            continue
-        }
-
-        allEntries.push({
+    const allEntries: TimelineEntry[] = [
+        ...messages.map((message) => ({
+            id: message.id,
+            createdAt: message.createdAt,
+            type: 'message' as const,
+            message
+        })),
+        ...renderedActivities.map((activity) => ({
             id: activity.id,
             createdAt: activity.createdAt,
-            type: 'activity',
+            type: 'activity' as const,
             activity
+        })),
+        ...proposedPlans.map((plan, index) => {
+            const hasLaterMessage = messages.some((message) => {
+                if (message.turnId && plan.turnId && message.turnId === plan.turnId) return false
+                return compareTimelinePosition(plan.createdAt, plan.id, message.createdAt, message.id) < 0
+            })
+            return {
+                id: `plan-${plan.id}-${index}`,
+                createdAt: plan.createdAt,
+                type: 'plan' as const,
+                plan,
+                canImplement: !hasLaterMessage
+            }
         })
-        activityIndex -= 1
-    }
+    ].sort((left, right) => compareTimelinePosition(left.createdAt, left.id, right.createdAt, right.id))
 
     const grouped: TimelineEntry[] = []
     let currentGroup: AssistantActivity[] = []
@@ -310,6 +295,9 @@ export function buildTimelineRows(entries: TimelineEntry[], isWorking: boolean, 
     const rows: TimelineRenderRow[] = entries.map((entry) => {
         if (entry.type === 'message') {
             return { kind: 'message', id: entry.id, createdAt: entry.createdAt, message: entry.message }
+        }
+        if (entry.type === 'plan') {
+            return { kind: 'plan', id: entry.id, createdAt: entry.createdAt, plan: entry.plan, canImplement: entry.canImplement }
         }
         if (entry.type === 'activity-group') {
             return { kind: 'activity-group', id: entry.id, createdAt: entry.createdAt, activities: entry.activities }
@@ -382,6 +370,7 @@ export function getActivityFileCount(activity: AssistantActivity): number | null
 }
 
 export function getActivityTitle(activity: AssistantActivity): string {
+    if (activity.kind === 'user-input.resolved') return 'Consulted user'
     if (activity.kind === 'search') return 'Search'
     if (activity.kind === 'file-read') return 'Read file'
     if (activity.kind === 'file-change') return (getActivityFileCount(activity) || 0) > 1 ? 'Edited files' : 'Edited file'
@@ -416,6 +405,11 @@ export function estimateTimelineRowHeight(row: TimelineRenderRow): number {
     if (row.kind === 'working') return 48
     if (row.kind === 'activity') return 168
     if (row.kind === 'activity-group') return 120 + Math.min(row.activities.length, 6) * 96
+    if (row.kind === 'plan') {
+        const displayedPlan = stripProposedPlanBlocks(row.plan.planMarkdown || '')
+        const contentLines = Math.max(4, displayedPlan.split(/\r?\n/).length)
+        return Math.min(2200, 220 + contentLines * 24)
+    }
 
     const parsedUserMessage = row.message.role === 'user'
         ? parseUserMessageAttachments(row.message.text || '')
@@ -423,7 +417,7 @@ export function estimateTimelineRowHeight(row: TimelineRenderRow): number {
     const attachmentCount = parsedUserMessage?.attachments.length || 0
     const rawBody = row.message.role === 'user'
         ? (parsedUserMessage?.body || '')
-        : (row.message.text || '')
+        : stripProposedPlanBlocks(row.message.text || '')
     const bodyLines = rawBody.split(/\r?\n/)
     const lineCount = Math.max(1, bodyLines.length)
     const estimatedWrappedLines = Math.ceil(Math.max(rawBody.length, 1) / (row.message.role === 'user' ? 56 : 64))

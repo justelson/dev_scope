@@ -1,4 +1,4 @@
-import { ArrowUpRight, Blocks, Code2, Rocket, Users } from 'lucide-react'
+import { ArrowUpRight, Blocks, Code2, MessageSquare, Rocket, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
@@ -52,6 +52,17 @@ export default function Home() {
             novelty: settings.tasksPageEnabled
                 ? 'Novel feature: dedicated tasks surface'
                 : 'Novel feature: project workflow fallback'
+        },
+        {
+            title: 'Assistant Workspace',
+            description: 'Open the assistant surface directly to plan, inspect, and execute work without leaving the desktop flow.',
+            icon: MessageSquare,
+            tone: 'from-violet-400/15 via-violet-400/0 to-transparent',
+            accent: 'text-violet-300',
+            border: 'group-hover:border-violet-400/50',
+            glow: 'bg-violet-400/20',
+            path: '/assistant',
+            novelty: 'Novel feature: in-app coding assistant'
         }
     ]
 

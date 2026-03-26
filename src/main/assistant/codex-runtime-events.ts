@@ -23,6 +23,23 @@ interface RuntimeEventHandlerDeps {
     writeMessage: (context: SessionContext, message: Record<string, unknown>) => void
 }
 
+function readResolvedUserInputAnswers(value: unknown): Record<string, string | string[]> {
+    const rawAnswers = asRecord(value) || {}
+    return Object.fromEntries(
+        Object.entries(rawAnswers).map(([questionId, answerValue]) => {
+            if (typeof answerValue === 'string') return [questionId, answerValue]
+            if (Array.isArray(answerValue)) {
+                return [questionId, answerValue.filter((entry): entry is string => typeof entry === 'string')]
+            }
+            const answerRecord = asRecord(answerValue)
+            const nestedAnswers = Array.isArray(answerRecord?.['answers'])
+                ? answerRecord['answers'].filter((entry): entry is string => typeof entry === 'string')
+                : []
+            return [questionId, nestedAnswers.length <= 1 ? (nestedAnswers[0] || '') : nestedAnswers]
+        })
+    )
+}
+
 export function handleStdoutLine(context: SessionContext, line: string, deps: RuntimeEventHandlerDeps): void {
     let parsed: JsonRpcMessage
     try {
@@ -274,12 +291,12 @@ function handleNotification(
     }
 
     if (method === 'item/tool/requestUserInput/answered') {
-        const answers = asRecord(payload['answers']) as Record<string, string | string[]> | undefined
+        const answers = readResolvedUserInputAnswers(payload['answers'])
         deps.emitRuntime({
             ...eventBase,
             type: 'user-input.resolved',
             requestId: asString(payload['requestId']) || eventBase.itemId,
-            payload: { answers: answers || {} }
+            payload: { answers }
         })
         return
     }

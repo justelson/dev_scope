@@ -8,6 +8,7 @@ import type {
 type AssistantDefaultsSubset = Pick<
     Settings,
     | 'assistantDefaultModel'
+    | 'assistantDefaultPromptTemplate'
     | 'assistantDefaultRuntimeMode'
     | 'assistantDefaultInteractionMode'
     | 'assistantDefaultEffort'
@@ -85,11 +86,17 @@ export function getAssistantDefaultSpeedLabel(fastModeEnabled: boolean): string 
 
 export function getAssistantDefaultsPreview(settings: AssistantDefaultsSubset): string {
     const modelLabel = settings.assistantDefaultModel.trim() || 'Auto model'
-    return [
+    const parts = [
         modelLabel,
         getAssistantDefaultInteractionModeLabel(settings.assistantDefaultInteractionMode),
         getAssistantDefaultRuntimeModeLabel(settings.assistantDefaultRuntimeMode),
         getAssistantDefaultEffortLabel(settings.assistantDefaultEffort),
         getAssistantDefaultSpeedLabel(settings.assistantDefaultFastMode)
-    ].join(' • ')
+    ]
+
+    if (settings.assistantDefaultPromptTemplate.trim()) {
+        parts.push('Template set')
+    }
+
+    return parts.join(' • ')
 }

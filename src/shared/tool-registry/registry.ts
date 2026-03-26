@@ -4,21 +4,13 @@ import { PACKAGE_MANAGER_TOOLS } from './entries/package-manager'
 import { BUILD_TOOL_TOOLS } from './entries/build-tool'
 import { CONTAINER_TOOLS } from './entries/container'
 import { VERSION_CONTROL_TOOLS } from './entries/version-control'
-import { AI_RUNTIME_TOOLS } from './entries/ai-runtime'
-import { AI_FRAMEWORK_TOOLS } from './entries/ai-framework'
-import { AI_AGENT_TOOLS_A } from './entries/ai-agent-a'
-import { AI_AGENT_TOOLS_B } from './entries/ai-agent-b'
 
 export const TOOL_REGISTRY: ToolDefinition[] = [
     ...LANGUAGE_TOOLS,
     ...PACKAGE_MANAGER_TOOLS,
     ...BUILD_TOOL_TOOLS,
     ...CONTAINER_TOOLS,
-    ...VERSION_CONTROL_TOOLS,
-    ...AI_RUNTIME_TOOLS,
-    ...AI_FRAMEWORK_TOOLS,
-    ...AI_AGENT_TOOLS_A,
-    ...AI_AGENT_TOOLS_B
+    ...VERSION_CONTROL_TOOLS
 ]
 
 export function getToolsByCategory(category: ToolCategory): ToolDefinition[] {

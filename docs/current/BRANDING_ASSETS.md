@@ -39,6 +39,7 @@ The generator refreshes:
 ## Runtime Rule
 
 - Dev runs should prefer the blueprint artwork for the literal app icon path and other dev-only shell-facing icon surfaces.
+- Dev runs now use the separate runtime identity `DevScope Air-dev`, a dev-only AppUserModelID, and an isolated local profile path so they can run beside the installed app without sharing the same state bucket.
 - Packaged Windows builds should use the cleaner release icon set for taskbar, shortcuts, installer, and shell surfaces.
 - In-app DevScope ASCII logo components remain the primary UI branding unless a screen explicitly needs image artwork.
 
@@ -47,6 +48,7 @@ The generator refreshes:
 Before tagging a release, verify:
 
 - dev run shows the blueprint artwork on dev-only branding surfaces
+- dev run resolves as `DevScope Air-dev` instead of reusing the installed app identity
 - packaged build still uses the clean icon in the window/taskbar
 - installer icon and shortcut icon resolve from `resources/icon.ico`
 - landing logo still matches the packaged release mark

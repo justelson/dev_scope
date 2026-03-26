@@ -1,8 +1,13 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import type {
     AssistantApprovalResponseInput,
+    AssistantApprovePendingPlaygroundLabRequestInput,
+    AssistantAttachSessionToPlaygroundLabInput,
     AssistantLatestTurn,
     AssistantModelInfo,
+    AssistantCreatePlaygroundLabInput,
+    AssistantCreateSessionInput,
+    AssistantDeclinePendingPlaygroundLabRequestInput,
     AssistantSendPromptOptions,
     AssistantSnapshot
 } from '@shared/assistant/contracts'
@@ -41,8 +46,46 @@ type AssistantWorkspaceSelection = {
     phaseLabel: string
 }
 
+type AssistantPageSelection = {
+    available: boolean
+    connected: boolean
+    loading: boolean
+    bootstrapped: boolean
+    commandPending: boolean
+    commandError: string | null
+    selectedSession: ReturnType<typeof getSelectedAssistantSession>
+    activeThread: ReturnType<typeof getActiveAssistantThread>
+    activityFeed: ReturnType<typeof getAssistantActivityFeed>
+    pendingApprovals: ReturnType<typeof getAssistantPendingApprovals>
+    pendingUserInputs: ReturnType<typeof getAssistantPendingUserInputs>
+    activePlan: ReturnType<typeof getAssistantActivePlan>
+    latestProposedPlan: ReturnType<typeof getAssistantLatestProposedPlan>
+    phase: ReturnType<typeof getAssistantThreadPhase>
+    phaseLabel: string
+}
+
+type AssistantConversationSelection = {
+    knownModels: AssistantModelInfo[]
+    available: boolean
+    connected: boolean
+    loading: boolean
+    modelsLoading: boolean
+    commandPending: boolean
+    selectedSession: ReturnType<typeof getSelectedAssistantSession>
+    activeThread: ReturnType<typeof getActiveAssistantThread>
+    timelineMessages: ReturnType<typeof getAssistantTimelineMessages>
+    activityFeed: ReturnType<typeof getAssistantActivityFeed>
+    pendingUserInputs: ReturnType<typeof getAssistantPendingUserInputs>
+    activePlan: ReturnType<typeof getAssistantActivePlan>
+    latestProposedPlan: ReturnType<typeof getAssistantLatestProposedPlan>
+    phase: ReturnType<typeof getAssistantThreadPhase>
+    phaseLabel: string
+}
+
 type AssistantSessionsRailSelection = {
+    snapshot: AssistantSnapshot
     sessions: AssistantSnapshot['sessions']
+    playground: AssistantSnapshot['playground']
     activeSessionId: string | null
     commandPending: boolean
 }
@@ -89,7 +132,12 @@ function areAssistantSessionsEqual(
     if (!left || !right) return left === right
     return left.id === right.id
         && left.title === right.title
+        && left.mode === right.mode
         && left.projectPath === right.projectPath
+        && left.playgroundLabId === right.playgroundLabId
+        && left.pendingLabRequest?.id === right.pendingLabRequest?.id
+        && left.pendingLabRequest?.kind === right.pendingLabRequest?.kind
+        && left.pendingLabRequest?.repoUrl === right.pendingLabRequest?.repoUrl
         && left.archived === right.archived
         && left.createdAt === right.createdAt
         && left.updatedAt === right.updatedAt
@@ -217,6 +265,42 @@ function areAssistantWorkspaceSelectionsEqual(left: AssistantWorkspaceSelection,
         && areAssistantLatestProposedPlansEqual(left.latestProposedPlan, right.latestProposedPlan)
 }
 
+function areAssistantPageSelectionsEqual(left: AssistantPageSelection, right: AssistantPageSelection): boolean {
+    return left.available === right.available
+        && left.connected === right.connected
+        && left.loading === right.loading
+        && left.bootstrapped === right.bootstrapped
+        && left.commandPending === right.commandPending
+        && left.commandError === right.commandError
+        && left.phase.key === right.phase.key
+        && left.phase.label === right.phase.label
+        && areAssistantSessionsEqual(left.selectedSession, right.selectedSession)
+        && areAssistantThreadsEqual(left.activeThread, right.activeThread)
+        && getActivityListSignature(left.activityFeed) === getActivityListSignature(right.activityFeed)
+        && getPendingApprovalSignature(left.pendingApprovals) === getPendingApprovalSignature(right.pendingApprovals)
+        && getPendingUserInputSignature(left.pendingUserInputs) === getPendingUserInputSignature(right.pendingUserInputs)
+        && areAssistantPlansEqual(left.activePlan, right.activePlan)
+        && areAssistantLatestProposedPlansEqual(left.latestProposedPlan, right.latestProposedPlan)
+}
+
+function areAssistantConversationSelectionsEqual(left: AssistantConversationSelection, right: AssistantConversationSelection): boolean {
+    return left.available === right.available
+        && left.connected === right.connected
+        && left.loading === right.loading
+        && left.modelsLoading === right.modelsLoading
+        && left.commandPending === right.commandPending
+        && left.phase.key === right.phase.key
+        && left.phase.label === right.phase.label
+        && areAssistantModelsEqual(left.knownModels, right.knownModels)
+        && areAssistantSessionsEqual(left.selectedSession, right.selectedSession)
+        && areAssistantThreadsEqual(left.activeThread, right.activeThread)
+        && getMessageListSignature(left.timelineMessages) === getMessageListSignature(right.timelineMessages)
+        && getActivityListSignature(left.activityFeed) === getActivityListSignature(right.activityFeed)
+        && getPendingUserInputSignature(left.pendingUserInputs) === getPendingUserInputSignature(right.pendingUserInputs)
+        && areAssistantPlansEqual(left.activePlan, right.activePlan)
+        && areAssistantLatestProposedPlansEqual(left.latestProposedPlan, right.latestProposedPlan)
+}
+
 function getRailSessionSignature(session: AssistantSnapshot['sessions'][number]): string {
     const activeThread = session.threads.find((thread) => thread.id === session.activeThreadId) || null
     const earliestCreatedThread = session.threads.reduce<typeof activeThread>((earliest, thread) => {
@@ -229,7 +313,11 @@ function getRailSessionSignature(session: AssistantSnapshot['sessions'][number])
     return [
         session.id,
         session.title,
+        session.mode,
         session.projectPath || '',
+        session.playgroundLabId || '',
+        session.pendingLabRequest?.id || '',
+        session.pendingLabRequest?.kind || '',
         session.archived ? '1' : '0',
         session.createdAt,
         session.activeThreadId || '',
@@ -247,6 +335,22 @@ function getRailSessionSignature(session: AssistantSnapshot['sessions'][number])
 function areAssistantSessionsRailSelectionsEqual(left: AssistantSessionsRailSelection, right: AssistantSessionsRailSelection): boolean {
     if (left.activeSessionId !== right.activeSessionId || left.commandPending !== right.commandPending) {
         return false
+    }
+    if (left.playground.rootPath !== right.playground.rootPath || left.playground.labs.length !== right.playground.labs.length) {
+        return false
+    }
+    for (let index = 0; index < left.playground.labs.length; index += 1) {
+        const leftLab = left.playground.labs[index]
+        const rightLab = right.playground.labs[index]
+        if (
+            leftLab?.id !== rightLab?.id
+            || leftLab?.title !== rightLab?.title
+            || leftLab?.rootPath !== rightLab?.rootPath
+            || leftLab?.updatedAt !== rightLab?.updatedAt
+            || leftLab?.repoUrl !== rightLab?.repoUrl
+        ) {
+            return false
+        }
     }
     if (left.sessions.length !== right.sessions.length) return false
     for (let index = 0; index < left.sessions.length; index += 1) {
@@ -298,7 +402,7 @@ export function useAssistantStoreLifecycle() {
 const assistantStoreActions = {
     refresh: () => assistantStore.refresh(),
     refreshModels: () => assistantStore.refreshModels(true),
-    createSession: (title?: string, projectPath?: string) => assistantStore.createSession(title, projectPath).then(() => undefined),
+    createSession: (input?: AssistantCreateSessionInput) => assistantStore.createSession(input).then(() => undefined),
     selectSession: (sessionId: string, options?: { force?: boolean }) => assistantStore.selectSession(sessionId, options).then(() => undefined),
     renameSession: (sessionId: string, title: string) => assistantStore.renameSession(sessionId, title).then(() => undefined),
     archiveSession: (sessionId: string, archived = true) => assistantStore.archiveSession(sessionId, archived).then(() => undefined),
@@ -309,6 +413,12 @@ const assistantStoreActions = {
     clearLogsResult: (sessionId?: string) => assistantStore.clearLogs(sessionId ? { sessionId } : undefined),
     clearCommandError: () => assistantStore.clearError(),
     setSessionProjectPath: (sessionId: string, projectPath: string | null) => assistantStore.setSessionProjectPath(sessionId, projectPath).then(() => undefined),
+    setPlaygroundRoot: (rootPath: string | null) => assistantStore.setPlaygroundRoot(rootPath).then(() => undefined),
+    createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) => assistantStore.createPlaygroundLab(input).then(() => undefined),
+    createPlaygroundLabResult: (input: AssistantCreatePlaygroundLabInput) => assistantStore.createPlaygroundLab(input),
+    attachSessionToPlaygroundLab: (input: AssistantAttachSessionToPlaygroundLabInput) => assistantStore.attachSessionToPlaygroundLab(input).then(() => undefined),
+    approvePendingPlaygroundLabRequest: (input: AssistantApprovePendingPlaygroundLabRequestInput) => assistantStore.approvePendingPlaygroundLabRequest(input).then(() => undefined),
+    declinePendingPlaygroundLabRequest: (input: AssistantDeclinePendingPlaygroundLabRequestInput) => assistantStore.declinePendingPlaygroundLabRequest(input).then(() => undefined),
     newThread: (sessionId?: string) => assistantStore.newThread(sessionId).then(() => undefined),
     sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) => assistantStore.sendPrompt(prompt, options).then(() => undefined),
     sendPromptResult: (prompt: string, options?: AssistantSendPromptOptions) => assistantStore.sendPrompt(prompt, options),
@@ -323,12 +433,19 @@ const assistantStoreActions = {
     createProjectSession: () => assistantStore.createProjectSession().then(() => undefined)
 }
 
+export function useAssistantStoreActions() {
+    useAssistantStoreLifecycle()
+    return assistantStoreActions
+}
+
 export function useAssistantSessionsRailStore() {
     useAssistantStoreLifecycle()
     const rail = useAssistantStoreSelector<AssistantSessionsRailSelection>((state) => ({
+        snapshot: state.snapshot,
         sessions: state.snapshot.sessions,
+        playground: state.snapshot.playground,
         activeSessionId: state.snapshot.selectedSessionId,
-        commandPending: state.commandPending || state.modelsLoading
+        commandPending: state.commandPending
     }), areAssistantSessionsRailSelectionsEqual)
 
     return {
@@ -351,7 +468,7 @@ export function useAssistantStore() {
             loading: state.hydrating,
             bootstrapped: state.hydrated,
             modelsLoading: state.modelsLoading,
-            commandPending: state.commandPending || state.modelsLoading,
+            commandPending: state.commandPending,
             commandError: state.error,
             selectedSession,
             activeThread,
@@ -378,4 +495,58 @@ export function useAssistantStore() {
             return assistantStoreActions.chooseProjectPath(workspace.selectedSession.id)
         }
     }
+}
+
+export function useAssistantPageStore() {
+    useAssistantStoreLifecycle()
+    return useAssistantStoreSelector<AssistantPageSelection>((state) => {
+        const selectedSession = getSelectedAssistantSession(state.snapshot)
+        const activeThread = getActiveAssistantThread(selectedSession)
+        const phase = getAssistantThreadPhase(activeThread)
+
+        return {
+            available: state.status.available,
+            connected: state.status.connected,
+            loading: state.hydrating,
+            bootstrapped: state.hydrated,
+            commandPending: state.commandPending,
+            commandError: state.error,
+            selectedSession,
+            activeThread,
+            activityFeed: getAssistantActivityFeed(activeThread),
+            pendingApprovals: getAssistantPendingApprovals(activeThread),
+            pendingUserInputs: getAssistantPendingUserInputs(activeThread),
+            activePlan: getAssistantActivePlan(activeThread),
+            latestProposedPlan: getAssistantLatestProposedPlan(activeThread),
+            phase,
+            phaseLabel: getAssistantThreadPhaseLabel(activeThread)
+        }
+    }, areAssistantPageSelectionsEqual)
+}
+
+export function useAssistantConversationStore() {
+    useAssistantStoreLifecycle()
+    return useAssistantStoreSelector<AssistantConversationSelection>((state) => {
+        const selectedSession = getSelectedAssistantSession(state.snapshot)
+        const activeThread = getActiveAssistantThread(selectedSession)
+        const phase = getAssistantThreadPhase(activeThread)
+
+        return {
+            knownModels: state.snapshot.knownModels,
+            available: state.status.available,
+            connected: state.status.connected,
+            loading: state.hydrating,
+            modelsLoading: state.modelsLoading,
+            commandPending: state.commandPending,
+            selectedSession,
+            activeThread,
+            timelineMessages: getAssistantTimelineMessages(activeThread),
+            activityFeed: getAssistantActivityFeed(activeThread),
+            pendingUserInputs: getAssistantPendingUserInputs(activeThread),
+            activePlan: getAssistantActivePlan(activeThread),
+            latestProposedPlan: getAssistantLatestProposedPlan(activeThread),
+            phase,
+            phaseLabel: getAssistantThreadPhaseLabel(activeThread)
+        }
+    }, areAssistantConversationSelectionsEqual)
 }
