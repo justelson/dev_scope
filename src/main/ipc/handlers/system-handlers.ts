@@ -4,7 +4,6 @@ import {
     getSystemInfo,
     sensingEngine
 } from '../../inspectors'
-import { invalidateUnifiedBatchCache } from '../../inspectors/unified-batch-scanner'
 import type {
     FullReport,
     ReadinessReport,
@@ -68,15 +67,13 @@ export async function handleGetDeveloperTooling(): Promise<ToolingReport> {
 export async function handleGetReadinessReport(): Promise<ReadinessReport> {
     log.info('IPC: getReadinessReport')
     const tooling = await handleGetDeveloperTooling()
-    const aiRuntime = { llmRuntimes: [], gpuAcceleration: [], aiFrameworks: [], timestamp: Date.now() }
-    return calculateReadiness(tooling, aiRuntime as any)
+    return calculateReadiness(tooling)
 }
 
 export async function handleRefreshAll(): Promise<FullReport> {
     log.info('IPC: refreshAll')
 
     clearCommandCache()
-    invalidateUnifiedBatchCache()
     systemMetricsBridge.invalidateStaticSnapshot()
 
     const [system, tooling] = await Promise.all([
@@ -84,13 +81,11 @@ export async function handleRefreshAll(): Promise<FullReport> {
         handleGetDeveloperTooling()
     ])
 
-    const aiRuntime = { llmRuntimes: [], gpuAcceleration: [], aiFrameworks: [], timestamp: Date.now() }
-    const readiness = calculateReadiness(tooling, aiRuntime as any)
+    const readiness = calculateReadiness(tooling)
 
     return {
         system,
         tooling,
-        aiRuntime,
         readiness,
         timestamp: Date.now()
     }

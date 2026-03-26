@@ -2,7 +2,7 @@ import { shell } from 'electron'
 import { access, cp, lstat, mkdir, open as fsOpen, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join, parse, relative, resolve, sep } from 'path'
 import log from 'electron-log'
-import { getGitStatus, type GitFileStatus } from '../../inspectors/git'
+import { checkIsGitRepo, getGitStatus, type GitFileStatus } from '../../inspectors/git'
 import { invalidateScanProjectsCache } from '../../services/project-discovery-service'
 import {
     handleCreateFileSystemItem,
@@ -90,7 +90,9 @@ export async function handleGetFileTree(
 
         let gitStatusMap: Record<string, GitFileStatus> = {}
         try {
-            gitStatusMap = await getGitStatus(resolvedProjectPath)
+            if (await checkIsGitRepo(resolvedProjectPath)) {
+                gitStatusMap = await getGitStatus(resolvedProjectPath)
+            }
         } catch {
             // Ignore git errors.
         }

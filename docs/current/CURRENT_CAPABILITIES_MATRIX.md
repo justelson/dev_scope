@@ -12,6 +12,7 @@ Last validated against code on March 20, 2026.
 ## Desktop Shell and System
 
 - Window controls: `Implemented`
+- Windows File Explorer shell integration for `Open with DevScope Air` file/folder entry points: `Implemented`
 - System overview and detailed system stats: `Implemented`
 - Readiness and developer-tooling detection: `Implemented`
 - Shared metrics bootstrap, subscribe, and read flows: `Implemented`
@@ -54,9 +55,11 @@ Last validated against code on March 20, 2026.
 - Event subscription and snapshot/status reads: `Implemented`
 - Session switching with cached selected-thread hydration: `Implemented`
 - Assistant persistence auto-recovers corrupt SQLite state by backing it up, rebuilding, and maintaining a JSON fallback snapshot for recovery: `Implemented`
-- Assistant markdown file links and edited-file entries opening in-app preview: `Implemented`
+- Assistant markdown file links and edited-file entries opening in-app preview, including exact-line opens for file references such as `path/to/file.ts:42` or `#L42`: `Implemented`
 - Assistant text inputs expose native right-click spelling suggestions and edit actions: `Implemented`
 - Assistant composer exposes optional voice input with mic start/stop control: browser speech streams live on supported runtimes, local Vosk MVP records locally with rolling draft updates plus a final pass on stop, and browser-speech network failures can route directly into highlighted transcription settings: `Implemented`
+- Assistant composer image attachments open the file preview renderer directly from the shelf while non-image attachments keep the local attachment preview flow: `Implemented`
+- Assistant composer pasted text attachments render as compact paper-card previews and open a dedicated text preview modal: `Implemented`
 - Assistant defaults/settings page exposes transcription enablement, browser-vs-local engine selection, local Vosk model download/install prep, and highlight-targeted deep linking from assistant error recovery flows: `Implemented`
 - App-level assistant defaults for starter prompt template, model, chat/plan mode, supervised/full-access mode, reasoning level, and fast mode: `Implemented`
 - Assistant account overview surface with auth mode, plan, and rate-limit reads: `Implemented`
