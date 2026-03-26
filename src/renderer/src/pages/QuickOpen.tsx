@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { FileCode2, Loader2, X } from 'lucide-react'
 import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
+import QuickPreviewTitleBar from './QuickPreviewTitleBar'
 
 function parseFilePathFromSearch(search: string): string | null {
     const params = new URLSearchParams(search)
@@ -56,27 +57,44 @@ export default function QuickOpen() {
 
     const closeWindow = () => {
         closePreview()
-        window.close()
+        window.devscope.window.close()
     }
+
+    const quickPreviewName = useMemo(() => {
+        if (previewFile?.name) return previewFile.name
+        if (!filePath) return 'Quick Preview'
+        return splitFileNameAndExtension(filePath).fileName
+    }, [filePath, previewFile?.name])
+    const quickPreviewExtension = useMemo(() => {
+        if (previewFile?.name) {
+            return splitFileNameAndExtension(previewFile.name).extension
+        }
+        if (!filePath) return ''
+        return splitFileNameAndExtension(filePath).extension
+    }, [filePath, previewFile?.name])
 
     if (!filePath) {
         return (
-            <div className="h-screen bg-sparkle-bg text-sparkle-text flex items-center justify-center p-6">
-                <div className="max-w-xl w-full rounded-2xl border border-white/10 bg-black/20 p-6">
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                        <FileCode2 size={16} className="text-[var(--accent-primary)]" />
-                        Quick Preview
+            <div className="flex h-screen flex-col overflow-hidden bg-sparkle-bg text-sparkle-text">
+                <QuickPreviewTitleBar fileName="Quick Preview" filePath="" extension="" />
+                <div className="flex flex-1 items-center justify-center p-6">
+                    <div className="max-w-xl w-full rounded-2xl border border-white/10 bg-black/20 p-6">
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                            <FileCode2 size={16} className="text-[var(--accent-primary)]" />
+                            Quick Preview
+                        </div>
+                        <p className="mt-3 text-sm text-white/70">No file path was provided to preview.</p>
                     </div>
-                    <p className="mt-3 text-sm text-white/70">No file path was provided to preview.</p>
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="h-screen bg-sparkle-bg text-sparkle-text">
+        <div className="flex h-screen flex-col overflow-hidden bg-sparkle-bg text-sparkle-text">
+            <QuickPreviewTitleBar fileName={quickPreviewName} filePath={filePath} extension={quickPreviewExtension} />
             {loadingPreview && !previewFile && (
-                <div className="h-full flex items-center justify-center">
+                <div className="flex flex-1 items-center justify-center">
                     <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-4 py-2 text-sm text-white/80">
                         <Loader2 size={14} className="animate-spin text-[var(--accent-primary)]" />
                         Loading preview...
@@ -85,7 +103,7 @@ export default function QuickOpen() {
             )}
 
             {!loadingPreview && !previewFile && (
-                <div className="h-full flex items-center justify-center p-6">
+                <div className="flex flex-1 items-center justify-center p-6">
                     <div className="max-w-xl w-full rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6">
                         <div className="flex items-center justify-between gap-3">
                             <div className="text-sm font-semibold text-amber-200">Unable to preview this file</div>
@@ -113,6 +131,7 @@ export default function QuickOpen() {
                     previewBytes={previewBytes}
                     modifiedAt={previewModifiedAt}
                     projectPath={undefined}
+                    shellMode="window"
                     onOpenLinkedPreview={openPreview}
                     onClose={closeWindow}
                 />

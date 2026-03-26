@@ -12,6 +12,7 @@ import { PreviewModalDialogs } from './PreviewModalDialogs'
 
 type PreviewModalLayoutProps = {
     file: PreviewFile
+    shellMode?: 'modal' | 'window'
     loading?: boolean
     truncated?: boolean
     size?: number
@@ -111,6 +112,7 @@ type PreviewModalLayoutProps = {
 export function PreviewModalLayout(props: PreviewModalLayoutProps) {
     const {
         file,
+        shellMode = 'modal',
         loading,
         truncated,
         size,
@@ -239,11 +241,40 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
         </PreviewErrorBoundary>
     )
 
+    const isWindowShell = shellMode === 'window'
+
     const modalContent = (
-        <div className={cn('fixed z-[80] flex transition-[background-color,padding,backdrop-filter] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]', isExpanded ? 'top-[46px] left-0 right-0 bottom-0 z-[45] items-stretch justify-stretch bg-sparkle-bg' : 'inset-0 items-center justify-center bg-black/70 backdrop-blur-md')} onClick={isExpanded ? undefined : handleCloseRequest} style={isExpanded ? undefined : { animation: 'fadeIn 0.18s ease-out' }} onWheel={(event) => event.stopPropagation()}>
-            <div className={cn('will-change-[opacity,width,height,max-width,max-height,border-radius,margin,box-shadow,border-color] transition-[width,max-width,height,max-height,border-radius,margin,box-shadow,border-color,opacity] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]', isExpanded ? 'bg-sparkle-card h-full w-full max-h-none max-w-none opacity-100 m-0 flex flex-col overflow-hidden rounded-none border-0 shadow-none' : 'bg-sparkle-card m-4 flex w-full max-h-[90vh] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-white/10 opacity-100 shadow-2xl')} onClick={isExpanded ? undefined : (event => event.stopPropagation())} style={modalStyle}>
+        <div
+            className={cn(
+                'flex transition-[background-color,padding,backdrop-filter] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]',
+                isWindowShell
+                    ? 'min-h-0 flex-1 items-stretch justify-stretch bg-sparkle-bg'
+                    : isExpanded
+                        ? 'fixed left-0 right-0 bottom-0 top-[46px] z-[45] items-stretch justify-stretch bg-sparkle-bg'
+                        : 'fixed inset-0 z-[80] items-center justify-center bg-black/70 backdrop-blur-md'
+            )}
+            onClick={!isWindowShell && !isExpanded ? handleCloseRequest : undefined}
+            style={!isWindowShell && !isExpanded ? { animation: 'fadeIn 0.18s ease-out' } : undefined}
+            onWheel={(event) => event.stopPropagation()}
+        >
+            <div
+                className={cn(
+                    'flex flex-col overflow-hidden',
+                    isWindowShell
+                        ? 'min-h-0 w-full flex-1 bg-sparkle-card'
+                        : 'will-change-[opacity,width,height,max-width,max-height,border-radius,margin,box-shadow,border-color] transition-[width,max-width,height,max-height,border-radius,margin,box-shadow,border-color,opacity] duration-320 ease-[cubic-bezier(0.16,1,0.3,1)]',
+                    !isWindowShell && (
+                        isExpanded
+                            ? 'bg-sparkle-card h-full w-full max-h-none max-w-none opacity-100 m-0 rounded-none border-0 shadow-none'
+                            : 'bg-sparkle-card m-4 w-full max-h-[90vh] max-w-[95vw] rounded-2xl border border-white/10 opacity-100 shadow-2xl'
+                    )
+                )}
+                onClick={!isWindowShell && !isExpanded ? (event => event.stopPropagation()) : undefined}
+                style={isWindowShell ? undefined : modalStyle}
+            >
                 <PreviewModalHeader
                     file={file}
+                    showCloseButton={!isWindowShell}
                     gitDiffSummary={gitDiffSummary}
                     totalFileLines={totalFileLines}
                     mode={mode}

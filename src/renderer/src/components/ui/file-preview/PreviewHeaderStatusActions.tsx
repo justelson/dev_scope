@@ -5,6 +5,7 @@ import type { PreviewFile } from './types'
 
 type PreviewHeaderStatusActionsProps = {
     file: PreviewFile
+    showCloseButton?: boolean
     gitDiffSummary?: GitDiffSummary | null
     totalFileLines: number
     isMediaFile: boolean
@@ -37,6 +38,7 @@ type PreviewHeaderStatusActionsProps = {
 
 export function PreviewHeaderStatusActions({
     file,
+    showCloseButton = true,
     gitDiffSummary,
     totalFileLines,
     isMediaFile,
@@ -169,13 +171,15 @@ export function PreviewHeaderStatusActions({
                 )}
             </div>
 
-            <button
-                onClick={onClose}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/40 transition-all hover:bg-white/10 hover:text-white"
-                title="Close (Esc)"
-            >
-                <X size={18} />
-            </button>
+            {showCloseButton && (
+                <button
+                    onClick={onClose}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/40 transition-all hover:bg-white/10 hover:text-white"
+                    title="Close (Esc)"
+                >
+                    <X size={18} />
+                </button>
+            )}
         </div>
     )
 }

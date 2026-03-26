@@ -21,6 +21,7 @@ interface FilePreviewModalProps extends PreviewMeta {
     content: string
     loading?: boolean
     projectPath?: string
+    shellMode?: 'modal' | 'window'
     onOpenLinkedPreview?: (file: { name: string; path: string }, ext: string, options?: PreviewOpenOptions) => Promise<void>
     mediaItems?: PreviewMediaItem[]
     onSaved?: (filePath: string) => Promise<void> | void
@@ -36,6 +37,7 @@ export function FilePreviewModal({
     previewBytes,
     modifiedAt,
     projectPath,
+    shellMode = 'modal',
     onOpenLinkedPreview,
     mediaItems = [],
     onSaved,
@@ -132,7 +134,8 @@ export function FilePreviewModal({
         resetKey: file.path,
         defaultStartExpanded,
         defaultLeftPanelOpen,
-        defaultRightPanelOpen
+        defaultRightPanelOpen,
+        initialFocusLine: file.focusLine ?? null
     })
 
     const {
@@ -375,6 +378,7 @@ export function FilePreviewModal({
     const modalContent = (
         <PreviewModalLayout
             file={file}
+            shellMode={shellMode}
             loading={loading}
             truncated={truncated}
             size={size ?? undefined}
@@ -472,7 +476,7 @@ export function FilePreviewModal({
         />
     )
 
-    if (typeof document === 'undefined') {
+    if (shellMode === 'window' || typeof document === 'undefined') {
         return modalContent
     }
 

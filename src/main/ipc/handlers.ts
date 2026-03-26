@@ -28,15 +28,22 @@ import {
     handleTestGroqConnection
 } from './handlers/settings-ai-handlers'
 import {
+    handleAssistantApprovePendingPlaygroundLabRequest,
     handleAssistantArchiveSession,
+    handleAssistantAttachSessionToPlaygroundLab,
     handleAssistantBootstrap,
     handleAssistantClearLogs,
     handleAssistantConnect,
+    handleAssistantCreatePlaygroundLab,
     handleAssistantCreateSession,
     handleAssistantDeleteMessage,
     handleAssistantDeleteSession,
+    handleAssistantDeclinePendingPlaygroundLabRequest,
+    handleAssistantDownloadTranscriptionModel,
     handleAssistantDisconnect,
     handleAssistantGetAccountOverview,
+    handleAssistantGetSessionTurnUsage,
+    handleAssistantGetTranscriptionModelState,
     handleAssistantGetSnapshot,
     handleAssistantGetStatus,
     handleAssistantInterruptTurn,
@@ -45,9 +52,11 @@ import {
     handleAssistantPersistClipboardImage,
     handleAssistantRenameSession,
     handleAssistantRespondApproval,
+    handleAssistantTranscribeAudioWithLocalModel,
     handleAssistantRespondUserInput,
     handleAssistantSelectSession,
     handleAssistantSendPrompt,
+    handleAssistantSetPlaygroundRoot,
     handleAssistantSetSessionProjectPath,
     handleAssistantSubscribe,
     handleAssistantUnsubscribe
@@ -200,6 +209,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle(ASSISTANT_IPC.getSnapshot, handleAssistantGetSnapshot)
     ipcMain.handle(ASSISTANT_IPC.getStatus, handleAssistantGetStatus)
     ipcMain.handle(ASSISTANT_IPC.getAccountOverview, handleAssistantGetAccountOverview)
+    ipcMain.handle(ASSISTANT_IPC.getSessionTurnUsage, handleAssistantGetSessionTurnUsage)
     ipcMain.handle(ASSISTANT_IPC.listModels, handleAssistantListModels)
     ipcMain.handle(ASSISTANT_IPC.connect, handleAssistantConnect)
     ipcMain.handle(ASSISTANT_IPC.disconnect, handleAssistantDisconnect)
@@ -211,12 +221,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle(ASSISTANT_IPC.deleteMessage, handleAssistantDeleteMessage)
     ipcMain.handle(ASSISTANT_IPC.clearLogs, handleAssistantClearLogs)
     ipcMain.handle(ASSISTANT_IPC.setSessionProjectPath, handleAssistantSetSessionProjectPath)
+    ipcMain.handle(ASSISTANT_IPC.setPlaygroundRoot, handleAssistantSetPlaygroundRoot)
+    ipcMain.handle(ASSISTANT_IPC.createPlaygroundLab, handleAssistantCreatePlaygroundLab)
+    ipcMain.handle(ASSISTANT_IPC.attachSessionToPlaygroundLab, handleAssistantAttachSessionToPlaygroundLab)
+    ipcMain.handle(ASSISTANT_IPC.approvePendingPlaygroundLabRequest, handleAssistantApprovePendingPlaygroundLabRequest)
+    ipcMain.handle(ASSISTANT_IPC.declinePendingPlaygroundLabRequest, handleAssistantDeclinePendingPlaygroundLabRequest)
     ipcMain.handle(ASSISTANT_IPC.persistClipboardImage, handleAssistantPersistClipboardImage)
     ipcMain.handle(ASSISTANT_IPC.newThread, handleAssistantNewThread)
     ipcMain.handle(ASSISTANT_IPC.sendPrompt, handleAssistantSendPrompt)
     ipcMain.handle(ASSISTANT_IPC.interruptTurn, handleAssistantInterruptTurn)
     ipcMain.handle(ASSISTANT_IPC.respondApproval, handleAssistantRespondApproval)
     ipcMain.handle(ASSISTANT_IPC.respondUserInput, handleAssistantRespondUserInput)
+    ipcMain.handle(ASSISTANT_IPC.getTranscriptionModelState, handleAssistantGetTranscriptionModelState)
+    ipcMain.handle(ASSISTANT_IPC.downloadTranscriptionModel, handleAssistantDownloadTranscriptionModel)
+    ipcMain.handle(ASSISTANT_IPC.transcribeAudioWithLocalModel, handleAssistantTranscribeAudioWithLocalModel)
 
     ipcMain.handle('devscope:selectFolder', handleSelectFolder)
     ipcMain.handle('devscope:selectMarkdownFile', handleSelectMarkdownFile)
@@ -315,21 +333,26 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.removeAllListeners('window:close')
     ipcMain.removeHandler('window:isMaximized')
 
-    ipcMain.on('window:minimize', () => {
-        if (!mainWindow.isDestroyed()) mainWindow.minimize()
+    ipcMain.on('window:minimize', (event) => {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender)
+        if (!targetWindow || targetWindow.isDestroyed()) return
+        targetWindow.minimize()
     })
-    ipcMain.on('window:maximize', () => {
-        if (!mainWindow.isDestroyed()) {
-            if (mainWindow.isMaximized()) mainWindow.unmaximize()
-            else mainWindow.maximize()
-        }
+    ipcMain.on('window:maximize', (event) => {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender)
+        if (!targetWindow || targetWindow.isDestroyed()) return
+        if (targetWindow.isMaximized()) targetWindow.unmaximize()
+        else targetWindow.maximize()
     })
-    ipcMain.on('window:close', () => {
-        if (!mainWindow.isDestroyed()) mainWindow.close()
+    ipcMain.on('window:close', (event) => {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender)
+        if (!targetWindow || targetWindow.isDestroyed()) return
+        targetWindow.close()
     })
-    ipcMain.handle('window:isMaximized', () => {
-        if (mainWindow.isDestroyed()) return false
-        return mainWindow.isMaximized()
+    ipcMain.handle('window:isMaximized', (event) => {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender)
+        if (!targetWindow || targetWindow.isDestroyed()) return false
+        return targetWindow.isMaximized()
     })
 
     mainWindow.webContents.once('destroyed', () => {

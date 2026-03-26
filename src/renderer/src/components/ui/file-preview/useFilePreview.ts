@@ -119,7 +119,8 @@ export function useFilePreview(): UseFilePreviewReturn {
             path: file.path,
             type: previewTarget.type,
             language: previewTarget.language,
-            startInEditMode: options?.startInEditMode === true
+            startInEditMode: options?.startInEditMode === true,
+            focusLine: options?.focusLine ?? null
         })
 
         if (!previewTarget.needsContent) {

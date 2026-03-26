@@ -3,8 +3,8 @@
  * Main Process Entry Point
  */
 
-import { app, BrowserWindow, shell, ipcMain, protocol } from 'electron'
-import { basename, extname, join } from 'path'
+import { app, BrowserWindow, Menu, shell, ipcMain, protocol, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { join } from 'path'
 import { existsSync, statSync } from 'fs'
 import { electronApp, is } from './utils'
 import log from 'electron-log'
@@ -12,6 +12,51 @@ import { registerIpcHandlers } from './ipc'
 import { disposeAssistantService } from './assistant'
 import { disposeSystemMetricsBridge } from './system-metrics/manager'
 import { disposeUpdater, initializeUpdater, registerUpdateWindow } from './update/manager'
+import { registerFileProtocol } from './file-protocol'
+
+const APP_NAME = 'DevScope Air'
+const DEV_APP_NAME = `${APP_NAME}-dev`
+const APP_USER_MODEL_ID = 'com.devscope.air.win'
+const DEV_APP_USER_MODEL_ID = `${APP_USER_MODEL_ID}.dev`
+
+type RuntimeIdentity = {
+    appName: string
+    appUserModelId: string
+    userDataDirectoryName: string
+    isDevRuntime: boolean
+}
+
+function resolveRuntimeIdentity(): RuntimeIdentity {
+    if (is.dev) {
+        return {
+            appName: DEV_APP_NAME,
+            appUserModelId: DEV_APP_USER_MODEL_ID,
+            userDataDirectoryName: DEV_APP_NAME,
+            isDevRuntime: true
+        }
+    }
+
+    return {
+        appName: APP_NAME,
+        appUserModelId: APP_USER_MODEL_ID,
+        userDataDirectoryName: APP_NAME,
+        isDevRuntime: false
+    }
+}
+
+const runtimeIdentity = resolveRuntimeIdentity()
+
+function applyRuntimeIdentity(identity: RuntimeIdentity): void {
+    app.setName(identity.appName)
+
+    if (!identity.isDevRuntime) return
+
+    const userDataPath = join(app.getPath('appData'), identity.userDataDirectoryName)
+    app.setPath('userData', userDataPath)
+    app.setPath('sessionData', join(userDataPath, 'session'))
+}
+
+applyRuntimeIdentity(runtimeIdentity)
 
 // Configure logging
 const verboseMainLogs = process.env.DEVSCOPE_VERBOSE_LOGS === '1'
@@ -26,28 +71,12 @@ let quickPreviewWindow: BrowserWindow | null = null
 let hasRegisteredIpcHandlers = false
 const FILE_PROTOCOL = 'devscope'
 const QUICK_PREVIEW_ROUTE = '/quick-open'
-const ASSOCIATED_CODE_EXTENSIONS = new Set([
-    '.md', '.markdown', '.mdx', '.txt', '.log',
-    '.js', '.jsx', '.mjs', '.cjs',
-    '.ts', '.tsx',
-    '.json', '.jsonc', '.json5',
-    '.css', '.scss', '.less',
-    '.html', '.htm', '.xml',
-    '.yml', '.yaml', '.toml', '.ini', '.conf',
-    '.sh', '.bash', '.zsh', '.ps1', '.bat', '.cmd',
-    '.py', '.rb', '.php', '.java', '.kt', '.kts',
-    '.c', '.h', '.cpp', '.cxx', '.hpp',
-    '.cs', '.go', '.rs', '.swift', '.dart', '.scala', '.sql',
-    '.vue', '.svelte', '.gradle'
-])
-const ASSOCIATED_DOTFILES = new Set([
-    '.gitignore',
-    '.gitattributes',
-    '.editorconfig',
-    '.npmrc',
-    '.eslintrc',
-    '.prettierrc'
-])
+const EXTERNAL_EXPLORER_LAUNCH_QUERY = 'shellLaunch=1'
+
+type ShellLaunchTarget = {
+    kind: 'file' | 'directory'
+    path: string
+}
 
 protocol.registerSchemesAsPrivileged([
     {
@@ -98,29 +127,75 @@ function lockWindowZoom(window: BrowserWindow): void {
     void webContents.setVisualZoomLevelLimits(1, 1).catch(() => {})
 }
 
-function shouldTreatAsAssociatedFile(arg: string): boolean {
+function registerEditableContextMenu(window: BrowserWindow): void {
+    window.webContents.on('context-menu', (_event, params) => {
+        if (!params.isEditable) return
+
+        const template: Electron.MenuItemConstructorOptions[] = []
+
+        if (params.misspelledWord) {
+            if (params.dictionarySuggestions.length > 0) {
+                template.push(
+                    ...params.dictionarySuggestions.slice(0, 6).map((suggestion) => ({
+                        label: suggestion,
+                        click: () => window.webContents.replaceMisspelling(suggestion)
+                    }))
+                )
+            } else {
+                template.push({
+                    label: 'No spelling suggestions',
+                    enabled: false
+                })
+            }
+
+            template.push({
+                label: 'Add to Dictionary',
+                click: () => window.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+            })
+            template.push({ type: 'separator' })
+        }
+
+        template.push(
+            { role: 'undo', enabled: params.editFlags.canUndo },
+            { role: 'redo', enabled: params.editFlags.canRedo },
+            { type: 'separator' },
+            { role: 'cut', enabled: params.editFlags.canCut },
+            { role: 'copy', enabled: params.editFlags.canCopy },
+            { role: 'paste', enabled: params.editFlags.canPaste },
+            { role: 'selectAll', enabled: params.editFlags.canSelectAll }
+        )
+
+        Menu.buildFromTemplate(template).popup({ window })
+    })
+}
+
+function resolveShellLaunchTarget(arg: string): ShellLaunchTarget | null {
     const trimmed = String(arg || '').trim()
-    if (!trimmed || trimmed.startsWith('-')) return false
-    if (!existsSync(trimmed)) return false
+    if (!trimmed || trimmed.startsWith('-')) return null
+    if (!existsSync(trimmed)) return null
 
     try {
         const stat = statSync(trimmed)
-        if (!stat.isFile()) return false
+        if (stat.isDirectory()) {
+            return { kind: 'directory', path: trimmed }
+        }
+        if (stat.isFile()) {
+            return { kind: 'file', path: trimmed }
+        }
     } catch {
-        return false
+        return null
     }
 
-    const fileName = basename(trimmed).toLowerCase()
-    const extension = extname(trimmed).toLowerCase()
-    return ASSOCIATED_CODE_EXTENSIONS.has(extension) || ASSOCIATED_DOTFILES.has(fileName)
+    return null
 }
 
-function extractAssociatedFileFromArgv(argv: string[]): string | null {
+function extractShellLaunchTargetFromArgv(argv: string[]): ShellLaunchTarget | null {
     const startIndex = app.isPackaged ? 1 : 2
     for (let i = startIndex; i < argv.length; i += 1) {
         const candidate = String(argv[i] || '').trim()
-        if (shouldTreatAsAssociatedFile(candidate)) {
-            return candidate
+        const shellLaunchTarget = resolveShellLaunchTarget(candidate)
+        if (shellLaunchTarget) {
+            return shellLaunchTarget
         }
     }
     return null
@@ -142,7 +217,11 @@ function loadRendererRoute(window: BrowserWindow, routeWithSearch: string): void
     void window.loadFile(join(__dirname, '../renderer/index.html'), { hash: routeWithSearch })
 }
 
-function createWindow(showOnReady = true): BrowserWindow {
+function buildExternalExplorerRoute(folderPath: string): string {
+    return `/explorer/${encodeURIComponent(folderPath)}?${EXTERNAL_EXPLORER_LAUNCH_QUERY}`
+}
+
+function createWindow(showOnReady = true, initialRoute = '/'): BrowserWindow {
     const iconPath = getAppIconPath()
     const window = new BrowserWindow({
         width: 1200,
@@ -189,8 +268,9 @@ function createWindow(showOnReady = true): BrowserWindow {
         }
     })
 
+    registerEditableContextMenu(window)
     lockWindowZoom(window)
-    loadRendererRoute(window, '/')
+    loadRendererRoute(window, initialRoute)
     registerUpdateWindow(window)
 
     return window
@@ -214,6 +294,7 @@ function createQuickPreviewWindow(filePath: string): BrowserWindow {
         minWidth: 760,
         minHeight: 520,
         show: false,
+        frame: false,
         backgroundColor: '#0c121f',
         autoHideMenuBar: true,
         ...(iconPath ? { icon: iconPath } : {}),
@@ -242,13 +323,47 @@ function createQuickPreviewWindow(filePath: string): BrowserWindow {
         return { action: 'deny' }
     })
 
+    registerEditableContextMenu(window)
     lockWindowZoom(window)
     loadRendererRoute(window, route)
     quickPreviewWindow = window
     return window
 }
 
-const initialAssociatedFilePath = extractAssociatedFileFromArgv(process.argv)
+function openFolderInMainWindow(folderPath: string): BrowserWindow {
+    const route = buildExternalExplorerRoute(folderPath)
+
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        mainWindow = createWindow(true, route)
+        ensureIpcHandlersRegistered(mainWindow)
+        return mainWindow
+    }
+
+    loadRendererRoute(mainWindow, route)
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+    return mainWindow
+}
+
+function handleShellLaunchTarget(shellLaunchTarget: ShellLaunchTarget): void {
+    if (shellLaunchTarget.kind === 'directory') {
+        openFolderInMainWindow(shellLaunchTarget.path)
+        return
+    }
+
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        mainWindow = createWindow(false)
+        ensureIpcHandlersRegistered(mainWindow)
+    }
+    createQuickPreviewWindow(shellLaunchTarget.path)
+}
+
+function resolveSenderWindow(event: IpcMainEvent | IpcMainInvokeEvent): BrowserWindow | null {
+    return BrowserWindow.fromWebContents(event.sender)
+}
+
+const initialShellLaunchTarget = extractShellLaunchTargetFromArgv(process.argv)
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 if (!hasSingleInstanceLock) {
@@ -256,9 +371,9 @@ if (!hasSingleInstanceLock) {
 }
 
 app.on('second-instance', (_event, argv) => {
-    const associatedFilePath = extractAssociatedFileFromArgv(argv)
-    if (associatedFilePath) {
-        createQuickPreviewWindow(associatedFilePath)
+    const shellLaunchTarget = extractShellLaunchTargetFromArgv(argv)
+    if (shellLaunchTarget) {
+        handleShellLaunchTarget(shellLaunchTarget)
         return
     }
 
@@ -274,80 +389,19 @@ app.on('second-instance', (_event, argv) => {
 })
 
 app.whenReady().then(() => {
-    app.setName('DevScope Air')
-    electronApp.setAppUserModelId('com.devscope.air.win')
+    electronApp.setAppUserModelId(runtimeIdentity.appUserModelId)
     void initializeUpdater()
+    registerFileProtocol(FILE_PROTOCOL)
 
-    protocol.registerBufferProtocol(FILE_PROTOCOL, (request, callback) => {
-        try {
-            const url = new URL(request.url)
-            let filePath = decodeURIComponent(url.pathname)
-
-            // Handle case where drive letter is interpreted as hostname (e.g. devscope://c/Users/...)
-            if (url.hostname && url.hostname.length === 1 && /^[a-zA-Z]$/.test(url.hostname)) {
-                filePath = `${url.hostname}:${filePath}`
-            }
-            // Handle UNC paths
-            else if (url.hostname) {
-                filePath = `//${url.hostname}${filePath}`
-            }
-            // Handle standard Windows paths with leading slash (e.g. /C:/Users/...)
-            else if (process.platform === 'win32' && filePath.startsWith('/')) {
-                filePath = filePath.slice(1)
-            }
-
-            // Read file and return as buffer with permissive CSP
-            import('fs').then(({ readFile }) => {
-                readFile(filePath, (err, data) => {
-                    if (err) {
-                        log.error('Failed to read file:', filePath, err)
-                        callback({ statusCode: 404, data: Buffer.from('') })
-                        return
-                    }
-
-                    // Determine MIME type
-                    const ext = filePath.split('.').pop()?.toLowerCase() || ''
-                    const mimeTypes: Record<string, string> = {
-                        'html': 'text/html',
-                        'htm': 'text/html',
-                        'css': 'text/css',
-                        'js': 'application/javascript',
-                        'json': 'application/json',
-                        'png': 'image/png',
-                        'jpg': 'image/jpeg',
-                        'jpeg': 'image/jpeg',
-                        'gif': 'image/gif',
-                        'svg': 'image/svg+xml',
-                        'mp4': 'video/mp4',
-                        'webm': 'video/webm'
-                    }
-                    const mimeType = mimeTypes[ext] || 'application/octet-stream'
-
-                    callback({
-                        statusCode: 200,
-                        data,
-                        mimeType,
-                        headers: {
-                            'Content-Security-Policy': "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;"
-                        }
-                    })
-                })
-            }).catch(err => {
-                log.error('Failed to import fs:', err)
-                callback({ statusCode: 500, data: Buffer.from('') })
-            })
-        } catch (err) {
-            log.error('Failed to resolve protocol URL:', request.url, err)
-            callback({ statusCode: 500, data: Buffer.from('') })
-        }
-    })
-
-    // Keep the full app alive in background for quick-file preview launches.
-    const launchHidden = Boolean(initialAssociatedFilePath)
-    mainWindow = createWindow(!launchHidden)
+    // Keep the full app alive in background for shell file-preview launches.
+    const launchHidden = initialShellLaunchTarget?.kind === 'file'
+    const initialRoute = initialShellLaunchTarget?.kind === 'directory'
+        ? buildExternalExplorerRoute(initialShellLaunchTarget.path)
+        : '/'
+    mainWindow = createWindow(!launchHidden, initialRoute)
     ensureIpcHandlersRegistered(mainWindow)
-    if (initialAssociatedFilePath) {
-        createQuickPreviewWindow(initialAssociatedFilePath)
+    if (initialShellLaunchTarget?.kind === 'file') {
+        createQuickPreviewWindow(initialShellLaunchTarget.path)
     }
 
     app.on('activate', function () {
@@ -388,26 +442,29 @@ app.on('before-quit', () => {
 })
 
 // Handle window control IPC
-ipcMain.on('window:minimize', () => {
+ipcMain.on('window:minimize', (event) => {
     log.info('Window minimize requested')
-    mainWindow?.minimize()
+    resolveSenderWindow(event)?.minimize()
 })
 
-ipcMain.on('window:maximize', () => {
+ipcMain.on('window:maximize', (event) => {
     log.info('Window maximize requested')
-    if (mainWindow?.isMaximized()) {
-        mainWindow.unmaximize()
+    const targetWindow = resolveSenderWindow(event)
+    if (!targetWindow) return
+
+    if (targetWindow.isMaximized()) {
+        targetWindow.unmaximize()
     } else {
-        mainWindow?.maximize()
+        targetWindow.maximize()
     }
 })
 
-ipcMain.on('window:close', () => {
+ipcMain.on('window:close', (event) => {
     log.info('Window close requested')
-    mainWindow?.close()
+    resolveSenderWindow(event)?.close()
 })
 
-ipcMain.handle('window:isMaximized', () => {
-    return mainWindow?.isMaximized() ?? false
+ipcMain.handle('window:isMaximized', (event) => {
+    return resolveSenderWindow(event)?.isMaximized() ?? false
 })
 

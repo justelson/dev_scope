@@ -1,5 +1,5 @@
 // ... imports
-import { useRef, lazy, Suspense, useEffect, useMemo, createContext, useContext, type ReactNode } from 'react'
+import { useRef, lazy, Suspense, useEffect, useMemo, useState, createContext, useContext, type ReactNode } from 'react'
 import { HashRouter, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import TitleBar from './components/layout/TitleBar'
 import Sidebar, { SidebarProvider, useSidebar } from './components/layout/Sidebar'
@@ -34,6 +34,7 @@ const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
 const LAST_MAIN_TAB_KEY = 'devscope:last-main-tab:v1'
 const LAST_APP_ROUTE_KEY = 'devscope:last-app-route:v1'
+const EXTERNAL_EXPLORER_ACCESS_KEY = 'devscope:external-explorer-access:v1'
 
 // Terminal Context
 interface TerminalContextType {
@@ -135,6 +136,19 @@ function readLastLaunchRoute(allowTasks: boolean, allowExplorer: boolean): strin
     return readLastMainTabPath(allowTasks, allowExplorer)
 }
 
+function hasExternalExplorerLaunchAccess(pathname: string, search: string): boolean {
+    if (!isExplorerAreaPath(pathname)) return false
+    return new URLSearchParams(search).get('shellLaunch') === '1'
+}
+
+function readExternalExplorerLaunchAccess(): boolean {
+    try {
+        return sessionStorage.getItem(EXTERNAL_EXPLORER_ACCESS_KEY) === '1'
+    } catch {
+        return false
+    }
+}
+
 function LaunchRedirect() {
     const { settings } = useSettings()
     return <Navigate to={readLastLaunchRoute(settings.tasksPageEnabled, settings.explorerTabEnabled)} replace />
@@ -148,9 +162,12 @@ function MainContent() {
     const mainRef = useRef<HTMLElement>(null!)
     const location = useLocation()
     const navigate = useNavigate()
+    const [externalExplorerAccess, setExternalExplorerAccess] = useState<boolean>(() => readExternalExplorerLaunchAccess())
     const isSettingsRoute = location.pathname.startsWith('/settings')
     const { isCollapsed } = useSidebar()
     const { settings } = useSettings()
+    const hasRouteLaunchAccess = hasExternalExplorerLaunchAccess(location.pathname, location.search)
+    const allowExplorerRoute = settings.explorerTabEnabled || externalExplorerAccess || hasRouteLaunchAccess
 
     const { targetY, currentY, animationFrame, isAnimating } = useSmoothScroll(mainRef, {
         ease: 0.12,
@@ -200,16 +217,26 @@ function MainContent() {
     }, [location.pathname, settings.explorerTabEnabled, settings.tasksPageEnabled])
 
     useEffect(() => {
+        if (!hasExternalExplorerLaunchAccess(location.pathname, location.search)) return
+        setExternalExplorerAccess(true)
+        try {
+            sessionStorage.setItem(EXTERNAL_EXPLORER_ACCESS_KEY, '1')
+        } catch {
+            // Ignore storage write errors.
+        }
+    }, [location.pathname, location.search])
+
+    useEffect(() => {
         if (settings.tasksPageEnabled) return
         if (!location.pathname.startsWith('/tasks')) return
         navigate('/home', { replace: true })
     }, [settings.tasksPageEnabled, location.pathname, navigate])
 
     useEffect(() => {
-        if (settings.explorerTabEnabled) return
+        if (allowExplorerRoute) return
         if (!isExplorerAreaPath(location.pathname)) return
         navigate('/home', { replace: true })
-    }, [settings.explorerTabEnabled, location.pathname, navigate])
+    }, [allowExplorerRoute, location.pathname, navigate])
 
     return (
         <main
@@ -224,11 +251,11 @@ function MainContent() {
                     <Route path="/projects" element={<FolderBrowse />} />
                     <Route
                         path="/explorer"
-                        element={settings.explorerTabEnabled ? <Explorer /> : <Navigate to="/home" replace />}
+                        element={allowExplorerRoute ? <Explorer /> : <Navigate to="/home" replace />}
                     />
                     <Route
                         path="/explorer/:folderPath"
-                        element={settings.explorerTabEnabled ? <Explorer /> : <Navigate to="/home" replace />}
+                        element={allowExplorerRoute ? <Explorer /> : <Navigate to="/home" replace />}
                     />
                     <Route
                         path="/tasks"

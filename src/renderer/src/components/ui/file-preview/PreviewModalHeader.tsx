@@ -11,6 +11,7 @@ import { PreviewHeaderHtmlControls } from './PreviewHeaderHtmlControls'
 
 interface PreviewModalHeaderProps {
     file: PreviewFile
+    showCloseButton?: boolean
     gitDiffSummary?: GitDiffSummary | null
     totalFileLines?: number
     mode: 'preview' | 'edit'
@@ -73,6 +74,7 @@ function formatPreviewFileName(name: string, maxLength: number): string {
 
 export default function PreviewModalHeader({
     file,
+    showCloseButton = true,
     gitDiffSummary,
     totalFileLines = 0,
     mode,
@@ -468,6 +470,7 @@ export default function PreviewModalHeader({
                 onRevert={onRevert}
                 onSave={onSave}
                 onClose={onClose}
+                showCloseButton={showCloseButton}
                 controlGroupClass={controlGroupClass}
                 iconButtonBaseClass={iconButtonBaseClass}
             />

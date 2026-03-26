@@ -7,6 +7,7 @@ export interface PreviewFile {
     type: PreviewFileType
     language?: string
     startInEditMode?: boolean
+    focusLine?: number | null
 }
 
 export interface PreviewMediaSource {
@@ -23,6 +24,7 @@ export interface PreviewMediaItem extends PreviewMediaSource {
 export interface PreviewOpenOptions {
     startInEditMode?: boolean
     mediaItems?: PreviewMediaSource[]
+    focusLine?: number
 }
 
 export interface PreviewMeta {
