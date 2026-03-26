@@ -13,6 +13,7 @@ import {
     type InlineMentionTag
 } from './assistant-composer-inline-mentions'
 import { useAssistantComposerProjectData } from './useAssistantComposerProjectData'
+import { useAssistantSpeechInput } from './useAssistantSpeechInput'
 import type { AssistantComposerPreferenceEffort } from './assistant-composer-preferences'
 import {
     areAssistantComposerSessionStatesEqual,
@@ -47,7 +48,12 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     const {
         sessionId,
         onSend,
+        onStop,
+        onCancelDirty,
+        onOpenAttachmentPreview,
+        onAttachmentShelfBoundsChange,
         disabled,
+        allowEmptySubmit = false,
         isSending,
         isThinking,
         thinkingLabel = 'Working...',
@@ -61,10 +67,15 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         runtimeMode,
         interactionMode,
         projectPath,
-        compact = false
+        compact = false,
+        submitLabel = 'Send',
+        dirtySubmitLabel,
+        cancelLabel = 'Cancel',
+        showCancelWhenDirty = false
     } = props
 
     const globalDefaultComposerState = useMemo<AssistantComposerSessionState>(() => ({
+        draft: settings.assistantDefaultPromptTemplate || undefined,
         model: settings.assistantDefaultModel.trim() || undefined,
         runtimeMode: settings.assistantDefaultRuntimeMode,
         interactionMode: settings.assistantDefaultInteractionMode,
@@ -75,6 +86,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         settings.assistantDefaultFastMode,
         settings.assistantDefaultInteractionMode,
         settings.assistantDefaultModel,
+        settings.assistantDefaultPromptTemplate,
         settings.assistantDefaultRuntimeMode
     ])
     const baseRuntimeMode: AssistantRuntimeMode = globalDefaultComposerState.runtimeMode || runtimeMode || (activeProfile === 'yolo-fast' ? 'full-access' : 'approval-required')
@@ -116,6 +128,9 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     const [mentionRecentModifiedAtByPath, setMentionRecentModifiedAtByPath] = useState<Record<string, number>>({})
     const [modelCanScrollUp, setModelCanScrollUp] = useState(false)
     const [modelCanScrollDown, setModelCanScrollDown] = useState(false)
+    const [branchRefreshToken, setBranchRefreshToken] = useState(0)
+    const [isSwitchingBranch, setIsSwitchingBranch] = useState(false)
+    const [branchActionError, setBranchActionError] = useState<string | null>(null)
     const [selectedEffort, setSelectedEffort] = useState<AssistantComposerPreferenceEffort>(initialComposerSessionState.effort || globalDefaultComposerState.effort || 'high')
     const [fastModeEnabled, setFastModeEnabled] = useState(initialComposerSessionState.fastModeEnabled ?? globalDefaultComposerState.fastModeEnabled ?? false)
     const [isCompactFooter, setIsCompactFooter] = useState(compact)
@@ -131,6 +146,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     const traitsDropdownRef = useRef<HTMLDivElement>(null)
     const didAutoRefreshModelsRef = useRef(false)
     const persistedSessionStateRef = useRef<AssistantComposerSessionState>(initialComposerSessionState)
+    const initializedSessionIdRef = useRef<string | null | undefined>(undefined)
 
     const [selectedModel, setSelectedModel] = useState(initialComposerSessionState.model || resolvedModel)
     const [selectedRuntimeMode, setSelectedRuntimeMode] = useState<AssistantRuntimeMode>(initialComposerSessionState.runtimeMode || baseRuntimeMode)
@@ -138,7 +154,15 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     const latestModelId = availableModelOptions[0]?.id || null
     const selectedModelLabel = availableModelOptions.find((entry) => entry.id === selectedModel)?.label || selectedModel || 'Select model'
     const currentBranch = branches.find((branch) => branch.current)?.name || null
-    const branchButtonLabel = branchesLoading ? 'Loading branch...' : currentBranch || 'Select branch'
+    const defaultBranchName = useMemo(() => {
+        const candidates = [
+            settings.gitPullRequestDefaultTargetBranch,
+            'main',
+            'master'
+        ].filter((name, index, collection): name is string => Boolean(name) && collection.indexOf(name) === index)
+        return candidates.find((name) => branches.some((branch) => branch.name === name)) || null
+    }, [branches, settings.gitPullRequestDefaultTargetBranch])
+    const branchButtonLabel = isSwitchingBranch ? 'Switching...' : branchesLoading ? 'Loading branch...' : currentBranch || 'Select branch'
     const mentionState = useMemo(() => {
         const cursorInsideInlineMention = inlineMentionTags.some((tag) => composerCursor > tag.start && composerCursor <= tag.end)
         const cursorRightAfterMention = inlineMentionTags.some((tag) => composerCursor === tag.end + 1)
@@ -181,6 +205,19 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     }, [branchQuery, branches])
     const activeMentionCandidate = mentionCandidates[activeMentionIndex] || null
     const activeModelCandidate = filteredModelOptions[activeModelIndex] || null
+    const activeBranchCandidate = filteredBranches[activeBranchIndex] || null
+    const currentComposerState = useMemo<AssistantComposerSessionState>(() => ({
+        draft: text.trim() ? text : undefined,
+        model: selectedModel || undefined,
+        runtimeMode: selectedRuntimeMode,
+        interactionMode: selectedInteractionMode,
+        effort: selectedEffort,
+        fastModeEnabled
+    }), [fastModeEnabled, selectedEffort, selectedInteractionMode, selectedModel, selectedRuntimeMode, text])
+    const isDirty = useMemo(
+        () => !areAssistantComposerSessionStatesEqual(persistedSessionStateRef.current, currentComposerState) || contextFiles.length > 0,
+        [contextFiles.length, currentComposerState]
+    )
 
     const syncScrollAffordance = (element: HTMLDivElement | null, setCanScrollUp: (value: boolean) => void, setCanScrollDown: (value: boolean) => void) => {
         if (!element) {
@@ -213,6 +250,8 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     const syncComposerCursor = (element: HTMLTextAreaElement | null) => setComposerCursor(element?.selectionStart ?? 0)
 
     useEffect(() => {
+        if (initializedSessionIdRef.current === sessionId) return
+        initializedSessionIdRef.current = sessionId
         const nextState = readAssistantComposerSessionState(sessionId, { ...globalDefaultComposerState, ...legacyComposerSessionState })
         persistedSessionStateRef.current = nextState
         setLoadedSessionId(null)
@@ -242,22 +281,14 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     }, [availableModelOptions, selectedModel])
     useEffect(() => {
         if (!sessionId || loadedSessionId !== sessionId) return
-        const nextState: AssistantComposerSessionState = {
-            draft: text.trim() ? text : undefined,
-            model: selectedModel || undefined,
-            runtimeMode: selectedRuntimeMode,
-            interactionMode: selectedInteractionMode,
-            effort: selectedEffort,
-            fastModeEnabled
-        }
-        if (areAssistantComposerSessionStatesEqual(persistedSessionStateRef.current, nextState)) return
+        if (areAssistantComposerSessionStatesEqual(persistedSessionStateRef.current, currentComposerState)) return
 
         const timeoutId = window.setTimeout(() => {
-            persistedSessionStateRef.current = writeAssistantComposerSessionState(sessionId, nextState)
+            persistedSessionStateRef.current = writeAssistantComposerSessionState(sessionId, currentComposerState)
         }, COMPOSER_SESSION_PERSIST_DEBOUNCE_MS)
 
         return () => window.clearTimeout(timeoutId)
-    }, [fastModeEnabled, loadedSessionId, selectedEffort, selectedInteractionMode, selectedModel, selectedRuntimeMode, sessionId, text])
+    }, [currentComposerState, loadedSessionId, sessionId])
     useEffect(() => { setShowMentionMenu(Boolean(mentionState)); setActiveMentionIndex(0) }, [mentionState?.query, mentionState?.start])
     useEffect(() => { if (!showModelDropdown) { setModelQuery(''); setActiveModelIndex(0) } }, [showModelDropdown])
     useEffect(() => { if (!showBranchDropdown) { setBranchQuery(''); setActiveBranchIndex(0) } }, [showBranchDropdown])
@@ -314,6 +345,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     }, [contextFiles, previewAttachment])
     useAssistantComposerProjectData({
         projectPath,
+        refreshToken: branchRefreshToken,
         projectNodes,
         mentionChangedStateByPath,
         setIsGitRepo,
@@ -324,6 +356,32 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         setMentionChangedStateByPath,
         setMentionRecentModifiedAtByPath
     })
+    const handleBranchSwitch = async (branchName: string) => {
+        const trimmedProjectPath = String(projectPath || '').trim()
+        const trimmedBranchName = String(branchName || '').trim()
+        if (!trimmedProjectPath || !trimmedBranchName || trimmedBranchName === currentBranch || isSwitchingBranch) return
+
+        setIsSwitchingBranch(true)
+        setBranchActionError(null)
+        try {
+            const result = await window.devscope.checkoutBranch(trimmedProjectPath, trimmedBranchName, {
+                autoStash: true,
+                autoCleanupLock: true
+            })
+            if (!result?.success) {
+                throw new Error(result?.error || 'Failed to switch branch')
+            }
+            setBranches((previous) => previous.map((branch) => ({ ...branch, current: branch.name === trimmedBranchName })))
+            setShowBranchDropdown(false)
+            setBranchQuery('')
+            setActiveBranchIndex(0)
+            setBranchRefreshToken((current) => current + 1)
+        } catch (error) {
+            setBranchActionError(error instanceof Error ? error.message : 'Failed to switch branch')
+        } finally {
+            setIsSwitchingBranch(false)
+        }
+    }
     useEffect(() => {
         const element = composerRootRef.current
         if (!element || typeof ResizeObserver === 'undefined') return
@@ -346,9 +404,11 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
 
     const handlers = createAssistantComposerHandlers({
         disabled,
+        allowEmptySubmit,
         isConnected,
         isSending,
         onSend,
+        onStop,
         text,
         setText,
         inlineMentionTags,
@@ -375,7 +435,9 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         showBranchDropdown,
         setShowBranchDropdown,
         filteredBranches,
+        activeBranchCandidate,
         setActiveBranchIndex,
+        onSwitchBranch: handleBranchSwitch,
         selectedModel,
         setSelectedModel,
         selectedRuntimeMode,
@@ -388,15 +450,59 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         setRemovingAttachmentIds,
         textareaRef
     })
+    const voiceInput = useAssistantSpeechInput({
+        text,
+        setText,
+        setComposerCursor,
+        textareaRef,
+        disabled,
+        isConnected,
+        engine: settings.assistantTranscriptionEngine
+    })
+    const handleCancelDirty = () => {
+        onCancelDirty?.()
+        const nextState = persistedSessionStateRef.current
+        setText(nextState.draft || '')
+        setInlineMentionTags([])
+        setContextFiles([])
+        setSentPromptHistory([])
+        setHistoryCursor(null)
+        setDraftBeforeHistory('')
+        setShowMentionMenu(false)
+        setPreviewAttachment(null)
+        setRemovingAttachmentIds([])
+        setSelectedModel(nextState.model || resolvedModel)
+        setSelectedRuntimeMode(nextState.runtimeMode || baseRuntimeMode)
+        setSelectedInteractionMode(nextState.interactionMode || baseInteractionMode)
+        setSelectedEffort(nextState.effort || globalDefaultComposerState.effort || 'high')
+        setFastModeEnabled(nextState.fastModeEnabled ?? globalDefaultComposerState.fastModeEnabled ?? false)
+        setComposerCursor(0)
+        window.requestAnimationFrame(() => {
+            const textarea = textareaRef.current
+            if (!textarea) return
+            textarea.focus()
+            textarea.setSelectionRange(0, 0)
+        })
+    }
 
     return {
         disabled,
+        allowEmptySubmit,
         isConnected,
         isThinking,
         thinkingLabel,
         modelsLoading,
         modelsError,
         compact,
+        submitLabel,
+        dirtySubmitLabel,
+        cancelLabel,
+        showCancelWhenDirty,
+        isDirty,
+        onStop,
+        onOpenAttachmentPreview,
+        onAttachmentShelfBoundsChange,
+        handleCancelDirty,
         text,
         setText,
         inlineMentionTags,
@@ -419,6 +525,8 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         branches,
         isGitRepo,
         branchesLoading,
+        isSwitchingBranch,
+        branchActionError,
         mentionLoading,
         activeMentionIndex,
         activeModelIndex,
@@ -455,14 +563,18 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         branchQuery,
         setBranchQuery,
         currentBranch,
+        defaultBranchName,
         branchButtonLabel,
         filteredBranches,
+        activeBranchCandidate,
         setActiveBranchIndex,
+        handleBranchSwitch,
         selectedInteractionMode,
         setSelectedInteractionMode,
         selectedRuntimeMode,
         setSelectedRuntimeMode,
         displayedProfile,
+        voiceInput,
         activeMentionCandidate,
         syncScrollAffordance,
         syncComposerCursor,

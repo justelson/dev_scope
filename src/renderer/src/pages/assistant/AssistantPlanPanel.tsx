@@ -1,28 +1,14 @@
 import { memo, useMemo, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, Ellipsis, Loader2, PanelRightClose } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, PanelRightClose, PanelRight } from 'lucide-react'
 import type { AssistantActivePlan, AssistantLatestTurn, AssistantProposedPlan } from '@shared/assistant/contracts'
+import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
 import { formatAssistantDateTime } from '@/lib/assistant/selectors'
 import { cn } from '@/lib/utils'
+import { getDisplayedProposedPlanMarkdown, getProposedPlanTitle } from './assistant-proposed-plan'
 import { getAssistantActivePlanProgress } from './assistant-plan-utils'
 
-function getDisplayedPlanMarkdown(planMarkdown: string): string {
-    const trimmed = String(planMarkdown || '').trim()
-    if (!trimmed) return ''
-    const lines = trimmed.split(/\r?\n/)
-    if (lines.length > 0 && /^#\s+/.test(lines[0].trim())) {
-        return lines.slice(1).join('\n').trim()
-    }
-    return trimmed
-}
-
-function getPlanTitle(planMarkdown: string): string | null {
-    const firstLine = String(planMarkdown || '').trim().split(/\r?\n/)[0]?.trim() || ''
-    const heading = /^#\s+(.+)$/.exec(firstLine)
-    return heading?.[1]?.trim() || null
-}
-
-function stepStatusIcon(status: 'pending' | 'inProgress' | 'completed') {
+function stepStatusIcon(status: 'pending' | 'inProgress' | 'completed', executionState: 'idle' | 'running' | 'stopped' | 'completed') {
     if (status === 'completed') {
         return (
             <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
@@ -31,6 +17,13 @@ function stepStatusIcon(status: 'pending' | 'inProgress' | 'completed') {
         )
     }
     if (status === 'inProgress') {
+        if (executionState === 'stopped') {
+            return (
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-300">
+                    <AlertTriangle size={12} />
+                </span>
+            )
+        }
         return (
             <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-400">
                 <Loader2 size={12} className="animate-spin" />
@@ -44,30 +37,57 @@ function stepStatusIcon(status: 'pending' | 'inProgress' | 'completed') {
     )
 }
 
+function planExecutionBadge(executionState: 'idle' | 'running' | 'stopped' | 'completed') {
+    if (executionState === 'running') {
+        return (
+            <span className="rounded-full border border-blue-400/20 bg-blue-500/[0.10] px-2 py-0.5 text-[10px] font-medium text-blue-200">
+                Running
+            </span>
+        )
+    }
+    if (executionState === 'stopped') {
+        return (
+            <span className="rounded-full border border-amber-400/20 bg-amber-500/[0.10] px-2 py-0.5 text-[10px] font-medium text-amber-200">
+                Stopped
+            </span>
+        )
+    }
+    if (executionState === 'completed') {
+        return (
+            <span className="rounded-full border border-emerald-400/20 bg-emerald-500/[0.10] px-2 py-0.5 text-[10px] font-medium text-emerald-200">
+                Done
+            </span>
+        )
+    }
+    return null
+}
+
 export const AssistantPlanPanel = memo(function AssistantPlanPanel(props: {
     open: boolean
+    compact?: boolean
     activePlan: AssistantActivePlan | null
     latestTurn: AssistantLatestTurn | null
     latestProposedPlan: AssistantProposedPlan | null
     markdownFilePath?: string | null
     onClose: () => void
+    onShowThreadDetails: () => void
     onOpenInternalLink?: (href: string) => Promise<void> | void
 }) {
-    const { open, activePlan, latestTurn, latestProposedPlan, markdownFilePath, onClose, onOpenInternalLink } = props
+    const { open, compact = false, activePlan, latestTurn, latestProposedPlan, markdownFilePath, onClose, onShowThreadDetails, onOpenInternalLink } = props
     const [proposedPlanExpanded, setProposedPlanExpanded] = useState(false)
     const progress = getAssistantActivePlanProgress(activePlan, latestTurn)
     const planMarkdown = latestProposedPlan?.planMarkdown ?? null
-    const displayedPlanMarkdown = useMemo(() => planMarkdown ? getDisplayedPlanMarkdown(planMarkdown) : '', [planMarkdown])
-    const planTitle = useMemo(() => planMarkdown ? getPlanTitle(planMarkdown) : null, [planMarkdown])
+    const displayedPlanMarkdown = useMemo(() => planMarkdown ? getDisplayedProposedPlanMarkdown(planMarkdown) : '', [planMarkdown])
+    const planTitle = useMemo(() => planMarkdown ? getProposedPlanTitle(planMarkdown) : null, [planMarkdown])
     const headerTimestamp = activePlan?.updatedAt || latestProposedPlan?.updatedAt || null
 
     return (
         <div
             className={cn('relative overflow-hidden transition-all duration-300', open ? 'opacity-100' : 'pointer-events-none opacity-0')}
-            style={{ width: open ? '340px' : '0px' }}
+            style={{ width: open ? (compact ? '360px' : '460px') : '0px' }}
         >
             <aside className="flex h-full min-h-0 flex-col border-l border-white/10 bg-sparkle-card/50">
-                <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-3">
+                <div className="flex h-[46px] shrink-0 items-center justify-between border-b border-white/10 px-3">
                     <div className="flex min-w-0 items-center gap-2">
                         <span className="rounded-md bg-blue-500/10 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-blue-400">
                             Plan
@@ -79,17 +99,16 @@ export const AssistantPlanPanel = memo(function AssistantPlanPanel(props: {
                         ) : null}
                     </div>
                     <div className="flex items-center gap-1">
-                        {planMarkdown ? (
-                            <button
-                                type="button"
-                                className="rounded-md p-1 text-sparkle-text-muted/70 transition-colors hover:text-sparkle-text-secondary"
-                                title="Plan actions unavailable"
-                                aria-label="Plan actions unavailable"
-                                disabled
-                            >
-                                <Ellipsis size={14} />
-                            </button>
-                        ) : null}
+                        <button
+                            type="button"
+                            onClick={onShowThreadDetails}
+                            className="inline-flex h-7 items-center gap-1.5 rounded-md bg-white/[0.03] px-2 text-[11px] font-medium text-sparkle-text-secondary transition-colors hover:bg-white/[0.05] hover:text-sparkle-text"
+                            title="Switch to thread details"
+                            aria-label="Switch to thread details"
+                        >
+                            <PanelRight size={13} />
+                            <span>Thread details</span>
+                        </button>
                         <button
                             type="button"
                             onClick={onClose}
@@ -112,24 +131,30 @@ export const AssistantPlanPanel = memo(function AssistantPlanPanel(props: {
 
                         {progress ? (
                             <div className="space-y-1">
-                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-sparkle-text-muted/55">
-                                    Steps
-                                </p>
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sparkle-text-muted/55">
+                                        Steps
+                                    </p>
+                                    {planExecutionBadge(progress.executionState)}
+                                </div>
                                 {progress.steps.map((step) => (
                                     <div
                                         key={`${step.status}:${step.step}`}
                                         className={cn(
                                             'flex items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-200',
-                                            step.status === 'inProgress' && 'bg-blue-500/[0.05]',
+                                            step.status === 'inProgress' && progress.executionState === 'stopped' && 'bg-amber-500/[0.06]',
+                                            step.status === 'inProgress' && progress.executionState !== 'stopped' && 'bg-blue-500/[0.05]',
                                             step.status === 'completed' && 'bg-emerald-500/[0.05]'
                                         )}
                                     >
-                                        <div className="mt-0.5">{stepStatusIcon(step.status)}</div>
+                                        <div className="mt-0.5">{stepStatusIcon(step.status, progress.executionState)}</div>
                                         <p
                                             className={cn(
                                                 'text-[13px] leading-snug',
                                                 step.status === 'completed'
                                                     ? 'text-sparkle-text-muted/60 line-through decoration-sparkle-text-muted/20'
+                                                    : step.status === 'inProgress' && progress.executionState === 'stopped'
+                                                        ? 'text-amber-100/85'
                                                     : step.status === 'inProgress'
                                                         ? 'text-sparkle-text/90'
                                                         : 'text-sparkle-text-secondary/80'
@@ -158,7 +183,7 @@ export const AssistantPlanPanel = memo(function AssistantPlanPanel(props: {
                                         {planTitle ?? 'Full Plan'}
                                     </span>
                                 </button>
-                                {proposedPlanExpanded ? (
+                                <AnimatedHeight isOpen={proposedPlanExpanded} duration={240}>
                                     <div className="rounded-lg border border-white/10 bg-black/20 p-3">
                                         <MarkdownRenderer
                                             content={displayedPlanMarkdown || ''}
@@ -167,7 +192,7 @@ export const AssistantPlanPanel = memo(function AssistantPlanPanel(props: {
                                             className="text-[13px] leading-6 text-sparkle-text [&_p]:mb-3 [&_p]:leading-6 [&_li]:leading-6 [&_ul]:text-[13px] [&_ol]:text-[13px] [&_pre]:text-[12px] [&_code]:text-[12px]"
                                         />
                                     </div>
-                                ) : null}
+                                </AnimatedHeight>
                             </div>
                         ) : null}
 

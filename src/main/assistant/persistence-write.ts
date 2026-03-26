@@ -2,9 +2,11 @@ import type { Database as SqlDatabase, SqlValue } from 'sql.js/dist/sql-asm.js'
 import type {
     AssistantActivity,
     AssistantDomainEvent,
+    AssistantLatestTurn,
     AssistantMessage,
     AssistantPendingApproval,
     AssistantPendingUserInput,
+    AssistantPlaygroundLab,
     AssistantProposedPlan,
     AssistantSession,
     AssistantSnapshot,
@@ -40,6 +42,10 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
             case 'session.selected':
                 if (session) upsertAssistantSession(db, session)
                 break
+            case 'playground.updated':
+                replaceAssistantPlaygroundLabs(db, snapshot.playground.labs)
+                upsertAssistantMeta(db, 'playgroundRootPath', snapshot.playground.rootPath || '')
+                break
             case 'session.deleted':
                 db.run('DELETE FROM assistant_sessions WHERE id = ?', [event.payload['sessionId'] as SqlValue])
                 break
@@ -53,11 +59,18 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
                 if (thread) {
                     upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
                     const patch = (event.payload['patch'] as Record<string, unknown> | undefined) || {}
+                    const removedTurnIds = Array.isArray(event.payload['removedTurnIds'])
+                        ? event.payload['removedTurnIds'].map((entry) => String(entry || '')).filter(Boolean)
+                        : []
                     if (Object.prototype.hasOwnProperty.call(patch, 'messages')) replaceAssistantMessages(db, thread.thread)
                     if (Object.prototype.hasOwnProperty.call(patch, 'activities')) replaceAssistantActivities(db, thread.thread)
                     if (Object.prototype.hasOwnProperty.call(patch, 'proposedPlans')) replaceAssistantProposedPlans(db, thread.thread)
                     if (Object.prototype.hasOwnProperty.call(patch, 'pendingApprovals')) replaceAssistantPendingApprovals(db, thread.thread)
                     if (Object.prototype.hasOwnProperty.call(patch, 'pendingUserInputs')) replaceAssistantPendingUserInputs(db, thread.thread)
+                    if (removedTurnIds.length > 0) deleteAssistantTurns(db, removedTurnIds)
+                    if (Object.prototype.hasOwnProperty.call(patch, 'latestTurn') && thread.thread.latestTurn) {
+                        upsertAssistantTurn(db, thread.thread.id, thread.thread.model, thread.thread.latestTurn)
+                    }
                 }
                 if (session) upsertAssistantSession(db, session)
                 break
@@ -76,7 +89,10 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
                 break
             case 'thread.plan.updated':
             case 'thread.latest-turn.updated':
-                if (thread) upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
+                if (thread) {
+                    upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
+                    if (thread.thread.latestTurn) upsertAssistantTurn(db, thread.thread.id, thread.thread.model, thread.thread.latestTurn)
+                }
                 break
             case 'thread.proposed-plan.upserted':
                 if (thread) {
@@ -116,6 +132,7 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
 
 export function replaceAssistantSnapshot(db: SqlDatabase, snapshot: AssistantSnapshot): void {
     runSqlTransaction(db, () => {
+        db.run('DELETE FROM assistant_turns')
         db.run('DELETE FROM assistant_pending_user_inputs')
         db.run('DELETE FROM assistant_pending_approvals')
         db.run('DELETE FROM assistant_proposed_plans')
@@ -123,12 +140,16 @@ export function replaceAssistantSnapshot(db: SqlDatabase, snapshot: AssistantSna
         db.run('DELETE FROM assistant_messages')
         db.run('DELETE FROM assistant_threads')
         db.run('DELETE FROM assistant_sessions')
+        db.run('DELETE FROM assistant_playground_labs')
 
         persistAssistantSnapshotMeta(db, snapshot)
+        replaceAssistantPlaygroundLabs(db, snapshot.playground.labs)
+        upsertAssistantMeta(db, 'playgroundRootPath', snapshot.playground.rootPath || '')
         for (const session of snapshot.sessions) {
             upsertAssistantSession(db, session)
             for (const thread of session.threads) {
                 upsertAssistantThreadSummary(db, session.id, thread)
+                if (thread.latestTurn) upsertAssistantTurn(db, thread.id, thread.model, thread.latestTurn)
                 replaceAssistantMessages(db, thread)
                 replaceAssistantActivities(db, thread)
                 replaceAssistantProposedPlans(db, thread)
@@ -153,11 +174,16 @@ export function upsertAssistantMeta(db: SqlDatabase, key: string, value: string)
 
 function upsertAssistantSession(db: SqlDatabase, session: AssistantSession): void {
     db.run(`
-        INSERT INTO assistant_sessions (id, title, project_path, archived, created_at, updated_at, active_thread_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO assistant_sessions (
+            id, title, mode, project_path, playground_lab_id, pending_lab_request_json, archived, created_at, updated_at, active_thread_id
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
+            mode = excluded.mode,
             project_path = excluded.project_path,
+            playground_lab_id = excluded.playground_lab_id,
+            pending_lab_request_json = excluded.pending_lab_request_json,
             archived = excluded.archived,
             created_at = excluded.created_at,
             updated_at = excluded.updated_at,
@@ -165,11 +191,43 @@ function upsertAssistantSession(db: SqlDatabase, session: AssistantSession): voi
     `, [
         session.id,
         session.title,
+        session.mode,
         session.projectPath,
+        session.playgroundLabId,
+        jsonStringify(session.pendingLabRequest),
         sqlBool(session.archived),
         session.createdAt,
         session.updatedAt,
         session.activeThreadId
+    ])
+}
+
+function replaceAssistantPlaygroundLabs(db: SqlDatabase, labs: AssistantPlaygroundLab[]): void {
+    db.run('DELETE FROM assistant_playground_labs')
+    for (const lab of labs) {
+        upsertAssistantPlaygroundLab(db, lab)
+    }
+}
+
+function upsertAssistantPlaygroundLab(db: SqlDatabase, lab: AssistantPlaygroundLab): void {
+    db.run(`
+        INSERT INTO assistant_playground_labs (id, title, root_path, source, repo_url, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            title = excluded.title,
+            root_path = excluded.root_path,
+            source = excluded.source,
+            repo_url = excluded.repo_url,
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at
+    `, [
+        lab.id,
+        lab.title,
+        lab.rootPath,
+        lab.source,
+        lab.repoUrl,
+        lab.createdAt,
+        lab.updatedAt
     ])
 }
 
@@ -237,6 +295,47 @@ function replaceAssistantPendingApprovals(db: SqlDatabase, thread: AssistantThre
 function replaceAssistantPendingUserInputs(db: SqlDatabase, thread: AssistantThread): void {
     db.run('DELETE FROM assistant_pending_user_inputs WHERE thread_id = ?', [thread.id])
     for (const input of thread.pendingUserInputs) upsertAssistantPendingUserInput(db, thread.id, input)
+}
+
+function upsertAssistantTurn(db: SqlDatabase, threadId: string, model: string, turn: AssistantLatestTurn): void {
+    db.run(`
+        INSERT INTO assistant_turns (
+            id, thread_id, model, state, requested_at, started_at, completed_at,
+            assistant_message_id, effort, service_tier, usage_json, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            thread_id = excluded.thread_id,
+            model = excluded.model,
+            state = excluded.state,
+            requested_at = excluded.requested_at,
+            started_at = excluded.started_at,
+            completed_at = excluded.completed_at,
+            assistant_message_id = excluded.assistant_message_id,
+            effort = excluded.effort,
+            service_tier = excluded.service_tier,
+            usage_json = excluded.usage_json,
+            updated_at = excluded.updated_at
+    `, [
+        turn.id,
+        threadId,
+        model,
+        turn.state,
+        turn.requestedAt,
+        turn.startedAt,
+        turn.completedAt,
+        turn.assistantMessageId,
+        turn.effort || null,
+        turn.serviceTier || null,
+        jsonStringify(turn.usage),
+        turn.completedAt || turn.startedAt || turn.requestedAt
+    ])
+}
+
+function deleteAssistantTurns(db: SqlDatabase, turnIds: string[]): void {
+    if (turnIds.length === 0) return
+    const placeholders = turnIds.map(() => '?').join(', ')
+    db.run(`DELETE FROM assistant_turns WHERE id IN (${placeholders})`, turnIds)
 }
 
 function upsertAssistantMessage(db: SqlDatabase, threadId: string, message: AssistantMessage): void {

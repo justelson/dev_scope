@@ -62,7 +62,8 @@ export function ProjectGroupIcon({
     expanded?: boolean
 }) {
     if (!group.path) {
-        return null
+        const FolderIcon = expanded && !collapsed ? FolderOpen : Folder
+        return <FolderIcon size={size} className="shrink-0 text-sparkle-text-muted/50" />
     }
 
     const hasMeaningfulProjectType = Boolean(
@@ -204,7 +205,7 @@ export function SessionRow({
                 className={cn(
                     'flex w-full min-w-0 items-center gap-1.5 rounded-md py-1.5 pr-2 text-left transition-[background-color,color,opacity,box-shadow] duration-150 select-none',
                     compact ? 'pl-1.5' : 'pl-2',
-                    !archived && !isDragging && 'cursor-grab active:cursor-grabbing',
+                    !archived && !isDragging && 'cursor-pointer',
                     isDragging && 'cursor-grabbing',
                     isOver && !isDragging && 'bg-white/[0.05] ring-1 ring-[var(--accent-primary)]/25 shadow-[0_10px_24px_rgba(0,0,0,0.14)]',
                     isActive

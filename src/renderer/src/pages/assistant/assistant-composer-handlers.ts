@@ -32,8 +32,10 @@ type SetInlineMentionTagsState = Dispatch<SetStateAction<InlineMentionTag[]>>
 
 export type AssistantComposerHandlersArgs = {
     disabled: boolean
+    allowEmptySubmit: boolean
     isConnected: boolean
     isSending: boolean
+    onStop?: () => Promise<void> | void
     onSend: (prompt: string, contextFiles: ComposerContextFile[], options: {
         model?: string
         runtimeMode: AssistantRuntimeMode
@@ -67,7 +69,9 @@ export type AssistantComposerHandlersArgs = {
     showBranchDropdown: boolean
     setShowBranchDropdown: SetBooleanState
     filteredBranches: Array<{ name: string; label?: string; commit?: string; current?: boolean }>
+    activeBranchCandidate: { name: string; label?: string; commit?: string; current?: boolean } | null
     setActiveBranchIndex: SetNumberState
+    onSwitchBranch: (branchName: string) => Promise<void>
     selectedModel: string
     setSelectedModel: SetStringState
     selectedRuntimeMode: AssistantRuntimeMode
@@ -84,6 +88,7 @@ export type AssistantComposerHandlersArgs = {
 export function createAssistantComposerHandlers(args: AssistantComposerHandlersArgs) {
     const {
         disabled,
+        allowEmptySubmit,
         isConnected,
         isSending,
         onSend,
@@ -113,7 +118,9 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         showBranchDropdown,
         setShowBranchDropdown,
         filteredBranches,
+        activeBranchCandidate,
         setActiveBranchIndex,
+        onSwitchBranch,
         selectedModel,
         setSelectedModel,
         selectedRuntimeMode,
@@ -140,6 +147,16 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
             setContextFiles((prev) => prev.filter((entry) => entry.id !== id))
             setRemovingAttachmentIds((prev) => prev.filter((entryId) => entryId !== id))
         }, ATTACHMENT_REMOVE_MS)
+    }
+
+    const restoreComposerFocus = () => {
+        window.requestAnimationFrame(() => {
+            const textarea = textareaRef.current
+            if (!textarea || textarea.disabled) return
+            const cursor = textarea.value.length
+            textarea.focus()
+            textarea.setSelectionRange(cursor, cursor)
+        })
     }
 
     const applyMentionCandidate = (candidate: MentionCandidate) => {
@@ -203,7 +220,7 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
                 content: needsInlineImageContent && source !== 'paste' ? dataUrl : undefined,
                 previewText: source === 'paste' ? 'Pasted image from clipboard.' : 'Attached image file.',
                 source,
-                animateIn: true
+                animateIn: source === 'paste' ? false : true
             })
         }
 
@@ -275,7 +292,8 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
             const fileKey = `${String(file.path || '').toLowerCase()}::${String(file.name || '').toLowerCase()}`
             return collection.findIndex((candidate) => `${String(candidate.path || '').toLowerCase()}::${String(candidate.name || '').toLowerCase()}` === fileKey) === index
         })
-        if ((!prompt && contextFilesForSend.length === 0) || disabled || isSending || !isConnected) return
+        const hasContent = Boolean(prompt || contextFilesForSend.length > 0)
+        if ((!allowEmptySubmit && !hasContent) || disabled || isSending || !isConnected) return
         const prevText = text
         const prevTags = inlineMentionTags
         const prevFiles = contextFiles
@@ -284,6 +302,7 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         setContextFiles([])
         setHistoryCursor(null)
         setDraftBeforeHistory('')
+        restoreComposerFocus()
         const success = await onSend(prompt, contextFilesForSend, {
             model: selectedModel || undefined,
             runtimeMode: selectedRuntimeMode,
@@ -295,9 +314,11 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
             setText(prevText)
             setInlineMentionTags(prevTags)
             setContextFiles(prevFiles)
+            restoreComposerFocus()
             return
         }
         if (prompt) setSentPromptHistory((prev) => prev[prev.length - 1] === prompt ? prev : [...prev.slice(-49), prompt])
+        restoreComposerFocus()
     }
 
     const handleRecallPrevious = () => {
@@ -416,6 +437,11 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
             if (event.key === 'ArrowUp') {
                 event.preventDefault()
                 setActiveBranchIndex((current) => (current - 1 + filteredBranches.length) % filteredBranches.length)
+                return
+            }
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                void onSwitchBranch((activeBranchCandidate || filteredBranches[0]).name)
                 return
             }
             if (event.key === 'Escape') {

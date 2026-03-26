@@ -1,15 +1,24 @@
 import log from 'electron-log'
 import type {
     AssistantApprovalResponseInput,
+    AssistantApprovePendingPlaygroundLabRequestInput,
+    AssistantAttachSessionToPlaygroundLabInput,
     AssistantClearLogsInput,
     AssistantConnectOptions,
+    AssistantCreatePlaygroundLabInput,
+    AssistantCreateSessionInput,
+    AssistantDeclinePendingPlaygroundLabRequestInput,
     AssistantDeleteMessageInput,
+    AssistantGetSessionTurnUsageInput,
     AssistantPersistClipboardImageInput,
     AssistantSendPromptOptions,
+    AssistantSetPlaygroundRootInput,
+    AssistantTranscribeAudioInput,
     AssistantUserInputResponseInput
 } from '../../../shared/assistant/contracts'
 import { getAssistantService } from '../../assistant'
 import { persistAssistantClipboardImage } from '../../assistant/clipboard-attachments'
+import { getAssistantTranscriptionModelManager } from '../../assistant/transcription-models'
 
 async function withAssistantResult<T>(work: () => Promise<T> | T): Promise<T | { success: false; error: string }> {
     try {
@@ -47,6 +56,11 @@ export function handleAssistantGetAccountOverview() {
     return withAssistantResult(() => getAssistantService().getAccountOverview())
 }
 
+export function handleAssistantGetSessionTurnUsage(_event: Electron.IpcMainInvokeEvent, input?: AssistantGetSessionTurnUsageInput) {
+    log.info('IPC: assistant:getSessionTurnUsage', { sessionId: input?.sessionId })
+    return withAssistantResult(() => getAssistantService().getSessionTurnUsage(input))
+}
+
 export function handleAssistantListModels(_event: Electron.IpcMainInvokeEvent, forceRefresh?: boolean) {
     log.info('IPC: assistant:listModels', { forceRefresh: Boolean(forceRefresh) })
     return withAssistantResult(() => getAssistantService().listModels(Boolean(forceRefresh)))
@@ -62,9 +76,9 @@ export function handleAssistantDisconnect(_event: Electron.IpcMainInvokeEvent, s
     return withAssistantResult(() => getAssistantService().disconnect(sessionId))
 }
 
-export function handleAssistantCreateSession(_event: Electron.IpcMainInvokeEvent, title?: string, projectPath?: string) {
-    log.info('IPC: assistant:createSession', { title, projectPath })
-    return withAssistantResult(() => getAssistantService().createSession(title, projectPath))
+export function handleAssistantCreateSession(_event: Electron.IpcMainInvokeEvent, input?: AssistantCreateSessionInput) {
+    log.info('IPC: assistant:createSession', { input })
+    return withAssistantResult(() => getAssistantService().createSession(input))
 }
 
 export function handleAssistantSelectSession(_event: Electron.IpcMainInvokeEvent, sessionId: string) {
@@ -102,6 +116,31 @@ export function handleAssistantSetSessionProjectPath(_event: Electron.IpcMainInv
     return withAssistantResult(() => getAssistantService().setSessionProjectPath(sessionId, projectPath))
 }
 
+export function handleAssistantSetPlaygroundRoot(_event: Electron.IpcMainInvokeEvent, input: AssistantSetPlaygroundRootInput) {
+    log.info('IPC: assistant:setPlaygroundRoot', { hasRootPath: Boolean(input?.rootPath) })
+    return withAssistantResult(() => getAssistantService().setPlaygroundRoot(input))
+}
+
+export function handleAssistantCreatePlaygroundLab(_event: Electron.IpcMainInvokeEvent, input: AssistantCreatePlaygroundLabInput) {
+    log.info('IPC: assistant:createPlaygroundLab', { source: input?.source, openSession: input?.openSession === true })
+    return withAssistantResult(() => getAssistantService().createPlaygroundLab(input))
+}
+
+export function handleAssistantAttachSessionToPlaygroundLab(_event: Electron.IpcMainInvokeEvent, input: AssistantAttachSessionToPlaygroundLabInput) {
+    log.info('IPC: assistant:attachSessionToPlaygroundLab', { sessionId: input?.sessionId, labId: input?.labId })
+    return withAssistantResult(() => getAssistantService().attachSessionToPlaygroundLab(input))
+}
+
+export function handleAssistantApprovePendingPlaygroundLabRequest(_event: Electron.IpcMainInvokeEvent, input: AssistantApprovePendingPlaygroundLabRequestInput) {
+    log.info('IPC: assistant:approvePendingPlaygroundLabRequest', { sessionId: input?.sessionId, source: input?.source })
+    return withAssistantResult(() => getAssistantService().approvePendingPlaygroundLabRequest(input))
+}
+
+export function handleAssistantDeclinePendingPlaygroundLabRequest(_event: Electron.IpcMainInvokeEvent, input: AssistantDeclinePendingPlaygroundLabRequestInput) {
+    log.info('IPC: assistant:declinePendingPlaygroundLabRequest', { sessionId: input?.sessionId })
+    return withAssistantResult(() => getAssistantService().declinePendingPlaygroundLabRequest(input))
+}
+
 export function handleAssistantPersistClipboardImage(_event: Electron.IpcMainInvokeEvent, input: AssistantPersistClipboardImageInput) {
     return withAssistantResult(async () => ({
         success: true as const,
@@ -132,4 +171,30 @@ export function handleAssistantRespondApproval(_event: Electron.IpcMainInvokeEve
 export function handleAssistantRespondUserInput(_event: Electron.IpcMainInvokeEvent, input: AssistantUserInputResponseInput) {
     log.info('IPC: assistant:respondUserInput', { requestId: input?.requestId })
     return withAssistantResult(() => getAssistantService().respondUserInput(input))
+}
+
+export function handleAssistantGetTranscriptionModelState() {
+    log.info('IPC: assistant:getTranscriptionModelState')
+    return withAssistantResult(async () => ({
+        success: true as const,
+        state: await getAssistantTranscriptionModelManager().getState()
+    }))
+}
+
+export function handleAssistantDownloadTranscriptionModel() {
+    log.info('IPC: assistant:downloadTranscriptionModel')
+    return withAssistantResult(async () => ({
+        success: true as const,
+        state: await getAssistantTranscriptionModelManager().downloadModel()
+    }))
+}
+
+export function handleAssistantTranscribeAudioWithLocalModel(_event: Electron.IpcMainInvokeEvent, input: AssistantTranscribeAudioInput) {
+    log.info('IPC: assistant:transcribeAudioWithLocalModel', {
+        byteLength: input?.audioBuffer ? input.audioBuffer.byteLength : 0
+    })
+    return withAssistantResult(async () => ({
+        success: true as const,
+        text: await getAssistantTranscriptionModelManager().transcribeWav(input.audioBuffer)
+    }))
 }

@@ -3,7 +3,14 @@ import type {
     AssistantInteractionMode,
     AssistantRuntimeMode
 } from './runtime'
-import type { AssistantAccountOverview, AssistantDomainEvent, AssistantRuntimeStatus, AssistantSnapshot } from './read-model'
+import type {
+    AssistantAccountOverview,
+    AssistantDomainEvent,
+    AssistantPlaygroundState,
+    AssistantRuntimeStatus,
+    AssistantSessionTurnUsagePayload,
+    AssistantSnapshot
+} from './read-model'
 
 export const ASSISTANT_IPC = {
     subscribe: 'devscope:assistant:subscribe',
@@ -12,6 +19,7 @@ export const ASSISTANT_IPC = {
     getSnapshot: 'devscope:assistant:getSnapshot',
     getStatus: 'devscope:assistant:getStatus',
     getAccountOverview: 'devscope:assistant:getAccountOverview',
+    getSessionTurnUsage: 'devscope:assistant:getSessionTurnUsage',
     listModels: 'devscope:assistant:listModels',
     connect: 'devscope:assistant:connect',
     disconnect: 'devscope:assistant:disconnect',
@@ -23,12 +31,20 @@ export const ASSISTANT_IPC = {
     deleteMessage: 'devscope:assistant:deleteMessage',
     clearLogs: 'devscope:assistant:clearLogs',
     setSessionProjectPath: 'devscope:assistant:setSessionProjectPath',
+    setPlaygroundRoot: 'devscope:assistant:setPlaygroundRoot',
+    createPlaygroundLab: 'devscope:assistant:createPlaygroundLab',
+    attachSessionToPlaygroundLab: 'devscope:assistant:attachSessionToPlaygroundLab',
+    approvePendingPlaygroundLabRequest: 'devscope:assistant:approvePendingPlaygroundLabRequest',
+    declinePendingPlaygroundLabRequest: 'devscope:assistant:declinePendingPlaygroundLabRequest',
     persistClipboardImage: 'devscope:assistant:persistClipboardImage',
     newThread: 'devscope:assistant:newThread',
     sendPrompt: 'devscope:assistant:sendPrompt',
     interruptTurn: 'devscope:assistant:interruptTurn',
     respondApproval: 'devscope:assistant:respondApproval',
     respondUserInput: 'devscope:assistant:respondUserInput',
+    getTranscriptionModelState: 'devscope:assistant:getTranscriptionModelState',
+    downloadTranscriptionModel: 'devscope:assistant:downloadTranscriptionModel',
+    transcribeAudioWithLocalModel: 'devscope:assistant:transcribeAudioWithLocalModel',
     eventStream: 'devscope:assistant:event'
 } as const
 
@@ -47,6 +63,14 @@ export interface AssistantAccountOverviewPayload {
     overview: AssistantAccountOverview
 }
 
+export interface AssistantGetSessionTurnUsageInput {
+    sessionId?: string
+}
+
+export interface AssistantSessionTurnUsageResultPayload {
+    usage: AssistantSessionTurnUsagePayload
+}
+
 export interface AssistantSendPromptOptions {
     sessionId?: string
     model?: string
@@ -59,6 +83,45 @@ export interface AssistantSendPromptOptions {
 export interface AssistantDeleteMessageInput {
     sessionId?: string
     messageId: string
+}
+
+export interface AssistantCreateSessionInput {
+    title?: string
+    projectPath?: string
+    mode?: 'work' | 'playground'
+    playgroundLabId?: string | null
+}
+
+export interface AssistantSetPlaygroundRootInput {
+    rootPath: string | null
+}
+
+export interface AssistantCreatePlaygroundLabInput {
+    title?: string
+    source: 'empty' | 'git-clone' | 'existing-folder'
+    repoUrl?: string
+    existingFolderPath?: string
+    openSession?: boolean
+}
+
+export interface AssistantAttachSessionToPlaygroundLabInput {
+    sessionId: string
+    labId: string
+}
+
+export interface AssistantApprovePendingPlaygroundLabRequestInput {
+    sessionId: string
+    source: 'empty' | 'git-clone'
+    title?: string
+    repoUrl?: string
+}
+
+export interface AssistantDeclinePendingPlaygroundLabRequestInput {
+    sessionId: string
+}
+
+export interface AssistantPlaygroundResultPayload {
+    playground: AssistantPlaygroundState
 }
 
 export interface AssistantPersistClipboardImageInput {
@@ -79,6 +142,22 @@ export interface AssistantApprovalResponseInput {
 export interface AssistantUserInputResponseInput {
     requestId: string
     answers: Record<string, string | string[]>
+}
+
+export type AssistantTranscriptionModelStatus = 'missing' | 'downloading' | 'ready' | 'error'
+
+export interface AssistantTranscriptionModelState {
+    provider: 'vosk'
+    modelId: string
+    modelName: string
+    status: AssistantTranscriptionModelStatus
+    installPath: string | null
+    downloadUrl: string
+    error: string | null
+}
+
+export interface AssistantTranscribeAudioInput {
+    audioBuffer: ArrayBuffer
 }
 
 export interface AssistantEventStreamPayload {

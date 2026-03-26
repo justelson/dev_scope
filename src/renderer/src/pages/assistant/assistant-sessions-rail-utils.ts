@@ -1,21 +1,35 @@
-import type { AssistantSession, AssistantThread } from '@shared/assistant/contracts'
+import type { AssistantPlaygroundState, AssistantSession, AssistantThread } from '@shared/assistant/contracts'
 import { getAssistantThreadPhase } from '@/lib/assistant/selectors'
 import { getCachedProjectDetails, primeProjectDetailsCache } from '@/lib/projectViewCache'
+import type { AssistantRailMode } from './useAssistantPageSidebarState'
 
 export type AssistantSessionsRailProps = {
     collapsed: boolean
     width: number
     compact?: boolean
+    railMode: AssistantRailMode
+    onRailModeChange: (next: AssistantRailMode) => void
     sessions: AssistantSession[]
+    playground: AssistantPlaygroundState
+    backgroundActivitySessions: AssistantSession[]
     activeSessionId: string | null
     commandPending: boolean
     onWidthChange?: (width: number) => void
     onCreateSession: (projectPath?: string) => Promise<void>
+    onCreatePlaygroundSession: (labId?: string | null) => Promise<void>
     onSelectSession: (sessionId: string) => Promise<void>
     onRenameSession: (sessionId: string, title: string) => Promise<void>
     onArchiveSession: (sessionId: string, archived?: boolean) => Promise<void>
     onDeleteSession: (sessionId: string) => Promise<void>
     onChooseProjectPath: () => Promise<void>
+    onSetPlaygroundRoot: (rootPath: string | null) => Promise<void>
+    onCreatePlaygroundLab: (input: {
+        title?: string
+        source: 'empty' | 'git-clone' | 'existing-folder'
+        repoUrl?: string
+        existingFolderPath?: string
+        openSession?: boolean
+    }) => Promise<unknown> | void
 }
 
 export type SessionProjectGroup = {

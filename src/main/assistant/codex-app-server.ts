@@ -34,6 +34,33 @@ import {
     type SessionContext
 } from './codex-runtime-protocol'
 
+function toCodexUserInputAnswer(value: unknown): { answers: string[] } {
+    if (typeof value === 'string') {
+        return { answers: [value] }
+    }
+
+    if (Array.isArray(value)) {
+        return { answers: value.filter((entry): entry is string => typeof entry === 'string') }
+    }
+
+    if (value && typeof value === 'object') {
+        const maybeAnswers = (value as { answers?: unknown }).answers
+        if (Array.isArray(maybeAnswers)) {
+            return { answers: maybeAnswers.filter((entry): entry is string => typeof entry === 'string') }
+        }
+    }
+
+    return { answers: [] }
+}
+
+function toCodexUserInputAnswers(
+    answers: Record<string, string | string[]>
+): Record<string, { answers: string[] }> {
+    return Object.fromEntries(
+        Object.entries(answers).map(([questionId, value]) => [questionId, toCodexUserInputAnswer(value)])
+    )
+}
+
 export class CodexAppServerRuntime extends EventEmitter {
     private readonly sessions = new Map<string, SessionContext>()
     private readonly codexBinary = process.platform === 'win32' ? 'codex.cmd' : 'codex'
@@ -351,7 +378,8 @@ export class CodexAppServerRuntime extends EventEmitter {
         if (!pending) throw new Error(`Unknown user-input request: ${requestId}`)
 
         context.pendingUserInputs.delete(requestId)
-        this.writeMessage(context, { id: pending.jsonRpcId, result: { answers } })
+        const codexAnswers = toCodexUserInputAnswers(answers)
+        this.writeMessage(context, { id: pending.jsonRpcId, result: { answers: codexAnswers } })
         this.emitRuntime({
             eventId: randomUUID(),
             type: 'user-input.resolved',

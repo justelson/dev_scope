@@ -1,4 +1,5 @@
 import type { AssistantInteractionMode, AssistantRuntimeMode } from '@shared/assistant/contracts'
+import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 
 export type ComposerContextFile = {
     id: string
@@ -14,6 +15,15 @@ export type ComposerContextFile = {
     animateIn?: boolean
 }
 
+export type AssistantElementBounds = {
+    top: number
+    right: number
+    bottom: number
+    left: number
+    width: number
+    height: number
+}
+
 export type AssistantComposerSendOptions = {
     model?: string
     runtimeMode: AssistantRuntimeMode
@@ -25,7 +35,16 @@ export type AssistantComposerSendOptions = {
 export type AssistantComposerProps = {
     sessionId?: string | null
     onSend: (prompt: string, contextFiles: ComposerContextFile[], options: AssistantComposerSendOptions) => Promise<boolean>
+    onStop?: () => Promise<void> | void
+    onCancelDirty?: () => void
+    onOpenAttachmentPreview?: (
+        file: { name: string; path: string },
+        ext: string,
+        options?: PreviewOpenOptions
+    ) => Promise<void> | void
+    onAttachmentShelfBoundsChange?: (bounds: AssistantElementBounds | null) => void
     disabled: boolean
+    allowEmptySubmit?: boolean
     isSending: boolean
     isThinking: boolean
     thinkingLabel?: string
@@ -40,4 +59,8 @@ export type AssistantComposerProps = {
     interactionMode?: AssistantInteractionMode
     projectPath?: string | null
     compact?: boolean
+    submitLabel?: string
+    dirtySubmitLabel?: string
+    cancelLabel?: string
+    showCancelWhenDirty?: boolean
 }

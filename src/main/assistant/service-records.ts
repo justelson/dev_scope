@@ -9,14 +9,19 @@ import type {
 export function createAssistantSessionRecord(params: {
     sessionId: string
     title: string
+    mode?: AssistantSession['mode']
     projectPath: string | null
+    playgroundLabId?: string | null
     createdAt: string
     thread: AssistantThread
 }): AssistantSession {
     return {
         id: params.sessionId,
         title: params.title,
+        mode: params.mode || 'work',
         projectPath: params.projectPath,
+        playgroundLabId: params.playgroundLabId ?? null,
+        pendingLabRequest: null,
         archived: false,
         createdAt: params.createdAt,
         updatedAt: params.createdAt,

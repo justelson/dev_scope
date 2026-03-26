@@ -24,6 +24,7 @@ import {
 } from './assistant-sessions-rail-order'
 
 function hasVisibleProjectPath(session: AssistantSession): boolean {
+    if (session.mode === 'playground') return true
     if (String(session.projectPath || '').trim()) return true
     return session.threads.some((thread) => String(thread.cwd || '').trim().length > 0)
 }
@@ -43,16 +44,23 @@ export function AssistantSessionsRail({
     collapsed,
     width,
     compact = false,
+    railMode,
+    onRailModeChange,
     sessions,
+    playground,
+    backgroundActivitySessions,
     activeSessionId,
     commandPending,
     onWidthChange,
     onCreateSession,
+    onCreatePlaygroundSession,
     onSelectSession,
     onRenameSession,
     onArchiveSession,
     onDeleteSession,
-    onChooseProjectPath
+    onChooseProjectPath,
+    onSetPlaygroundRoot,
+    onCreatePlaygroundLab
 }: AssistantSessionsRailProps) {
     const [renameTarget, setRenameTarget] = useState<AssistantSession | null>(null)
     const [renameDraft, setRenameDraft] = useState('')
@@ -85,17 +93,28 @@ export function AssistantSessionsRail({
     const groupedArchivedSessions = useMemo(() => groupSessionsByProject(archivedSessions), [archivedSessions, projectMetadataVersion])
     const orderedGroupedSessions = useMemo(() => orderAssistantSessionsGroups(groupedSessions, railOrder), [groupedSessions, railOrder])
     const orderedArchivedSessions = useMemo(() => orderAssistantSessionsGroups(groupedArchivedSessions, railOrder), [groupedArchivedSessions, railOrder])
+    const projectPathSignature = useMemo(
+        () => sessions
+            .map(resolveSessionProjectPath)
+            .filter(Boolean)
+            .sort()
+            .join('|'),
+        [sessions]
+    )
 
     useEffect(() => {
         let active = true
-        void hydrateProjectMetadataForPaths(sessions.map(resolveSessionProjectPath)).then((hydratedCount) => {
+        if (!projectPathSignature) return () => {
+            active = false
+        }
+        void hydrateProjectMetadataForPaths(projectPathSignature.split('|')).then((hydratedCount) => {
             if (!active || hydratedCount === 0) return
             setProjectMetadataVersion((current) => current + 1)
         })
         return () => {
             active = false
         }
-    }, [sessions])
+    }, [projectPathSignature])
 
     useEffect(() => {
         orderedGroupedSessionsRef.current = orderedGroupedSessions
@@ -322,20 +341,27 @@ export function AssistantSessionsRail({
                     <aside className="relative h-full w-full overflow-x-hidden border-r border-white/10 bg-sparkle-card/95 backdrop-blur-sm">
                         <ExpandedSessionsRailContent
                             compact={compact}
+                            railMode={railMode}
+                            playground={playground}
+                            backgroundActivitySessions={backgroundActivitySessions}
                             commandPending={commandPending}
                             groupedSessions={orderedGroupedSessions}
                             groupedArchivedSessions={orderedArchivedSessions}
                             activeSessionId={activeSessionId}
                             expandedGroupKeys={expandedGroupKeys}
                             showArchivedSessions={showArchivedSessions}
+                            onRailModeChange={onRailModeChange}
                             onToggleGroup={(key) => setExpandedGroupKeys((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next })}
                             onChooseProjectPath={() => void onChooseProjectPath()}
                             onCreateSession={(projectPath) => void onCreateSession(projectPath)}
+                            onCreatePlaygroundSession={(labId) => void onCreatePlaygroundSession(labId)}
                             onSelectSession={(sessionId) => void onSelectSession(sessionId)}
                             onOpenRename={openRenameModal}
                             onArchiveSession={(sessionId, archived) => void onArchiveSession(sessionId, archived)}
                             onDeleteRequest={setSessionToDelete}
                             onSetShowArchivedSessions={setShowArchivedSessions}
+                            onSetPlaygroundRoot={(rootPath) => void onSetPlaygroundRoot(rootPath)}
+                            onCreatePlaygroundLab={(input) => void onCreatePlaygroundLab(input)}
                             onProjectDragStart={handleProjectDragStart}
                             onProjectDragEnd={handleProjectDragEnd}
                             onProjectDragCancel={clearBodyDragState}
@@ -352,7 +378,7 @@ export function AssistantSessionsRail({
                             onPointerMove={handleResizePointerMove}
                             onPointerUp={handleResizePointerEnd}
                             onPointerCancel={handleResizePointerEnd}
-                            className={`absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] sm:flex touch-none group-data-[side=left]:-right-4 group-data-[side=left]:cursor-w-resize group-data-[side=right]:left-0 group-data-[side=right]:cursor-e-resize ${isResizing ? 'cursor-grabbing bg-white/[0.04] after:bg-white/25' : 'after:bg-transparent hover:bg-white/[0.03] hover:after:bg-white/10'}`}
+                            className={`absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] sm:flex touch-none group-data-[side=left]:-right-4 group-data-[side=right]:left-0 ${isResizing ? 'cursor-grabbing bg-white/[0.04] after:bg-white/25' : 'cursor-default after:bg-transparent hover:bg-white/[0.03] hover:after:bg-white/10'}`}
                             title={railTitle}
                         />
                     </aside>

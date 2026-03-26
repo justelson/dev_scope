@@ -2,11 +2,14 @@ import type { Database as SqlDatabase, SqlValue } from 'sql.js/dist/sql-asm.js'
 import type {
     AssistantActivity,
     AssistantDomainEvent,
+    AssistantLatestTurn,
     AssistantMessage,
     AssistantPendingApproval,
     AssistantPendingUserInput,
+    AssistantPlaygroundLab,
     AssistantProposedPlan,
     AssistantSession,
+    AssistantSessionTurnUsageEntry,
     AssistantSnapshot,
     AssistantThread
 } from '../../shared/assistant/contracts'
@@ -44,6 +47,7 @@ export function readAssistantSnapshot(db: SqlDatabase): AssistantSnapshot {
         snapshotSequence: meta.snapshotSequence,
         updatedAt: meta.updatedAt,
         selectedSessionId,
+        playground: readAssistantPlaygroundState(db),
         sessions,
         knownModels: meta.knownModels
     }
@@ -128,6 +132,45 @@ export function readActiveThreadDetails(db: SqlDatabase, sessionId: string, snap
     }
 }
 
+export function readAssistantSessionTurnUsage(db: SqlDatabase, sessionId: string): AssistantSessionTurnUsageEntry[] {
+    const rows = db.exec(`
+        SELECT
+            assistant_turns.id,
+            assistant_threads.session_id,
+            assistant_turns.thread_id,
+            assistant_turns.model,
+            assistant_turns.state,
+            assistant_turns.requested_at,
+            assistant_turns.started_at,
+            assistant_turns.completed_at,
+            assistant_turns.assistant_message_id,
+            assistant_turns.effort,
+            assistant_turns.service_tier,
+            assistant_turns.usage_json,
+            assistant_turns.updated_at
+        FROM assistant_turns
+        INNER JOIN assistant_threads ON assistant_threads.id = assistant_turns.thread_id
+        WHERE assistant_threads.session_id = ?
+        ORDER BY assistant_turns.requested_at ASC, assistant_turns.id ASC
+    `, [sessionId])[0]?.values || []
+
+    return rows.map((row) => ({
+        id: String(row[0] || ''),
+        sessionId: String(row[1] || ''),
+        threadId: String(row[2] || ''),
+        model: String(row[3] || ''),
+        state: String(row[4] || 'running') as AssistantLatestTurn['state'],
+        requestedAt: String(row[5] || new Date(0).toISOString()),
+        startedAt: toNullableString(row[6]),
+        completedAt: toNullableString(row[7]),
+        assistantMessageId: toNullableString(row[8]),
+        effort: toNullableString(row[9]) as AssistantLatestTurn['effort'],
+        serviceTier: toNullableString(row[10]) as AssistantLatestTurn['serviceTier'],
+        usage: parseJson(row[11], null),
+        updatedAt: String(row[12] || new Date(0).toISOString())
+    }))
+}
+
 function readAssistantMeta(db: SqlDatabase): AssistantMetaRow {
     const rows = db.exec('SELECT key, value FROM assistant_meta')
     const values = new Map<string, string>()
@@ -140,6 +183,7 @@ function readAssistantMeta(db: SqlDatabase): AssistantMetaRow {
         snapshotSequence: Number(values.get('snapshotSequence') || '0') || 0,
         updatedAt: values.get('updatedAt') || new Date(0).toISOString(),
         selectedSessionId: values.get('selectedSessionId') || null,
+        playgroundRootPath: values.get('playgroundRootPath') || null,
         knownModels: parseJson(values.get('knownModels') || '', [])
     }
 }
@@ -147,7 +191,7 @@ function readAssistantMeta(db: SqlDatabase): AssistantMetaRow {
 function readAssistantSessionSummaries(db: SqlDatabase): AssistantSession[] {
     const sessions = new Map<string, AssistantSession>()
     const sessionRows = db.exec(`
-        SELECT id, title, project_path, archived, created_at, updated_at, active_thread_id
+        SELECT id, title, mode, project_path, playground_lab_id, pending_lab_request_json, archived, created_at, updated_at, active_thread_id
         FROM assistant_sessions
         ORDER BY updated_at DESC, id DESC
     `)[0]?.values || []
@@ -156,11 +200,14 @@ function readAssistantSessionSummaries(db: SqlDatabase): AssistantSession[] {
         const session: AssistantSession = {
             id: String(row[0] || ''),
             title: String(row[1] || 'New Session'),
-            projectPath: toNullableString(row[2]),
-            archived: toNumber(row[3]) === 1,
-            createdAt: String(row[4] || new Date(0).toISOString()),
-            updatedAt: String(row[5] || new Date(0).toISOString()),
-            activeThreadId: toNullableString(row[6]),
+            mode: String(row[2] || 'work') === 'playground' ? 'playground' : 'work',
+            projectPath: toNullableString(row[3]),
+            playgroundLabId: toNullableString(row[4]),
+            pendingLabRequest: parseJson(row[5], null),
+            archived: toNumber(row[6]) === 1,
+            createdAt: String(row[7] || new Date(0).toISOString()),
+            updatedAt: String(row[8] || new Date(0).toISOString()),
+            activeThreadId: toNullableString(row[9]),
             threadIds: [],
             threads: []
         }
@@ -217,6 +264,30 @@ function readAssistantSessionSummaries(db: SqlDatabase): AssistantSession[] {
     }
 
     return [...sessions.values()]
+}
+
+function readAssistantPlaygroundState(db: SqlDatabase): AssistantSnapshot['playground'] {
+    const rootPath = readAssistantMeta(db).playgroundRootPath
+    const labRows = db.exec(`
+        SELECT id, title, root_path, source, repo_url, created_at, updated_at
+        FROM assistant_playground_labs
+        ORDER BY updated_at DESC, id DESC
+    `)[0]?.values || []
+
+    const labs: AssistantPlaygroundLab[] = labRows.map((row) => ({
+        id: String(row[0] || ''),
+        title: String(row[1] || 'Lab'),
+        rootPath: String(row[2] || ''),
+        source: String(row[3] || 'empty') as AssistantPlaygroundLab['source'],
+        repoUrl: toNullableString(row[4]),
+        createdAt: String(row[5] || new Date(0).toISOString()),
+        updatedAt: String(row[6] || new Date(0).toISOString())
+    }))
+
+    return {
+        rootPath,
+        labs
+    }
 }
 
 function removeInvalidSessions(db: SqlDatabase, sessions: AssistantSession[]): AssistantSession[] {

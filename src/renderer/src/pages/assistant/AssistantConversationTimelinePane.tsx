@@ -1,17 +1,21 @@
-import { memo, type RefObject } from 'react'
+import { memo, useLayoutEffect, useRef, type RefObject } from 'react'
 import { ArrowDown } from 'lucide-react'
-import type { AssistantActivity, AssistantMessage } from '@shared/assistant/contracts'
+import type { AssistantActivity, AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
+import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import type { AssistantTextStreamingMode } from '@/lib/settings'
 import { LoadingSpinner } from '@/components/ui/LoadingState'
 import { cn } from '@/lib/utils'
 import { AssistantTimeline } from './AssistantTimeline'
 import type { AssistantDiffTarget } from './assistant-diff-types'
+import type { AssistantElementBounds } from './assistant-composer-types'
 
 export const AssistantConversationTimelinePane = memo(function AssistantConversationTimelinePane(props: {
     loading: boolean
     timelineScrollRef: RefObject<HTMLDivElement | null>
+    timelineContentRef: RefObject<HTMLDivElement | null>
     messages: AssistantMessage[]
     activities: AssistantActivity[]
+    proposedPlans?: AssistantProposedPlan[]
     latestProjectLabel: string
     projectTitle: string | null
     assistantMessageFilePath?: string | null
@@ -26,14 +30,56 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
     loadingChats: boolean
     assistantTextStreamingMode: AssistantTextStreamingMode
     showScrollToBottom: boolean
+    elevateScrollToBottom?: boolean
+    onScrollButtonBoundsChange?: (bounds: AssistantElementBounds | null) => void
     onScrollTimeline: (element: HTMLDivElement) => void
     onScrollToBottom: () => void
     onRequestDeleteUserMessage: (message: AssistantMessage) => void
+    onImplementProposedPlan?: (plan: AssistantProposedPlan) => Promise<void> | void
+    onShowPlanPanel?: () => void
+    onOpenAttachmentPreview?: (
+        file: { name: string; path: string },
+        ext: string,
+        options?: PreviewOpenOptions
+    ) => Promise<void> | void
     onOpenAssistantLink?: (href: string) => Promise<void> | void
     onOpenEditedFile?: (filePath: string) => Promise<void> | void
     onViewDiff?: (target: AssistantDiffTarget) => void
 }) {
     const projectRootPath = props.projectTitle
+    const floatingPlanOverlayRef = useRef<HTMLDivElement | null>(null)
+    const scrollButtonRef = useRef<HTMLButtonElement | null>(null)
+
+    useLayoutEffect(() => {
+        const element = scrollButtonRef.current
+        if (!props.showScrollToBottom || !element) {
+            props.onScrollButtonBoundsChange?.(null)
+            return
+        }
+
+        const measure = () => {
+            const rect = element.getBoundingClientRect()
+            props.onScrollButtonBoundsChange?.({
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+                left: rect.left,
+                width: rect.width,
+                height: rect.height
+            })
+        }
+
+        const frameId = window.requestAnimationFrame(measure)
+        const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => measure()) : null
+        observer?.observe(element)
+        window.addEventListener('resize', measure)
+
+        return () => {
+            window.cancelAnimationFrame(frameId)
+            observer?.disconnect()
+            window.removeEventListener('resize', measure)
+        }
+    }, [props.elevateScrollToBottom, props.onScrollButtonBoundsChange, props.showScrollToBottom])
 
     return (
         <div className="relative flex-1 min-h-0 bg-sparkle-bg">
@@ -48,18 +94,20 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
                     <div
                         ref={props.timelineScrollRef}
                         onScroll={(event) => props.onScrollTimeline(event.currentTarget)}
-                        className="custom-scrollbar h-full overflow-y-auto px-4 py-4"
+                        className="custom-scrollbar relative h-full overflow-y-auto px-4 py-4"
                     >
-                        <div className="mx-auto w-full max-w-3xl">
+                        <div ref={props.timelineContentRef} className="mx-auto w-full max-w-3xl">
                             <AssistantTimeline
                                 messages={props.messages}
                                 activities={props.activities}
+                                proposedPlans={props.proposedPlans || []}
                                 projectLabel={props.latestProjectLabel !== 'not set' ? props.latestProjectLabel : null}
                                 projectTitle={projectRootPath}
                                 projectRootPath={projectRootPath}
                                 assistantMessageFilePath={props.assistantMessageFilePath}
                                 windowKey={props.windowKey}
                                 scrollContainerRef={props.timelineScrollRef}
+                                overlayContainerRef={floatingPlanOverlayRef}
                                 isWorking={props.isWorking}
                                 workingLabel={props.activeStatusLabel}
                                 activeWorkStartedAt={props.activeWorkStartedAt}
@@ -70,14 +118,22 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
                                 assistantTextStreamingMode={props.assistantTextStreamingMode}
                                 isConnecting={props.isConnecting}
                                 onRequestDeleteUserMessage={props.onRequestDeleteUserMessage}
+                                onImplementProposedPlan={props.onImplementProposedPlan}
+                                onShowPlanPanel={props.onShowPlanPanel}
+                                onOpenAttachmentPreview={props.onOpenAttachmentPreview}
                                 onOpenInternalLink={props.onOpenAssistantLink}
                                 onOpenFilePath={props.onOpenEditedFile}
                                 onViewDiff={props.onViewDiff}
                             />
                         </div>
                     </div>
-                    <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
+                    <div ref={floatingPlanOverlayRef} className="pointer-events-none absolute inset-0 z-20" />
+                    <div className={cn(
+                        'pointer-events-none absolute inset-x-0 z-30 flex justify-center px-4 transition-all duration-200',
+                        props.elevateScrollToBottom ? 'bottom-24' : 'bottom-4'
+                    )}>
                         <button
+                            ref={scrollButtonRef}
                             type="button"
                             onClick={props.onScrollToBottom}
                             className={cn(

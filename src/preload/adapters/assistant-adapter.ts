@@ -1,12 +1,19 @@
 import { ipcRenderer } from 'electron'
 import type {
     AssistantApprovalResponseInput,
+    AssistantApprovePendingPlaygroundLabRequestInput,
+    AssistantAttachSessionToPlaygroundLabInput,
     AssistantClearLogsInput,
     AssistantConnectOptions,
+    AssistantCreatePlaygroundLabInput,
+    AssistantCreateSessionInput,
+    AssistantDeclinePendingPlaygroundLabRequestInput,
     AssistantDeleteMessageInput,
     AssistantEventStreamPayload,
     AssistantPersistClipboardImageInput,
     AssistantSendPromptOptions,
+    AssistantSetPlaygroundRootInput,
+    AssistantTranscribeAudioInput,
     AssistantUserInputResponseInput
 } from '../../shared/assistant/contracts'
 import { ASSISTANT_IPC, assertAssistantIpcContract } from '../../shared/assistant/contracts'
@@ -15,10 +22,6 @@ export function createAssistantAdapter() {
     assertAssistantIpcContract()
 
     return {
-        getAIRuntimeStatus: async () => {
-            const status = await ipcRenderer.invoke(ASSISTANT_IPC.getStatus)
-            return { success: true as const, status }
-        },
         assistant: {
             subscribe: () => ipcRenderer.invoke(ASSISTANT_IPC.subscribe),
             unsubscribe: () => ipcRenderer.invoke(ASSISTANT_IPC.unsubscribe),
@@ -26,10 +29,11 @@ export function createAssistantAdapter() {
             getSnapshot: () => ipcRenderer.invoke(ASSISTANT_IPC.getSnapshot),
             getStatus: () => ipcRenderer.invoke(ASSISTANT_IPC.getStatus),
             getAccountOverview: () => ipcRenderer.invoke(ASSISTANT_IPC.getAccountOverview),
+            getSessionTurnUsage: (input?: { sessionId?: string }) => ipcRenderer.invoke(ASSISTANT_IPC.getSessionTurnUsage, input),
             listModels: (forceRefresh = false) => ipcRenderer.invoke(ASSISTANT_IPC.listModels, forceRefresh),
             connect: (options?: AssistantConnectOptions) => ipcRenderer.invoke(ASSISTANT_IPC.connect, options),
             disconnect: (sessionId?: string) => ipcRenderer.invoke(ASSISTANT_IPC.disconnect, sessionId),
-            createSession: (title?: string, projectPath?: string) => ipcRenderer.invoke(ASSISTANT_IPC.createSession, title, projectPath),
+            createSession: (input?: AssistantCreateSessionInput) => ipcRenderer.invoke(ASSISTANT_IPC.createSession, input),
             selectSession: (sessionId: string) => ipcRenderer.invoke(ASSISTANT_IPC.selectSession, sessionId),
             renameSession: (sessionId: string, title: string) => ipcRenderer.invoke(ASSISTANT_IPC.renameSession, sessionId, title),
             archiveSession: (sessionId: string, archived = true) => ipcRenderer.invoke(ASSISTANT_IPC.archiveSession, sessionId, archived),
@@ -38,6 +42,16 @@ export function createAssistantAdapter() {
             clearLogs: (input?: AssistantClearLogsInput) => ipcRenderer.invoke(ASSISTANT_IPC.clearLogs, input),
             setSessionProjectPath: (sessionId: string, projectPath: string | null) =>
                 ipcRenderer.invoke(ASSISTANT_IPC.setSessionProjectPath, sessionId, projectPath),
+            setPlaygroundRoot: (input: AssistantSetPlaygroundRootInput) =>
+                ipcRenderer.invoke(ASSISTANT_IPC.setPlaygroundRoot, input),
+            createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) =>
+                ipcRenderer.invoke(ASSISTANT_IPC.createPlaygroundLab, input),
+            attachSessionToPlaygroundLab: (input: AssistantAttachSessionToPlaygroundLabInput) =>
+                ipcRenderer.invoke(ASSISTANT_IPC.attachSessionToPlaygroundLab, input),
+            approvePendingPlaygroundLabRequest: (input: AssistantApprovePendingPlaygroundLabRequestInput) =>
+                ipcRenderer.invoke(ASSISTANT_IPC.approvePendingPlaygroundLabRequest, input),
+            declinePendingPlaygroundLabRequest: (input: AssistantDeclinePendingPlaygroundLabRequestInput) =>
+                ipcRenderer.invoke(ASSISTANT_IPC.declinePendingPlaygroundLabRequest, input),
             persistClipboardImage: (input: AssistantPersistClipboardImageInput) =>
                 ipcRenderer.invoke(ASSISTANT_IPC.persistClipboardImage, input),
             newThread: (sessionId?: string) => ipcRenderer.invoke(ASSISTANT_IPC.newThread, sessionId),
@@ -47,6 +61,9 @@ export function createAssistantAdapter() {
                 ipcRenderer.invoke(ASSISTANT_IPC.respondApproval, input),
             respondUserInput: (input: AssistantUserInputResponseInput) =>
                 ipcRenderer.invoke(ASSISTANT_IPC.respondUserInput, input),
+            getTranscriptionModelState: () => ipcRenderer.invoke(ASSISTANT_IPC.getTranscriptionModelState),
+            downloadTranscriptionModel: () => ipcRenderer.invoke(ASSISTANT_IPC.downloadTranscriptionModel),
+            transcribeAudioWithLocalModel: (input: AssistantTranscribeAudioInput) => ipcRenderer.invoke(ASSISTANT_IPC.transcribeAudioWithLocalModel, input),
             onEvent: (callback: (payload: AssistantEventStreamPayload) => void) => {
                 const listener = (_event: Electron.IpcRendererEvent, payload: AssistantEventStreamPayload) => {
                     callback(payload)

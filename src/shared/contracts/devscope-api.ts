@@ -3,16 +3,27 @@ import type { FullReport, ReadinessReport, SystemHealth, ToolingReport } from '.
 import type {
     AssistantApprovalResponseInput,
     AssistantAccountOverviewPayload,
+    AssistantApprovePendingPlaygroundLabRequestInput,
+    AssistantAttachSessionToPlaygroundLabInput,
     AssistantBootstrapPayload,
     AssistantClearLogsInput,
     AssistantConnectOptions,
+    AssistantCreatePlaygroundLabInput,
+    AssistantCreateSessionInput,
+    AssistantDeclinePendingPlaygroundLabRequestInput,
     AssistantDeleteMessageInput,
     AssistantEventStreamPayload,
+    AssistantGetSessionTurnUsageInput,
     AssistantModelInfo,
+    AssistantPlaygroundResultPayload,
     AssistantPersistClipboardImageInput,
     AssistantRuntimeStatus,
     AssistantSendPromptOptions,
+    AssistantSetPlaygroundRootInput,
+    AssistantSessionTurnUsageResultPayload,
     AssistantSnapshot,
+    AssistantTranscribeAudioInput,
+    AssistantTranscriptionModelState,
     AssistantUserInputResponseInput
 } from '../assistant/contracts'
 import type {
@@ -199,10 +210,11 @@ export interface DevScopeAssistantApi {
     getSnapshot: () => Promise<AssistantSnapshot>
     getStatus: () => Promise<AssistantRuntimeStatus>
     getAccountOverview: () => Promise<DevScopeResult<AssistantAccountOverviewPayload>>
+    getSessionTurnUsage: (input?: AssistantGetSessionTurnUsageInput) => Promise<DevScopeResult<AssistantSessionTurnUsageResultPayload>>
     listModels: (forceRefresh?: boolean) => Promise<DevScopeResult<{ models: AssistantModelInfo[] }>>
     connect: (options?: AssistantConnectOptions) => Promise<DevScopeResult<{ threadId: string }>>
     disconnect: (sessionId?: string) => Promise<DevScopeResult>
-    createSession: (title?: string, projectPath?: string) => Promise<DevScopeResult<{ sessionId: string }>>
+    createSession: (input?: AssistantCreateSessionInput) => Promise<DevScopeResult<{ sessionId: string }>>
     selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot: AssistantSnapshot }>>
     renameSession: (sessionId: string, title: string) => Promise<DevScopeResult>
     archiveSession: (sessionId: string, archived?: boolean) => Promise<DevScopeResult>
@@ -210,6 +222,11 @@ export interface DevScopeAssistantApi {
     deleteMessage: (input: AssistantDeleteMessageInput) => Promise<DevScopeResult>
     clearLogs: (input?: AssistantClearLogsInput) => Promise<DevScopeResult>
     setSessionProjectPath: (sessionId: string, projectPath: string | null) => Promise<DevScopeResult>
+    setPlaygroundRoot: (input: AssistantSetPlaygroundRootInput) => Promise<DevScopeResult<AssistantPlaygroundResultPayload>>
+    createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) => Promise<DevScopeResult<{ labId: string; sessionId?: string | null } & AssistantPlaygroundResultPayload>>
+    attachSessionToPlaygroundLab: (input: AssistantAttachSessionToPlaygroundLabInput) => Promise<DevScopeResult<AssistantPlaygroundResultPayload>>
+    approvePendingPlaygroundLabRequest: (input: AssistantApprovePendingPlaygroundLabRequestInput) => Promise<DevScopeResult<{ sessionId: string; labId: string } & AssistantPlaygroundResultPayload>>
+    declinePendingPlaygroundLabRequest: (input: AssistantDeclinePendingPlaygroundLabRequestInput) => Promise<DevScopeResult>
     persistClipboardImage: (input: AssistantPersistClipboardImageInput) => Promise<DevScopeResult<{ path: string }>>
     newThread: (sessionId?: string) => Promise<DevScopeResult<{ threadId: string }>>
     sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) =>
@@ -217,6 +234,9 @@ export interface DevScopeAssistantApi {
     interruptTurn: (turnId?: string, sessionId?: string) => Promise<DevScopeResult>
     respondApproval: (input: AssistantApprovalResponseInput) => Promise<DevScopeResult>
     respondUserInput: (input: AssistantUserInputResponseInput) => Promise<DevScopeResult>
+    getTranscriptionModelState: () => Promise<DevScopeResult<{ state: AssistantTranscriptionModelState }>>
+    downloadTranscriptionModel: () => Promise<DevScopeResult<{ state: AssistantTranscriptionModelState }>>
+    transcribeAudioWithLocalModel: (input: AssistantTranscribeAudioInput) => Promise<DevScopeResult<{ text: string }>>
     onEvent: (callback: (event: AssistantEventStreamPayload) => void) => () => void
 }
 
@@ -228,10 +248,6 @@ export interface DevScopeApi {
     getReadinessReport: () => Promise<ReadinessReport>
     refreshAll: () => Promise<FullReport>
     system: DevScopeSystemApi
-
-    // Capabilities disabled in Air
-    getAIRuntimeStatus: () => Promise<DevScopeResult<{ status: AssistantRuntimeStatus }>>
-    getAIAgents: () => Promise<DevScopeResult<{ agents: unknown[] }>>
 
     // Settings + AI
     setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) => Promise<DevScopeResult>

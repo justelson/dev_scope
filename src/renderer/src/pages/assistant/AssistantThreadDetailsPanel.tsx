@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Check, ChevronDown, ChevronRight, Copy, Loader2, PlugZap, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Copy, ListTodo, Loader2, PlugZap, Trash2 } from 'lucide-react'
 import type { AssistantActivity } from '@shared/assistant/contracts'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { cn } from '@/lib/utils'
@@ -7,6 +7,7 @@ import { IssueLogRow, copyTextToClipboard, getUsageMetricDotClass, getUsageMetri
 
 export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsPanel(props: {
     open: boolean
+    compact?: boolean
     selectedProjectPath: string
     selectedProjectLabel: string
     displayProjectPath: string
@@ -22,6 +23,9 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
     selectedRuntimeLabel: string
     selectedThinkingLabel: string
     selectedSpeedLabel: string
+    sessionCostLabel: string
+    sessionCostDisplay: string
+    sessionCostTone: UsageMetricTone
     sidebarMetricChips: Array<{ label: string; value: string; tone: UsageMetricTone }>
     issueActivities: AssistantActivity[]
     latestIssueGroup: { activity: AssistantActivity; activities: AssistantActivity[]; count: number } | null
@@ -36,6 +40,7 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
     assistantAvailable: boolean
     commandPending: boolean
     onClose: () => void
+    onShowPlan: () => void
     onToggleProjectPath: () => void
     onCopyProjectPath: () => void
     onToggleLogsExpanded: () => void
@@ -45,12 +50,12 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
     onShowLogDetails: (activity: AssistantActivity) => void
     onToggleAssistantConnection: () => void
 }) {
-    const { open, selectedProjectPath, selectedProjectLabel, displayProjectPath, showFullProjectPath, projectPathCopied, contextPercentage, contextColor, contextUsedDisplay, contextAvailableDisplay, pendingApprovalsCount, pendingUserInputsCount, sidebarSelectedModel, selectedRuntimeLabel, selectedThinkingLabel, selectedSpeedLabel, sidebarMetricChips, issueActivities, latestIssueGroup, olderIssueGroups, copiedLogId, copyErrorByLogId, allLogsCopied, clearingLogs, logsExpanded, selectedSessionId, assistantConnected, assistantAvailable, commandPending, onClose, onToggleProjectPath, onCopyProjectPath, onToggleLogsExpanded, onCopyAllLogs, onClearLogs, onCopyLog, onShowLogDetails, onToggleAssistantConnection } = props
+    const { open, compact = false, selectedProjectPath, selectedProjectLabel, displayProjectPath, showFullProjectPath, projectPathCopied, contextPercentage, contextColor, contextUsedDisplay, contextAvailableDisplay, pendingApprovalsCount, pendingUserInputsCount, sidebarSelectedModel, selectedRuntimeLabel, selectedThinkingLabel, selectedSpeedLabel, sessionCostLabel, sessionCostDisplay, sessionCostTone, sidebarMetricChips, issueActivities, latestIssueGroup, olderIssueGroups, copiedLogId, copyErrorByLogId, allLogsCopied, clearingLogs, logsExpanded, selectedSessionId, assistantConnected, assistantAvailable, commandPending, onClose, onShowPlan, onToggleProjectPath, onCopyProjectPath, onToggleLogsExpanded, onCopyAllLogs, onClearLogs, onCopyLog, onShowLogDetails, onToggleAssistantConnection } = props
 
     return (
-        <div className={cn('relative overflow-hidden transition-all duration-300', open ? 'opacity-100' : 'opacity-0 pointer-events-none')} style={{ width: open ? '380px' : '0px' }}>
-            <aside className="flex h-full min-h-0 flex-col bg-sparkle-bg">
-                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <div className={cn('relative overflow-hidden transition-all duration-300', open ? 'opacity-100' : 'opacity-0 pointer-events-none')} style={{ width: open ? (compact ? '360px' : '460px') : '0px' }}>
+            <aside className="flex h-full min-h-0 flex-col border-l border-white/10 bg-sparkle-bg">
+                <div className="flex h-[46px] shrink-0 items-center justify-between gap-3 border-b border-white/10 px-3">
                     <div className="flex min-w-0 items-center gap-2">
                         <h2 className="text-sm font-semibold text-sparkle-text">Thread Details</h2>
                         <button
@@ -69,7 +74,19 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
                             <PlugZap size={13} />
                         </button>
                     </div>
-                    <button type="button" onClick={onClose} className="rounded-md border border-white/10 bg-white/[0.03] p-1.5 text-sparkle-text-secondary transition-colors hover:border-white/20 hover:bg-white/[0.05] hover:text-sparkle-text" title="Close panel"><ChevronRight size={14} /></button>
+                    <div className="flex items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={onShowPlan}
+                            className="inline-flex h-7 items-center gap-1.5 rounded-md bg-white/[0.03] px-2 text-[11px] font-medium text-sparkle-text-secondary transition-colors hover:bg-white/[0.05] hover:text-sparkle-text"
+                            title="Switch to plan"
+                            aria-label="Switch to plan"
+                        >
+                            <ListTodo size={13} />
+                            <span>Plan</span>
+                        </button>
+                        <button type="button" onClick={onClose} className="rounded-md border border-white/10 bg-white/[0.03] p-1.5 text-sparkle-text-secondary transition-colors hover:border-white/20 hover:bg-white/[0.05] hover:text-sparkle-text" title="Close panel"><ChevronRight size={14} /></button>
+                    </div>
                 </div>
                 <div className="shrink-0 space-y-3 border-b border-white/10 px-4 py-4">
                     <div className="space-y-2">
@@ -107,9 +124,18 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
                         </div>
                     </div>
 
-                    {sidebarMetricChips.length > 0 && <div className="space-y-2 border-t border-white/5 pt-3">
+                    {(sessionCostLabel || sidebarMetricChips.length > 0) && <div className="space-y-2 border-t border-white/5 pt-3">
                         <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-sparkle-text-muted">Usage Metrics</span>
                         <div className="space-y-1 text-xs">
+                            {sessionCostLabel ? <div className="rounded-lg bg-white/[0.02] px-2 py-1.5">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="min-w-0 truncate text-sparkle-text-secondary">{sessionCostLabel}</span>
+                                    <span className={cn('inline-flex items-center gap-2 font-mono', getUsageMetricToneClass(sessionCostTone))}>
+                                        <span className={cn('h-1.5 w-1.5 rounded-full', getUsageMetricDotClass(sessionCostTone))} />
+                                        {sessionCostDisplay}
+                                    </span>
+                                </div>
+                            </div> : null}
                             {sidebarMetricChips.map((chip) => <div key={chip.label} className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.02] px-2 py-1.5"><span className="text-sparkle-text-secondary">{chip.label}</span><span className={cn('inline-flex items-center gap-2 font-mono', getUsageMetricToneClass(chip.tone))}><span className={cn('h-1.5 w-1.5 rounded-full', getUsageMetricDotClass(chip.tone))} />{chip.value}</span></div>)}
                         </div>
                     </div>}

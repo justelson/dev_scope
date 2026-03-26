@@ -183,6 +183,10 @@ export function useAssistantTimelineVirtualizer({
 
     return {
         totalVirtualHeight,
+        paddingTop: virtualRows.length > 0 ? (offsets[virtualRange.startIndex] || 0) : 0,
+        paddingBottom: virtualRows.length > 0 && virtualRange.endIndex >= 0
+            ? Math.max(0, totalVirtualHeight - (offsets[virtualRange.endIndex + 1] || 0))
+            : 0,
         virtualRows: virtualRange.rows,
         tailRows,
         registerMeasuredRow,

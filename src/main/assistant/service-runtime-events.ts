@@ -291,6 +291,7 @@ export function handleAssistantRuntimeEvent(event: AssistantRuntimeEvent, deps: 
     if (event.type === 'user-input.requested' || event.type === 'user-input.resolved') {
         const existingThread = deps.requireThread(event.threadId)
         const current = existingThread.pendingUserInputs.find((entry) => entry.requestId === event.requestId)
+        const wasAlreadyResolved = current?.status === 'resolved'
         const userInput: AssistantPendingUserInput = current
             ? {
                 ...current,
@@ -309,6 +310,32 @@ export function handleAssistantRuntimeEvent(event: AssistantRuntimeEvent, deps: 
                 resolvedAt: event.type === 'user-input.resolved' ? event.createdAt : null
             }
         deps.appendEvent('thread.user-input.updated', event.createdAt, { threadId: event.threadId, userInput }, session.id, event.threadId)
+        if (event.type === 'user-input.resolved' && !wasAlreadyResolved) {
+            const answers = event.payload.answers || {}
+            const answeredCount = Object.values(answers).filter((value) => {
+                if (Array.isArray(value)) return value.length > 0
+                return String(value || '').trim().length > 0
+            }).length
+            deps.appendEvent('thread.activity.appended', event.createdAt, {
+                threadId: event.threadId,
+                activity: {
+                    id: createAssistantId('assistant-activity'),
+                    kind: 'user-input.resolved',
+                    tone: 'tool',
+                    summary: 'Consulted user',
+                    detail: `${answeredCount}/${userInput.questions.length} answers captured`,
+                    turnId: event.turnId || null,
+                    createdAt: event.createdAt,
+                    payload: {
+                        requestId: userInput.requestId,
+                        questions: userInput.questions,
+                        answers,
+                        answeredCount,
+                        questionCount: userInput.questions.length
+                    }
+                }
+            }, session.id, event.threadId)
+        }
         return
     }
 

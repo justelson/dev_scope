@@ -71,6 +71,9 @@ export async function openAssistantFileTarget(options: {
     }
 
     const { extension, name } = splitFileNameAndExtension(pathInfo.path)
-    await options.openPreview({ name, path: pathInfo.path }, extension, options.previewOptions)
+    await options.openPreview({ name, path: pathInfo.path }, extension, {
+        ...options.previewOptions,
+        focusLine: options.previewOptions?.focusLine ?? resolvedTarget?.focusLine
+    })
     return true
 }
