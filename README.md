@@ -209,5 +209,6 @@ Distributed under the MIT License. See [`package.json`](./package.json) for the 
 
 ---
 <div align="center">
+  If you are curious, yes! this was built by a 15 year old, all you need to build is curious and motivated
   # Devs don't use light mode.
 <div>
