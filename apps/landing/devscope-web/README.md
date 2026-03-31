@@ -27,6 +27,12 @@ npm run preview
 npm run lint
 ```
 
+## Deployment
+
+- Repo-root Vercel deploys should use the root-level `vercel.json`, which builds `apps/landing/devscope-web` explicitly.
+- Package-root Vercel deploys should use this package's local `vercel.json`.
+- Both configs now declare the Vite build/install/output settings explicitly so the landing deploy does not depend on Vercel dashboard auto-detection.
+
 ## Important Files
 
 - [`src/App.tsx`](C:\Users\elson\my_coding_play\devscope\apps\landing\devscope-web\src\App.tsx): main landing page composition
