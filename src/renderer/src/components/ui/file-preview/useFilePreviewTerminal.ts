@@ -429,6 +429,21 @@ export function useFilePreviewTerminal({
 
     useEffect(() => {
         if (!isResizingTerminal) return
+        const applyDragState = (active: boolean) => {
+            if (active) {
+                document.documentElement.style.setProperty('cursor', 'row-resize', 'important')
+                document.documentElement.style.setProperty('user-select', 'none', 'important')
+                document.body.style.setProperty('cursor', 'row-resize', 'important')
+                document.body.style.setProperty('user-select', 'none', 'important')
+                return
+            }
+
+            document.documentElement.style.removeProperty('cursor')
+            document.documentElement.style.removeProperty('user-select')
+            document.body.style.removeProperty('cursor')
+            document.body.style.removeProperty('user-select')
+        }
+
         const maxHeight = Math.max(220, Math.floor(window.innerHeight * 0.78))
         const clamp = (value: number) => Math.min(maxHeight, Math.max(PREVIEW_TERMINAL_MIN_HEIGHT, value))
         const onMove = (event: MouseEvent) => {
@@ -440,13 +455,11 @@ export function useFilePreviewTerminal({
         const stop = () => {
             terminalResizeRef.current = null
             setIsResizingTerminal(false)
-            document.body.style.cursor = ''
-            document.body.style.userSelect = ''
+            applyDragState(false)
             window.removeEventListener('mousemove', onMove)
             window.removeEventListener('mouseup', stop)
         }
-        document.body.style.cursor = 'row-resize'
-        document.body.style.userSelect = 'none'
+        applyDragState(true)
         window.addEventListener('mousemove', onMove)
         window.addEventListener('mouseup', stop)
         return stop

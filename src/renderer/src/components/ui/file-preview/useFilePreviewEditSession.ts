@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { summarizeGitDiff, type GitDiffSummary } from './gitDiff'
 import type { PreviewFile } from './types'
 import type { PendingIntent } from './modalShared'
@@ -11,7 +11,6 @@ type UseFilePreviewEditSessionParams = {
     projectPath?: string
     canEdit: boolean
     initialMode: 'preview' | 'edit'
-    isHtml: boolean
     onSaved?: (filePath: string) => Promise<void> | void
     onClose: () => void
 }
@@ -24,14 +23,10 @@ export function useFilePreviewEditSession({
     projectPath,
     canEdit,
     initialMode,
-    isHtml,
     onSaved,
     onClose
 }: UseFilePreviewEditSessionParams) {
     const [mode, setMode] = useState<'preview' | 'edit'>(initialMode)
-    const [htmlViewMode, setHtmlViewMode] = useState<'rendered' | 'code'>(
-        initialMode === 'edit' && isHtml ? 'code' : 'rendered'
-    )
     const [gitDiffText, setGitDiffText] = useState<string>('No changes')
     const [gitDiffSummary, setGitDiffSummary] = useState<GitDiffSummary | null>(null)
     const [sourceContent, setSourceContent] = useState(content)
@@ -45,11 +40,11 @@ export function useFilePreviewEditSession({
     const [gitSummaryRefreshToken, setGitSummaryRefreshToken] = useState(0)
     const [fileModifiedAt, setFileModifiedAt] = useState<number | null>(typeof modifiedAt === 'number' ? modifiedAt : null)
     const [conflictModifiedAt, setConflictModifiedAt] = useState<number | null>(null)
+    const pendingExternalActionRef = useRef<(() => void | Promise<void>) | null>(null)
 
     const isDirty = draftContent !== sourceContent
 
     useEffect(() => {
-        setHtmlViewMode(initialMode === 'edit' && isHtml ? 'code' : 'rendered')
         setMode(initialMode)
         setSourceContent(content)
         setDraftContent(content)
@@ -58,9 +53,10 @@ export function useFilePreviewEditSession({
         setSaveError(null)
         setShowUnsavedModal(false)
         setPendingIntent(null)
+        pendingExternalActionRef.current = null
         setFileModifiedAt(typeof modifiedAt === 'number' ? modifiedAt : null)
         setConflictModifiedAt(null)
-    }, [content, initialMode, isHtml, modifiedAt, truncated])
+    }, [content, initialMode, modifiedAt, truncated])
 
     useEffect(() => {
         if (isDirty || mode === 'edit') return
@@ -83,11 +79,17 @@ export function useFilePreviewEditSession({
         if (shouldUpdateVersion) setFileModifiedAt(incomingModifiedAt)
     }, [content, draftContent, fileModifiedAt, isDirty, mode, modifiedAt, sourceContent])
 
-    const commitPendingIntent = useCallback(() => {
+    const commitPendingIntent = useCallback(async () => {
         if (pendingIntent === 'close') {
             onClose()
         } else if (pendingIntent === 'preview') {
             setMode('preview')
+        } else if (pendingIntent === 'external') {
+            const pendingExternalAction = pendingExternalActionRef.current
+            pendingExternalActionRef.current = null
+            if (pendingExternalAction) {
+                await pendingExternalAction()
+            }
         }
         setPendingIntent(null)
     }, [onClose, pendingIntent])
@@ -240,20 +242,34 @@ export function useFilePreviewEditSession({
     const dismissUnsavedChanges = useCallback(() => {
         setShowUnsavedModal(false)
         setPendingIntent(null)
+        pendingExternalActionRef.current = null
     }, [])
 
     const discardUnsavedChanges = useCallback(() => {
         setDraftContent(sourceContent)
         setShowUnsavedModal(false)
-        commitPendingIntent()
+        void commitPendingIntent()
     }, [commitPendingIntent, sourceContent])
 
     const confirmUnsavedChanges = useCallback(async () => {
         const saved = await handleSave()
         if (!saved) return
         setShowUnsavedModal(false)
-        commitPendingIntent()
+        await commitPendingIntent()
     }, [commitPendingIntent, handleSave])
+
+    const requestExternalIntent = useCallback((action: () => void | Promise<void>) => {
+        if (!isDirty) {
+            const result = action()
+            if (result && typeof (result as Promise<void>).then === 'function') {
+                void result
+            }
+            return
+        }
+        pendingExternalActionRef.current = action
+        setPendingIntent('external')
+        setShowUnsavedModal(true)
+    }, [isDirty])
 
     useEffect(() => {
         let disposed = false
@@ -299,8 +315,6 @@ export function useFilePreviewEditSession({
     return {
         mode,
         setMode,
-        htmlViewMode,
-        setHtmlViewMode,
         gitDiffText,
         gitDiffSummary,
         sourceContent,
@@ -324,6 +338,7 @@ export function useFilePreviewEditSession({
         reloadFromDisk,
         overwriteOnConflict,
         requestIntent,
+        requestExternalIntent,
         handleCloseRequest
     }
 }

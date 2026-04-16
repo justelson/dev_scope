@@ -10,6 +10,11 @@ export interface PreviewFile {
     focusLine?: number | null
 }
 
+export interface PreviewTab {
+    id: string
+    file: PreviewFile
+}
+
 export interface PreviewMediaSource {
     name: string
     path: string

@@ -20,6 +20,7 @@ mermaid.initialize({
 })
 
 const mermaidSvgCache = new Map<string, string>()
+const mermaidRenderPromiseCache = new Map<string, Promise<string>>()
 
 function hashString(input: string): string {
     let hash = 0
@@ -34,86 +35,52 @@ export const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: s
     const containerRef = useRef<HTMLDivElement | null>(null)
     const [svg, setSvg] = useState<string>(() => mermaidSvgCache.get(chart) || '')
     const [error, setError] = useState('')
-    const [isNearViewport, setIsNearViewport] = useState<boolean>(() => Boolean(mermaidSvgCache.get(chart)))
-
-    useEffect(() => {
-        if (svg) {
-            setIsNearViewport(true)
-            return
-        }
-
-        const node = containerRef.current
-        if (!node) return
-
-        const observer = new IntersectionObserver((entries) => {
-            const [entry] = entries
-            if (!entry?.isIntersecting) return
-            setIsNearViewport(true)
-            observer.disconnect()
-        }, {
-            rootMargin: '480px 0px'
-        })
-
-        observer.observe(node)
-
-        return () => {
-            observer.disconnect()
-        }
-    }, [svg, chart])
 
     useEffect(() => {
         const cachedSvg = mermaidSvgCache.get(chart)
+        setSvg((previous) => (previous === (cachedSvg || '') ? previous : (cachedSvg || '')))
+        setError((previous) => (previous ? '' : previous))
+
         if (cachedSvg) {
-            setSvg((previous) => (previous === cachedSvg ? previous : cachedSvg))
-            setError((previous) => (previous ? '' : previous))
             return
         }
 
-        if (!isNearViewport) return
-
         let cancelled = false
-        let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null
-        setSvg('')
-        setError('')
 
-        const renderDiagram = async () => {
-            try {
-                const id = `mermaid-${hashString(chart)}`
-                const { svg: renderedSvg } = await mermaid.render(id, chart)
+        const renderDiagram = (): Promise<string> => {
+            const existingPromise = mermaidRenderPromiseCache.get(chart)
+            if (existingPromise) return existingPromise
+
+            const renderPromise = mermaid.render(`mermaid-${hashString(chart)}`, chart)
+                .then(({ svg: renderedSvg }) => {
+                    mermaidSvgCache.set(chart, renderedSvg)
+                    mermaidRenderPromiseCache.delete(chart)
+                    return renderedSvg
+                })
+                .catch((renderError) => {
+                    mermaidRenderPromiseCache.delete(chart)
+                    throw renderError
+                })
+
+            mermaidRenderPromiseCache.set(chart, renderPromise)
+            return renderPromise
+        }
+
+        void renderDiagram()
+            .then((renderedSvg) => {
                 if (cancelled) return
-
-                mermaidSvgCache.set(chart, renderedSvg)
-                setSvg(renderedSvg)
-            } catch (renderError: any) {
-                if (!cancelled) {
-                    console.error('Mermaid render error:', renderError)
-                    setError(renderError.message || 'Failed to render diagram')
-                }
-            }
-        }
-
-        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-            const idleId = window.requestIdleCallback(() => {
-                void renderDiagram()
-            }, { timeout: 300 })
-
-            return () => {
-                cancelled = true
-                window.cancelIdleCallback(idleId)
-            }
-        }
-
-        timeoutId = globalThis.setTimeout(() => {
-            void renderDiagram()
-        }, 16)
+                setSvg((previous) => (previous === renderedSvg ? previous : renderedSvg))
+            })
+            .catch((renderError: any) => {
+                if (cancelled) return
+                console.error('Mermaid render error:', renderError)
+                setError(renderError.message || 'Failed to render diagram')
+            })
 
         return () => {
             cancelled = true
-            if (timeoutId !== null) {
-                globalThis.clearTimeout(timeoutId)
-            }
         }
-    }, [chart, isNearViewport])
+    }, [chart])
 
     if (error) {
         return (
@@ -129,7 +96,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: s
                 ref={containerRef}
                 className="flex min-h-[220px] items-center justify-center rounded-lg border border-white/10 bg-sparkle-card p-4 text-sm text-sparkle-text-secondary"
             >
-                {isNearViewport ? 'Rendering diagram...' : 'Diagram will render when you scroll here'}
+                Rendering diagram...
             </div>
         )
     }
@@ -137,7 +104,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({ chart }: { chart: s
     return (
         <div
             ref={containerRef}
-            className="mermaid-diagram flex items-center justify-center overflow-x-auto rounded-lg border border-white/10 bg-sparkle-card p-4 [content-visibility:auto]"
+            className="mermaid-diagram flex items-center justify-center overflow-x-auto rounded-lg border border-white/10 bg-sparkle-card p-4"
             dangerouslySetInnerHTML={{ __html: svg }}
         />
     )

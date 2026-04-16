@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
+import { getFileUrl } from './utils'
 import type { ViewportPreset, ViewportPresetConfig } from './viewport'
 
 interface HtmlRenderedPreviewProps {
@@ -11,26 +12,22 @@ interface HtmlRenderedPreviewProps {
     isExpanded?: boolean
 }
 
-function getBaseHref(filePath: string): string {
-    const normalized = String(filePath || '').replace(/\\/g, '/')
-    const lastSlashIndex = normalized.lastIndexOf('/')
-    const directoryPath = lastSlashIndex >= 0 ? normalized.slice(0, lastSlashIndex + 1) : normalized
-    const trimmed = directoryPath.startsWith('/') ? directoryPath.slice(1) : directoryPath
-    return `devscope:///${encodeURI(trimmed).replace(/#/g, '%23').replace(/\?/g, '%3F')}`
+function computeContentStamp(content: string): string {
+    let hash = 0
+
+    for (let index = 0; index < content.length; index += 1) {
+        hash = ((hash * 31) + content.charCodeAt(index)) | 0
+    }
+
+    return Math.abs(hash).toString(36)
 }
 
-function buildPreviewDocument(content: string, filePath: string): string {
-    const baseHref = getBaseHref(filePath)
+function buildPreviewUrl(filePath: string, content: string): string {
+    const baseUrl = getFileUrl(filePath)
+    const separator = baseUrl.includes('?') ? '&' : '?'
+    const contentStamp = computeContentStamp(content)
 
-    if (/<head(\s[^>]*)?>/i.test(content)) {
-        return content.replace(/<head(\s[^>]*)?>/i, (match) => `${match}<base href="${baseHref}">`)
-    }
-
-    if (/<html(\s[^>]*)?>/i.test(content)) {
-        return content.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head><base href="${baseHref}"></head>`)
-    }
-
-    return `<!DOCTYPE html><html><head><base href="${baseHref}"></head><body>${content}</body></html>`
+    return `${baseUrl}${separator}devscope-preview=${contentStamp}`
 }
 
 export default function HtmlRenderedPreview({
@@ -41,25 +38,27 @@ export default function HtmlRenderedPreview({
     presetConfig,
     isExpanded = false
 }: HtmlRenderedPreviewProps) {
-    const previewDocument = useMemo(
-        () => buildPreviewDocument(content, filePath),
+    const previewUrl = useMemo(
+        () => buildPreviewUrl(filePath, content),
         [content, filePath]
     )
+    const viewportWidth = viewport === 'responsive' ? '100%' : `${presetConfig.width}px`
 
     return (
         <div className="h-full w-full min-h-0 overflow-hidden bg-sparkle-bg">
             <div
                 className={cn(
-                    'mx-auto h-full overflow-hidden bg-white',
+                    'mx-auto h-full overflow-hidden bg-white transition-[width,max-width,border-radius,box-shadow,transform] duration-420 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width,max-width]',
                     isExpanded ? 'rounded-none shadow-none' : 'rounded-lg shadow-2xl'
                 )}
                 style={{
-                    width: viewport === 'responsive' ? '100%' : `${presetConfig.width}px`,
+                    width: viewportWidth,
                     maxWidth: '100%'
                 }}
             >
                 <iframe
-                    srcDoc={previewDocument}
+                    key={previewUrl}
+                    src={previewUrl}
                     title={`${fileName} preview`}
                     className="block h-full w-full"
                     style={{
