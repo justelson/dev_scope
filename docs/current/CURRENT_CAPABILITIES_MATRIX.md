@@ -23,9 +23,12 @@ Last validated against code on March 20, 2026.
 - Folder selection and root scanning: `Implemented`
 - Project indexing across multiple roots: `Implemented`
 - Project details read model: `Implemented`
+- Project details progressive shell rendering with inline loading states for README, files, metadata, and refresh hydration: `Implemented`
 - Installed IDE listing and open-in-IDE flows: `Implemented`
 - File tree reads and path info: `Implemented`
 - File preview reads across text/media/image content: `Implemented`
+- Rendered HTML file preview loads the actual on-disk HTML document through the app file protocol, so relative local JS/CSS/assets referenced by that file resolve in preview mode: `Implemented`
+- Fullscreen file preview uses an IDE-style workspace shell with a full-height left navigation rail, tab-like top file bar, right-aligned action chrome, and integrated folder/file-map navigation: `Implemented`
 - File writes, rename, move, paste, and delete flows: `Implemented`
 - Preview terminal sessions: `Implemented`
 - Python preview runs: `Implemented`
@@ -42,7 +45,9 @@ Last validated against code on March 20, 2026.
 
 - Assistant page in renderer: `Implemented`
 - Session create/select/rename/archive/delete: `Implemented`
-- Assistant sidebar project grouping with newest-first chats for new sessions, progressive 5-chat "Show more" expansion, and drag reordering: `Implemented`
+- Assistant delete flows reconcile auto-titled chats after history removal, drop empty detached Playground chats, and detach/remove lab-linked chats even when the link is path-derived: `Implemented`
+- Assistant sidebar project grouping with newest-first chats for new sessions, remaining-count `Show more` expansion, and drag reordering: `Implemented`
+- Assistant sidebar subagent tree with collapsible child threads nested under each chat and per-thread selection: `Implemented`
 - Connect/disconnect and model listing: `Implemented`
 - Prompt send and interrupt: `Implemented` (empty composer text falls back to a default send prompt)
 - Approval response and user-input response handling: `Implemented`
@@ -52,14 +57,21 @@ Last validated against code on March 20, 2026.
 - Pending AI follow-up question panel with inline option response flow: `Implemented`
 - Resolved guided-input responses persist as a tool-style `Consulted user` history row with expandable question/answer detail: `Implemented`
 - Session project-path association and new thread flow: `Implemented`
+- Session project-path routing auto-classifies folders under the configured Playground root into Playground sessions/labs, and the assistant rail auto-switches to the selected session mode when opening or switching into those chats: `Implemented`
+- Playground mode now requires a configured Playground root before creating labs or starting new Playground chats, with a dedicated root-selection onboarding overlay and disabled new-chat entry points until the root is set: `Implemented`
 - Event subscription and snapshot/status reads: `Implemented`
 - Session switching with cached selected-thread hydration: `Implemented`
+- Subagent runtime threads stream into their own selectable thread views, and parent-thread subagent control events render as dedicated orchestration cards instead of generic tool calls: `Implemented`
 - Assistant persistence auto-recovers corrupt SQLite state by backing it up, rebuilding, and maintaining a JSON fallback snapshot for recovery: `Implemented`
 - Assistant markdown file links and edited-file entries opening in-app preview, including exact-line opens for file references such as `path/to/file.ts:42` or `#L42`: `Implemented`
 - Assistant text inputs expose native right-click spelling suggestions and edit actions: `Implemented`
 - Assistant composer exposes optional voice input with mic start/stop control: browser speech streams live on supported runtimes, local Vosk MVP records locally with rolling draft updates plus a final pass on stop, and browser-speech network failures can route directly into highlighted transcription settings: `Implemented`
+- Assistant composer supports busy-turn queueing and force-send controls, with a default setting for whether busy sends queue or interrupt first: `Implemented`
+- Assistant composer derives a shared capability state for typing, attachments, send/stop, and control locking, and surfaces contextual composer status/explanations for disconnected, unavailable, busy, and guided-input states: `Implemented`
+- Force-pushed assistant turns keep the conversation in a working state when the runtime session is still live, and assistant turn footers show per-turn elapsed time on the last assistant message when timing data is available: `Implemented`
 - Assistant composer image attachments open the file preview renderer directly from the shelf while non-image attachments keep the local attachment preview flow: `Implemented`
 - Assistant composer pasted text attachments render as compact paper-card previews and open a dedicated text preview modal: `Implemented`
+- Clipboard-origin assistant attachments keep local previews while prompts serialize a safe `clipboard://` reference instead of the local storage path, and explicitly mark those attachments as not being the active repo/project root or current working directory: `Implemented`
 - Assistant defaults/settings page exposes transcription enablement, browser-vs-local engine selection, local Vosk model download/install prep, and highlight-targeted deep linking from assistant error recovery flows: `Implemented`
 - App-level assistant defaults for starter prompt template, model, chat/plan mode, supervised/full-access mode, reasoning level, and fast mode: `Implemented`
 - Assistant account overview surface with auth mode, plan, and rate-limit reads: `Implemented`
