@@ -8,10 +8,13 @@ import type {
     AssistantCreatePlaygroundLabInput,
     AssistantCreateSessionInput,
     AssistantDeclinePendingPlaygroundLabRequestInput,
+    AssistantDeletePlaygroundLabInput,
     AssistantDeleteMessageInput,
     AssistantEventStreamPayload,
     AssistantPersistClipboardImageInput,
+    AssistantResolveClipboardAttachmentInput,
     AssistantSendPromptOptions,
+    AssistantSelectThreadInput,
     AssistantSetPlaygroundRootInput,
     AssistantTranscribeAudioInput,
     AssistantUserInputResponseInput
@@ -35,6 +38,7 @@ export function createAssistantAdapter() {
             disconnect: (sessionId?: string) => ipcRenderer.invoke(ASSISTANT_IPC.disconnect, sessionId),
             createSession: (input?: AssistantCreateSessionInput) => ipcRenderer.invoke(ASSISTANT_IPC.createSession, input),
             selectSession: (sessionId: string) => ipcRenderer.invoke(ASSISTANT_IPC.selectSession, sessionId),
+            selectThread: (input: AssistantSelectThreadInput) => ipcRenderer.invoke(ASSISTANT_IPC.selectThread, input),
             renameSession: (sessionId: string, title: string) => ipcRenderer.invoke(ASSISTANT_IPC.renameSession, sessionId, title),
             archiveSession: (sessionId: string, archived = true) => ipcRenderer.invoke(ASSISTANT_IPC.archiveSession, sessionId, archived),
             deleteSession: (sessionId: string) => ipcRenderer.invoke(ASSISTANT_IPC.deleteSession, sessionId),
@@ -46,6 +50,8 @@ export function createAssistantAdapter() {
                 ipcRenderer.invoke(ASSISTANT_IPC.setPlaygroundRoot, input),
             createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) =>
                 ipcRenderer.invoke(ASSISTANT_IPC.createPlaygroundLab, input),
+            deletePlaygroundLab: (input: AssistantDeletePlaygroundLabInput) =>
+                ipcRenderer.invoke(ASSISTANT_IPC.deletePlaygroundLab, input),
             attachSessionToPlaygroundLab: (input: AssistantAttachSessionToPlaygroundLabInput) =>
                 ipcRenderer.invoke(ASSISTANT_IPC.attachSessionToPlaygroundLab, input),
             approvePendingPlaygroundLabRequest: (input: AssistantApprovePendingPlaygroundLabRequestInput) =>
@@ -54,6 +60,8 @@ export function createAssistantAdapter() {
                 ipcRenderer.invoke(ASSISTANT_IPC.declinePendingPlaygroundLabRequest, input),
             persistClipboardImage: (input: AssistantPersistClipboardImageInput) =>
                 ipcRenderer.invoke(ASSISTANT_IPC.persistClipboardImage, input),
+            resolveClipboardAttachment: (input: AssistantResolveClipboardAttachmentInput) =>
+                ipcRenderer.invoke(ASSISTANT_IPC.resolveClipboardAttachment, input),
             newThread: (sessionId?: string) => ipcRenderer.invoke(ASSISTANT_IPC.newThread, sessionId),
             sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) => ipcRenderer.invoke(ASSISTANT_IPC.sendPrompt, prompt, options),
             interruptTurn: (turnId?: string, sessionId?: string) => ipcRenderer.invoke(ASSISTANT_IPC.interruptTurn, turnId, sessionId),

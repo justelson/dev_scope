@@ -12,9 +12,10 @@ import { AssistantConversationPane } from './AssistantConversationPane'
 import { AssistantDiffPanel } from './AssistantDiffPanel'
 import { ConnectedAssistantPlanPanel } from './ConnectedAssistantPlanPanel'
 import { ConnectedAssistantThreadDetailsPanel } from './ConnectedAssistantThreadDetailsPanel'
-import { DeleteHistoryConfirm } from './AssistantPageHelpers'
+import { AssistantTransientToast, DeleteHistoryConfirm, useAssistantTransientToast } from './AssistantPageHelpers'
 import type { AssistantDiffTarget } from './assistant-diff-types'
 import { openAssistantFileTarget } from './assistant-file-navigation'
+import { resolveSessionProjectPath } from './assistant-sessions-rail-utils'
 import {
     useAssistantPageSidebarState,
     type AssistantRightPanelMode
@@ -25,7 +26,9 @@ type AssistantPageShellSelection = {
     assistantAvailable: boolean
     assistantConnected: boolean
     commandPending: boolean
+    playgroundRootPath: string | null
     selectedSessionId: string | null
+    selectedSessionMode: 'work' | 'playground'
     activeThreadId: string | null
     selectedProjectPath: string
 }
@@ -35,7 +38,9 @@ function areAssistantPageShellSelectionsEqual(left: AssistantPageShellSelection,
         && left.assistantAvailable === right.assistantAvailable
         && left.assistantConnected === right.assistantConnected
         && left.commandPending === right.commandPending
+        && left.playgroundRootPath === right.playgroundRootPath
         && left.selectedSessionId === right.selectedSessionId
+        && left.selectedSessionMode === right.selectedSessionMode
         && left.activeThreadId === right.activeThreadId
         && left.selectedProjectPath === right.selectedProjectPath
 }
@@ -61,14 +66,18 @@ export default function AssistantPage() {
             assistantAvailable: state.status.available,
             assistantConnected: state.status.connected,
             commandPending: state.commandPending,
+            playgroundRootPath: state.snapshot.playground.rootPath || null,
             selectedSessionId: selectedSession?.id || null,
+            selectedSessionMode: selectedSession?.mode || 'work',
             activeThreadId: activeThread?.id || null,
-            selectedProjectPath: String(selectedSession?.projectPath || activeThread?.cwd || '').trim()
+            selectedProjectPath: selectedSession ? resolveSessionProjectPath(selectedSession) : ''
         }
     }, areAssistantPageShellSelectionsEqual)
     const preview = useFilePreview()
     const { isCollapsed: mainSidebarCollapsed, setIsCollapsed: setMainSidebarCollapsed } = useSidebar()
     const autoConnectAttemptedSessionRef = useRef<string | null>(null)
+    const autoRoutedSelectionRef = useRef<string | null>(null)
+    const autoStartedDetachedPlaygroundRef = useRef(false)
     const mainSidebarBeforeAssistantRef = useRef<boolean | null>(null)
     const previousMainSidebarCollapsedRef = useRef(mainSidebarCollapsed)
     const autoCollapsedInnerSidebarRef = useRef(false)
@@ -86,6 +95,7 @@ export default function AssistantPage() {
     const [selectedDiffTarget, setSelectedDiffTarget] = useState<AssistantDiffTarget | null>(null)
     const [pendingMessageDelete, setPendingMessageDelete] = useState<AssistantMessage | null>(null)
     const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null)
+    const { toast, showToast } = useAssistantTransientToast()
 
     useEffect(() => {
         mainSidebarBeforeAssistantRef.current = mainSidebarCollapsed
@@ -143,6 +153,22 @@ export default function AssistantPage() {
     }, [actions, shell.assistantAvailable, shell.assistantConnected, shell.bootstrapped, shell.commandPending, shell.selectedSessionId])
 
     useEffect(() => {
+        const sessionId = shell.selectedSessionId
+        if (!sessionId) {
+            autoRoutedSelectionRef.current = null
+            return
+        }
+
+        const selectionKey = `${sessionId}:${shell.selectedSessionMode}`
+        if (autoRoutedSelectionRef.current === selectionKey) return
+        autoRoutedSelectionRef.current = selectionKey
+
+        if (railMode !== shell.selectedSessionMode) {
+            setRailMode(shell.selectedSessionMode)
+        }
+    }, [railMode, setRailMode, shell.selectedSessionId, shell.selectedSessionMode])
+
+    useEffect(() => {
         setSelectedDiffTarget(null)
         if (rightPanelMode === 'diff') setRightPanelMode('none')
     }, [setRightPanelMode, shell.activeThreadId, shell.selectedSessionId])
@@ -174,6 +200,37 @@ export default function AssistantPage() {
         await preview.openPreview(file, ext, options)
     }, [preview.openPreview])
 
+    const handleStartDetachedPlaygroundChat = useCallback(async () => {
+        setRailMode('playground')
+        await actions.createSession({ mode: 'playground' })
+    }, [actions, setRailMode])
+
+    const handleChoosePlaygroundRoot = useCallback(async () => {
+        const folderResult = await window.devscope.selectFolder()
+        if (!folderResult.success || folderResult.cancelled || !folderResult.folderPath) return
+        setRailMode('playground')
+        await actions.setPlaygroundRoot(folderResult.folderPath)
+    }, [actions, setRailMode])
+
+    useEffect(() => {
+        if (railMode !== 'playground' || shell.selectedSessionId || !shell.playgroundRootPath) {
+            autoStartedDetachedPlaygroundRef.current = false
+            return
+        }
+        if (!shell.bootstrapped || shell.commandPending) return
+        if (autoStartedDetachedPlaygroundRef.current) return
+
+        autoStartedDetachedPlaygroundRef.current = true
+        void handleStartDetachedPlaygroundChat()
+    }, [
+        handleStartDetachedPlaygroundChat,
+        railMode,
+        shell.bootstrapped,
+        shell.commandPending,
+        shell.playgroundRootPath,
+        shell.selectedSessionId
+    ])
+
     const handleViewActivityDiff = useCallback((target: AssistantDiffTarget) => {
         setSelectedDiffTarget(target)
         setRightPanelMode('diff')
@@ -184,11 +241,16 @@ export default function AssistantPage() {
         try {
             setDeletingMessageId(pendingMessageDelete.id)
             const result = await actions.deleteMessageResult(pendingMessageDelete.id, shell.selectedSessionId || undefined)
-            if (result.success) setPendingMessageDelete(null)
+            if (!result.success) {
+                showToast(`Failed to delete message: ${result.error}`, 'error')
+                return
+            }
+            setPendingMessageDelete(null)
+            showToast('Deleted message')
         } finally {
             setDeletingMessageId(null)
         }
-    }, [actions, pendingMessageDelete, shell.selectedSessionId])
+    }, [actions, pendingMessageDelete, shell.selectedSessionId, showToast])
 
     const handleToggleAssistantLeftSidebar = useCallback(() => {
         autoCollapsedInnerSidebarRef.current = false
@@ -244,6 +306,7 @@ export default function AssistantPage() {
                         railMode={railMode}
                         onRailModeChange={setRailMode}
                         onWidthChange={setLeftSidebarWidth}
+                        onShowToast={showToast}
                     />
                     <div className="flex min-w-0 flex-1">
                         <AssistantConversationPane
@@ -251,7 +314,11 @@ export default function AssistantPage() {
                             rightPanelMode={rightPanelMode}
                             deletingMessageId={deletingMessageId}
                             leftSidebarCollapsed={leftSidebarCollapsed}
+                            fallbackSessionMode={railMode}
+                            playgroundRootMissing={railMode === 'playground' && !shell.playgroundRootPath}
                             onToggleLeftSidebar={handleToggleAssistantLeftSidebar}
+                            onChoosePlaygroundRoot={handleChoosePlaygroundRoot}
+                            onStartDetachedPlaygroundChat={handleStartDetachedPlaygroundChat}
                             onRequestDeleteUserMessage={setPendingMessageDelete}
                             onToggleRightSidebar={handleToggleRightSidebar}
                             onTogglePlanPanel={handleTogglePlanPanel}
@@ -288,6 +355,7 @@ export default function AssistantPage() {
                 onConfirm={() => void handleDeleteUserMessage()}
                 onCancel={handleCancelPendingMessageDelete}
             />
+            <AssistantTransientToast toast={toast} />
             {preview.previewFile ? (
                 <FilePreviewModal
                     file={preview.previewFile}

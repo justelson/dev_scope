@@ -119,6 +119,12 @@ export async function requestFromEphemeralServer<T>(args: {
         thread: {
             id: '__ephemeral-model-list__',
             providerThreadId: null,
+            source: 'root',
+            parentThreadId: null,
+            providerParentThreadId: null,
+            subagentDepth: null,
+            agentNickname: null,
+            agentRole: null,
             model: args.modelId || '',
             cwd: process.cwd(),
             messageCount: 0,

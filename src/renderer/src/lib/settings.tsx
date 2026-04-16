@@ -12,6 +12,7 @@ import {
 } from './settings-assistant-defaults'
 
 export {
+    getAssistantBusyMessageModeLabel,
     getAssistantDefaultEffortLabel,
     getAssistantDefaultInteractionModeLabel,
     getAssistantDefaultRuntimeModeLabel,
@@ -39,6 +40,7 @@ export type AssistantDefaultRuntimeMode = 'approval-required' | 'full-access'
 export type AssistantDefaultInteractionMode = 'default' | 'plan'
 export type AssistantDefaultEffort = 'low' | 'medium' | 'high' | 'xhigh'
 export type AssistantTranscriptionEngine = 'browser' | 'vosk'
+export type AssistantBusyMessageMode = 'queue' | 'force'
 
 export interface PullRequestGuideConfig {
     mode: PullRequestGuideMode
@@ -144,6 +146,7 @@ export interface Settings {
     assistantDefaultInteractionMode: AssistantDefaultInteractionMode
     assistantDefaultEffort: AssistantDefaultEffort
     assistantDefaultFastMode: boolean
+    assistantBusyMessageMode: AssistantBusyMessageMode
     assistantTranscriptionEnabled: boolean
     assistantTranscriptionEngine: AssistantTranscriptionEngine
 }
@@ -206,6 +209,7 @@ const DEFAULT_SETTINGS: Settings = {
     assistantDefaultInteractionMode: 'default',
     assistantDefaultEffort: 'high',
     assistantDefaultFastMode: false,
+    assistantBusyMessageMode: 'queue',
     assistantTranscriptionEnabled: false,
     assistantTranscriptionEngine: 'browser'
 }
@@ -354,6 +358,7 @@ function loadSettings(): Settings {
                 assistantDefaultInteractionMode: sanitizeAssistantDefaultInteractionMode(candidate.assistantDefaultInteractionMode),
                 assistantDefaultEffort: sanitizeAssistantDefaultEffort(candidate.assistantDefaultEffort),
                 assistantDefaultFastMode: !!candidate.assistantDefaultFastMode,
+                assistantBusyMessageMode: candidate.assistantBusyMessageMode === 'force' ? 'force' : 'queue',
                 assistantTranscriptionEnabled: candidate.assistantTranscriptionEnabled === true,
                 assistantTranscriptionEngine: candidate.assistantTranscriptionEngine === 'vosk' ? 'vosk' : 'browser'
             }

@@ -24,6 +24,12 @@ function createEphemeralThread(cwd: string, model?: string): AssistantThread {
     return {
         id: `codex-ephemeral-${randomUUID()}`,
         providerThreadId: null,
+        source: 'root',
+        parentThreadId: null,
+        providerParentThreadId: null,
+        subagentDepth: null,
+        agentNickname: null,
+        agentRole: null,
         model: String(model || '').trim(),
         cwd,
         messageCount: 0,
@@ -100,7 +106,8 @@ async function withCodexSession<T>(options: {
     output.on('line', (line) => {
         handleStdoutLine(context, line, {
             emitRuntime: () => undefined,
-            writeMessage: (targetContext, message) => writeMessage(targetContext, message)
+            writeMessage: (targetContext, message) => writeMessage(targetContext, message),
+            registerThreadAlias: () => undefined
         })
     })
 
@@ -202,7 +209,8 @@ export async function generateCodexText(prompt: string, options?: {
                                     }
                                 }
                             },
-                            writeMessage: (targetContext, message) => writeMessage(targetContext, message)
+                            writeMessage: (targetContext, message) => writeMessage(targetContext, message),
+                            registerThreadAlias: () => undefined
                         })
                     }
 

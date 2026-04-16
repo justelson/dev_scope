@@ -1,5 +1,5 @@
 import type { SharedSystemMetrics } from '../system-metrics'
-import type { FullReport, ReadinessReport, SystemHealth, ToolingReport } from '../../main/inspectors/types'
+import type { SystemHealth } from '../../main/inspectors/types'
 import type {
     AssistantApprovalResponseInput,
     AssistantAccountOverviewPayload,
@@ -11,6 +11,7 @@ import type {
     AssistantCreatePlaygroundLabInput,
     AssistantCreateSessionInput,
     AssistantDeclinePendingPlaygroundLabRequestInput,
+    AssistantDeletePlaygroundLabInput,
     AssistantDeleteMessageInput,
     AssistantEventStreamPayload,
     AssistantGetSessionTurnUsageInput,
@@ -19,6 +20,7 @@ import type {
     AssistantPersistClipboardImageInput,
     AssistantRuntimeStatus,
     AssistantSendPromptOptions,
+    AssistantSelectThreadInput,
     AssistantSetPlaygroundRootInput,
     AssistantSessionTurnUsageResultPayload,
     AssistantSnapshot,
@@ -216,6 +218,7 @@ export interface DevScopeAssistantApi {
     disconnect: (sessionId?: string) => Promise<DevScopeResult>
     createSession: (input?: AssistantCreateSessionInput) => Promise<DevScopeResult<{ sessionId: string }>>
     selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot: AssistantSnapshot }>>
+    selectThread: (input: AssistantSelectThreadInput) => Promise<DevScopeResult<{ sessionId: string; threadId: string; snapshot: AssistantSnapshot }>>
     renameSession: (sessionId: string, title: string) => Promise<DevScopeResult>
     archiveSession: (sessionId: string, archived?: boolean) => Promise<DevScopeResult>
     deleteSession: (sessionId: string) => Promise<DevScopeResult>
@@ -224,10 +227,12 @@ export interface DevScopeAssistantApi {
     setSessionProjectPath: (sessionId: string, projectPath: string | null) => Promise<DevScopeResult>
     setPlaygroundRoot: (input: AssistantSetPlaygroundRootInput) => Promise<DevScopeResult<AssistantPlaygroundResultPayload>>
     createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) => Promise<DevScopeResult<{ labId: string; sessionId?: string | null } & AssistantPlaygroundResultPayload>>
+    deletePlaygroundLab: (input: AssistantDeletePlaygroundLabInput) => Promise<DevScopeResult<AssistantPlaygroundResultPayload>>
     attachSessionToPlaygroundLab: (input: AssistantAttachSessionToPlaygroundLabInput) => Promise<DevScopeResult<AssistantPlaygroundResultPayload>>
     approvePendingPlaygroundLabRequest: (input: AssistantApprovePendingPlaygroundLabRequestInput) => Promise<DevScopeResult<{ sessionId: string; labId: string } & AssistantPlaygroundResultPayload>>
     declinePendingPlaygroundLabRequest: (input: AssistantDeclinePendingPlaygroundLabRequestInput) => Promise<DevScopeResult>
     persistClipboardImage: (input: AssistantPersistClipboardImageInput) => Promise<DevScopeResult<{ path: string }>>
+    resolveClipboardAttachment: (input: { reference: string }) => Promise<DevScopeResult<{ path: string | null }>>
     newThread: (sessionId?: string) => Promise<DevScopeResult<{ threadId: string }>>
     sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) =>
         Promise<DevScopeResult<{ sessionId: string; threadId: string; turnId: string }>>
@@ -244,9 +249,6 @@ export interface DevScopeApi {
     // System
     getSystemOverview: () => Promise<SystemHealth>
     getDetailedSystemStats: () => Promise<Record<string, unknown>>
-    getDeveloperTooling: () => Promise<ToolingReport>
-    getReadinessReport: () => Promise<ReadinessReport>
-    refreshAll: () => Promise<FullReport>
     system: DevScopeSystemApi
 
     // Settings + AI

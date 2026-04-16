@@ -10,7 +10,7 @@ import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { createMarkdownComponents } from './markdown/components'
 
-interface MarkdownRendererProps {
+export interface MarkdownRendererProps {
     content: string
     className?: string
     filePath?: string
@@ -19,7 +19,9 @@ interface MarkdownRendererProps {
     onInternalLinkClick?: (href: string) => Promise<void> | void
 }
 
-function MarkdownRenderer({ content, className, filePath, codeBlockMaxLines, lightweight = false, onInternalLinkClick }: MarkdownRendererProps) {
+const RAW_HTML_TAG_REGEX = /<\/?[A-Za-z][^>\n]*>/
+
+export function MarkdownContentRenderer({ content, className, filePath, codeBlockMaxLines, lightweight = false, onInternalLinkClick }: MarkdownRendererProps) {
     const components = useMemo(
         () => createMarkdownComponents(filePath, {
             codeBlockMaxLines,
@@ -28,10 +30,14 @@ function MarkdownRenderer({ content, className, filePath, codeBlockMaxLines, lig
         }),
         [filePath, codeBlockMaxLines, lightweight, onInternalLinkClick]
     )
+    const rehypePlugins = useMemo(
+        () => (!lightweight && RAW_HTML_TAG_REGEX.test(content) ? [rehypeRaw] : []),
+        [content, lightweight]
+    )
 
     return (
         <div className={cn('markdown-body break-words [overflow-wrap:anywhere] [word-break:break-word]', className)}>
-            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={lightweight ? [] : [rehypeRaw]} components={components}>
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
                 {content}
             </Markdown>
         </div>
@@ -39,7 +45,7 @@ function MarkdownRenderer({ content, className, filePath, codeBlockMaxLines, lig
 }
 
 export default memo(
-    MarkdownRenderer,
+    MarkdownContentRenderer,
     (previous, next) =>
         previous.content === next.content &&
         previous.className === next.className &&

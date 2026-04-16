@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildGitPublishPlan } from '@/lib/gitPublishPlanner'
+import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import { useGitHubPublishContext } from './useGitHubPublishContext'
 import type { GitCommit } from './types'
 
@@ -291,7 +292,8 @@ export function useProjectDetailsGitViewModel({
                 if (!result?.success) {
                     throw new Error(result?.error || 'Failed to link upstream remote.')
                 }
-                await refreshGitData(false, { quiet: true, mode: 'pulls' })
+                invalidateProjectGitOverview(decodedPath)
+                await refreshGitData(false, { quiet: true, mode: 'full' })
             } catch (error) {
                 console.error('[GitTab] Failed to link upstream remote automatically', error)
             }
@@ -317,7 +319,8 @@ export function useProjectDetailsGitViewModel({
                 if (!updateResult?.success) {
                     throw new Error(updateResult?.error || 'Failed to update upstream remote.')
                 }
-                await refreshGitData(false, { quiet: true, mode: 'pulls' })
+                invalidateProjectGitOverview(decodedPath)
+                await refreshGitData(false, { quiet: true, mode: 'full' })
             }
             return 'upstream'
         }
@@ -327,7 +330,8 @@ export function useProjectDetailsGitViewModel({
             throw new Error(addResult?.error || 'Failed to add upstream remote.')
         }
 
-        await refreshGitData(false, { quiet: true, mode: 'pulls' })
+        invalidateProjectGitOverview(decodedPath)
+        await refreshGitData(false, { quiet: true, mode: 'full' })
         return 'upstream'
     }
 

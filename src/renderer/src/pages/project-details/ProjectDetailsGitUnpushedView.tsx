@@ -13,6 +13,9 @@ export function ProjectDetailsGitUnpushedView(props: {
     currentBranchNeedsPublish: boolean
     compactPushSummaryLines: string[]
     hasGitHubRemote: boolean
+    pullRequestActionLabel: string
+    pullRequestActionHint: string
+    pullRequestActionDisabled: boolean
     onOpenCreatePullRequest: () => void
     unpushedCommits: any[]
     onCommitClick: (commit: any) => void
@@ -27,6 +30,9 @@ export function ProjectDetailsGitUnpushedView(props: {
         currentBranchNeedsPublish,
         compactPushSummaryLines,
         hasGitHubRemote,
+        pullRequestActionLabel,
+        pullRequestActionHint,
+        pullRequestActionDisabled,
         onOpenCreatePullRequest,
         unpushedCommits,
         onCommitClick,
@@ -75,17 +81,17 @@ export function ProjectDetailsGitUnpushedView(props: {
                     </div>
                     <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/62">
                         {hasGitHubRemote
-                            ? 'Create the PR from this branch once the branch is ready.'
+                            ? pullRequestActionHint
                             : 'These commits stay local until you push them with your normal Git remote workflow.'}
                     </div>
                     <div className="mt-3 flex justify-end">
                         <button
                             onClick={onOpenCreatePullRequest}
-                            disabled={!hasGitHubRemote}
-                            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/80 transition-colors hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={pullRequestActionDisabled}
+                            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent-primary)]/16 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-primary)]/24 disabled:cursor-not-allowed disabled:bg-white/[0.04] disabled:text-white/35"
                         >
                             <GitPullRequest size={14} />
-                            {hasGitHubRemote ? 'Create PR' : 'GitHub Remote Required'}
+                            {hasGitHubRemote ? pullRequestActionLabel : 'GitHub Remote Required'}
                         </button>
                     </div>
                 </div>

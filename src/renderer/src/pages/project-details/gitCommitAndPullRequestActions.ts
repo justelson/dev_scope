@@ -1,4 +1,5 @@
 import { resolvePreferredGitTextProvider } from '@/lib/gitAi'
+import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import {
     getProjectPullRequestConfig,
     resolvePreferredPullRequestProvider,
@@ -24,8 +25,8 @@ export function createGitCommitAndPullRequestActions(params: GitActionParams) {
             }
 
             params.setCommitMessage('')
-            await params.refreshGitData(false, { mode: 'unpushed' })
-            void params.refreshGitData(false, { quiet: true, mode: 'full' })
+            invalidateProjectGitOverview(params.decodedPath)
+            await params.refreshGitData(false, { mode: 'full' })
             params.showToast('Commit created successfully.')
         } catch (err: any) {
             params.showToast(`Failed to commit: ${err.message}`, undefined, undefined, 'error')
@@ -122,8 +123,8 @@ export function createGitCommitAndPullRequestActions(params: GitActionParams) {
             }
 
             params.setCommitMessage('')
-            await params.refreshGitData(false, { mode: 'unpushed' })
-            void params.refreshGitData(false, { quiet: true, mode: 'full' })
+            invalidateProjectGitOverview(params.decodedPath)
+            await params.refreshGitData(false, { mode: 'full' })
             window.open(result.pullRequest.url, '_blank', 'noopener,noreferrer')
             const prNumberLabel = result.pullRequest.number > 0 ? ` #${result.pullRequest.number}` : ''
             params.showToast(

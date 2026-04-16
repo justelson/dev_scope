@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AssistantSession } from '@shared/assistant/contracts'
+import type { AssistantToastInput } from './AssistantPageHelpers'
 import {
     ExpandedSessionsRailContent,
     RenameSessionModal,
     SessionDeleteModal
 } from './AssistantSessionsRailParts'
 import {
-    getDisplayTitle,
+    getSessionDisplayTitle,
     groupSessionsByProject,
     hydrateProjectMetadataForPaths,
     resolveSessionProjectPath,
     type SessionProjectGroup,
     type AssistantSessionsRailProps
 } from './assistant-sessions-rail-utils'
+import { hasSessionChats } from './AssistantSessionsRailRows'
 import {
     getGroupSessionIds,
     getProjectIds,
@@ -23,10 +25,17 @@ import {
     type AssistantSessionsRailOrder
 } from './assistant-sessions-rail-order'
 
+type AssistantSessionsRailViewProps = AssistantSessionsRailProps & {
+    onShowToast: (input: AssistantToastInput) => void
+}
+
 function hasVisibleProjectPath(session: AssistantSession): boolean {
-    if (session.mode === 'playground') return true
     if (String(session.projectPath || '').trim()) return true
-    return session.threads.some((thread) => String(thread.cwd || '').trim().length > 0)
+    const hasThreadCwd = session.threads.some((thread) => String(thread.cwd || '').trim().length > 0)
+    if (session.mode === 'playground') {
+        return hasThreadCwd || hasSessionChats(session)
+    }
+    return hasThreadCwd
 }
 
 function moveItemToIndex(values: string[], itemId: string, targetId: string): string[] {
@@ -50,21 +59,26 @@ export function AssistantSessionsRail({
     playground,
     backgroundActivitySessions,
     activeSessionId,
+    activeThreadId,
     commandPending,
     onWidthChange,
     onCreateSession,
     onCreatePlaygroundSession,
     onSelectSession,
+    onSelectThread,
     onRenameSession,
     onArchiveSession,
     onDeleteSession,
     onChooseProjectPath,
     onSetPlaygroundRoot,
-    onCreatePlaygroundLab
-}: AssistantSessionsRailProps) {
+    onCreatePlaygroundLab,
+    onDeletePlaygroundLab,
+    onShowToast
+}: AssistantSessionsRailViewProps) {
     const [renameTarget, setRenameTarget] = useState<AssistantSession | null>(null)
     const [renameDraft, setRenameDraft] = useState('')
     const [sessionToDelete, setSessionToDelete] = useState<AssistantSession | null>(null)
+    const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
     const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(new Set())
     const [showArchivedSessions, setShowArchivedSessions] = useState(false)
     const [railOrder, setRailOrder] = useState<AssistantSessionsRailOrder>(() => loadAssistantSessionsRailOrder())
@@ -147,7 +161,7 @@ export function AssistantSessionsRail({
 
     const openRenameModal = (session: AssistantSession) => {
         setRenameTarget(session)
-        setRenameDraft(getDisplayTitle(session.title))
+        setRenameDraft(getSessionDisplayTitle(session))
     }
 
     const closeRenameModal = () => {
@@ -162,6 +176,24 @@ export function AssistantSessionsRail({
         await onRenameSession(renameTarget.id, normalized)
         closeRenameModal()
     }
+
+    const handleConfirmDeleteSession = useCallback(async () => {
+        if (!sessionToDelete || deletingSessionId) return
+
+        const targetTitle = getSessionDisplayTitle(sessionToDelete)
+        try {
+            setDeletingSessionId(sessionToDelete.id)
+            const result = await onDeleteSession(sessionToDelete.id)
+            if (!result.success) {
+                onShowToast({ message: `Failed to delete "${targetTitle}": ${result.error}`, tone: 'error' })
+                return
+            }
+            setSessionToDelete(null)
+            onShowToast({ message: `Deleted "${targetTitle}"` })
+        } finally {
+            setDeletingSessionId(null)
+        }
+    }, [deletingSessionId, onDeleteSession, onShowToast, sessionToDelete])
 
     const minSidebarWidth = 180
     const maxSidebarWidth = compact ? 420 : 520
@@ -348,6 +380,7 @@ export function AssistantSessionsRail({
                             groupedSessions={orderedGroupedSessions}
                             groupedArchivedSessions={orderedArchivedSessions}
                             activeSessionId={activeSessionId}
+                            activeThreadId={activeThreadId}
                             expandedGroupKeys={expandedGroupKeys}
                             showArchivedSessions={showArchivedSessions}
                             onRailModeChange={onRailModeChange}
@@ -356,18 +389,22 @@ export function AssistantSessionsRail({
                             onCreateSession={(projectPath) => void onCreateSession(projectPath)}
                             onCreatePlaygroundSession={(labId) => void onCreatePlaygroundSession(labId)}
                             onSelectSession={(sessionId) => void onSelectSession(sessionId)}
+                            onSelectThread={(input) => void onSelectThread(input)}
                             onOpenRename={openRenameModal}
                             onArchiveSession={(sessionId, archived) => void onArchiveSession(sessionId, archived)}
                             onDeleteRequest={setSessionToDelete}
+                            onDeleteSession={(sessionId) => onDeleteSession(sessionId)}
                             onSetShowArchivedSessions={setShowArchivedSessions}
                             onSetPlaygroundRoot={(rootPath) => void onSetPlaygroundRoot(rootPath)}
                             onCreatePlaygroundLab={(input) => void onCreatePlaygroundLab(input)}
+                            onDeletePlaygroundLab={onDeletePlaygroundLab}
                             onProjectDragStart={handleProjectDragStart}
                             onProjectDragEnd={handleProjectDragEnd}
                             onProjectDragCancel={clearBodyDragState}
                             onSessionDragStart={handleSessionDragStart}
                             onSessionDragEnd={handleSessionDragEnd}
                             onSessionDragCancel={clearBodyDragState}
+                            onShowToast={onShowToast}
                         />
                         <button
                             ref={railRef}
@@ -385,7 +422,15 @@ export function AssistantSessionsRail({
                 </div>
             </div>
             <RenameSessionModal renameTarget={renameTarget} renameDraft={renameDraft} onChangeDraft={setRenameDraft} onClose={closeRenameModal} onSubmit={() => void submitRename()} />
-            <SessionDeleteModal sessionToDelete={sessionToDelete} onConfirm={() => { if (sessionToDelete) void onDeleteSession(sessionToDelete.id); setSessionToDelete(null) }} onCancel={() => setSessionToDelete(null)} />
+            <SessionDeleteModal
+                sessionToDelete={sessionToDelete}
+                deleting={Boolean(deletingSessionId)}
+                onConfirm={() => void handleConfirmDeleteSession()}
+                onCancel={() => {
+                    if (deletingSessionId) return
+                    setSessionToDelete(null)
+                }}
+            />
         </>
     )
 }

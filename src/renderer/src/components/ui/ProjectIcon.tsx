@@ -8,7 +8,9 @@ import {
     Folder, FolderOpen, FileCode, Box, Code,
     Server, Cpu, Smartphone, Globe, Terminal
 } from 'lucide-react'
+import { useSettings } from '@/lib/settings'
 import { getFileUrl } from './file-preview/utils'
+import { buildSimpleIconUrl, resolveReadableLogoColor, withAlpha } from './logoColors'
 
 // Inline data to avoid ESM import issues
 const PROJECT_TYPES_DATA: Record<string, { displayName: string; icon: string; themeColor: string }> = {
@@ -108,6 +110,7 @@ export default function ProjectIcon({
     showFallback = true,
     ...props
 }: ProjectIconProps) {
+    const { settings } = useSettings()
     const [customImgError, setCustomImgError] = useState(false)
     const [genericImgError, setGenericImgError] = useState(false)
 
@@ -125,9 +128,10 @@ export default function ProjectIcon({
 
     const iconSlug = frameworkData?.icon || typeData?.icon
     const themeColor = frameworkData?.themeColor || typeData?.themeColor
+    const readableThemeColor = resolveReadableLogoColor(themeColor, settings.theme)
     const displayName = frameworkData?.displayName || typeData?.displayName || projectType || 'Project'
+    const iconShadow = `drop-shadow(0 0 1px ${withAlpha(readableThemeColor, settings.theme === 'light' ? 0.14 : 0.24)})`
 
-    // Use Simple Icons CDN if we have an icon slug
     if (customIconPath && !customImgError) {
         return (
             <div
@@ -142,6 +146,7 @@ export default function ProjectIcon({
                     width={size}
                     height={size}
                     className="w-full h-full object-contain"
+                    style={{ filter: iconShadow }}
                     onError={() => setCustomImgError(true)}
                     loading="lazy"
                 />
@@ -150,8 +155,7 @@ export default function ProjectIcon({
     }
 
     if (iconSlug && !genericImgError) {
-        // Use the theme color directly instead of white, with fallback to white for dark mode
-        const iconUrl = `https://cdn.simpleicons.org/${iconSlug}`
+        const iconUrl = buildSimpleIconUrl(iconSlug, readableThemeColor)
 
         return (
             <div
@@ -165,12 +169,8 @@ export default function ProjectIcon({
                     alt={`${displayName} logo`}
                     width={size}
                     height={size}
-                    className="w-full h-full object-contain icon-adaptive"
-                    style={{ 
-                        filter: themeColor ? `drop-shadow(0 0 1px ${themeColor}40)` : undefined,
-                        // Use CSS filter to adapt icon color based on theme
-                        // In light mode, icons will be darker; in dark mode, they'll be lighter
-                    }}
+                    className="w-full h-full object-contain"
+                    style={{ filter: iconShadow }}
                     onError={() => setGenericImgError(true)}
                     loading="lazy"
                 />
@@ -178,11 +178,10 @@ export default function ProjectIcon({
         )
     }
 
-    // Fallback to Lucide icon
     if (!showFallback) return null
 
     const FallbackIcon = TYPE_FALLBACK_ICONS[projectType || 'default'] || TYPE_FALLBACK_ICONS['default']
-    const fallbackColor = themeColor || '#a1a1aa'
+    const fallbackColor = readableThemeColor
 
     return (
         <div
@@ -205,29 +204,29 @@ interface FrameworkBadgeProps {
 }
 
 export function FrameworkBadge({ framework, size = 'sm', showLabel = true, className }: FrameworkBadgeProps) {
+    const { settings } = useSettings()
     const frameworkData = getFrameworkById(framework)
     if (!frameworkData) return null
 
     const iconSize = size === 'sm' ? 12 : size === 'md' ? 16 : 20
     const textSize = size === 'sm' ? 'text-[10px]' : size === 'md' ? 'text-xs' : 'text-sm'
+    const readableThemeColor = resolveReadableLogoColor(frameworkData.themeColor, settings.theme)
+    const backgroundAlpha = settings.theme === 'light' ? 0.08 : 0.14
+    const borderAlpha = settings.theme === 'light' ? 0.18 : 0.26
 
     return (
         <span
             className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded framework-badge ${className}`}
             style={{
-                backgroundColor: `${frameworkData.themeColor}15`,
-                border: `1px solid ${frameworkData.themeColor}40`
+                backgroundColor: withAlpha(readableThemeColor, backgroundAlpha),
+                border: `1px solid ${withAlpha(readableThemeColor, borderAlpha)}`
             }}
         >
             <ProjectIcon framework={framework} size={iconSize} showFallback={false} />
             {showLabel && (
-                <span 
+                <span
                     className={`font-medium ${textSize}`}
-                    style={{ 
-                        color: frameworkData.themeColor,
-                        // Ensure text is readable in both light and dark modes
-                        textShadow: '0 0 0.5px currentColor'
-                    }}
+                    style={{ color: readableThemeColor }}
                 >
                     {frameworkData.displayName}
                 </span>

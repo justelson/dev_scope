@@ -6,9 +6,11 @@ import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
 import {
+    Clock3,
     Check,
     ChevronDown,
     ChevronUp,
+    Zap,
     FileCode2,
     FileImage,
     FileText,
@@ -23,7 +25,6 @@ import {
     X
 } from 'lucide-react'
 import AssistantAttachmentPreviewModal from './AssistantAttachmentPreviewModal'
-import AssistantAttachmentTextPreviewModal from './AssistantAttachmentTextPreviewModal'
 import { ComposerAttachmentsShelf, ComposerFooterControls, ComposerMentionMenu, ComposerSendButton, ComposerVoiceButton } from './AssistantComposerSections'
 import { formatAssistantModelLabel } from './assistant-model-labels'
 import {
@@ -31,6 +32,7 @@ import {
     reconcileInlineMentionTags,
 } from './assistant-composer-inline-mentions'
 import type { AssistantComposerController } from './useAssistantComposerController'
+import { deriveAssistantComposerViewState } from './assistant-composer-view-state'
 import {
     getContentTypeTag,
     getContextFileMeta,
@@ -41,11 +43,25 @@ import {
 export function AssistantComposerView({ controller }: { controller: AssistantComposerController }) {
     const navigate = useNavigate()
     const { settings } = useSettings()
-    const iconTheme = settings.theme === 'light' ? 'light' : 'dark'
     const transcriptionEnabled = settings.assistantTranscriptionEnabled
-    const voiceBusy = controller.voiceInput.isRecording || controller.voiceInput.isTranscribing
+    const capabilities = controller.capabilities
+    const canSend = capabilities.canSend
+    const showBusySendActions = capabilities.showBusySendActions
+    const defaultBusyActionLabel = controller.busyMessageMode === 'force' ? 'Force' : 'Queue'
+    const secondaryBusyActionLabel = controller.busyMessageMode === 'force' ? 'Queue' : 'Force'
     const [showBrowserSpeechFallbackModal, setShowBrowserSpeechFallbackModal] = useState(false)
     const attachmentShelfRef = useRef<HTMLDivElement | null>(null)
+    const {
+        composerStatusDotClass,
+        composerStatusToneClass,
+        iconTheme,
+        transientStatus,
+        voiceBusy
+    } = deriveAssistantComposerViewState({
+        capabilities,
+        controller,
+        settings
+    })
 
     useEffect(() => {
         if (settings.assistantTranscriptionEngine !== 'browser') {
@@ -110,14 +126,69 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
         <>
             <div className="relative flex pointer-events-none flex-col gap-0">
                 <div ref={attachmentShelfRef} className="pointer-events-none absolute inset-x-0 bottom-full z-20 mb-1">
-                    <ComposerAttachmentsShelf
-                        contextFiles={controller.contextFiles}
-                        compact={controller.compact}
-                        removingAttachmentIds={controller.removingAttachmentIds}
-                        onOpenAttachmentPreview={controller.onOpenAttachmentPreview}
-                        onPreview={controller.setPreviewAttachment}
-                        onRemove={controller.removeAttachment}
-                    />
+                    <div className="flex flex-col gap-1.5">
+                        <AnimatedHeight isOpen={controller.queuedMessages.length > 0} duration={220}>
+                            <div className="pointer-events-auto flex flex-col gap-1.5">
+                                {controller.queuedMessages.map((queuedMessage, index) => {
+                                    const isForce = queuedMessage.dispatchMode === 'force'
+                                    return (
+                                        <div
+                                            key={queuedMessage.id}
+                                            data-composer-attachment-item="true"
+                                            className={cn(
+                                                'overflow-hidden rounded-xl border bg-sparkle-card/95 px-3 py-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-xl',
+                                                isForce
+                                                    ? 'border-amber-400/20'
+                                                    : 'border-white/10'
+                                            )}
+                                        >
+                                            <div className="flex items-start gap-2.5">
+                                                <div className={cn(
+                                                    'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg',
+                                                    isForce
+                                                        ? 'bg-amber-500/12 text-amber-200'
+                                                        : 'bg-white/[0.05] text-sparkle-text-secondary'
+                                                )}>
+                                                    {isForce ? <Zap size={13} /> : <Clock3 size={13} />}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={cn(
+                                                            'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]',
+                                                            isForce
+                                                                ? 'bg-amber-500/12 text-amber-100'
+                                                                : 'bg-white/[0.05] text-sparkle-text-muted'
+                                                        )}>
+                                                            {isForce ? 'Force next' : `Queued ${index + 1}`}
+                                                        </span>
+                                                    </div>
+                                                    <p
+                                                        className="mt-1.5 whitespace-pre-wrap break-words text-[12px] leading-5 text-sparkle-text"
+                                                        style={{
+                                                            display: '-webkit-box',
+                                                            WebkitBoxOrient: 'vertical',
+                                                            WebkitLineClamp: 3,
+                                                            overflow: 'hidden'
+                                                        }}
+                                                    >
+                                                        {queuedMessage.prompt.trim() || 'Attachment-only message'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </AnimatedHeight>
+                        <ComposerAttachmentsShelf
+                            contextFiles={controller.contextFiles}
+                            compact={controller.compact}
+                            removingAttachmentIds={controller.removingAttachmentIds}
+                            onOpenAttachmentPreview={controller.onOpenAttachmentPreview}
+                            onPreview={controller.setPreviewAttachment}
+                            onRemove={controller.removeAttachment}
+                        />
+                    </div>
                 </div>
                 <div ref={controller.composerRootRef} className="pointer-events-auto relative z-10">
                     <div className="group rounded-[20px] border border-white/10 bg-sparkle-card transition-[border-color,box-shadow] duration-200 focus-within:border-[var(--accent-primary)]/28 focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent-primary)_18%,transparent),0_0_18px_color-mix(in_srgb,var(--accent-primary)_12%,transparent)]">
@@ -150,7 +221,17 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                             />
 
                             <div className="flex min-h-[56px] items-start gap-2">
-                                <button type="button" onClick={() => controller.filePickerRef.current?.click()} disabled={controller.disabled} className="mt-0.5 rounded-lg p-1 text-sparkle-text-muted transition-colors hover:bg-white/[0.03] hover:text-sparkle-text disabled:opacity-50" title="Attach files"><Plus size={18} /></button>
+                                <button
+                                    type="button"
+                                    onClick={() => controller.filePickerRef.current?.click()}
+                                    disabled={capabilities.attachDisabled}
+                                    className="mt-0.5 rounded-lg p-1 text-sparkle-text-muted transition-colors hover:bg-white/[0.03] hover:text-sparkle-text disabled:opacity-50"
+                                    title={capabilities.attachDisabled
+                                        ? capabilities.detailLabel || 'Attachments are unavailable right now'
+                                        : 'Attach files'}
+                                >
+                                    <Plus size={18} />
+                                </button>
                                 <div className="relative min-w-0 flex-1">
                                     <textarea
                                         ref={controller.textareaRef}
@@ -169,17 +250,18 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                                         onKeyDown={controller.handleKeyDown}
                                         onPaste={controller.handlePaste}
                                         className={cn('relative w-full resize-none overflow-y-auto bg-transparent pl-[3px] pr-2 text-sparkle-text outline-none placeholder:text-sparkle-text/20 selection:bg-white/15', controller.compact ? 'min-h-[52px] text-[13px] leading-[1.35rem]' : 'min-h-[58px] text-[14px] leading-[1.45rem]')}
-                                        placeholder="Ask anything, @tag files/folders"
-                                        disabled={controller.disabled || voiceBusy}
+                                        placeholder={capabilities.placeholder}
+                                        disabled={capabilities.inputDisabled || voiceBusy}
                                     />
                                 </div>
                             </div>
                         </div>
                         <div className={cn('flex items-center justify-between px-1.5 pb-1.5 sm:px-2 sm:pb-2', controller.isCompactFooter ? 'gap-0.5' : 'flex-wrap gap-1 sm:flex-nowrap sm:gap-0')}>
-                            <ComposerFooterControls
-                                isCompactFooter={controller.isCompactFooter}
-                                modelDropdownRef={controller.modelDropdownRef}
-                                showModelDropdown={controller.showModelDropdown}
+                        <ComposerFooterControls
+                            isCompactFooter={controller.isCompactFooter}
+                            controlsLocked={capabilities.controlsLocked}
+                            modelDropdownRef={controller.modelDropdownRef}
+                            showModelDropdown={controller.showModelDropdown}
                                 setShowModelDropdown={controller.setShowModelDropdown}
                                 modelsLoading={controller.modelsLoading}
                                 modelsError={controller.modelsError}
@@ -228,18 +310,53 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                                 <ComposerVoiceButton
                                     supported={transcriptionEnabled && controller.voiceInput.isSupported}
                                     isRecording={controller.voiceInput.isRecording}
-                                    disabled={controller.disabled || controller.isThinking || controller.voiceInput.isTranscribing || !controller.isConnected}
+                                    disabled={capabilities.voiceDisabled || controller.voiceInput.isTranscribing}
                                     onToggle={controller.voiceInput.toggleRecording}
                                 />
-                                <ComposerSendButton
-                                    disabled={controller.disabled || voiceBusy}
-                                    isConnected={controller.isConnected}
-                                    isThinking={controller.isThinking}
-                                    canSend={controller.allowEmptySubmit || Boolean(controller.text.trim() || controller.contextFiles.length > 0)}
-                                    label={controller.isDirty && controller.dirtySubmitLabel ? controller.dirtySubmitLabel : controller.submitLabel}
-                                    onStop={controller.onStop}
-                                    onSend={() => void controller.handleSend()}
-                                />
+                                {controller.queuedMessageCount > 0 ? (
+                                    <span className="inline-flex h-[36px] items-center rounded-full border border-transparent bg-white/[0.03] px-3 text-[11px] font-medium text-sparkle-text-secondary">
+                                        {controller.queuedMessageCount} queued
+                                    </span>
+                                ) : null}
+                                {showBusySendActions ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => void controller.handleSend()}
+                                            className="inline-flex h-[36px] items-center justify-center rounded-full border border-white/10 bg-[#2246a8] px-3.5 text-[12px] font-semibold text-white transition-all duration-150 hover:scale-[1.03] hover:border-white/20 hover:bg-[#2955ca]"
+                                            title={`${defaultBusyActionLabel} this message while the current turn is still running`}
+                                        >
+                                            {defaultBusyActionLabel}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => void (controller.busyMessageMode === 'force' ? controller.handleQueueSend() : controller.handleForceSend())}
+                                            className="inline-flex h-[36px] items-center justify-center rounded-full border border-transparent bg-white/[0.03] px-3.5 text-[12px] font-semibold text-sparkle-text-secondary transition-colors hover:bg-white/[0.05] hover:text-sparkle-text"
+                                            title={`${secondaryBusyActionLabel} this message instead of using the default busy-send action`}
+                                        >
+                                            {secondaryBusyActionLabel}
+                                        </button>
+                                        <ComposerSendButton
+                                            disabled={capabilities.sendDisabled || voiceBusy}
+                                            isConnected={controller.isConnected}
+                                            isThinking={true}
+                                            canSend={false}
+                                            label={controller.isDirty && controller.dirtySubmitLabel ? controller.dirtySubmitLabel : controller.submitLabel}
+                                            onStop={controller.onStop}
+                                            onSend={() => void controller.handleSend()}
+                                        />
+                                    </>
+                                ) : (
+                                    <ComposerSendButton
+                                        disabled={capabilities.sendDisabled || voiceBusy}
+                                        isConnected={controller.isConnected}
+                                        isThinking={controller.isThinking}
+                                        canSend={canSend}
+                                        label={controller.isDirty && controller.dirtySubmitLabel ? controller.dirtySubmitLabel : controller.submitLabel}
+                                        onStop={controller.onStop}
+                                        onSend={() => void controller.handleSend()}
+                                    />
+                                )}
                             </div>
                         </div>
                     </div>
@@ -247,13 +364,25 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
 
                 <div className="pointer-events-auto flex items-center justify-between px-1 pt-2 text-[11px] font-medium text-sparkle-text-secondary">
                     <div className="flex items-center gap-2">
-                        <span>Local</span>
-                        {(voiceBusy || controller.voiceInput.speechError || controller.isThinking || controller.mentionLoading || controller.branchesLoading) && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-sparkle-text-muted">
-                                <span className={cn('h-1.5 w-1.5 rounded-full', controller.voiceInput.isRecording ? 'animate-pulse bg-rose-400' : controller.voiceInput.isTranscribing ? 'animate-pulse bg-sky-300' : controller.voiceInput.speechError ? 'bg-rose-300/80' : 'animate-pulse bg-white/35')} />
-                                <span>{controller.voiceInput.isRecording ? (settings.assistantTranscriptionEngine === 'vosk' ? 'Recording locally...' : 'Listening...') : controller.voiceInput.isTranscribing ? 'Transcribing locally...' : controller.voiceInput.speechError || (controller.isThinking ? controller.thinkingLabel : controller.mentionLoading ? 'Indexing...' : 'Loading...')}</span>
+                        {transientStatus ? (
+                            <span className={cn('inline-flex items-center gap-1.5', transientStatus.toneClass)}>
+                                <span className={cn('h-1.5 w-1.5 rounded-full', transientStatus.dotClass)} />
+                                <span>{transientStatus.label}</span>
                             </span>
+                        ) : (
+                            <>
+                                <span className={cn('inline-flex items-center gap-1.5', composerStatusToneClass)}>
+                                    <span className={cn('h-1.5 w-1.5 rounded-full', composerStatusDotClass)} />
+                                    <span>{capabilities.statusLabel}</span>
+                                </span>
+                            </>
                         )}
+                        {controller.queuedMessageCount > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-sparkle-text-muted">
+                                <span className="h-1.5 w-1.5 rounded-full bg-sky-300/70" />
+                                <span>{controller.queuedMessageCount} queued</span>
+                            </span>
+                        ) : null}
                     </div>
 
                     <div className="relative" ref={controller.branchDropdownRef}>
@@ -263,7 +392,7 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                             <ChevronDown size={11} className="-mr-0.5 ml-0.5 opacity-60" />
                         </button>
 
-                        <div className={cn('pointer-events-none absolute bottom-full right-0 z-30 mb-2 w-64 overflow-hidden', controller.showBranchDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
+                        <div className={cn('pointer-events-none absolute bottom-full right-0 z-[170] mb-2 w-64 overflow-hidden', controller.showBranchDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
                             <AnimatedHeight isOpen={controller.showBranchDropdown} duration={220}>
                                 <div className="rounded-lg border border-white/10 bg-sparkle-card p-1.5 shadow-lg">
                                     {!controller.isGitRepo ? (
@@ -332,19 +461,12 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                 </div>
 
                 <AssistantAttachmentPreviewModal
-                    file={controller.previewAttachment && !isPastedTextAttachment(controller.previewAttachment) ? controller.previewAttachment : null}
-                    meta={controller.previewAttachment && !isPastedTextAttachment(controller.previewAttachment) ? getContextFileMeta(controller.previewAttachment) : null}
-                    contentType={controller.previewAttachment && !isPastedTextAttachment(controller.previewAttachment) ? getContentTypeTag(controller.previewAttachment) : ''}
-                    sizeLabel={controller.previewAttachment && !isPastedTextAttachment(controller.previewAttachment) ? toKbLabel(controller.previewAttachment.sizeBytes) : ''}
+                    file={controller.previewAttachment}
+                    meta={controller.previewAttachment ? getContextFileMeta(controller.previewAttachment) : null}
+                    contentType={controller.previewAttachment ? getContentTypeTag(controller.previewAttachment) : ''}
+                    sizeLabel={controller.previewAttachment ? toKbLabel(controller.previewAttachment.sizeBytes) : ''}
                     showFormattingWarning={controller.previewAttachment ? isPastedTextAttachment(controller.previewAttachment) : false}
-                    onClose={() => controller.setPreviewAttachment(null)}
-                />
-                <AssistantAttachmentTextPreviewModal
-                    file={controller.previewAttachment && isPastedTextAttachment(controller.previewAttachment) ? controller.previewAttachment : null}
-                    meta={controller.previewAttachment && isPastedTextAttachment(controller.previewAttachment) ? getContextFileMeta(controller.previewAttachment) : null}
-                    contentType={controller.previewAttachment && isPastedTextAttachment(controller.previewAttachment) ? getContentTypeTag(controller.previewAttachment) : ''}
-                    sizeLabel={controller.previewAttachment && isPastedTextAttachment(controller.previewAttachment) ? toKbLabel(controller.previewAttachment.sizeBytes) : ''}
-                    showFormattingWarning={controller.previewAttachment ? isPastedTextAttachment(controller.previewAttachment) : false}
+                    onUpdatePastedText={controller.updateContextFileText}
                     onClose={() => controller.setPreviewAttachment(null)}
                 />
             </div>

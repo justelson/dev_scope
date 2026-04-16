@@ -1,5 +1,6 @@
 import { useEffect, type MutableRefObject } from 'react'
 import { getCachedProjectGitSnapshot, setCachedProjectGitSnapshot } from '@/lib/projectViewCache'
+import { setCachedProjectGitOverview } from '@/lib/projectGitOverview'
 import type { UseProjectGitLifecycleParams } from './types'
 import type { GitDataSnapshot } from './gitLifecycleUtils'
 import { createEmptyGitStateMap } from './gitLifecycleUtils'
@@ -44,7 +45,6 @@ export function useProjectGitCacheLifecycle(
         setLoadingGit,
         setLoadingGitHistory,
         setTargetBranch,
-        setGitView,
         setCommitPage,
         setUnpushedPage,
         setChangesPage
@@ -97,7 +97,6 @@ export function useProjectGitCacheLifecycle(
         }
 
         setTargetBranch('')
-        setGitView('manage')
         setCommitPage(1)
         setUnpushedPage(1)
         setChangesPage(1)
@@ -122,7 +121,6 @@ export function useProjectGitCacheLifecycle(
         setLoadingGit,
         setLoadingGitHistory,
         setTargetBranch,
-        setGitView,
         setCommitPage,
         setUnpushedPage,
         setChangesPage,
@@ -151,6 +149,13 @@ export function useProjectGitCacheLifecycle(
         }
 
         setCachedProjectGitSnapshot(decodedPath, snapshot)
+        setCachedProjectGitOverview(decodedPath, {
+            path: decodedPath,
+            isGitRepo,
+            changedCount: isGitRepo ? gitStatusDetails.length : 0,
+            unpushedCount: isGitRepo ? unpushedCommits.length : 0,
+            hasRemote: hasRemote === true
+        })
     }, [
         decodedPath,
         isGitRepo,

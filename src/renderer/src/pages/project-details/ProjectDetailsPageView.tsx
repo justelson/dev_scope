@@ -3,6 +3,7 @@ import { ProjectDetailsContent } from './ProjectDetailsContent'
 import { ProjectDetailsErrorView, ProjectDetailsLoadingView } from './ProjectDetailsStateViews'
 import { ProjectDetailsOverlays } from './ProjectDetailsOverlays'
 import { ProjectDetailsTransientUi } from './ProjectDetailsTransientUi'
+import { buildProjectDetailsShell } from './projectDetailsShell'
 import {
     buildProjectDetailsContentProps,
     buildProjectDetailsFileSystemModalProps,
@@ -16,6 +17,7 @@ export function ProjectDetailsPageView(props: any) {
         project,
         error,
         navigate,
+        decodedPath,
         isCondensedLayout,
         themeColor,
         showScriptsModal,
@@ -73,15 +75,10 @@ export function ProjectDetailsPageView(props: any) {
         projectTerminalLabel,
         projectRootPath,
         showToast,
-        installedIdes,
-        loadingInstalledIdes,
-        openingIdeId,
-        handleOpenProjectInIde,
         handleCopyPath,
         copiedPath,
         handleOpenInExplorer,
         goBack,
-        loadInstalledIdes,
         activeTab,
         setActiveTab,
         fileTree,
@@ -172,7 +169,6 @@ export function ProjectDetailsPageView(props: any) {
         remotes,
         tags,
         stashes,
-        decodedPath,
         changesPage,
         setChangesPage,
         ITEMS_PER_PAGE,
@@ -235,11 +231,26 @@ export function ProjectDetailsPageView(props: any) {
         setDeleteTarget
     } = props
 
-    if (loading) {
+    const fallbackProjectPath = String(decodedPath || '').trim()
+    const displayProject = project ?? (fallbackProjectPath ? buildProjectDetailsShell(fallbackProjectPath) : null)
+    const progressiveProps = displayProject
+        ? {
+            ...props,
+            project: displayProject,
+            projectDetailsLoading: loading
+        }
+        : props
+
+    if (loading && !displayProject) {
         return <ProjectDetailsLoadingView />
     }
     if (!project) {
-        return <ProjectDetailsErrorView error={error} onBackToProjects={() => navigate('/projects')} />
+        if (!loading && error) {
+            return <ProjectDetailsErrorView error={error} onBackToProjects={() => navigate('/projects')} />
+        }
+        if (!displayProject) {
+            return <ProjectDetailsLoadingView />
+        }
     }
 
     return (
@@ -251,10 +262,10 @@ export function ProjectDetailsPageView(props: any) {
                 maxWidth: isCondensedLayout ? undefined : '1600px'
             }}
         >
-            <ProjectDetailsOverlays {...buildProjectDetailsOverlayProps(props)} />
-            <ProjectDetailsContent {...buildProjectDetailsContentProps(props)} />
-            <ProjectDetailsTransientUi {...buildProjectDetailsTransientUiProps(props)} />
-            <ProjectDetailsFileSystemModals {...buildProjectDetailsFileSystemModalProps(props)} />
+            <ProjectDetailsOverlays {...buildProjectDetailsOverlayProps(progressiveProps)} />
+            <ProjectDetailsContent {...buildProjectDetailsContentProps(progressiveProps)} />
+            <ProjectDetailsTransientUi {...buildProjectDetailsTransientUiProps(progressiveProps)} />
+            <ProjectDetailsFileSystemModals {...buildProjectDetailsFileSystemModalProps(progressiveProps)} />
         </div>
     )
 }

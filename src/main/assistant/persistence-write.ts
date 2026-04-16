@@ -16,6 +16,7 @@ import {
     PERSISTENCE_VERSION,
     jsonStringify,
     runSqlTransaction,
+    shouldPersistAssistantSession,
     sqlBool
 } from './persistence-utils'
 
@@ -32,7 +33,7 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
         switch (event.type) {
             case 'session.created':
                 if (session) {
-                    upsertAssistantSession(db, session)
+                    if (!syncAssistantSessionPersistence(db, session)) break
                     for (const createdThread of session.threads) {
                         upsertAssistantThreadSummary(db, session.id, createdThread)
                     }
@@ -40,7 +41,7 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
                 break
             case 'session.updated':
             case 'session.selected':
-                if (session) upsertAssistantSession(db, session)
+                if (session) syncAssistantSessionPersistence(db, session)
                 break
             case 'playground.updated':
                 replaceAssistantPlaygroundLabs(db, snapshot.playground.labs)
@@ -51,12 +52,13 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
                 break
             case 'thread.created':
                 if (session && thread) {
-                    upsertAssistantSession(db, session)
+                    if (!syncAssistantSessionPersistence(db, session)) break
                     upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
                 }
                 break
             case 'thread.updated': {
                 if (thread) {
+                    if (session && !syncAssistantSessionPersistence(db, session)) break
                     upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
                     const patch = (event.payload['patch'] as Record<string, unknown> | undefined) || {}
                     const removedTurnIds = Array.isArray(event.payload['removedTurnIds'])
@@ -72,13 +74,14 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
                         upsertAssistantTurn(db, thread.thread.id, thread.thread.model, thread.thread.latestTurn)
                     }
                 }
-                if (session) upsertAssistantSession(db, session)
+                if (session) syncAssistantSessionPersistence(db, session)
                 break
             }
             case 'thread.message.user':
             case 'thread.message.assistant.delta':
             case 'thread.message.assistant.completed':
                 if (thread) {
+                    if (session && !syncAssistantSessionPersistence(db, session)) break
                     upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
                     const payloadMessage = event.payload['message'] as Record<string, unknown> | undefined
                     const messageId = String(event.payload['messageId'] || payloadMessage?.['id'] || '')
@@ -90,12 +93,14 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
             case 'thread.plan.updated':
             case 'thread.latest-turn.updated':
                 if (thread) {
+                    if (session && !syncAssistantSessionPersistence(db, session)) break
                     upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
                     if (thread.thread.latestTurn) upsertAssistantTurn(db, thread.thread.id, thread.thread.model, thread.thread.latestTurn)
                 }
                 break
             case 'thread.proposed-plan.upserted':
                 if (thread) {
+                    if (session && !syncAssistantSessionPersistence(db, session)) break
                     upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
                     const payloadPlan = event.payload['plan'] as Record<string, unknown> | undefined
                     const plan = thread.thread.proposedPlans.find((entry) => entry.id === String(payloadPlan?.['id'] || ''))
@@ -104,6 +109,7 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
                 break
             case 'thread.activity.appended':
                 if (thread) {
+                    if (session && !syncAssistantSessionPersistence(db, session)) break
                     upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
                     const payloadActivity = event.payload['activity'] as Record<string, unknown> | undefined
                     const activity = thread.thread.activities.find((entry) => entry.id === String(payloadActivity?.['id'] || ''))
@@ -112,6 +118,7 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
                 break
             case 'thread.approval.updated':
                 if (thread) {
+                    if (session && !syncAssistantSessionPersistence(db, session)) break
                     upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
                     const payloadApproval = event.payload['approval'] as Record<string, unknown> | undefined
                     const approval = thread.thread.pendingApprovals.find((entry) => entry.requestId === String(payloadApproval?.['requestId'] || ''))
@@ -120,6 +127,7 @@ export function persistAssistantEvent(db: SqlDatabase, event: AssistantDomainEve
                 break
             case 'thread.user-input.updated':
                 if (thread) {
+                    if (session && !syncAssistantSessionPersistence(db, session)) break
                     upsertAssistantThreadSummary(db, thread.sessionId, thread.thread)
                     const payloadUserInput = event.payload['userInput'] as Record<string, unknown> | undefined
                     const userInput = thread.thread.pendingUserInputs.find((entry) => entry.requestId === String(payloadUserInput?.['requestId'] || ''))
@@ -146,7 +154,7 @@ export function replaceAssistantSnapshot(db: SqlDatabase, snapshot: AssistantSna
         replaceAssistantPlaygroundLabs(db, snapshot.playground.labs)
         upsertAssistantMeta(db, 'playgroundRootPath', snapshot.playground.rootPath || '')
         for (const session of snapshot.sessions) {
-            upsertAssistantSession(db, session)
+            if (!syncAssistantSessionPersistence(db, session)) continue
             for (const thread of session.threads) {
                 upsertAssistantThreadSummary(db, session.id, thread)
                 if (thread.latestTurn) upsertAssistantTurn(db, thread.id, thread.model, thread.latestTurn)
@@ -170,6 +178,15 @@ export function persistAssistantSnapshotMeta(db: SqlDatabase, snapshot: Assistan
 
 export function upsertAssistantMeta(db: SqlDatabase, key: string, value: string): void {
     db.run('INSERT OR REPLACE INTO assistant_meta (key, value) VALUES (?, ?)', [key, value])
+}
+
+function syncAssistantSessionPersistence(db: SqlDatabase, session: AssistantSession): boolean {
+    if (!shouldPersistAssistantSession(session)) {
+        db.run('DELETE FROM assistant_sessions WHERE id = ?', [session.id])
+        return false
+    }
+    upsertAssistantSession(db, session)
+    return true
 }
 
 function upsertAssistantSession(db: SqlDatabase, session: AssistantSession): void {
@@ -234,13 +251,20 @@ function upsertAssistantPlaygroundLab(db: SqlDatabase, lab: AssistantPlaygroundL
 function upsertAssistantThreadSummary(db: SqlDatabase, sessionId: string, thread: AssistantThread): void {
     db.run(`
         INSERT INTO assistant_threads (
-            id, session_id, provider_thread_id, model, cwd, message_count, last_seen_completed_turn_id,
+            id, session_id, provider_thread_id, source, parent_thread_id, provider_parent_thread_id, subagent_depth, agent_nickname, agent_role,
+            model, cwd, message_count, last_seen_completed_turn_id,
             runtime_mode, interaction_mode, state, last_error, created_at, updated_at, latest_turn_json, active_plan_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             session_id = excluded.session_id,
             provider_thread_id = excluded.provider_thread_id,
+            source = excluded.source,
+            parent_thread_id = excluded.parent_thread_id,
+            provider_parent_thread_id = excluded.provider_parent_thread_id,
+            subagent_depth = excluded.subagent_depth,
+            agent_nickname = excluded.agent_nickname,
+            agent_role = excluded.agent_role,
             model = excluded.model,
             cwd = excluded.cwd,
             message_count = excluded.message_count,
@@ -257,6 +281,12 @@ function upsertAssistantThreadSummary(db: SqlDatabase, sessionId: string, thread
         thread.id,
         sessionId,
         thread.providerThreadId,
+        thread.source,
+        thread.parentThreadId,
+        thread.providerParentThreadId,
+        thread.subagentDepth,
+        thread.agentNickname,
+        thread.agentRole,
         thread.model,
         thread.cwd,
         thread.messageCount,

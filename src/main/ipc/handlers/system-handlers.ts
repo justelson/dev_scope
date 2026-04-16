@@ -1,17 +1,7 @@
 import log from 'electron-log'
 import si from 'systeminformation'
-import {
-    getSystemInfo,
-    sensingEngine
-} from '../../inspectors'
-import type {
-    FullReport,
-    ReadinessReport,
-    SystemHealth,
-    ToolingReport
-} from '../../inspectors/types'
-import { clearCommandCache } from '../../inspectors/safe-exec'
-import { calculateReadiness } from '../../readiness/scorer'
+import { getSystemInfo } from '../../inspectors'
+import type { SystemHealth } from '../../inspectors/types'
 import { systemMetricsBridge } from '../../system-metrics/manager'
 
 export async function handleSystemMetricsBootstrap() {
@@ -41,54 +31,6 @@ export async function handleGetSystemOverview(): Promise<SystemHealth> {
 export async function handleGetDetailedSystemStats() {
     log.info('IPC: getDetailedSystemStats')
     return systemMetricsBridge.getSnapshot()
-}
-
-export async function handleGetDeveloperTooling(): Promise<ToolingReport> {
-    log.info('IPC: getDeveloperTooling (SensingEngine)')
-
-    const [languages, packageManagers, buildTools, containers, versionControl] = await Promise.all([
-        sensingEngine.scanCategory('language'),
-        sensingEngine.scanCategory('package_manager'),
-        sensingEngine.scanCategory('build_tool'),
-        sensingEngine.scanCategory('container'),
-        sensingEngine.scanCategory('version_control')
-    ])
-
-    return {
-        languages,
-        packageManagers,
-        buildTools,
-        containers,
-        versionControl,
-        timestamp: Date.now()
-    }
-}
-
-export async function handleGetReadinessReport(): Promise<ReadinessReport> {
-    log.info('IPC: getReadinessReport')
-    const tooling = await handleGetDeveloperTooling()
-    return calculateReadiness(tooling)
-}
-
-export async function handleRefreshAll(): Promise<FullReport> {
-    log.info('IPC: refreshAll')
-
-    clearCommandCache()
-    systemMetricsBridge.invalidateStaticSnapshot()
-
-    const [system, tooling] = await Promise.all([
-        handleGetSystemOverview(),
-        handleGetDeveloperTooling()
-    ])
-
-    const readiness = calculateReadiness(tooling)
-
-    return {
-        system,
-        tooling,
-        readiness,
-        timestamp: Date.now()
-    }
 }
 
 export async function handleGetFileSystemRoots() {

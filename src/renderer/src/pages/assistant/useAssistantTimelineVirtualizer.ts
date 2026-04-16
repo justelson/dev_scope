@@ -50,6 +50,7 @@ export function useAssistantTimelineVirtualizer({
     const [measurementVersion, setMeasurementVersion] = useState(0)
     const [scrollTop, setScrollTop] = useState(0)
     const [viewportHeight, setViewportHeight] = useState(0)
+    const [viewportWidth, setViewportWidth] = useState(0)
 
     useEffect(() => {
         measuredHeightsRef.current.clear()
@@ -65,6 +66,7 @@ export function useAssistantTimelineVirtualizer({
 
         const updateViewportMetrics = () => {
             setViewportHeight(element.clientHeight)
+            setViewportWidth(element.clientWidth)
             setScrollTop(element.scrollTop)
         }
 
@@ -106,11 +108,11 @@ export function useAssistantTimelineVirtualizer({
         for (let index = 0; index < virtualRows.length; index += 1) {
             const row = virtualRows[index]
             const measuredHeight = measuredHeightsRef.current.get(row.id)
-            const estimatedHeight = measuredHeight ?? estimateTimelineRowHeight(row)
+            const estimatedHeight = measuredHeight ?? estimateTimelineRowHeight(row, { containerWidth: viewportWidth })
             nextOffsets[index + 1] = nextOffsets[index] + estimatedHeight
         }
         return nextOffsets
-    }, [measurementVersion, virtualRows])
+    }, [measurementVersion, viewportWidth, virtualRows])
 
     const totalVirtualHeight = offsets[offsets.length - 1] || 0
 
@@ -183,6 +185,7 @@ export function useAssistantTimelineVirtualizer({
 
     return {
         totalVirtualHeight,
+        viewportWidth,
         paddingTop: virtualRows.length > 0 ? (offsets[virtualRange.startIndex] || 0) : 0,
         paddingBottom: virtualRows.length > 0 && virtualRange.endIndex >= 0
             ? Math.max(0, totalVirtualHeight - (offsets[virtualRange.endIndex + 1] || 0))

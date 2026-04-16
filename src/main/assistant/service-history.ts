@@ -9,6 +9,11 @@ type UserTurnEntry = {
 type AssistantDeleteMessagePlan = {
     rollbackTurnCount: number | null
     removedTurnIds: string[]
+    deletedWindow: {
+        startCreatedAt: string
+        endCreatedAt: string | null
+        includesThreadTail: boolean
+    }
     patch: Pick<
         AssistantThread,
         | 'messages'
@@ -17,6 +22,7 @@ type AssistantDeleteMessagePlan = {
         | 'pendingApprovals'
         | 'pendingUserInputs'
         | 'activePlan'
+        | 'lastSeenCompletedTurnId'
         | 'latestTurn'
         | 'state'
         | 'lastError'
@@ -50,6 +56,14 @@ function getUserTurnEntries(messages: AssistantMessage[], targetMessageId: strin
         .filter((entry): entry is UserTurnEntry => Boolean(entry))
 }
 
+function getNextUserMessageIndex(messages: AssistantMessage[], index: number): number {
+    for (let cursor = index + 1; cursor < messages.length; cursor += 1) {
+        if (messages[cursor]?.role === 'user') return cursor
+    }
+
+    return messages.length
+}
+
 function getLatestRemainingTurn(threadMessages: AssistantMessage[], orderedTurnIds: string[], removedTurnIds: Set<string>, occurredAt: string): AssistantLatestTurn | null {
     const remainingTurnIds = orderedTurnIds.filter((turnId) => !removedTurnIds.has(turnId))
     const latestRemainingTurnId = remainingTurnIds[remainingTurnIds.length - 1] || null
@@ -72,6 +86,48 @@ function getLatestRemainingTurn(threadMessages: AssistantMessage[], orderedTurnI
     }
 }
 
+function getRemainingLatestTurn(
+    thread: AssistantThread,
+    threadMessages: AssistantMessage[],
+    orderedTurnIds: string[],
+    removedTurnIds: Set<string>,
+    occurredAt: string
+): AssistantLatestTurn | null {
+    if (thread.latestTurn && !removedTurnIds.has(thread.latestTurn.id)) {
+        return thread.latestTurn
+    }
+
+    return getLatestRemainingTurn(threadMessages, orderedTurnIds, removedTurnIds, occurredAt)
+}
+
+function getRemainingLastSeenCompletedTurnId(
+    thread: AssistantThread,
+    orderedTurnIds: string[],
+    removedTurnIds: Set<string>
+): string | null {
+    if (!thread.lastSeenCompletedTurnId || !removedTurnIds.has(thread.lastSeenCompletedTurnId)) {
+        return thread.lastSeenCompletedTurnId
+    }
+
+    const latestTurnId = thread.latestTurn?.id || null
+    const latestTurnCompleted = thread.latestTurn?.state === 'completed'
+    const remainingTurnIds = orderedTurnIds.filter((turnId) => !removedTurnIds.has(turnId))
+
+    for (let index = remainingTurnIds.length - 1; index >= 0; index -= 1) {
+        const candidateTurnId = remainingTurnIds[index]
+        if (candidateTurnId !== latestTurnId) return candidateTurnId
+        if (latestTurnCompleted) return candidateTurnId
+    }
+
+    return null
+}
+
+function isWithinDeletedWindow(createdAt: string, startCreatedAt: string, endCreatedAt: string | null): boolean {
+    if (createdAt < startCreatedAt) return false
+    if (endCreatedAt && createdAt >= endCreatedAt) return false
+    return true
+}
+
 export function buildDeleteMessagePlan(thread: AssistantThread, messageId: string, occurredAt: string): AssistantDeleteMessagePlan {
     const messages = getSortedMessages(thread)
     const targetIndex = messages.findIndex((message) => message.id === messageId && message.role === 'user')
@@ -90,23 +146,40 @@ export function buildDeleteMessagePlan(thread: AssistantThread, messageId: strin
         .filter((turnId, index, array): turnId is string => Boolean(turnId) && array.indexOf(turnId) === index)
 
     const targetTurnIndex = targetEntry.turnId ? orderedTurnIds.indexOf(targetEntry.turnId) : -1
-    const removedTurnIds = new Set(targetTurnIndex >= 0 ? orderedTurnIds.slice(targetTurnIndex) : [])
-    const keptMessages = messages.slice(0, targetIndex)
-    const latestTurn = getLatestRemainingTurn(keptMessages, orderedTurnIds, removedTurnIds, occurredAt)
+    const nextUserIndex = getNextUserMessageIndex(messages, targetIndex)
+    const removedTurnIds = new Set(targetEntry.turnId ? [targetEntry.turnId] : [])
+    const deletedWindowStartAt = targetEntry.message.createdAt
+    const deletedWindowEndAt = nextUserIndex < messages.length ? messages[nextUserIndex]?.createdAt || null : null
+    const includesThreadTail = nextUserIndex >= messages.length
+    const keptMessages = messages.filter((_message, index) => index < targetIndex || index >= nextUserIndex)
+    const latestTurn = getRemainingLatestTurn(thread, keptMessages, orderedTurnIds, removedTurnIds, occurredAt)
+    const lastSeenCompletedTurnId = getRemainingLastSeenCompletedTurnId(thread, orderedTurnIds, removedTurnIds)
+
+    const shouldKeepRecord = (turnId: string | null, createdAt: string): boolean => {
+        if (turnId && removedTurnIds.has(turnId)) return false
+        if (!turnId && isWithinDeletedWindow(createdAt, deletedWindowStartAt, deletedWindowEndAt)) return false
+        return true
+    }
 
     return {
-        rollbackTurnCount: targetTurnIndex >= 0 ? Math.max(1, orderedTurnIds.length - targetTurnIndex) : null,
+        rollbackTurnCount: includesThreadTail && targetTurnIndex >= 0 ? 1 : null,
         removedTurnIds: [...removedTurnIds],
+        deletedWindow: {
+            startCreatedAt: deletedWindowStartAt,
+            endCreatedAt: deletedWindowEndAt,
+            includesThreadTail
+        },
         patch: {
             messages: keptMessages,
-            activities: thread.activities.filter((activity) => !activity.turnId || !removedTurnIds.has(activity.turnId)),
-            proposedPlans: thread.proposedPlans.filter((plan) => !plan.turnId || !removedTurnIds.has(plan.turnId)),
-            pendingApprovals: thread.pendingApprovals.filter((approval) => !approval.turnId || !removedTurnIds.has(approval.turnId)),
-            pendingUserInputs: thread.pendingUserInputs.filter((entry) => !entry.turnId || !removedTurnIds.has(entry.turnId)),
+            activities: thread.activities.filter((activity) => shouldKeepRecord(activity.turnId, activity.createdAt)),
+            proposedPlans: thread.proposedPlans.filter((plan) => shouldKeepRecord(plan.turnId, plan.createdAt)),
+            pendingApprovals: thread.pendingApprovals.filter((approval) => shouldKeepRecord(approval.turnId, approval.createdAt)),
+            pendingUserInputs: thread.pendingUserInputs.filter((entry) => shouldKeepRecord(entry.turnId, entry.createdAt)),
             activePlan: thread.activePlan && thread.activePlan.turnId && removedTurnIds.has(thread.activePlan.turnId) ? null : thread.activePlan,
+            lastSeenCompletedTurnId,
             latestTurn,
-            state: 'ready',
-            lastError: null,
+            state: includesThreadTail ? 'ready' : thread.state,
+            lastError: includesThreadTail ? null : thread.lastError,
             updatedAt: occurredAt
         }
     }

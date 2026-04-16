@@ -3,9 +3,9 @@ import {
     RefreshCw, Copy, Check, BookOpen, Package,
     GitBranch, GitPullRequest, Folder
 } from 'lucide-react'
+import { OpenWithProjectButton } from '@/components/ui/OpenWithProjectButton'
 import { cn } from '@/lib/utils'
 import ProjectIcon, { FrameworkBadge } from '@/components/ui/ProjectIcon'
-import { ProjectIdeLauncherButton } from './ProjectIdeLauncherButton'
 
 interface ProjectDetailsHeaderSectionProps {
     [key: string]: any
@@ -15,6 +15,8 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
     const {
         themeColor,
         project,
+        projectDetailsLoading,
+        currentBranch,
         isProjectLive,
         activePorts,
         formatRelTime,
@@ -34,10 +36,8 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
         onBrowseFolder,
         onShowScriptsModal,
         onShowDependenciesModal,
-        installedIdes,
-        loadingInstalledIdes,
-        openingIdeId,
-        onOpenProjectInIde,
+        onOpenWithAssistant,
+        settings,
         loadProjectDetails,
         scriptCount,
         dependencyCount
@@ -46,13 +46,15 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
     return (
         <>
             <div className={cn(
-                'relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.03] to-transparent transition-[margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                'relative rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.03] to-transparent transition-[margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
                 isCondensedLayout ? 'mb-6' : 'mb-8'
             )}>
-                <div
-                    className="absolute -top-20 -right-20 w-40 h-40 rounded-full blur-3xl opacity-20 pointer-events-none"
-                    style={{ background: themeColor }}
-                />
+                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+                    <div
+                        className="absolute -top-20 -right-20 h-40 w-40 rounded-full opacity-20 blur-3xl"
+                        style={{ background: themeColor }}
+                    />
+                </div>
 
                 <div className={cn(
                     'relative flex items-center transition-[gap,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
@@ -84,6 +86,20 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                             {project.version && (
                                 <span className="text-xs font-mono text-white/40 bg-white/5 px-2 py-0.5 rounded">
                                     v{project.version}
+                                </span>
+                            )}
+                            {currentBranch && (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/60">
+                                    <GitBranch size={10} className="text-white/38" />
+                                    <span className="max-w-[160px] truncate font-mono text-white/68" title={currentBranch}>
+                                        {currentBranch}
+                                    </span>
+                                </span>
+                            )}
+                            {projectDetailsLoading && (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-white/55">
+                                    <RefreshCw size={10} className="animate-spin" />
+                                    Loading
                                 </span>
                             )}
                         </div>
@@ -135,7 +151,7 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                 </div>
 
                 <div className={cn(
-                    'flex items-center gap-2 bg-black/20 border-t border-white/5 transition-[padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                    'relative flex items-center gap-2 bg-black/20 border-t border-white/5 transition-[padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
                                 isCondensedLayout ? 'px-4 py-2.5' : 'px-5 py-3'
                 )}>
                     <FolderOpen size={14} className="text-white/30 shrink-0" />
@@ -143,12 +159,17 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                         {project.path}
                     </span>
                     <div className="flex items-center gap-1">
-                        <ProjectIdeLauncherButton
-                            installedIdes={installedIdes}
-                            loadingInstalledIdes={loadingInstalledIdes}
-                            openingIdeId={openingIdeId}
-                            onOpenProjectInIde={onOpenProjectInIde}
-                            compact
+                        <OpenWithProjectButton
+                            projectPath={project?.path || null}
+                            preferredShell={settings.defaultShell}
+                            menuWidthMode="trigger"
+                            menuPresentation="inline"
+                            contextActions={[{
+                                id: 'assistant',
+                                label: 'Assistant',
+                                icon: 'assistant',
+                                onSelect: onOpenWithAssistant
+                            }]}
                         />
                         <button
                             onClick={handleCopyPath}
@@ -299,9 +320,9 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                                 'flex items-center justify-center rounded-xl border border-white/10 bg-sparkle-card text-white/40 shadow-sm transition-all hover:border-white/20 hover:text-white shrink-0',
                                 isCondensedLayout ? 'h-10 w-10' : 'h-11 w-11'
                             )}
-                            title="Refresh"
+                            title={projectDetailsLoading ? 'Refreshing project details' : 'Refresh'}
                         >
-                            <RefreshCw size={isCondensedLayout ? 15 : 16} />
+                            <RefreshCw size={isCondensedLayout ? 15 : 16} className={cn(projectDetailsLoading && 'animate-spin')} />
                         </button>
                     </div>
                 </div>

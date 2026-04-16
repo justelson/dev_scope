@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { useAssistantSessionsRailStore } from '@/lib/assistant/store'
 import { getAssistantBackgroundActivitySessions, getAssistantSessionsByMode } from '@/lib/assistant/selectors'
+import type { AssistantToastInput } from './AssistantPageHelpers'
 import { AssistantSessionsRail } from './AssistantSessionsRail'
 import type { AssistantRailMode } from './useAssistantPageSidebarState'
 
@@ -10,8 +11,9 @@ export const ConnectedAssistantSessionsRail = memo(function ConnectedAssistantSe
     railMode: AssistantRailMode
     onRailModeChange: (next: AssistantRailMode) => void
     onWidthChange: (next: number) => void
+    onShowToast: (input: AssistantToastInput) => void
 }) {
-    const { collapsed, width, railMode, onRailModeChange, onWidthChange } = props
+    const { collapsed, width, railMode, onRailModeChange, onWidthChange, onShowToast } = props
     const railController = useAssistantSessionsRailStore()
     const otherMode: AssistantRailMode = railMode === 'work' ? 'playground' : 'work'
     const visibleSessions = getAssistantSessionsByMode(railController.snapshot, railMode, true)
@@ -28,17 +30,21 @@ export const ConnectedAssistantSessionsRail = memo(function ConnectedAssistantSe
             playground={railController.playground}
             backgroundActivitySessions={backgroundActivitySessions}
             activeSessionId={railController.activeSessionId}
+            activeThreadId={railController.activeThreadId}
             commandPending={railController.commandPending}
             onWidthChange={onWidthChange}
             onCreateSession={(projectPath) => railController.createSession({ projectPath })}
             onCreatePlaygroundSession={(labId) => railController.createSession({ mode: 'playground', playgroundLabId: labId || null })}
             onSelectSession={railController.selectSession}
+            onSelectThread={railController.selectThread}
             onRenameSession={railController.renameSession}
             onArchiveSession={railController.archiveSession}
-            onDeleteSession={railController.deleteSession}
+            onDeleteSession={railController.deleteSessionResult}
             onChooseProjectPath={railController.createProjectSession}
             onSetPlaygroundRoot={railController.setPlaygroundRoot}
             onCreatePlaygroundLab={railController.createPlaygroundLabResult}
+            onDeletePlaygroundLab={railController.deletePlaygroundLabResult}
+            onShowToast={onShowToast}
         />
     )
 })

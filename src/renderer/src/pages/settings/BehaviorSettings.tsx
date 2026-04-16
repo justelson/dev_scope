@@ -303,14 +303,6 @@ export default function BehaviorSettings() {
                                         </span>
                                     )}
                                 />
-                                <div className="rounded-xl border border-white/10 bg-black/10 p-4">
-                                    <p className="text-sm font-medium text-sparkle-text">What changes</p>
-                                    <ul className="mt-2 space-y-2 text-xs leading-relaxed text-sparkle-text-secondary">
-                                        <li>Project and folder terminal launches use this shell by default.</li>
-                                        <li>Assistant and tool-triggered terminal actions inherit this choice.</li>
-                                        <li>Switching here applies immediately. No app restart is required.</li>
-                                    </ul>
-                                </div>
                             </div>
                         </SettingsSection>
                     </div>

@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useRef, type RefObject } from 'react'
 import { ArrowDown } from 'lucide-react'
-import type { AssistantActivity, AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
+import type { AssistantActivity, AssistantMessage, AssistantProposedPlan, AssistantSessionTurnUsageEntry } from '@shared/assistant/contracts'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import type { AssistantTextStreamingMode } from '@/lib/settings'
 import { LoadingSpinner } from '@/components/ui/LoadingState'
@@ -16,6 +16,7 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
     messages: AssistantMessage[]
     activities: AssistantActivity[]
     proposedPlans?: AssistantProposedPlan[]
+    sessionMode: 'work' | 'playground'
     latestProjectLabel: string
     projectTitle: string | null
     assistantMessageFilePath?: string | null
@@ -26,6 +27,7 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
     activeWorkStartedAt: string | null
     latestAssistantMessageId: string | null
     latestTurnStartedAt: string | null
+    turnUsageById?: ReadonlyMap<string, AssistantSessionTurnUsageEntry>
     deletingMessageId: string | null
     loadingChats: boolean
     assistantTextStreamingMode: AssistantTextStreamingMode
@@ -101,7 +103,8 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
                                 messages={props.messages}
                                 activities={props.activities}
                                 proposedPlans={props.proposedPlans || []}
-                                projectLabel={props.latestProjectLabel !== 'not set' ? props.latestProjectLabel : null}
+                                sessionMode={props.sessionMode}
+                                projectLabel={projectRootPath ? props.latestProjectLabel : null}
                                 projectTitle={projectRootPath}
                                 projectRootPath={projectRootPath}
                                 assistantMessageFilePath={props.assistantMessageFilePath}
@@ -113,6 +116,7 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
                                 activeWorkStartedAt={props.activeWorkStartedAt}
                                 latestAssistantMessageId={props.latestAssistantMessageId}
                                 latestTurnStartedAt={props.latestTurnStartedAt}
+                                turnUsageById={props.turnUsageById}
                                 deletingMessageId={props.deletingMessageId}
                                 loadingChats={props.loadingChats}
                                 assistantTextStreamingMode={props.assistantTextStreamingMode}

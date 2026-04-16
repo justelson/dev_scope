@@ -1,35 +1,30 @@
 import { useCallback, useEffect, useMemo } from 'react'
+import {
+    DndContext,
+    DragOverlay,
+    closestCenter,
+    pointerWithin,
+} from '@dnd-kit/core'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router-dom'
+import { getParentFolderPath } from '@/lib/filesystem/fileSystemPaths'
 import { useSettings } from '@/lib/settings'
-import { cn } from '@/lib/utils'
-import { buildLocalDiffPreview, countLines, extractOutlineItems, isEditableFileType, PREVIEW_TERMINAL_MIN_HEIGHT, type OutlineItem } from './file-preview/modalShared'
+import { isEditableFileType, PREVIEW_TERMINAL_MIN_HEIGHT } from './file-preview/modalShared'
+import type { FilePreviewModalProps } from './file-preview/modalTypes'
 import { PreviewModalLayout } from './file-preview/PreviewModalLayout'
 import { PreviewPythonOutputPanel } from './file-preview/PreviewPythonOutputPanel'
 import { PreviewTerminalPanel } from './file-preview/PreviewTerminalPanel'
-import type { PreviewFile, PreviewMediaItem, PreviewMeta, PreviewOpenOptions } from './file-preview/types'
+import { useFilePreviewModalAnalysis } from './file-preview/useFilePreviewModalAnalysis'
+import { useFilePreviewModalInteractions } from './file-preview/useFilePreviewModalInteractions'
 import { useFilePreview } from './file-preview/useFilePreview'
 import { useFilePreviewChrome } from './file-preview/useFilePreviewChrome'
 import { useFilePreviewEditSession } from './file-preview/useFilePreviewEditSession'
 import { useFilePreviewPython } from './file-preview/useFilePreviewPython'
 import { useFilePreviewTerminal } from './file-preview/useFilePreviewTerminal'
-import { isMediaPreviewType } from './file-preview/utils'
-import { navigateMarkdownLink } from './markdown/linkNavigation'
-
-interface FilePreviewModalProps extends PreviewMeta {
-    file: PreviewFile
-    content: string
-    loading?: boolean
-    projectPath?: string
-    shellMode?: 'modal' | 'window'
-    onOpenLinkedPreview?: (file: { name: string; path: string }, ext: string, options?: PreviewOpenOptions) => Promise<void>
-    mediaItems?: PreviewMediaItem[]
-    onSaved?: (filePath: string) => Promise<void> | void
-    onClose: () => void
-}
 
 export function FilePreviewModal({
     file,
+    previewTabs,
+    activePreviewTabId,
     content,
     loading,
     truncated,
@@ -39,23 +34,39 @@ export function FilePreviewModal({
     projectPath,
     shellMode = 'modal',
     onOpenLinkedPreview,
+    onOpenLinkedPreviewInNewTab,
+    onSelectPreviewTab,
+    onClosePreviewTab,
+    onReorderPreviewTabs,
     mediaItems = [],
     onSaved,
     onClose
 }: FilePreviewModalProps) {
-    const navigate = useNavigate()
     const { settings, updateSettings } = useSettings()
     const isCsv = file.type === 'csv'
     const isHtml = file.type === 'html'
+    const previewModeEnabled = file.type === 'md' || file.type === 'csv' || file.type === 'html'
     const canEdit = isEditableFileType(file.type)
-    const defaultMode: 'preview' | 'edit' = canEdit ? settings.filePreviewDefaultMode : 'preview'
-    const initialMode: 'preview' | 'edit' = file.startInEditMode && canEdit ? 'edit' : defaultMode
+    const defaultMode: 'preview' | 'edit' = !previewModeEnabled && canEdit
+        ? 'edit'
+        : canEdit ? settings.filePreviewDefaultMode : 'preview'
+    const initialMode: 'preview' | 'edit' = (file.startInEditMode && canEdit) || (!previewModeEnabled && canEdit) ? 'edit' : defaultMode
     const defaultStartExpanded = settings.filePreviewOpenInFullscreen
     const defaultLeftPanelOpen = settings.filePreviewFullscreenShowLeftPanel
     const defaultRightPanelOpen = settings.filePreviewFullscreenShowRightPanel
     const canRunPython = file.type === 'code'
         && (file.language === 'python' || /\.py$/i.test(file.name) || /\.py$/i.test(file.path))
     const canUsePreviewTerminal = Boolean(projectPath || file.path)
+    const resolvedPreviewTabs = useMemo(
+        () => (previewTabs && previewTabs.length > 0 ? previewTabs : [{ id: file.path || file.name, file }]),
+        [file, previewTabs]
+    )
+    const resolvedActivePreviewTabId = activePreviewTabId ?? resolvedPreviewTabs[0]?.id ?? null
+    const createDestinationDirectory = useMemo(
+        () => getParentFolderPath(file.path) || projectPath || '',
+        [file.path, projectPath]
+    )
+    const canCreateSiblingFile = Boolean(createDestinationDirectory && onOpenLinkedPreview)
     const terminalInitialHeight = Math.max(
         PREVIEW_TERMINAL_MIN_HEIGHT,
         Math.min(720, Math.round(settings.filePreviewTerminalPanelHeight || 220))
@@ -64,8 +75,6 @@ export function FilePreviewModal({
     const {
         mode,
         setMode,
-        htmlViewMode,
-        setHtmlViewMode,
         gitDiffText,
         gitDiffSummary,
         sourceContent,
@@ -87,6 +96,7 @@ export function FilePreviewModal({
         reloadFromDisk,
         overwriteOnConflict,
         requestIntent,
+        requestExternalIntent,
         handleCloseRequest
     } = useFilePreviewEditSession({
         file,
@@ -96,7 +106,6 @@ export function FilePreviewModal({
         projectPath,
         canEdit,
         initialMode,
-        isHtml,
         onSaved,
         onClose
     })
@@ -131,7 +140,6 @@ export function FilePreviewModal({
         modalStyle,
         presetConfig
     } = useFilePreviewChrome({
-        resetKey: file.path,
         defaultStartExpanded,
         defaultLeftPanelOpen,
         defaultRightPanelOpen,
@@ -139,12 +147,10 @@ export function FilePreviewModal({
     })
 
     const {
-        terminalVisible,
         setTerminalVisible,
         terminalSessions,
         terminalState,
         terminalPanelPhase,
-        terminalSessionId,
         terminalGroupKey,
         terminalGroupCwd,
         terminalHeight,
@@ -206,6 +212,38 @@ export function FilePreviewModal({
         defaultShell: settings.defaultShell
     })
 
+    const {
+        folderTreeRefreshToken,
+        preserveSidebarContextRequest,
+        dndSensors,
+        openMediaItem,
+        handleInternalMarkdownLink,
+        handleSelectPreviewTab,
+        handleClosePreviewTab,
+        handleOpenLinkedPreview,
+        handleOpenLinkedPreviewInNewTab,
+        handleOpenInBrowser,
+        handleOpenCreateSiblingFileModal,
+        handlePreviewDragStart,
+        handlePreviewDragCancel,
+        handlePreviewDragEnd,
+        dragOverlay,
+        createFileModal
+    } = useFilePreviewModalInteractions({
+        file,
+        mediaItems,
+        settingsTheme: settings.theme,
+        resolvedActivePreviewTabId,
+        createDestinationDirectory,
+        canCreateSiblingFile,
+        onOpenLinkedPreview,
+        onOpenLinkedPreviewInNewTab,
+        onSelectPreviewTab,
+        onClosePreviewTab,
+        onReorderPreviewTabs,
+        requestExternalIntent
+    })
+
     useEffect(() => {
         const originalOverflow = document.body.style.overflow
         document.body.style.overflow = 'hidden'
@@ -219,19 +257,9 @@ export function FilePreviewModal({
         updateSettings({ filePreviewPythonRunMode: pythonRunMode })
     }, [pythonRunMode, settings.filePreviewPythonRunMode, updateSettings])
 
-    const openMediaItem = useCallback(async (item: PreviewMediaItem) => {
-        if (!onOpenLinkedPreview) return
-        await onOpenLinkedPreview({ name: item.name, path: item.path }, item.extension, {
-            mediaItems: mediaItems.map(({ name, path, extension }) => ({ name, path, extension }))
-        })
-    }, [mediaItems, onOpenLinkedPreview])
-
-    const handleInternalMarkdownLink = useCallback(async (href: string) => {
-        await navigateMarkdownLink({ href, filePath: file.path, navigate, openPreview: onOpenLinkedPreview })
-    }, [file.path, navigate, onOpenLinkedPreview])
-
     const handleModeChange = useCallback(async (nextMode: 'preview' | 'edit') => {
         if (nextMode === mode) return
+        if (!previewModeEnabled && nextMode === 'preview') return
         if (nextMode === 'preview') {
             requestIntent('preview')
             return
@@ -239,13 +267,12 @@ export function FilePreviewModal({
         if (!canEdit) return
         const loaded = await ensureEditableContentLoaded()
         if (!loaded) return
-        if (isHtml) setHtmlViewMode('code')
         setMode('edit')
-    }, [canEdit, ensureEditableContentLoaded, isHtml, mode, requestIntent, setHtmlViewMode, setMode])
+    }, [canEdit, ensureEditableContentLoaded, mode, previewModeEnabled, requestIntent, setMode])
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'e' && canEdit) {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'e' && canEdit && previewModeEnabled) {
                 event.preventDefault()
                 void handleModeChange(mode === 'edit' ? 'preview' : 'edit')
                 return
@@ -263,85 +290,37 @@ export function FilePreviewModal({
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [canEdit, handleCloseRequest, handleModeChange, handleSave, mode])
+    }, [canEdit, handleCloseRequest, handleModeChange, handleSave, mode, previewModeEnabled])
 
-    const handleOpenInBrowser = useCallback(async () => {
-        try {
-            await window.devscope.openFile(file.path)
-        } catch (error) {
-            console.error('Failed to open in browser:', error)
-        }
-    }, [file.path])
 
-    const activeContent = mode === 'edit' ? draftContent : sourceContent
-    const totalFileLines = countLines(activeContent)
-    const isCompactHtmlViewport = isHtml && viewport !== 'responsive' && presetConfig.width <= 768
+    const {
+        totalFileLines,
+        isCompactHtmlViewport,
+        isHtmlRenderedPreview,
+        previewResetKey,
+        localDiffPreview,
+        outlineItems,
+        longLineCount,
+        trailingWhitespaceCount,
+        jsonDiagnostic,
+        isEditorToolsEnabled,
+        getEditorToolButtonClass,
+        handleOutlineItemSelect
+    } = useFilePreviewModalAnalysis({
+        file,
+        mode,
+        viewport,
+        presetWidth: presetConfig.width,
+        sourceContent,
+        draftContent,
+        isDirty,
+        previewSurfaceRef,
+        setFocusLine
+    })
     const showPythonOutputPanel = canRunPython && (pythonOutputVisible || pythonRunState !== 'idle')
     const hasBottomPanel = showPythonOutputPanel || renderTerminalPanel
-    const centerHtmlRenderedPreview = isHtml && htmlViewMode === 'rendered' && mode === 'preview' && !hasBottomPanel
-    const flushResponsiveHtmlPreview = isHtml && htmlViewMode === 'rendered' && viewport === 'responsive' && !isExpanded
-    const previewResetKey = isMediaPreviewType(file.type)
-        ? `media:${viewport}:${htmlViewMode}:${mode}`
-        : `${file.path}:${file.type}:${viewport}:${htmlViewMode}:${mode}`
-
-    const localDiffPreview = useMemo(() => {
-        if (mode !== 'edit' || !isDirty) return null
-        return buildLocalDiffPreview(sourceContent, draftContent)
-    }, [draftContent, isDirty, mode, sourceContent])
-
-    const outlineItems = useMemo(
-        () => extractOutlineItems(activeContent, file.type),
-        [activeContent, file.type]
-    )
-    const longLineCount = useMemo(
-        () => activeContent.split(/\r?\n/).filter((line) => line.length > 120).length,
-        [activeContent]
-    )
-    const trailingWhitespaceCount = useMemo(
-        () => activeContent.split(/\r?\n/).filter((line) => /[ \t]+$/.test(line)).length,
-        [activeContent]
-    )
-    const jsonDiagnostic = useMemo(() => {
-        if (file.type !== 'json') return null
-        try {
-            JSON.parse(activeContent)
-            return { ok: true, message: 'Valid JSON structure' }
-        } catch (error: any) {
-            return { ok: false, message: error?.message || 'Invalid JSON syntax' }
-        }
-    }, [activeContent, file.type])
-
-    const isEditorToolsEnabled = mode === 'edit'
-    const getEditorToolButtonClass = (isActive = false) => cn(
-        'inline-flex items-center justify-center rounded-md border px-2 py-1 text-[11px] font-medium transition-colors',
-        isEditorToolsEnabled
-            ? isActive
-                ? 'border-sky-400/45 bg-sky-500/10 text-sky-200 hover:bg-sky-500/15'
-                : 'border-sparkle-border-secondary bg-sparkle-bg text-sparkle-text-secondary hover:border-sparkle-border hover:bg-sparkle-card-hover hover:text-sparkle-text'
-            : 'border-transparent bg-sparkle-bg/45 text-sparkle-text-muted/80 cursor-not-allowed opacity-70'
-    )
-
-    const handleOutlineItemSelect = useCallback((item: OutlineItem) => {
-        if (mode === 'edit') {
-            setFocusLine(item.line)
-            return
-        }
-        if (file.type === 'md') {
-            const root = previewSurfaceRef.current
-            if (!root) return
-            const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9\s_-]/g, '').replace(/\s+/g, ' ').trim()
-            const targetLabel = normalize(item.label)
-            const headings = Array.from(root.querySelectorAll('h1,h2,h3,h4,h5,h6')) as HTMLElement[]
-            const directMatch = headings.find((heading) => normalize(heading.textContent || '') === targetLabel)
-                || headings.find((heading) => normalize(heading.textContent || '').includes(targetLabel))
-            if (directMatch) {
-                directMatch.scrollIntoView({ block: 'center', behavior: 'smooth' })
-                return
-            }
-        }
-
-        setFocusLine(item.line)
-    }, [file.type, mode, previewSurfaceRef, setFocusLine])
+    const centerHtmlRenderedPreview = isHtmlRenderedPreview && !hasBottomPanel
+    const flushResponsiveHtmlPreview = isHtmlRenderedPreview && viewport === 'responsive' && !isExpanded
 
     const pythonOutputPanel = showPythonOutputPanel ? (
         <PreviewPythonOutputPanel fileName={file.name} visible={showPythonOutputPanel} runState={pythonRunState} interpreter={pythonInterpreter} command={pythonCommand} entries={pythonOutputEntries} height={pythonOutputHeight} showTimestamps={pythonShowTimestamps} scrollRef={pythonOutputScrollRef} onResizeStart={startPythonOutputResize} onToggleTimestamps={() => setPythonShowTimestamps((current) => !current)} onClear={clearPythonOutput} />
@@ -418,8 +397,6 @@ export function FilePreviewModal({
             loadingEditableContent={loadingEditableContent}
             viewport={viewport}
             setViewport={setViewport}
-            htmlViewMode={htmlViewMode}
-            setHtmlViewMode={setHtmlViewMode}
             csvDistinctColorsEnabled={csvDistinctColorsEnabled}
             setCsvDistinctColorsEnabled={setCsvDistinctColorsEnabled}
             pythonRunState={pythonRunState}
@@ -458,6 +435,17 @@ export function FilePreviewModal({
             hasBottomPanel={hasBottomPanel}
             outlineItems={outlineItems}
             onOutlineSelect={handleOutlineItemSelect}
+            onMinimizeLeftPanel={() => setLeftPanelOpen(false)}
+            onOpenLinkedPreview={handleOpenLinkedPreview}
+            onOpenLinkedPreviewInNewTab={handleOpenLinkedPreviewInNewTab}
+            folderTreeRefreshToken={folderTreeRefreshToken}
+            preserveSidebarContextRequest={preserveSidebarContextRequest}
+            previewTabs={resolvedPreviewTabs}
+            activePreviewTabId={resolvedActivePreviewTabId}
+            onSelectPreviewTab={handleSelectPreviewTab}
+            onClosePreviewTab={handleClosePreviewTab}
+            canCreateSiblingFile={canCreateSiblingFile}
+            onCreateSiblingFile={handleOpenCreateSiblingFileModal}
             longLineCount={longLineCount}
             trailingWhitespaceCount={trailingWhitespaceCount}
             jsonDiagnostic={jsonDiagnostic}
@@ -467,6 +455,7 @@ export function FilePreviewModal({
             terminalPanel={terminalPanel}
             showUnsavedModal={showUnsavedModal}
             conflictModifiedAt={conflictModifiedAt}
+            previewModeEnabled={previewModeEnabled}
             dismissUnsaved={dismissUnsavedChanges}
             discardUnsaved={discardUnsavedChanges}
             confirmUnsaved={confirmUnsavedChanges}
@@ -476,11 +465,41 @@ export function FilePreviewModal({
         />
     )
 
+    const modalWithDnd = (
+        <DndContext
+            sensors={dndSensors}
+            collisionDetection={(args) => {
+                const pointerCollisions = pointerWithin(args)
+                if (pointerCollisions.length > 0) return pointerCollisions
+                return closestCenter(args)
+            }}
+            onDragStart={handlePreviewDragStart}
+            onDragCancel={handlePreviewDragCancel}
+            onDragEnd={handlePreviewDragEnd}
+        >
+            {modalContent}
+            <DragOverlay zIndex={240}>
+                {dragOverlay}
+            </DragOverlay>
+        </DndContext>
+    )
+
     if (shellMode === 'window' || typeof document === 'undefined') {
-        return modalContent
+        return (
+            <>
+                {modalWithDnd}
+                {createFileModal}
+            </>
+        )
     }
 
-    return createPortal(modalContent, document.body)
+    return createPortal(
+        <>
+            {modalWithDnd}
+            {createFileModal}
+        </>,
+        document.body
+    )
 }
 
 export { useFilePreview }

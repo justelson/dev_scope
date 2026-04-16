@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { access, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 function sanitizeFileName(value: string): string {
@@ -22,7 +22,7 @@ export async function persistAssistantClipboardImage(input: {
     dataUrl: string
     fileName?: string
 }): Promise<string> {
-    const assistantDir = join(app.getPath('userData'), 'assistant', 'attachments', 'clipboard')
+    const assistantDir = getAssistantClipboardAttachmentsDir()
     await mkdir(assistantDir, { recursive: true })
 
     const fileName = sanitizeFileName(input.fileName || '')
@@ -30,4 +30,29 @@ export async function persistAssistantClipboardImage(input: {
     const bytes = decodeDataUrl(input.dataUrl)
     await writeFile(storagePath, bytes)
     return storagePath
+}
+
+function getAssistantClipboardAttachmentsDir(): string {
+    return join(app.getPath('userData'), 'assistant', 'attachments', 'clipboard')
+}
+
+function parseClipboardAttachmentReference(reference: string): string | null {
+    const normalized = String(reference || '').trim()
+    if (!normalized.toLowerCase().startsWith('clipboard://')) return null
+    const tail = normalized.slice('clipboard://'.length).trim().replace(/^[/\\]+/, '')
+    if (!tail || /[/\\]/.test(tail)) return null
+    return tail
+}
+
+export async function resolveAssistantClipboardAttachment(reference: string): Promise<string | null> {
+    const fileName = parseClipboardAttachmentReference(reference)
+    if (!fileName) return null
+
+    const resolvedPath = join(getAssistantClipboardAttachmentsDir(), fileName)
+    try {
+        await access(resolvedPath)
+        return resolvedPath
+    } catch {
+        return null
+    }
 }

@@ -8,16 +8,19 @@ import type {
     AssistantCreatePlaygroundLabInput,
     AssistantCreateSessionInput,
     AssistantDeclinePendingPlaygroundLabRequestInput,
+    AssistantDeletePlaygroundLabInput,
     AssistantDeleteMessageInput,
     AssistantGetSessionTurnUsageInput,
     AssistantPersistClipboardImageInput,
+    AssistantResolveClipboardAttachmentInput,
     AssistantSendPromptOptions,
+    AssistantSelectThreadInput,
     AssistantSetPlaygroundRootInput,
     AssistantTranscribeAudioInput,
     AssistantUserInputResponseInput
 } from '../../../shared/assistant/contracts'
 import { getAssistantService } from '../../assistant'
-import { persistAssistantClipboardImage } from '../../assistant/clipboard-attachments'
+import { persistAssistantClipboardImage, resolveAssistantClipboardAttachment } from '../../assistant/clipboard-attachments'
 import { getAssistantTranscriptionModelManager } from '../../assistant/transcription-models'
 
 async function withAssistantResult<T>(work: () => Promise<T> | T): Promise<T | { success: false; error: string }> {
@@ -86,6 +89,11 @@ export function handleAssistantSelectSession(_event: Electron.IpcMainInvokeEvent
     return withAssistantResult(() => getAssistantService().selectSession(sessionId))
 }
 
+export function handleAssistantSelectThread(_event: Electron.IpcMainInvokeEvent, input: AssistantSelectThreadInput) {
+    log.info('IPC: assistant:selectThread', { sessionId: input?.sessionId, threadId: input?.threadId })
+    return withAssistantResult(() => getAssistantService().selectThread(input.sessionId, input.threadId))
+}
+
 export function handleAssistantRenameSession(_event: Electron.IpcMainInvokeEvent, sessionId: string, title: string) {
     log.info('IPC: assistant:renameSession', { sessionId })
     return withAssistantResult(() => getAssistantService().renameSession(sessionId, title))
@@ -126,6 +134,11 @@ export function handleAssistantCreatePlaygroundLab(_event: Electron.IpcMainInvok
     return withAssistantResult(() => getAssistantService().createPlaygroundLab(input))
 }
 
+export function handleAssistantDeletePlaygroundLab(_event: Electron.IpcMainInvokeEvent, input: AssistantDeletePlaygroundLabInput) {
+    log.info('IPC: assistant:deletePlaygroundLab', { labId: input?.labId })
+    return withAssistantResult(() => getAssistantService().deletePlaygroundLab(input))
+}
+
 export function handleAssistantAttachSessionToPlaygroundLab(_event: Electron.IpcMainInvokeEvent, input: AssistantAttachSessionToPlaygroundLabInput) {
     log.info('IPC: assistant:attachSessionToPlaygroundLab', { sessionId: input?.sessionId, labId: input?.labId })
     return withAssistantResult(() => getAssistantService().attachSessionToPlaygroundLab(input))
@@ -145,6 +158,13 @@ export function handleAssistantPersistClipboardImage(_event: Electron.IpcMainInv
     return withAssistantResult(async () => ({
         success: true as const,
         path: await persistAssistantClipboardImage(input)
+    }))
+}
+
+export function handleAssistantResolveClipboardAttachment(_event: Electron.IpcMainInvokeEvent, input: AssistantResolveClipboardAttachmentInput) {
+    return withAssistantResult(async () => ({
+        success: true as const,
+        path: await resolveAssistantClipboardAttachment(input.reference)
     }))
 }
 

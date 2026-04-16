@@ -8,6 +8,8 @@ import { IssueLogRow, copyTextToClipboard, getUsageMetricDotClass, getUsageMetri
 export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsPanel(props: {
     open: boolean
     compact?: boolean
+    selectedChatTypeLabel: string
+    selectedLocationTypeLabel: string
     selectedProjectPath: string
     selectedProjectLabel: string
     displayProjectPath: string
@@ -50,7 +52,7 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
     onShowLogDetails: (activity: AssistantActivity) => void
     onToggleAssistantConnection: () => void
 }) {
-    const { open, compact = false, selectedProjectPath, selectedProjectLabel, displayProjectPath, showFullProjectPath, projectPathCopied, contextPercentage, contextColor, contextUsedDisplay, contextAvailableDisplay, pendingApprovalsCount, pendingUserInputsCount, sidebarSelectedModel, selectedRuntimeLabel, selectedThinkingLabel, selectedSpeedLabel, sessionCostLabel, sessionCostDisplay, sessionCostTone, sidebarMetricChips, issueActivities, latestIssueGroup, olderIssueGroups, copiedLogId, copyErrorByLogId, allLogsCopied, clearingLogs, logsExpanded, selectedSessionId, assistantConnected, assistantAvailable, commandPending, onClose, onShowPlan, onToggleProjectPath, onCopyProjectPath, onToggleLogsExpanded, onCopyAllLogs, onClearLogs, onCopyLog, onShowLogDetails, onToggleAssistantConnection } = props
+    const { open, compact = false, selectedChatTypeLabel, selectedLocationTypeLabel, selectedProjectPath, selectedProjectLabel, displayProjectPath, showFullProjectPath, projectPathCopied, contextPercentage, contextColor, contextUsedDisplay, contextAvailableDisplay, pendingApprovalsCount, pendingUserInputsCount, sidebarSelectedModel, selectedRuntimeLabel, selectedThinkingLabel, selectedSpeedLabel, sessionCostLabel, sessionCostDisplay, sessionCostTone, sidebarMetricChips, issueActivities, latestIssueGroup, olderIssueGroups, copiedLogId, copyErrorByLogId, allLogsCopied, clearingLogs, logsExpanded, selectedSessionId, assistantConnected, assistantAvailable, commandPending, onClose, onShowPlan, onToggleProjectPath, onCopyProjectPath, onToggleLogsExpanded, onCopyAllLogs, onClearLogs, onCopyLog, onShowLogDetails, onToggleAssistantConnection } = props
 
     return (
         <div className={cn('relative overflow-hidden transition-all duration-300', open ? 'opacity-100' : 'opacity-0 pointer-events-none')} style={{ width: open ? (compact ? '360px' : '460px') : '0px' }}>
@@ -91,10 +93,32 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
                 <div className="shrink-0 space-y-3 border-b border-white/10 px-4 py-4">
                     <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-sparkle-text-muted">Project</span>
-                            {selectedProjectPath && selectedProjectLabel !== 'Detached' && <button type="button" onClick={onCopyProjectPath} className={cn('shrink-0 rounded-md border p-1 transition-colors', projectPathCopied ? 'border-emerald-400/20 bg-emerald-500/[0.08] text-emerald-200' : 'border-white/10 bg-white/[0.03] text-sparkle-text-secondary hover:border-white/20 hover:bg-white/[0.05] hover:text-sparkle-text')} title={projectPathCopied ? 'Copied!' : `Copy full path: ${selectedProjectPath}`}>{projectPathCopied ? <Check size={11} /> : <Copy size={11} />}</button>}
+                            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-sparkle-text-muted">Chat</span>
+                            {selectedProjectPath ? <button type="button" onClick={onCopyProjectPath} className={cn('shrink-0 rounded-md border p-1 transition-colors', projectPathCopied ? 'border-emerald-400/20 bg-emerald-500/[0.08] text-emerald-200' : 'border-white/10 bg-white/[0.03] text-sparkle-text-secondary hover:border-white/20 hover:bg-white/[0.05] hover:text-sparkle-text')} title={projectPathCopied ? 'Copied!' : `Copy full path: ${selectedProjectPath}`}>{projectPathCopied ? <Check size={11} /> : <Copy size={11} />}</button> : null}
                         </div>
-                        {selectedProjectPath && selectedProjectLabel !== 'Detached' ? <button type="button" onClick={onToggleProjectPath} onDoubleClick={async (event) => { event.preventDefault(); await copyTextToClipboard(selectedProjectPath) }} className="w-full truncate text-left text-sm font-medium text-sparkle-text transition-colors hover:text-sparkle-text-secondary" title={showFullProjectPath ? 'Show folder name (double-click to copy)' : 'Show full path (double-click to copy)'}>{displayProjectPath}</button> : <span className="block truncate text-sm font-medium text-sparkle-text">{selectedProjectLabel}</span>}
+                        <div className="space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-sparkle-text-secondary">Type</span>
+                                <span className="font-medium text-sparkle-text">{selectedChatTypeLabel}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-sparkle-text-secondary">Target</span>
+                                <span className="font-medium text-sparkle-text">{selectedLocationTypeLabel}</span>
+                            </div>
+                        </div>
+                        {selectedProjectPath ? (
+                            <button
+                                type="button"
+                                onClick={onToggleProjectPath}
+                                onDoubleClick={async (event) => { event.preventDefault(); await copyTextToClipboard(selectedProjectPath) }}
+                                className="w-full truncate text-left text-sm font-medium text-sparkle-text transition-colors hover:text-sparkle-text-secondary"
+                                title={showFullProjectPath ? 'Show folder or lab name (double-click to copy)' : 'Show full path (double-click to copy)'}
+                            >
+                                {displayProjectPath}
+                            </button>
+                        ) : (
+                            <span className="block truncate text-sm font-medium text-sparkle-text">{selectedProjectLabel}</span>
+                        )}
                     </div>
 
                     {(pendingApprovalsCount > 0 || pendingUserInputsCount > 0) && <div className="space-y-2 border-t border-white/5 pt-3">

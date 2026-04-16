@@ -1,20 +1,21 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { ChevronLeft, ChevronRight, ListTodo, MoreHorizontal, PanelLeft, PanelRight, SquarePen } from 'lucide-react'
-import type { AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
-import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { AssistantProposedPlan, AssistantSessionTurnUsageEntry } from '@shared/assistant/contracts'
 import { useSettings } from '@/lib/settings'
-import { useAssistantConversationStore, useAssistantStoreActions } from '@/lib/assistant/store'
+import { useAssistantConversationStore, useAssistantStoreActions, useAssistantStoreSelector } from '@/lib/assistant/store'
 import { isAssistantThreadActivelyWorking } from '@/lib/assistant/selectors'
 import { cn } from '@/lib/utils'
-import type { AssistantDiffTarget } from './assistant-diff-types'
 import { buildPromptWithContextFiles } from './assistant-composer-utils'
+import { AssistantChatOnboardingOverlay } from './AssistantChatOnboardingOverlay'
+import { AssistantConversationHeader } from './AssistantConversationHeader'
 import { AssistantConversationComposerPane } from './AssistantConversationComposerPane'
-import { AssistantHeaderOpenWithButton } from './AssistantHeaderOpenWithButton'
 import { AssistantConversationTimelinePane } from './AssistantConversationTimelinePane'
-import { AssistantProjectGitChip } from './AssistantProjectGitChip'
+import type { AssistantConversationPaneProps } from './AssistantConversationPane.types'
 import type { AssistantComposerSendOptions, AssistantElementBounds, ComposerContextFile } from './assistant-composer-types'
 import { getAssistantLinkBaseFilePath } from './assistant-file-navigation'
 import { getAssistantActivePlanProgress, hasAssistantPlanPanelContent } from './assistant-plan-utils'
+import { getAssistantThreadDisplayTitle, getSessionDisplayTitle, resolveSessionProjectPath } from './assistant-sessions-rail-utils'
+import { useAssistantQueuedComposer } from './useAssistantQueuedComposer'
+import { useAssistantSessionTurnUsage } from './useAssistantSessionTurnUsage'
 import { useAssistantPageTimelineScroll } from './useAssistantPageTimelineScroll'
 
 const TIMELINE_SHOW_SCROLL_BUTTON_THRESHOLD_PX = 420
@@ -26,136 +27,12 @@ function rectsOverlap(a: AssistantElementBounds, b: AssistantElementBounds): boo
     return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
 }
 
-const AssistantConversationHeader = memo(function AssistantConversationHeader(props: {
-    rightPanelOpen: boolean
-    rightPanelMode: 'none' | 'details' | 'plan' | 'diff'
-    planPanelAvailable: boolean
-    planProgressLabel: string | null
-    planIsComplete: boolean
-    showHeaderMenu: boolean
-    setShowHeaderMenu: (value: boolean) => void
-    headerMenuRef: RefObject<HTMLDivElement | null>
-    leftSidebarCollapsed: boolean
-    latestProjectLabel: string
-    selectedSessionTitle: string
-    selectedSessionMode: 'work' | 'playground'
-    selectedProjectTooltip: string
-    selectedProjectPath: string | null
-    preferredShell: 'powershell' | 'cmd'
-    gitRefreshToken: string
-    onToggleLeftSidebar: () => void
-    onTogglePlanPanel: () => void
-    onCreateThread: () => void
-    onToggleRightSidebar: () => void
-}) {
-    const {
-        rightPanelOpen,
-        rightPanelMode,
-        planPanelAvailable,
-        planProgressLabel,
-        planIsComplete,
-        showHeaderMenu,
-        setShowHeaderMenu,
-        headerMenuRef,
-        leftSidebarCollapsed,
-        latestProjectLabel,
-        selectedSessionTitle,
-        selectedSessionMode,
-        selectedProjectTooltip,
-        selectedProjectPath,
-        preferredShell,
-        gitRefreshToken,
-        onToggleLeftSidebar,
-        onTogglePlanPanel,
-        onCreateThread,
-        onToggleRightSidebar
-    } = props
-
-    return (
-        <div className={cn('flex items-center justify-between gap-2 border-b border-white/10 bg-sparkle-card px-3 py-1.5', rightPanelOpen && 'border-r border-white/10')}>
-            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                <button
-                    type="button"
-                    onClick={onToggleLeftSidebar}
-                    className="shrink-0 rounded-lg border border-white/10 bg-sparkle-card p-1.5 text-sparkle-text-secondary transition-colors hover:border-white/20 hover:bg-white/[0.03] hover:text-sparkle-text"
-                    title={leftSidebarCollapsed ? 'Expand assistant sidebar' : 'Collapse assistant sidebar'}
-                    aria-label={leftSidebarCollapsed ? 'Expand assistant sidebar' : 'Collapse assistant sidebar'}
-                >
-                    {leftSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-                </button>
-                <h2 className="truncate text-[13px] font-semibold leading-none text-sparkle-text">{selectedSessionTitle}</h2>
-                <span className={cn(
-                    'inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-medium leading-none',
-                    selectedSessionMode === 'playground'
-                        ? 'border-violet-400/20 bg-violet-500/[0.08] text-violet-100'
-                        : 'border-sky-400/20 bg-sky-500/[0.08] text-sky-100'
-                )}>
-                    {selectedSessionMode === 'playground' ? 'Playground chat' : 'Work chat'}
-                </span>
-                <span className="inline-flex max-w-[220px] shrink-0 items-center rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium leading-none text-sparkle-text-secondary" title={selectedProjectTooltip}>
-                    <span className="truncate">{latestProjectLabel}</span>
-                </span>
-            </div>
-            <div ref={headerMenuRef} className="relative flex shrink-0 items-center gap-1.5">
-                <AssistantProjectGitChip
-                    projectPath={selectedProjectPath}
-                    refreshToken={gitRefreshToken}
-                />
-                <AssistantHeaderOpenWithButton
-                    projectPath={selectedProjectPath}
-                    preferredShell={preferredShell}
-                />
-                <button
-                    type="button"
-                    onClick={onTogglePlanPanel}
-                    className={cn(
-                        'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-medium transition-colors',
-                        rightPanelMode === 'plan' && planIsComplete
-                            ? 'border-emerald-400/30 bg-emerald-500/[0.10] text-emerald-100'
-                            : rightPanelMode === 'plan'
-                                ? 'border-violet-400/30 bg-violet-500/[0.10] text-violet-100'
-                                : planIsComplete
-                                    ? 'border-emerald-400/20 bg-emerald-500/[0.08] text-emerald-200 hover:border-emerald-300/35 hover:bg-emerald-500/[0.12]'
-                                    : 'border-white/10 bg-sparkle-card text-sparkle-text-secondary hover:border-white/20 hover:bg-white/[0.03] hover:text-sparkle-text'
-                    )}
-                    title={planPanelAvailable ? 'Show plan panel' : 'Show plan panel (no current running todo)'}
-                >
-                    <ListTodo size={13} />
-                    <span>{planPanelAvailable ? (planProgressLabel || 'Plan') : 'Set plan'}</span>
-                </button>
-                <button type="button" onClick={() => setShowHeaderMenu(!showHeaderMenu)} className="inline-flex size-8 items-center justify-center rounded-lg border border-white/10 bg-sparkle-card text-sparkle-text-secondary transition-colors hover:border-white/20 hover:bg-white/[0.03] hover:text-sparkle-text" title="More actions"><MoreHorizontal size={14} /></button>
-                {showHeaderMenu && <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-lg border border-white/10 bg-sparkle-card p-1 shadow-lg">
-                    <button type="button" onClick={onCreateThread} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text"><SquarePen size={13} />New thread</button>
-                    <button type="button" onClick={onToggleRightSidebar} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-sparkle-text-secondary transition-colors hover:bg-sparkle-card-hover hover:text-sparkle-text">{rightPanelMode === 'details' ? <PanelRight size={13} /> : <PanelLeft size={13} />}{rightPanelMode === 'details' ? 'Hide details' : 'Show details'}</button>
-                </div>}
-            </div>
-        </div>
-    )
-})
-
-export function AssistantConversationPane(props: {
-    rightPanelOpen: boolean
-    rightPanelMode: 'none' | 'details' | 'plan' | 'diff'
-    deletingMessageId: string | null
-    leftSidebarCollapsed: boolean
-    onToggleLeftSidebar: () => void
-    onRequestDeleteUserMessage: (message: AssistantMessage) => void
-    onToggleRightSidebar: () => void
-    onTogglePlanPanel: () => void
-    onOpenAttachmentPreview?: (
-        file: { name: string; path: string },
-        ext: string,
-        options?: PreviewOpenOptions
-    ) => Promise<void> | void
-    onOpenAssistantLink?: (href: string) => Promise<void> | void
-    onOpenEditedFile?: (filePath: string) => Promise<void> | void
-    onViewDiff?: (target: AssistantDiffTarget) => void
-}) {
+export function AssistantConversationPane(props: AssistantConversationPaneProps) {
     const controller = useAssistantConversationStore()
     const actions = useAssistantStoreActions()
     const { settings } = useSettings()
     const headerMenuRef = useRef<HTMLDivElement | null>(null)
-    const [showHeaderMenu, setShowHeaderMenu] = useState(false)
+    const [activeHeaderMenu, setActiveHeaderMenu] = useState<'none' | 'open-with' | 'more'>('none')
     const [showScrollToBottom, setShowScrollToBottom] = useState(false)
     const [elevateScrollToBottom, setElevateScrollToBottom] = useState(false)
     const [attachmentShelfBounds, setAttachmentShelfBounds] = useState<AssistantElementBounds | null>(null)
@@ -168,16 +45,42 @@ export function AssistantConversationPane(props: {
     const isThreadWorking = isAssistantThreadActivelyWorking(controller.activeThread)
     const isThreadConnecting = controller.phase.key === 'starting'
     const activeStatusLabel = isThreadConnecting ? 'Connecting...' : 'Working...'
-    const selectedProjectPath = String(controller.selectedSession?.projectPath || controller.activeThread?.cwd || '').trim()
-    const selectedSessionMode = controller.selectedSession?.mode || 'work'
-    const selectedSessionTitle = controller.selectedSession?.title || 'Assistant'
-    const selectedProjectTooltip = controller.selectedSession?.projectPath || controller.activeThread?.cwd || (selectedSessionMode === 'playground' ? 'No lab attached yet' : 'No project selected')
-    const latestProjectLabel = selectedProjectPath
-        ? selectedProjectPath.split(/[\\/]/).filter(Boolean).pop() || selectedProjectPath
-        : (selectedSessionMode === 'playground' ? 'chat-only' : 'not set')
+    const selectedSessionId = controller.selectedSession?.id || null
+    const selectedPlaygroundLabId = controller.selectedSession?.playgroundLabId || null
+    const selectedPlaygroundLabTitle = useAssistantStoreSelector((state) => {
+        if (!selectedPlaygroundLabId) return null
+        return state.snapshot.playground.labs.find((lab) => lab.id === selectedPlaygroundLabId)?.title || null
+    })
+    const selectedProjectPath = controller.selectedSession ? resolveSessionProjectPath(controller.selectedSession) : ''
+    const lastResolvedProjectPathBySessionRef = useRef<Record<string, string>>({})
+    const selectedSessionMode = controller.selectedSession?.mode || props.fallbackSessionMode
+    const displayProjectPath = selectedProjectPath || (
+        (controller.commandPending || controller.loading) && selectedSessionId
+            ? lastResolvedProjectPathBySessionRef.current[selectedSessionId] || ''
+            : ''
+    )
+    const selectedSessionTitle = controller.selectedSession ? getSessionDisplayTitle(controller.selectedSession) : 'Assistant'
+    const activeThreadIsSubagent = controller.activeThread?.source === 'subagent'
+    const activeThreadLabel = controller.activeThread ? getAssistantThreadDisplayTitle(controller.activeThread) : null
+    const selectedProjectTooltip = displayProjectPath || (
+        selectedSessionMode === 'playground'
+            ? (props.playgroundRootMissing
+                ? 'Choose a Playground root before creating Playground chats or labs.'
+                : 'Detached Playground chat. Create or attach a lab only when you need files.')
+            : 'Select a project to start a work chat.'
+    )
+    const latestProjectLabel = displayProjectPath
+        ? (
+            selectedSessionMode === 'playground' && selectedPlaygroundLabTitle
+                ? selectedPlaygroundLabTitle
+                : (displayProjectPath.split(/[\\/]/).filter(Boolean).pop() || displayProjectPath)
+        )
+        : (selectedSessionMode === 'playground'
+            ? (selectedPlaygroundLabTitle || (props.playgroundRootMissing ? 'choose root' : 'chat-only'))
+            : 'select project')
     const assistantMessageFilePath = useMemo(
-        () => getAssistantLinkBaseFilePath(selectedProjectPath),
-        [selectedProjectPath]
+        () => getAssistantLinkBaseFilePath(displayProjectPath),
+        [displayProjectPath]
     )
     const availableModels = useMemo(() => {
         if (controller.knownModels.length > 0) return controller.knownModels
@@ -188,10 +91,30 @@ export function AssistantConversationPane(props: {
     const activePlanProgress = getAssistantActivePlanProgress(controller.activePlan, controller.activeThread?.latestTurn || null)
     const planProgressLabel = activePlanProgress ? `${activePlanProgress.currentStepNumber}/${activePlanProgress.totalSteps}` : null
     const planIsComplete = activePlanProgress?.isComplete === true
+    const { sessionTurnUsage } = useAssistantSessionTurnUsage({
+        sessionId: selectedSessionId,
+        enabled: Boolean(selectedSessionId),
+        refreshKey: `${controller.activeThread?.latestTurn?.id || ''}:${controller.activeThread?.latestTurn?.completedAt || ''}:${controller.activeThread?.latestTurn?.state || ''}`
+    })
+    const turnUsageById = useMemo(() => {
+        const next = new Map<string, AssistantSessionTurnUsageEntry>()
+        for (const turn of sessionTurnUsage?.turns || []) {
+            next.set(turn.id, turn)
+        }
+        return next
+    }, [sessionTurnUsage])
     const shouldShowWorkingIndicator = isThreadWorking
         && !controller.timelineMessages.some((message) => message.role === 'assistant' && message.streaming)
     const lastTimelineMessage = controller.timelineMessages[controller.timelineMessages.length - 1] || null
     const latestTimelineActivity = controller.activityFeed[0] || null
+    const selectedThreadHasHistoricalContent = Boolean(
+        ((controller.activeThread?.messageCount || 0) > 0)
+        || Boolean(controller.activeThread?.latestTurn)
+        || Boolean(controller.activeThread?.activePlan)
+        || (controller.activeThread?.proposedPlans.length || 0) > 0
+        || (controller.activeThread?.pendingApprovals.length || 0) > 0
+        || (controller.activeThread?.pendingUserInputs.length || 0) > 0
+    )
     const { timelineContentRef, timelineScrollRef, onScrollTimeline, onScrollToBottom } = useAssistantPageTimelineScroll({
         sessionId: controller.selectedSession?.id || null,
         threadId: controller.activeThread?.id || null,
@@ -210,13 +133,24 @@ export function AssistantConversationPane(props: {
     const isLoadingSelectedChat = Boolean(
         !isThreadConnecting
         && !controller.loading
-        && controller.commandPending
         && controller.selectedSession
-        && controller.activeThread
+        && selectedThreadHasHistoricalContent
         && controller.timelineMessages.length === 0
         && controller.activityFeed.length === 0
-        && (controller.activeThread.messageCount > 0 || controller.activeThread.latestTurn || controller.activeThread.updatedAt)
     )
+    const showPlaygroundRootOnboarding = !controller.loading
+        && props.fallbackSessionMode === 'playground'
+        && props.playgroundRootMissing
+    const showWorkProjectOnboarding = !showPlaygroundRootOnboarding
+        && !controller.loading
+        && !controller.commandPending
+        && selectedSessionMode === 'work'
+        && !displayProjectPath
+    const showPlaygroundDetachedOnboarding = !showPlaygroundRootOnboarding
+        && !controller.loading
+        && selectedSessionMode === 'playground'
+        && !controller.selectedSession
+    const showChatOnboardingOverlay = showPlaygroundRootOnboarding || showWorkProjectOnboarding || showPlaygroundDetachedOnboarding
     const gitRefreshToken = `${controller.selectedSession?.id || 'no-session'}:${controller.activeThread?.id || 'no-thread'}:${controller.activeThread?.latestTurn?.completedAt || controller.activeThread?.lastSeenCompletedTurnId || 'idle'}`
 
     const getDistanceFromBottom = useCallback((element: HTMLDivElement) => {
@@ -247,12 +181,17 @@ export function AssistantConversationPane(props: {
     }, [onScrollTimeline, syncScrollButtonVisibility])
 
     useEffect(() => {
-        if (!showHeaderMenu) return
+        if (!selectedSessionId || !selectedProjectPath) return
+        lastResolvedProjectPathBySessionRef.current[selectedSessionId] = selectedProjectPath
+    }, [selectedProjectPath, selectedSessionId])
+
+    useEffect(() => {
+        if (activeHeaderMenu !== 'more') return
         const handlePointerDown = (event: MouseEvent) => {
-            if (!headerMenuRef.current?.contains(event.target as Node)) setShowHeaderMenu(false)
+            if (!headerMenuRef.current?.contains(event.target as Node)) setActiveHeaderMenu('none')
         }
         const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setShowHeaderMenu(false)
+            if (event.key === 'Escape') setActiveHeaderMenu('none')
         }
         document.addEventListener('mousedown', handlePointerDown)
         window.addEventListener('keydown', handleEscape)
@@ -260,7 +199,7 @@ export function AssistantConversationPane(props: {
             document.removeEventListener('mousedown', handlePointerDown)
             window.removeEventListener('keydown', handleEscape)
         }
-    }, [showHeaderMenu])
+    }, [activeHeaderMenu])
 
     useLayoutEffect(() => {
         const element = timelineScrollRef.current
@@ -314,6 +253,12 @@ export function AssistantConversationPane(props: {
     }, [controller.activeThread?.interactionMode, controller.activeThread?.id])
 
     useEffect(() => {
+        setActiveHeaderMenu('none')
+        setInteractionModeOverride(null)
+        setImplementationToastVisible(false)
+    }, [controller.activeThread?.id, selectedSessionId])
+
+    useEffect(() => {
         if (!implementationToastVisible) return
         const timeoutId = window.setTimeout(() => setImplementationToastVisible(false), IMPLEMENT_MODE_TOAST_MS)
         return () => window.clearTimeout(timeoutId)
@@ -357,7 +302,7 @@ export function AssistantConversationPane(props: {
         )
     }, [actions, controller.activeThread?.latestTurn?.id, controller.selectedSession?.id])
 
-    const handleSendPrompt = useCallback(async (
+    const handleDispatchPrompt = useCallback(async (
         prompt: string,
         contextFiles: ComposerContextFile[],
         options: AssistantComposerSendOptions
@@ -372,7 +317,22 @@ export function AssistantConversationPane(props: {
         })
         return result.success
     }, [actions, controller.selectedSession?.id])
-
+    const isAssistantBusy = controller.commandPending || isThreadWorking
+    const {
+        sendingComposerPrompt,
+        queuedComposerMessageCount,
+        queuedComposerMessageItems,
+        handleSendPrompt
+    } = useAssistantQueuedComposer({
+        selectedSessionId,
+        isAssistantBusy,
+        commandPending: controller.commandPending,
+        isThreadWorking,
+        activeTurnId: controller.activeThread?.latestTurn?.id || null,
+        busyMessageMode: settings.assistantBusyMessageMode,
+        dispatchPrompt: handleDispatchPrompt,
+        interruptTurn: (turnId, sessionId) => actions.interruptTurn(turnId, sessionId)
+    })
     const handleImplementProposedPlan = useCallback(async (plan: AssistantProposedPlan) => {
         const planMarkdown = String(plan.planMarkdown || '').trim()
         if (!planMarkdown) return
@@ -401,98 +361,147 @@ export function AssistantConversationPane(props: {
 
     const handleCreateThread = useCallback(() => {
         void actions.newThread(controller.selectedSession?.id || undefined)
-        setShowHeaderMenu(false)
+        setActiveHeaderMenu('none')
     }, [actions, controller.selectedSession?.id])
+
+    const handleChooseProjectForWorkChat = useCallback(async () => {
+        if (controller.commandPending) return
+        if (controller.selectedSession?.id) {
+            await actions.chooseProjectPath(controller.selectedSession.id)
+            return
+        }
+        await actions.createProjectSession()
+    }, [actions, controller.commandPending, controller.selectedSession?.id])
 
     const handleToggleDetailsPanel = useCallback(() => {
         props.onToggleRightSidebar()
-        setShowHeaderMenu(false)
+        setActiveHeaderMenu('none')
     }, [props.onToggleRightSidebar])
 
     const effectiveInteractionMode = interactionModeOverride || controller.activeThread?.interactionMode || 'default'
 
     return (
-        <section className="flex min-w-0 flex-1 flex-col">
-            <AssistantConversationHeader
-                rightPanelOpen={props.rightPanelOpen}
-                rightPanelMode={props.rightPanelMode}
-                planPanelAvailable={planPanelAvailable}
-                planProgressLabel={planProgressLabel}
-                planIsComplete={planIsComplete}
-                showHeaderMenu={showHeaderMenu}
-                setShowHeaderMenu={setShowHeaderMenu}
-                headerMenuRef={headerMenuRef}
-                leftSidebarCollapsed={props.leftSidebarCollapsed}
-                latestProjectLabel={latestProjectLabel}
-                selectedSessionTitle={selectedSessionTitle}
-                selectedSessionMode={selectedSessionMode}
-                selectedProjectTooltip={selectedProjectTooltip}
-                selectedProjectPath={selectedProjectPath || null}
-                preferredShell={settings.defaultShell}
-                gitRefreshToken={gitRefreshToken}
-                onToggleLeftSidebar={props.onToggleLeftSidebar}
-                onTogglePlanPanel={props.onTogglePlanPanel}
-                onCreateThread={handleCreateThread}
-                onToggleRightSidebar={handleToggleDetailsPanel}
-            />
-            <AssistantConversationTimelinePane
-                loading={controller.loading}
-                timelineContentRef={timelineContentRef}
-                timelineScrollRef={timelineScrollRef}
-                messages={controller.timelineMessages}
-                activities={controller.activityFeed}
-                proposedPlans={controller.activeThread?.proposedPlans || []}
-                latestProjectLabel={latestProjectLabel}
-                projectTitle={selectedProjectPath || null}
-                assistantMessageFilePath={assistantMessageFilePath}
-                windowKey={`${controller.selectedSession?.id || 'no-session'}:${controller.activeThread?.id || 'no-thread'}`}
-                isWorking={isThreadWorking}
-                activeStatusLabel={activeStatusLabel}
-                isConnecting={isThreadConnecting}
-                activeWorkStartedAt={controller.activeThread?.latestTurn?.startedAt || null}
-                latestAssistantMessageId={controller.activeThread?.latestTurn?.assistantMessageId || null}
-                latestTurnStartedAt={controller.activeThread?.latestTurn?.startedAt || null}
-                deletingMessageId={props.deletingMessageId}
-                loadingChats={isLoadingSelectedChat}
-                assistantTextStreamingMode={settings.assistantTextStreamingMode}
-                showScrollToBottom={showScrollToBottom}
-                elevateScrollToBottom={elevateScrollToBottom}
-                onScrollButtonBoundsChange={setScrollButtonBounds}
-                onScrollTimeline={handleTimelineScrollEvent}
-                onScrollToBottom={handleScrollToBottomClick}
-                onRequestDeleteUserMessage={props.onRequestDeleteUserMessage}
-                onImplementProposedPlan={handleImplementProposedPlan}
-                onShowPlanPanel={props.rightPanelMode !== 'plan' ? props.onTogglePlanPanel : undefined}
-                onOpenAttachmentPreview={props.onOpenAttachmentPreview}
-                onOpenAssistantLink={props.onOpenAssistantLink}
-                onOpenEditedFile={props.onOpenEditedFile}
-                onViewDiff={props.onViewDiff}
-            />
-            <AssistantConversationComposerPane
-                pendingPlaygroundLabRequest={controller.selectedSession?.pendingLabRequest || null}
-                pendingUserInputs={controller.pendingUserInputs}
-                commandPending={controller.commandPending}
-                thinking={controller.commandPending || isThreadWorking}
-                selectedSessionId={controller.selectedSession?.id || null}
-                assistantAvailable={controller.available}
-                assistantConnected={controller.connected}
-                selectedProjectPath={selectedProjectPath || null}
-                availableModels={availableModels}
-                activeModel={controller.activeThread?.model || availableModels[0]?.id || undefined}
-                modelsLoading={controller.modelsLoading}
-                runtimeMode={controller.activeThread?.runtimeMode || 'approval-required'}
-                interactionMode={effectiveInteractionMode}
-                activeProfile={controller.activeThread?.runtimeMode === 'full-access' ? 'yolo-fast' : 'safe-dev'}
-                activeStatusLabel={activeStatusLabel}
-                onStop={handleStopTurn}
-                onOpenAttachmentPreview={props.onOpenAttachmentPreview}
-                onAttachmentShelfBoundsChange={setAttachmentShelfBounds}
-                sendPrompt={handleSendPrompt}
-                refreshModels={handleRefreshModels}
-                respondUserInput={handleRespondUserInput}
-                approvePendingPlaygroundLabRequest={handleApprovePendingPlaygroundLabRequest}
-                declinePendingPlaygroundLabRequest={handleDeclinePendingPlaygroundLabRequest}
-            />
+        <section className="relative flex min-w-0 flex-1 flex-col">
+            <div className={cn(
+                'flex min-h-0 flex-1 flex-col transition-[filter,opacity] duration-200',
+                showChatOnboardingOverlay && 'pointer-events-none select-none blur-[2px] opacity-55'
+            )}>
+                <AssistantConversationHeader
+                    rightPanelOpen={props.rightPanelOpen}
+                    rightPanelMode={props.rightPanelMode}
+                    planPanelAvailable={planPanelAvailable}
+                    planProgressLabel={planProgressLabel}
+                    planIsComplete={planIsComplete}
+                    activeHeaderMenu={activeHeaderMenu}
+                    setActiveHeaderMenu={setActiveHeaderMenu}
+                    headerMenuRef={headerMenuRef}
+                    leftSidebarCollapsed={props.leftSidebarCollapsed}
+                    latestProjectLabel={latestProjectLabel}
+                    selectedSessionTitle={selectedSessionTitle}
+                    selectedSessionMode={selectedSessionMode}
+                    activeThreadIsSubagent={activeThreadIsSubagent}
+                    activeThreadLabel={activeThreadLabel}
+                    selectedProjectTooltip={selectedProjectTooltip}
+                    selectedProjectPath={displayProjectPath || null}
+                    preferredShell={settings.defaultShell}
+                    gitRefreshToken={gitRefreshToken}
+                    onToggleLeftSidebar={props.onToggleLeftSidebar}
+                    onTogglePlanPanel={props.onTogglePlanPanel}
+                    onCreateThread={handleCreateThread}
+                    onToggleRightSidebar={handleToggleDetailsPanel}
+                />
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                    <AssistantConversationTimelinePane
+                        loading={controller.loading}
+                        timelineContentRef={timelineContentRef}
+                        timelineScrollRef={timelineScrollRef}
+                        messages={controller.timelineMessages}
+                        activities={controller.activityFeed}
+                        proposedPlans={controller.activeThread?.proposedPlans || []}
+                        sessionMode={selectedSessionMode}
+                        latestProjectLabel={latestProjectLabel}
+                        projectTitle={displayProjectPath || null}
+                        assistantMessageFilePath={assistantMessageFilePath}
+                        windowKey={`${controller.selectedSession?.id || 'no-session'}:${controller.activeThread?.id || 'no-thread'}`}
+                        isWorking={isThreadWorking}
+                        activeStatusLabel={activeStatusLabel}
+                        isConnecting={isThreadConnecting}
+                        activeWorkStartedAt={controller.activeThread?.latestTurn?.startedAt || null}
+                        latestAssistantMessageId={controller.activeThread?.latestTurn?.assistantMessageId || null}
+                        latestTurnStartedAt={controller.activeThread?.latestTurn?.startedAt || null}
+                        turnUsageById={turnUsageById}
+                        deletingMessageId={props.deletingMessageId}
+                        loadingChats={isLoadingSelectedChat}
+                        assistantTextStreamingMode={settings.assistantTextStreamingMode}
+                        showScrollToBottom={showScrollToBottom}
+                        elevateScrollToBottom={elevateScrollToBottom}
+                        onScrollButtonBoundsChange={setScrollButtonBounds}
+                        onScrollTimeline={handleTimelineScrollEvent}
+                        onScrollToBottom={handleScrollToBottomClick}
+                        onRequestDeleteUserMessage={props.onRequestDeleteUserMessage}
+                        onImplementProposedPlan={handleImplementProposedPlan}
+                        onShowPlanPanel={props.rightPanelMode !== 'plan' ? props.onTogglePlanPanel : undefined}
+                        onOpenAttachmentPreview={props.onOpenAttachmentPreview}
+                        onOpenAssistantLink={props.onOpenAssistantLink}
+                        onOpenEditedFile={props.onOpenEditedFile}
+                        onViewDiff={props.onViewDiff}
+                    />
+                    <AssistantConversationComposerPane
+                        pendingPlaygroundLabRequest={controller.selectedSession?.pendingLabRequest || null}
+                        pendingUserInputs={controller.pendingUserInputs}
+                        commandPending={controller.commandPending}
+                        sending={sendingComposerPrompt}
+                        thinking={controller.commandPending || isThreadWorking}
+                        queuedMessageCount={queuedComposerMessageCount}
+                        queuedMessages={queuedComposerMessageItems}
+                        selectedSessionId={controller.selectedSession?.id || null}
+                        selectedSessionMode={selectedSessionMode}
+                        assistantAvailable={controller.available}
+                        assistantConnected={controller.connected}
+                        selectedProjectPath={displayProjectPath || null}
+                        availableModels={availableModels}
+                        activeModel={controller.activeThread?.model || availableModels[0]?.id || undefined}
+                        modelsLoading={controller.modelsLoading}
+                        runtimeMode={controller.activeThread?.runtimeMode || 'approval-required'}
+                        interactionMode={effectiveInteractionMode}
+                        activeProfile={controller.activeThread?.runtimeMode === 'full-access' ? 'yolo-fast' : 'safe-dev'}
+                        activeStatusLabel={activeStatusLabel}
+                        onStop={handleStopTurn}
+                        onOpenAttachmentPreview={props.onOpenAttachmentPreview}
+                        onAttachmentShelfBoundsChange={setAttachmentShelfBounds}
+                        sendPrompt={handleSendPrompt}
+                        refreshModels={handleRefreshModels}
+                        respondUserInput={handleRespondUserInput}
+                        approvePendingPlaygroundLabRequest={handleApprovePendingPlaygroundLabRequest}
+                        declinePendingPlaygroundLabRequest={handleDeclinePendingPlaygroundLabRequest}
+                    />
+                </div>
+            </div>
+            {showPlaygroundRootOnboarding ? (
+                <AssistantChatOnboardingOverlay
+                    mode="playground-root"
+                    busy={controller.commandPending}
+                    onChoosePlaygroundRoot={props.onChoosePlaygroundRoot}
+                />
+            ) : null}
+            {showWorkProjectOnboarding ? (
+                <AssistantChatOnboardingOverlay
+                    mode="work-project"
+                    busy={controller.commandPending}
+                    hasSession={Boolean(controller.selectedSession)}
+                    onChooseProject={handleChooseProjectForWorkChat}
+                    playgroundRootConfigured={!props.playgroundRootMissing}
+                    onChoosePlaygroundRoot={props.onChoosePlaygroundRoot}
+                    onStartDetachedPlaygroundChat={props.onStartDetachedPlaygroundChat}
+                />
+            ) : null}
+            {showPlaygroundDetachedOnboarding ? (
+                <AssistantChatOnboardingOverlay
+                    mode="playground-chat"
+                    busy={controller.commandPending}
+                    onStartDetachedPlaygroundChat={props.onStartDetachedPlaygroundChat}
+                />
+            ) : null}
             <div className="pointer-events-none absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
                 <div
                     className={cn(

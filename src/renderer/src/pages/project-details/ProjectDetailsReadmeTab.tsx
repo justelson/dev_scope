@@ -1,16 +1,18 @@
 import { memo, useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowUpRight, BookOpen, ChevronUp } from 'lucide-react'
+import { ArrowUpRight, BookOpen, ChevronUp, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
 import { navigateMarkdownLink } from '@/components/ui/markdown/linkNavigation'
 import type { UseFilePreviewReturn } from '@/components/ui/file-preview/useFilePreview'
+import { ProjectDetailsInlineLoading } from './ProjectDetailsInlineLoading'
 
 interface ProjectDetailsReadmeTabProps {
     project: {
         path: string
         readme?: string | null
     }
+    loadingProjectDetails?: boolean
     openPreview?: UseFilePreviewReturn['openPreview']
     readmeContentRef: MutableRefObject<HTMLDivElement | null>
     readmeExpanded: boolean
@@ -21,6 +23,7 @@ interface ProjectDetailsReadmeTabProps {
 function ProjectDetailsReadmeTabImpl(props: ProjectDetailsReadmeTabProps) {
     const {
         project,
+        loadingProjectDetails = false,
         openPreview,
         readmeContentRef,
         readmeExpanded,
@@ -33,6 +36,7 @@ function ProjectDetailsReadmeTabImpl(props: ProjectDetailsReadmeTabProps) {
     const [showFloatingCollapse, setShowFloatingCollapse] = useState(false)
     const [floatingRightPx, setFloatingRightPx] = useState(24)
     const readmeFilePath = `${project.path}/README.md`
+    const hasReadmeContent = Boolean(project.readme?.trim())
 
     const getScrollParent = (node: HTMLElement | null): HTMLElement | Window => {
         if (!node) return window
@@ -150,8 +154,14 @@ function ProjectDetailsReadmeTabImpl(props: ProjectDetailsReadmeTabProps) {
 
     return (
         <div ref={readmeSectionRef} className="relative">
-            {project.readme ? (
+            {hasReadmeContent ? (
                 <>
+                    {loadingProjectDetails && (
+                        <div className="flex items-center gap-2 border-b border-white/5 bg-white/[0.02] px-6 py-3 text-xs text-white/50">
+                            <RefreshCw size={13} className="animate-spin text-white/40" />
+                            <span>Refreshing README preview...</span>
+                        </div>
+                    )}
                     <div
                         ref={readmeContentRef}
                         className={cn(
@@ -160,7 +170,7 @@ function ProjectDetailsReadmeTabImpl(props: ProjectDetailsReadmeTabProps) {
                         )}
                     >
                         <MarkdownRenderer
-                            content={project.readme}
+                            content={project.readme || ''}
                             filePath={readmeFilePath}
                             onInternalLinkClick={handleInternalMarkdownLink}
                         />
@@ -216,10 +226,27 @@ function ProjectDetailsReadmeTabImpl(props: ProjectDetailsReadmeTabProps) {
                     )}
                 </>
             ) : (
-                <div className="flex flex-col items-center justify-center py-24 text-white/20">
-                    <BookOpen size={48} className="mb-4 opacity-50" />
-                    <p>No README.md found</p>
-                </div>
+                loadingProjectDetails ? (
+                    <div className="p-6">
+                        <div className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02]">
+                            <ProjectDetailsInlineLoading
+                                title="Loading README"
+                                detail="Reading the project README and rendering it for preview."
+                            />
+                            <div className="space-y-3 px-8 pb-8">
+                                <div className="h-4 w-2/3 animate-pulse rounded bg-white/5" />
+                                <div className="h-4 w-full animate-pulse rounded bg-white/5" />
+                                <div className="h-4 w-5/6 animate-pulse rounded bg-white/5" />
+                                <div className="h-4 w-3/4 animate-pulse rounded bg-white/5" />
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-24 text-white/20">
+                        <BookOpen size={48} className="mb-4 opacity-50" />
+                        <p>No README.md found</p>
+                    </div>
+                )
             )}
         </div>
     )
@@ -228,6 +255,7 @@ function ProjectDetailsReadmeTabImpl(props: ProjectDetailsReadmeTabProps) {
 export const ProjectDetailsReadmeTab = memo(ProjectDetailsReadmeTabImpl, (previous, next) => (
     previous.project.path === next.project.path
     && previous.project.readme === next.project.readme
+    && previous.loadingProjectDetails === next.loadingProjectDetails
     && previous.openPreview === next.openPreview
     && previous.readmeContentRef === next.readmeContentRef
     && previous.readmeExpanded === next.readmeExpanded

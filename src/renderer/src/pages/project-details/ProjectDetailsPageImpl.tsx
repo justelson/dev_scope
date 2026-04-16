@@ -55,10 +55,7 @@ export default function ProjectDetailsPage() {
         projectRootPath: derived.projectRootPath,
         toast: state.toast,
         setToast: state.setToast,
-        setCopiedPath: state.setCopiedPath,
-        setInstalledIdes: state.setInstalledIdes,
-        setLoadingInstalledIdes: state.setLoadingInstalledIdes,
-        setOpeningIdeId: state.setOpeningIdeId
+        setCopiedPath: state.setCopiedPath
     })
 
     useProjectDetailsPersistence({

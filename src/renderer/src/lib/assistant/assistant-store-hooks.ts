@@ -3,13 +3,10 @@ import type {
     AssistantApprovalResponseInput,
     AssistantApprovePendingPlaygroundLabRequestInput,
     AssistantAttachSessionToPlaygroundLabInput,
-    AssistantLatestTurn,
-    AssistantModelInfo,
     AssistantCreatePlaygroundLabInput,
     AssistantCreateSessionInput,
     AssistantDeclinePendingPlaygroundLabRequestInput,
-    AssistantSendPromptOptions,
-    AssistantSnapshot
+    AssistantSendPromptOptions
 } from '@shared/assistant/contracts'
 import {
     getActiveAssistantThread,
@@ -18,349 +15,25 @@ import {
     getAssistantLatestProposedPlan,
     getAssistantPendingApprovals,
     getAssistantPendingUserInputs,
+    getSelectedAssistantSession,
     getAssistantThreadPhase,
     getAssistantThreadPhaseLabel,
-    getAssistantTimelineMessages,
-    getSelectedAssistantSession
+    getAssistantTimelineMessages
 } from './selectors'
 import { assistantStore, type AssistantStoreState } from './assistant-store-core'
 
-type AssistantWorkspaceSelection = {
-    knownModels: AssistantModelInfo[]
-    available: boolean
-    connected: boolean
-    loading: boolean
-    bootstrapped: boolean
-    modelsLoading: boolean
-    commandPending: boolean
-    commandError: string | null
-    selectedSession: ReturnType<typeof getSelectedAssistantSession>
-    activeThread: ReturnType<typeof getActiveAssistantThread>
-    timelineMessages: ReturnType<typeof getAssistantTimelineMessages>
-    activityFeed: ReturnType<typeof getAssistantActivityFeed>
-    pendingApprovals: ReturnType<typeof getAssistantPendingApprovals>
-    pendingUserInputs: ReturnType<typeof getAssistantPendingUserInputs>
-    activePlan: ReturnType<typeof getAssistantActivePlan>
-    latestProposedPlan: ReturnType<typeof getAssistantLatestProposedPlan>
-    phase: ReturnType<typeof getAssistantThreadPhase>
-    phaseLabel: string
-}
-
-type AssistantPageSelection = {
-    available: boolean
-    connected: boolean
-    loading: boolean
-    bootstrapped: boolean
-    commandPending: boolean
-    commandError: string | null
-    selectedSession: ReturnType<typeof getSelectedAssistantSession>
-    activeThread: ReturnType<typeof getActiveAssistantThread>
-    activityFeed: ReturnType<typeof getAssistantActivityFeed>
-    pendingApprovals: ReturnType<typeof getAssistantPendingApprovals>
-    pendingUserInputs: ReturnType<typeof getAssistantPendingUserInputs>
-    activePlan: ReturnType<typeof getAssistantActivePlan>
-    latestProposedPlan: ReturnType<typeof getAssistantLatestProposedPlan>
-    phase: ReturnType<typeof getAssistantThreadPhase>
-    phaseLabel: string
-}
-
-type AssistantConversationSelection = {
-    knownModels: AssistantModelInfo[]
-    available: boolean
-    connected: boolean
-    loading: boolean
-    modelsLoading: boolean
-    commandPending: boolean
-    selectedSession: ReturnType<typeof getSelectedAssistantSession>
-    activeThread: ReturnType<typeof getActiveAssistantThread>
-    timelineMessages: ReturnType<typeof getAssistantTimelineMessages>
-    activityFeed: ReturnType<typeof getAssistantActivityFeed>
-    pendingUserInputs: ReturnType<typeof getAssistantPendingUserInputs>
-    activePlan: ReturnType<typeof getAssistantActivePlan>
-    latestProposedPlan: ReturnType<typeof getAssistantLatestProposedPlan>
-    phase: ReturnType<typeof getAssistantThreadPhase>
-    phaseLabel: string
-}
-
-type AssistantSessionsRailSelection = {
-    snapshot: AssistantSnapshot
-    sessions: AssistantSnapshot['sessions']
-    playground: AssistantSnapshot['playground']
-    activeSessionId: string | null
-    commandPending: boolean
-}
-
-function areAssistantModelsEqual(left: AssistantModelInfo[], right: AssistantModelInfo[]): boolean {
-    if (left === right) return true
-    if (left.length !== right.length) return false
-    for (let index = 0; index < left.length; index += 1) {
-        if (
-            left[index]?.id !== right[index]?.id
-            || left[index]?.label !== right[index]?.label
-            || left[index]?.description !== right[index]?.description
-        ) {
-            return false
-        }
-    }
-    return true
-}
-
-function areAssistantLatestTurnsEqual(left: AssistantLatestTurn | null, right: AssistantLatestTurn | null): boolean {
-    if (left === right) return true
-    if (!left || !right) return left === right
-    return left.id === right.id
-        && left.state === right.state
-        && left.requestedAt === right.requestedAt
-        && left.startedAt === right.startedAt
-        && left.completedAt === right.completedAt
-        && left.assistantMessageId === right.assistantMessageId
-        && left.effort === right.effort
-        && left.serviceTier === right.serviceTier
-        && left.usage?.totalTokens === right.usage?.totalTokens
-        && left.usage?.inputTokens === right.usage?.inputTokens
-        && left.usage?.outputTokens === right.usage?.outputTokens
-        && left.usage?.reasoningOutputTokens === right.usage?.reasoningOutputTokens
-        && left.usage?.cachedInputTokens === right.usage?.cachedInputTokens
-        && left.usage?.modelContextWindow === right.usage?.modelContextWindow
-}
-
-function areAssistantSessionsEqual(
-    left: AssistantWorkspaceSelection['selectedSession'],
-    right: AssistantWorkspaceSelection['selectedSession']
-): boolean {
-    if (left === right) return true
-    if (!left || !right) return left === right
-    return left.id === right.id
-        && left.title === right.title
-        && left.mode === right.mode
-        && left.projectPath === right.projectPath
-        && left.playgroundLabId === right.playgroundLabId
-        && left.pendingLabRequest?.id === right.pendingLabRequest?.id
-        && left.pendingLabRequest?.kind === right.pendingLabRequest?.kind
-        && left.pendingLabRequest?.repoUrl === right.pendingLabRequest?.repoUrl
-        && left.archived === right.archived
-        && left.createdAt === right.createdAt
-        && left.updatedAt === right.updatedAt
-        && left.activeThreadId === right.activeThreadId
-}
-
-function areAssistantThreadsEqual(
-    left: AssistantWorkspaceSelection['activeThread'],
-    right: AssistantWorkspaceSelection['activeThread']
-): boolean {
-    if (left === right) return true
-    if (!left || !right) return left === right
-    return left.id === right.id
-        && left.providerThreadId === right.providerThreadId
-        && left.model === right.model
-        && left.cwd === right.cwd
-        && left.messageCount === right.messageCount
-        && left.lastSeenCompletedTurnId === right.lastSeenCompletedTurnId
-        && left.runtimeMode === right.runtimeMode
-        && left.interactionMode === right.interactionMode
-        && left.state === right.state
-        && left.lastError === right.lastError
-        && left.createdAt === right.createdAt
-        && left.updatedAt === right.updatedAt
-        && areAssistantLatestTurnsEqual(left.latestTurn, right.latestTurn)
-}
-
-function getMessageListSignature(messages: AssistantWorkspaceSelection['timelineMessages']): string {
-    if (messages.length === 0) return '0'
-    const first = messages[0]
-    const last = messages[messages.length - 1]
-    return [
-        messages.length,
-        first?.id || '',
-        first?.updatedAt || '',
-        first?.streaming ? '1' : '0',
-        last?.id || '',
-        last?.updatedAt || '',
-        last?.streaming ? '1' : '0'
-    ].join('|')
-}
-
-function getActivityListSignature(activities: AssistantWorkspaceSelection['activityFeed']): string {
-    if (activities.length === 0) return '0'
-    const newest = activities[0]
-    const oldest = activities[activities.length - 1]
-    return [
-        activities.length,
-        newest?.id || '',
-        newest?.createdAt || '',
-        oldest?.id || '',
-        oldest?.createdAt || ''
-    ].join('|')
-}
-
-function getPendingApprovalSignature(items: AssistantWorkspaceSelection['pendingApprovals']): string {
-    if (items.length === 0) return '0'
-    const first = items[0]
-    const last = items[items.length - 1]
-    return [
-        items.length,
-        first?.requestId || '',
-        first?.status || '',
-        last?.requestId || '',
-        last?.status || ''
-    ].join('|')
-}
-
-function getPendingUserInputSignature(items: AssistantWorkspaceSelection['pendingUserInputs']): string {
-    if (items.length === 0) return '0'
-    const first = items[0]
-    const last = items[items.length - 1]
-    return [
-        items.length,
-        first?.requestId || '',
-        first?.status || '',
-        last?.requestId || '',
-        last?.status || ''
-    ].join('|')
-}
-
-function areAssistantPlansEqual(
-    left: AssistantWorkspaceSelection['activePlan'],
-    right: AssistantWorkspaceSelection['activePlan']
-): boolean {
-    if (left === right) return true
-    if (!left || !right) return left === right
-    return left.turnId === right.turnId
-        && left.updatedAt === right.updatedAt
-        && left.explanation === right.explanation
-        && left.plan.length === right.plan.length
-}
-
-function areAssistantLatestProposedPlansEqual(
-    left: AssistantWorkspaceSelection['latestProposedPlan'],
-    right: AssistantWorkspaceSelection['latestProposedPlan']
-): boolean {
-    if (left === right) return true
-    if (!left || !right) return left === right
-    return left.id === right.id
-        && left.turnId === right.turnId
-        && left.createdAt === right.createdAt
-        && left.updatedAt === right.updatedAt
-        && left.planMarkdown === right.planMarkdown
-}
-
-function areAssistantWorkspaceSelectionsEqual(left: AssistantWorkspaceSelection, right: AssistantWorkspaceSelection): boolean {
-    return left.available === right.available
-        && left.connected === right.connected
-        && left.loading === right.loading
-        && left.bootstrapped === right.bootstrapped
-        && left.modelsLoading === right.modelsLoading
-        && left.commandPending === right.commandPending
-        && left.commandError === right.commandError
-        && left.phase.key === right.phase.key
-        && left.phase.label === right.phase.label
-        && areAssistantModelsEqual(left.knownModels, right.knownModels)
-        && areAssistantSessionsEqual(left.selectedSession, right.selectedSession)
-        && areAssistantThreadsEqual(left.activeThread, right.activeThread)
-        && getMessageListSignature(left.timelineMessages) === getMessageListSignature(right.timelineMessages)
-        && getActivityListSignature(left.activityFeed) === getActivityListSignature(right.activityFeed)
-        && getPendingApprovalSignature(left.pendingApprovals) === getPendingApprovalSignature(right.pendingApprovals)
-        && getPendingUserInputSignature(left.pendingUserInputs) === getPendingUserInputSignature(right.pendingUserInputs)
-        && areAssistantPlansEqual(left.activePlan, right.activePlan)
-        && areAssistantLatestProposedPlansEqual(left.latestProposedPlan, right.latestProposedPlan)
-}
-
-function areAssistantPageSelectionsEqual(left: AssistantPageSelection, right: AssistantPageSelection): boolean {
-    return left.available === right.available
-        && left.connected === right.connected
-        && left.loading === right.loading
-        && left.bootstrapped === right.bootstrapped
-        && left.commandPending === right.commandPending
-        && left.commandError === right.commandError
-        && left.phase.key === right.phase.key
-        && left.phase.label === right.phase.label
-        && areAssistantSessionsEqual(left.selectedSession, right.selectedSession)
-        && areAssistantThreadsEqual(left.activeThread, right.activeThread)
-        && getActivityListSignature(left.activityFeed) === getActivityListSignature(right.activityFeed)
-        && getPendingApprovalSignature(left.pendingApprovals) === getPendingApprovalSignature(right.pendingApprovals)
-        && getPendingUserInputSignature(left.pendingUserInputs) === getPendingUserInputSignature(right.pendingUserInputs)
-        && areAssistantPlansEqual(left.activePlan, right.activePlan)
-        && areAssistantLatestProposedPlansEqual(left.latestProposedPlan, right.latestProposedPlan)
-}
-
-function areAssistantConversationSelectionsEqual(left: AssistantConversationSelection, right: AssistantConversationSelection): boolean {
-    return left.available === right.available
-        && left.connected === right.connected
-        && left.loading === right.loading
-        && left.modelsLoading === right.modelsLoading
-        && left.commandPending === right.commandPending
-        && left.phase.key === right.phase.key
-        && left.phase.label === right.phase.label
-        && areAssistantModelsEqual(left.knownModels, right.knownModels)
-        && areAssistantSessionsEqual(left.selectedSession, right.selectedSession)
-        && areAssistantThreadsEqual(left.activeThread, right.activeThread)
-        && getMessageListSignature(left.timelineMessages) === getMessageListSignature(right.timelineMessages)
-        && getActivityListSignature(left.activityFeed) === getActivityListSignature(right.activityFeed)
-        && getPendingUserInputSignature(left.pendingUserInputs) === getPendingUserInputSignature(right.pendingUserInputs)
-        && areAssistantPlansEqual(left.activePlan, right.activePlan)
-        && areAssistantLatestProposedPlansEqual(left.latestProposedPlan, right.latestProposedPlan)
-}
-
-function getRailSessionSignature(session: AssistantSnapshot['sessions'][number]): string {
-    const activeThread = session.threads.find((thread) => thread.id === session.activeThreadId) || null
-    const earliestCreatedThread = session.threads.reduce<typeof activeThread>((earliest, thread) => {
-        if (!earliest) return thread
-        if (thread.createdAt.localeCompare(earliest.createdAt) < 0) return thread
-        return earliest
-    }, null)
-    const hasVisibleChats = session.threads.some((thread) => (thread.messageCount || 0) > 0)
-
-    return [
-        session.id,
-        session.title,
-        session.mode,
-        session.projectPath || '',
-        session.playgroundLabId || '',
-        session.pendingLabRequest?.id || '',
-        session.pendingLabRequest?.kind || '',
-        session.archived ? '1' : '0',
-        session.createdAt,
-        session.activeThreadId || '',
-        hasVisibleChats ? '1' : '0',
-        activeThread?.state || '',
-        activeThread?.messageCount || 0,
-        activeThread?.lastSeenCompletedTurnId || '',
-        activeThread?.latestTurn?.id || '',
-        activeThread?.latestTurn?.state || '',
-        activeThread?.cwd || '',
-        earliestCreatedThread?.cwd || ''
-    ].join('|')
-}
-
-function areAssistantSessionsRailSelectionsEqual(left: AssistantSessionsRailSelection, right: AssistantSessionsRailSelection): boolean {
-    if (left.activeSessionId !== right.activeSessionId || left.commandPending !== right.commandPending) {
-        return false
-    }
-    if (left.playground.rootPath !== right.playground.rootPath || left.playground.labs.length !== right.playground.labs.length) {
-        return false
-    }
-    for (let index = 0; index < left.playground.labs.length; index += 1) {
-        const leftLab = left.playground.labs[index]
-        const rightLab = right.playground.labs[index]
-        if (
-            leftLab?.id !== rightLab?.id
-            || leftLab?.title !== rightLab?.title
-            || leftLab?.rootPath !== rightLab?.rootPath
-            || leftLab?.updatedAt !== rightLab?.updatedAt
-            || leftLab?.repoUrl !== rightLab?.repoUrl
-        ) {
-            return false
-        }
-    }
-    if (left.sessions.length !== right.sessions.length) return false
-    for (let index = 0; index < left.sessions.length; index += 1) {
-        if (getRailSessionSignature(left.sessions[index]) !== getRailSessionSignature(right.sessions[index])) {
-            return false
-        }
-    }
-    return true
-}
-
+import type {
+    AssistantConversationSelection,
+    AssistantPageSelection,
+    AssistantSessionsRailSelection,
+    AssistantWorkspaceSelection
+} from './assistant-store-selection-types'
+import {
+    areAssistantConversationSelectionsEqual,
+    areAssistantPageSelectionsEqual,
+    areAssistantSessionsRailSelectionsEqual,
+    areAssistantWorkspaceSelectionsEqual
+} from './assistant-store-selection-helpers'
 export function useAssistantStoreSelector<T>(
     selector: (state: AssistantStoreState) => T,
     isEqual: (left: T, right: T) => boolean = Object.is
@@ -404,9 +77,11 @@ const assistantStoreActions = {
     refreshModels: () => assistantStore.refreshModels(true),
     createSession: (input?: AssistantCreateSessionInput) => assistantStore.createSession(input).then(() => undefined),
     selectSession: (sessionId: string, options?: { force?: boolean }) => assistantStore.selectSession(sessionId, options).then(() => undefined),
+    selectThread: (input: { sessionId: string; threadId: string }, options?: { force?: boolean }) => assistantStore.selectThread(input, options).then(() => undefined),
     renameSession: (sessionId: string, title: string) => assistantStore.renameSession(sessionId, title).then(() => undefined),
     archiveSession: (sessionId: string, archived = true) => assistantStore.archiveSession(sessionId, archived).then(() => undefined),
     deleteSession: (sessionId: string) => assistantStore.deleteSession(sessionId).then(() => undefined),
+    deleteSessionResult: (sessionId: string) => assistantStore.deleteSession(sessionId),
     deleteMessage: (messageId: string, sessionId?: string) => assistantStore.deleteMessage({ messageId, sessionId }).then(() => undefined),
     deleteMessageResult: (messageId: string, sessionId?: string) => assistantStore.deleteMessage({ messageId, sessionId }),
     clearLogs: (sessionId?: string) => assistantStore.clearLogs(sessionId ? { sessionId } : undefined).then(() => undefined),
@@ -416,6 +91,8 @@ const assistantStoreActions = {
     setPlaygroundRoot: (rootPath: string | null) => assistantStore.setPlaygroundRoot(rootPath).then(() => undefined),
     createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) => assistantStore.createPlaygroundLab(input).then(() => undefined),
     createPlaygroundLabResult: (input: AssistantCreatePlaygroundLabInput) => assistantStore.createPlaygroundLab(input),
+    deletePlaygroundLab: (labId: string) => assistantStore.deletePlaygroundLab({ labId }).then(() => undefined),
+    deletePlaygroundLabResult: (labId: string) => assistantStore.deletePlaygroundLab({ labId }),
     attachSessionToPlaygroundLab: (input: AssistantAttachSessionToPlaygroundLabInput) => assistantStore.attachSessionToPlaygroundLab(input).then(() => undefined),
     approvePendingPlaygroundLabRequest: (input: AssistantApprovePendingPlaygroundLabRequestInput) => assistantStore.approvePendingPlaygroundLabRequest(input).then(() => undefined),
     declinePendingPlaygroundLabRequest: (input: AssistantDeclinePendingPlaygroundLabRequestInput) => assistantStore.declinePendingPlaygroundLabRequest(input).then(() => undefined),
@@ -445,6 +122,7 @@ export function useAssistantSessionsRailStore() {
         sessions: state.snapshot.sessions,
         playground: state.snapshot.playground,
         activeSessionId: state.snapshot.selectedSessionId,
+        activeThreadId: state.status.activeThreadId,
         commandPending: state.commandPending
     }), areAssistantSessionsRailSelectionsEqual)
 
@@ -550,3 +228,4 @@ export function useAssistantConversationStore() {
         }
     }, areAssistantConversationSelectionsEqual)
 }
+

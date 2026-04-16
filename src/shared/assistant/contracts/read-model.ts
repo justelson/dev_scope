@@ -109,6 +109,8 @@ export interface AssistantLatestTurn {
     usage?: AssistantTurnUsage | null
 }
 
+export type AssistantThreadSource = 'root' | 'subagent' | 'other'
+
 export interface AssistantSessionTurnUsageEntry {
     id: string
     sessionId: string
@@ -128,6 +130,12 @@ export interface AssistantSessionTurnUsageEntry {
 export interface AssistantThread {
     id: string
     providerThreadId: string | null
+    source: AssistantThreadSource
+    parentThreadId: string | null
+    providerParentThreadId: string | null
+    subagentDepth: number | null
+    agentNickname: string | null
+    agentRole: string | null
     model: string
     cwd: string | null
     messageCount: number

@@ -7,6 +7,10 @@ import type {
 } from '../../shared/assistant/contracts'
 
 const DEFAULT_SESSION_TITLE = 'New Session'
+const LEGACY_DEFAULT_SESSION_TITLES = new Set([
+    DEFAULT_SESSION_TITLE.toLowerCase(),
+    'new playground chat'
+])
 const PLAN_BLOCK_REGEX = /<proposed_plan>\s*([\s\S]*?)\s*<\/proposed_plan>/i
 
 export function nowIso(): string {
@@ -26,7 +30,7 @@ export function deriveSessionTitleFromPrompt(prompt: string): string {
 }
 
 export function isDefaultSessionTitle(title: string): boolean {
-    return title.trim().toLowerCase() === DEFAULT_SESSION_TITLE.toLowerCase()
+    return LEGACY_DEFAULT_SESSION_TITLES.has(title.trim().toLowerCase())
 }
 
 export function extractProposedPlanMarkdown(text: string | undefined): string | undefined {

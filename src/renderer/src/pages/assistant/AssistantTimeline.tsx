@@ -1,6 +1,6 @@
 import type { ReactNode, RefObject } from 'react'
 import { memo, useMemo } from 'react'
-import type { AssistantActivity, AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
+import type { AssistantActivity, AssistantMessage, AssistantProposedPlan, AssistantSessionTurnUsageEntry } from '@shared/assistant/contracts'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import type { AssistantTextStreamingMode } from '@/lib/settings'
 import { LoadingSpinner } from '@/components/ui/LoadingState'
@@ -14,6 +14,7 @@ import {
 } from './AssistantTimelineRows'
 import { buildTimelineRows, estimateTimelineRowHeight, type TimelineRenderRow } from './assistant-timeline-helpers'
 import { useAssistantTimelineEntries } from './useAssistantTimelineEntries'
+import { useAssistantTimelineVirtualizer } from './useAssistantTimelineVirtualizer'
 import { useAssistantTimelineWindow } from './useAssistantTimelineWindow'
 
 type AssistantTimelineProps = {
@@ -22,6 +23,7 @@ type AssistantTimelineProps = {
     proposedPlans?: AssistantProposedPlan[]
     projectLabel?: string | null
     projectTitle?: string | null
+    sessionMode?: 'work' | 'playground'
     projectRootPath?: string | null
     assistantMessageFilePath?: string | null
     windowKey?: string
@@ -32,6 +34,7 @@ type AssistantTimelineProps = {
     activeWorkStartedAt?: string | null
     latestAssistantMessageId?: string | null
     latestTurnStartedAt?: string | null
+    turnUsageById?: ReadonlyMap<string, AssistantSessionTurnUsageEntry>
     deletingMessageId?: string | null
     loadingChats?: boolean
     assistantTextStreamingMode?: AssistantTextStreamingMode
@@ -55,6 +58,7 @@ function AssistantTimelineImpl({
     proposedPlans = [],
     projectLabel = null,
     projectTitle = null,
+    sessionMode = 'work',
     projectRootPath = null,
     assistantMessageFilePath = null,
     windowKey = 'default',
@@ -65,6 +69,7 @@ function AssistantTimelineImpl({
     activeWorkStartedAt = null,
     latestAssistantMessageId = null,
     latestTurnStartedAt = null,
+    turnUsageById,
     deletingMessageId = null,
     loadingChats = false,
     assistantTextStreamingMode = 'stream',
@@ -91,10 +96,23 @@ function AssistantTimelineImpl({
         () => buildTimelineRows(visibleEntries, isWorking, activeWorkStartedAt),
         [activeWorkStartedAt, isWorking, visibleEntries]
     )
+    const timelineVirtualizer = useAssistantTimelineVirtualizer({
+        rows,
+        resetKey: windowKey,
+        scrollContainerRef
+    })
     const hasStreamingAssistantMessage = useMemo(
         () => messages.some((message) => message.role === 'assistant' && message.streaming),
         [messages]
     )
+    const lastAssistantMessageIdByTurn = useMemo(() => {
+        const next = new Map<string, string>()
+        for (const message of messages) {
+            if (message.role !== 'assistant' || !message.turnId) continue
+            next.set(message.turnId, message.id)
+        }
+        return next
+    }, [messages])
 
     if (loadingChats) {
         return (
@@ -108,7 +126,15 @@ function AssistantTimelineImpl({
     }
 
     if (rows.length === 0) {
-        return <TimelineEmptyState projectLabel={projectLabel} projectTitle={projectTitle} isConnecting={isConnecting} connectingLabel={workingLabel} />
+        return (
+            <TimelineEmptyState
+                projectLabel={projectLabel}
+                projectTitle={projectTitle}
+                sessionMode={sessionMode}
+                showStatusIndicator={isConnecting || isWorking}
+                statusIndicatorLabel={workingLabel}
+            />
+        )
     }
 
     const renderRow = (row: TimelineRenderRow) => {
@@ -157,7 +183,9 @@ function AssistantTimelineImpl({
                 key={row.id}
                 message={row.message}
                 isLatestAssistant={row.message.role === 'assistant' && row.message.id === latestAssistantMessageId}
+                isLastAssistantInTurn={row.message.role === 'assistant' && !!row.message.turnId && lastAssistantMessageIdByTurn.get(row.message.turnId) === row.message.id}
                 latestTurnStartedAt={latestTurnStartedAt}
+                turnUsage={row.message.role === 'assistant' && row.message.turnId ? (turnUsageById?.get(row.message.turnId) || null) : null}
                 deleting={row.message.id === deletingMessageId}
                 assistantTextStreamingMode={assistantTextStreamingMode}
                 onRequestDelete={row.message.role === 'user' ? onRequestDeleteUserMessage : undefined}
@@ -169,15 +197,16 @@ function AssistantTimelineImpl({
         )
     }
 
-    const renderRowContainer = (row: TimelineRenderRow, content: ReactNode) => {
+    const renderRowContainer = (row: TimelineRenderRow, content: ReactNode, measured = false) => {
         if (!content) return null
         return (
             <div
                 key={row.id}
+                ref={measured ? timelineVirtualizer.getMeasuredRowRef(row.id) : undefined}
                 className="pb-4"
                 style={{
                     contentVisibility: 'auto',
-                    containIntrinsicSize: `${estimateTimelineRowHeight(row)}px`
+                    containIntrinsicSize: `${estimateTimelineRowHeight(row, { containerWidth: timelineVirtualizer.viewportWidth })}px`
                 }}
             >
                 {content}
@@ -206,7 +235,24 @@ function AssistantTimelineImpl({
                     </div>
                 </div>
             ) : null}
-            {rows.map((row) => renderRowContainer(row, renderRow(row)))}
+            {timelineVirtualizer.paddingTop > 0 ? (
+                <div
+                    aria-hidden="true"
+                    style={{
+                        height: timelineVirtualizer.paddingTop
+                    }}
+                />
+            ) : null}
+            {timelineVirtualizer.virtualRows.map(({ row }) => renderRowContainer(row, renderRow(row), true))}
+            {timelineVirtualizer.tailRows.map((row) => renderRowContainer(row, renderRow(row), true))}
+            {timelineVirtualizer.paddingBottom > 0 ? (
+                <div
+                    aria-hidden="true"
+                    style={{
+                        height: timelineVirtualizer.paddingBottom
+                    }}
+                />
+            ) : null}
         </div>
     )
 }

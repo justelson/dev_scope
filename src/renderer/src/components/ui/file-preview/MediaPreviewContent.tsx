@@ -18,80 +18,28 @@ function renderMediaIcon(type: PreviewMediaItem['type']) {
     return <Music4 size={20} className="text-sky-200" />
 }
 
-function MediaPeekCard({ item }: { item: PreviewMediaItem }) {
-    const [previewFailed, setPreviewFailed] = useState(false)
-
-    return (
-        <div className="pointer-events-none w-36 overflow-hidden rounded-2xl border border-white/10 bg-black/75 shadow-2xl backdrop-blur-md">
-            <div className="h-24 w-full overflow-hidden bg-white/[0.04]">
-                {!previewFailed && item.type === 'image' ? (
-                    <img
-                        src={getFileUrl(item.thumbnailPath || item.path)}
-                        alt={item.name}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                        onError={() => setPreviewFailed(true)}
-                    />
-                ) : !previewFailed && item.type === 'video' ? (
-                    <video
-                        src={getFileUrl(item.path)}
-                        muted
-                        preload="metadata"
-                        playsInline
-                        className="h-full w-full object-cover"
-                        onError={() => setPreviewFailed(true)}
-                    />
-                ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-black/20">
-                        {renderMediaIcon(item.type)}
-                    </div>
-                )}
-            </div>
-            <div className="px-3 py-2">
-                <div className="truncate text-[11px] font-medium text-white">{item.name}</div>
-                <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-white/45">{item.type}</div>
-            </div>
-        </div>
-    )
-}
-
-function MediaNavZone({
+function MediaNavButton({
     side,
     item,
-    isActive,
-    onHoverChange,
     onSelect
 }: {
     side: 'left' | 'right'
     item: PreviewMediaItem | null
-    isActive: boolean
-    onHoverChange: (side: 'left' | 'right' | null) => void
     onSelect?: (item: PreviewMediaItem) => Promise<void> | void
 }) {
     if (!item) return null
 
-    const previewPositionClassName = side === 'left' ? 'left-14' : 'right-14'
     const zonePositionClassName = side === 'left' ? 'left-0 items-start pl-3' : 'right-0 items-end pr-3'
 
     return (
-        <div
-            className={cn('absolute inset-y-0 z-20 flex w-28 items-center', zonePositionClassName)}
-            onMouseEnter={() => onHoverChange(side)}
-            onMouseLeave={() => onHoverChange(null)}
-        >
+        <div className={cn('absolute inset-y-0 z-20 flex w-20 items-center', zonePositionClassName)}>
             <button
                 type="button"
                 onClick={() => { void onSelect?.(item) }}
-                className={cn(
-                    'pointer-events-auto relative flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-black/55 text-white/80 shadow-xl backdrop-blur-md transition-all duration-200 hover:border-white/20 hover:bg-black/70 hover:text-white',
-                    isActive ? 'opacity-100' : 'opacity-0'
-                )}
+                className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/55 text-white/80 shadow-xl backdrop-blur-md transition-colors duration-200 hover:border-white/20 hover:bg-black/70 hover:text-white"
                 title={`${side === 'left' ? 'Previous' : 'Next'} media`}
             >
                 {side === 'left' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
-                <div className={cn('absolute top-1/2 -translate-y-1/2', isActive ? 'block' : 'hidden', previewPositionClassName)}>
-                    <MediaPeekCard item={item} />
-                </div>
             </button>
         </div>
     )
@@ -103,7 +51,7 @@ function renderMediaStage(targetFile: PreviewFile, activeMediaItem: PreviewMedia
             <ImagePreviewContent
                 filePath={targetFile.path}
                 fileName={targetFile.name}
-                isExpanded={isExpanded}
+                isExpanded
             />
         )
     }
@@ -161,7 +109,6 @@ export default function MediaPreviewContent({
     onSelectMedia,
     isExpanded = false
 }: MediaPreviewContentProps) {
-    const [hoveredEdge, setHoveredEdge] = useState<'left' | 'right' | null>(null)
     const [transitionState, setTransitionState] = useState<{
         from: PreviewFile
         to: PreviewFile
@@ -204,7 +151,6 @@ export default function MediaPreviewContent({
         const previousFile = previousFileRef.current
         if (previousFile.path === file.path) return
 
-        setHoveredEdge(null)
         const previousIndex = mediaItems.findIndex((item) => item.path.toLowerCase() === previousFile.path.toLowerCase())
         const nextIndexValue = mediaItems.findIndex((item) => item.path.toLowerCase() === file.path.toLowerCase())
         const direction: 'left' | 'right' = (
@@ -265,8 +211,8 @@ export default function MediaPreviewContent({
                 renderMediaStage(file, activeMediaItem, isExpanded)
             )}
 
-            <MediaNavZone side="left" item={previousItem} isActive={hoveredEdge === 'left'} onHoverChange={setHoveredEdge} onSelect={onSelectMedia} />
-            <MediaNavZone side="right" item={nextItem} isActive={hoveredEdge === 'right'} onHoverChange={setHoveredEdge} onSelect={onSelectMedia} />
+            <MediaNavButton side="left" item={previousItem} onSelect={onSelectMedia} />
+            <MediaNavButton side="right" item={nextItem} onSelect={onSelectMedia} />
         </div>
     )
 }

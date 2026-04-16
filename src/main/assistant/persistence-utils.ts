@@ -19,7 +19,7 @@ export interface AssistantMetaRow {
     knownModels: AssistantSnapshot['knownModels']
 }
 
-export const PERSISTENCE_VERSION = 5
+export const PERSISTENCE_VERSION = 7
 export const PERSISTENCE_FLUSH_DEBOUNCE_MS = 1500
 
 export function jsonStringify(value: unknown): string {
@@ -47,6 +47,18 @@ export function toNumber(value: SqlValue, fallback = 0): number {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+export function readAssistantMetaValue(db: SqlDatabase, key: string): string | null {
+    const row = db.exec('SELECT value FROM assistant_meta WHERE key = ?', [key])[0]?.values?.[0] || null
+    return typeof row?.[0] === 'string' && row[0].length > 0 ? row[0] : null
+}
+
+export function readAssistantPersistenceVersion(db: SqlDatabase): number | null {
+    const value = readAssistantMetaValue(db, 'persistenceVersion')
+    if (!value) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
 function normalizeAssistantPath(value?: string | null): string {
     return String(value || '').trim()
 }
@@ -65,6 +77,13 @@ function hasSessionMessages(session: AssistantSession): boolean {
         const summarizedCount = Number.isFinite(thread.messageCount) ? thread.messageCount : 0
         return summarizedCount > 0 || thread.messages.length > 0
     })
+}
+
+export function shouldPersistAssistantSession(session: AssistantSession): boolean {
+    if (session.mode !== 'playground') return true
+    if (session.playgroundLabId) return true
+    if (resolveSessionProjectPath(session)) return true
+    return hasSessionMessages(session)
 }
 
 export function shouldDeleteInvalidSession(session: AssistantSession): boolean {
@@ -105,6 +124,12 @@ export function initializeAssistantPersistenceSchema(db: SqlDatabase): void {
             id TEXT PRIMARY KEY,
             session_id TEXT NOT NULL,
             provider_thread_id TEXT,
+            source TEXT NOT NULL DEFAULT 'root',
+            parent_thread_id TEXT,
+            provider_parent_thread_id TEXT,
+            subagent_depth INTEGER,
+            agent_nickname TEXT,
+            agent_role TEXT,
             model TEXT NOT NULL,
             cwd TEXT,
             message_count INTEGER NOT NULL,
@@ -215,6 +240,12 @@ export function initializeAssistantPersistenceSchema(db: SqlDatabase): void {
     ensureTableColumn(db, 'assistant_sessions', 'mode', `TEXT NOT NULL DEFAULT 'work'`)
     ensureTableColumn(db, 'assistant_sessions', 'playground_lab_id', 'TEXT')
     ensureTableColumn(db, 'assistant_sessions', 'pending_lab_request_json', 'TEXT')
+    ensureTableColumn(db, 'assistant_threads', 'source', `TEXT NOT NULL DEFAULT 'root'`)
+    ensureTableColumn(db, 'assistant_threads', 'parent_thread_id', 'TEXT')
+    ensureTableColumn(db, 'assistant_threads', 'provider_parent_thread_id', 'TEXT')
+    ensureTableColumn(db, 'assistant_threads', 'subagent_depth', 'INTEGER')
+    ensureTableColumn(db, 'assistant_threads', 'agent_nickname', 'TEXT')
+    ensureTableColumn(db, 'assistant_threads', 'agent_role', 'TEXT')
 }
 
 function ensureTableColumn(db: SqlDatabase, tableName: string, columnName: string, definition: string): void {

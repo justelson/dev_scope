@@ -1,5 +1,5 @@
 import type { Settings } from '@/lib/settings'
-import type { DevScopeGitHubPublishContext } from '@shared/contracts/devscope-api'
+import type { DevScopeGitHubPublishContext, DevScopePullRequestSummary } from '@shared/contracts/devscope-api'
 import type { GitBranchSummary, GitCommit, GitRemoteSummary } from '../types'
 
 export type ToastTone = 'success' | 'error' | 'info'
@@ -25,4 +25,6 @@ export type PullRequestModalProps = {
     updateSettings: (partial: Partial<Settings>) => void
     showToast: (message: string, actionLabel?: string, actionTo?: string, tone?: ToastTone) => void
     onCommitClick?: (commit: GitCommit) => void
+    initialPullRequest?: DevScopePullRequestSummary | null
+    onPullRequestResolved?: (pullRequest: DevScopePullRequestSummary | null) => void
 }
