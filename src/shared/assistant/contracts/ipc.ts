@@ -25,6 +25,7 @@ export const ASSISTANT_IPC = {
     disconnect: 'devscope:assistant:disconnect',
     createSession: 'devscope:assistant:createSession',
     selectSession: 'devscope:assistant:selectSession',
+    selectThread: 'devscope:assistant:selectThread',
     renameSession: 'devscope:assistant:renameSession',
     archiveSession: 'devscope:assistant:archiveSession',
     deleteSession: 'devscope:assistant:deleteSession',
@@ -33,10 +34,12 @@ export const ASSISTANT_IPC = {
     setSessionProjectPath: 'devscope:assistant:setSessionProjectPath',
     setPlaygroundRoot: 'devscope:assistant:setPlaygroundRoot',
     createPlaygroundLab: 'devscope:assistant:createPlaygroundLab',
+    deletePlaygroundLab: 'devscope:assistant:deletePlaygroundLab',
     attachSessionToPlaygroundLab: 'devscope:assistant:attachSessionToPlaygroundLab',
     approvePendingPlaygroundLabRequest: 'devscope:assistant:approvePendingPlaygroundLabRequest',
     declinePendingPlaygroundLabRequest: 'devscope:assistant:declinePendingPlaygroundLabRequest',
     persistClipboardImage: 'devscope:assistant:persistClipboardImage',
+    resolveClipboardAttachment: 'devscope:assistant:resolveClipboardAttachment',
     newThread: 'devscope:assistant:newThread',
     sendPrompt: 'devscope:assistant:sendPrompt',
     interruptTurn: 'devscope:assistant:interruptTurn',
@@ -92,6 +95,11 @@ export interface AssistantCreateSessionInput {
     playgroundLabId?: string | null
 }
 
+export interface AssistantSelectThreadInput {
+    sessionId: string
+    threadId: string
+}
+
 export interface AssistantSetPlaygroundRootInput {
     rootPath: string | null
 }
@@ -106,6 +114,10 @@ export interface AssistantCreatePlaygroundLabInput {
 
 export interface AssistantAttachSessionToPlaygroundLabInput {
     sessionId: string
+    labId: string
+}
+
+export interface AssistantDeletePlaygroundLabInput {
     labId: string
 }
 
@@ -128,6 +140,10 @@ export interface AssistantPersistClipboardImageInput {
     dataUrl: string
     fileName?: string
     mimeType?: string
+}
+
+export interface AssistantResolveClipboardAttachmentInput {
+    reference: string
 }
 
 export interface AssistantClearLogsInput {

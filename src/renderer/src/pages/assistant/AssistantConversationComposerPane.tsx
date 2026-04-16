@@ -4,14 +4,19 @@ import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import { AssistantComposer } from './AssistantComposer'
 import { AssistantPendingPlaygroundLabPanel } from './AssistantPendingPlaygroundLabPanel'
 import { AssistantPendingUserInputPanel } from './AssistantPendingUserInputPanel'
-import type { AssistantComposerSendOptions, AssistantElementBounds, ComposerContextFile } from './assistant-composer-types'
+import { deriveAssistantComposerDisabledReason } from './assistant-composer-capabilities'
+import type { AssistantComposerSendOptions, AssistantElementBounds, AssistantQueuedComposerMessage, ComposerContextFile } from './assistant-composer-types'
 
 export const AssistantConversationComposerPane = memo(function AssistantConversationComposerPane(props: {
     pendingPlaygroundLabRequest: AssistantPlaygroundPendingLabRequest | null
     pendingUserInputs: AssistantPendingUserInput[]
     commandPending: boolean
+    sending: boolean
     thinking: boolean
+    queuedMessageCount: number
+    queuedMessages: AssistantQueuedComposerMessage[]
     selectedSessionId: string | null
+    selectedSessionMode: 'work' | 'playground'
     assistantAvailable: boolean
     assistantConnected: boolean
     selectedProjectPath: string | null
@@ -41,6 +46,12 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
 }) {
     const hasPendingPlaygroundLabRequest = Boolean(props.pendingPlaygroundLabRequest)
     const isWaitingForUserInput = props.pendingUserInputs.length > 0
+    const composerDisabledReason = deriveAssistantComposerDisabledReason({
+        sessionId: props.selectedSessionId,
+        assistantAvailable: props.assistantAvailable,
+        sessionMode: props.selectedSessionMode,
+        projectPath: props.selectedProjectPath
+    })
 
     return (
         <div className="relative px-4 py-3">
@@ -74,10 +85,13 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
                 <div className="mx-auto w-full max-w-3xl">
                     <AssistantComposer
                         sessionId={props.selectedSessionId}
-                        disabled={!props.selectedSessionId || !props.assistantAvailable}
-                        isSending={props.commandPending}
+                        disabled={Boolean(composerDisabledReason)}
+                        disabledReason={composerDisabledReason}
+                        isSending={props.sending}
                         isThinking={props.thinking}
                         thinkingLabel={props.activeStatusLabel}
+                        queuedMessageCount={props.queuedMessageCount}
+                        queuedMessages={props.queuedMessages}
                         isConnected={props.assistantConnected}
                         activeModel={props.activeModel}
                         modelOptions={props.availableModels}

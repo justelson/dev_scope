@@ -240,6 +240,7 @@ function applyAssistantDomainEventInternal(snapshot: AssistantSnapshot, event: A
             const sessionIndex = findSessionIndex(next, sessionId)
             const writable = ensureSessionWritable(next, previousSessions, sessionIndex)
             const thread = event.payload['thread'] as AssistantThread
+            const makeActive = event.payload['makeActive'] !== false
             if (!writable) break
 
             if (writable.session.threads === writable.previousSession.threads) {
@@ -250,7 +251,9 @@ function applyAssistantDomainEventInternal(snapshot: AssistantSnapshot, event: A
             }
             writable.session.threads.unshift(thread)
             writable.session.threadIds = sortThreadsNewestFirst([thread.id, ...writable.session.threadIds], writable.session.threads)
-            writable.session.activeThreadId = thread.id
+            if (makeActive) {
+                writable.session.activeThreadId = thread.id
+            }
             writable.session.updatedAt = event.occurredAt
             shouldSortSessions = true
             break

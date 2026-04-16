@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
     AssistantActivity,
     AssistantAccountOverview,
-    AssistantLatestTurn,
-    AssistantSessionTurnUsagePayload
+    AssistantLatestTurn
 } from '@shared/assistant/contracts'
 import {
     estimateAssistantSessionCostUsd,
@@ -18,6 +17,7 @@ import {
     getAssistantPendingUserInputs,
     getSelectedAssistantSession
 } from '@/lib/assistant/selectors'
+import { resolveSessionProjectPath } from './assistant-sessions-rail-utils'
 import {
     buildIssueLogEntry,
     copyTextToClipboard,
@@ -37,6 +37,7 @@ import {
     type AssistantComposerSessionState
 } from './assistant-composer-session-state'
 import { SIDEBAR_EFFORT_LABELS } from './useAssistantPageSidebarState'
+import { useAssistantSessionTurnUsage } from './useAssistantSessionTurnUsage'
 
 type ThreadDetailsSelection = {
     assistantAvailable: boolean
@@ -44,8 +45,12 @@ type ThreadDetailsSelection = {
     commandPending: boolean
     commandError: string | null
     selectedSessionId: string | null
+    selectedSessionMode: 'work' | 'playground'
     selectedSessionUpdatedAt: string | null
+    activeThreadId: string | null
     selectedProjectPath: string
+    selectedPlaygroundLabId: string | null
+    selectedPlaygroundLabTitle: string | null
     activeThreadModel: string
     activeThreadRuntimeMode: 'approval-required' | 'full-access'
     latestTurn: AssistantLatestTurn | null
@@ -66,8 +71,12 @@ const CLOSED_THREAD_DETAILS_SELECTION: ThreadDetailsSelection = {
     commandPending: false,
     commandError: null,
     selectedSessionId: null,
+    selectedSessionMode: 'work',
     selectedSessionUpdatedAt: null,
+    activeThreadId: null,
     selectedProjectPath: '',
+    selectedPlaygroundLabId: null,
+    selectedPlaygroundLabTitle: null,
     activeThreadModel: '',
     activeThreadRuntimeMode: 'approval-required',
     latestTurn: null,
@@ -114,8 +123,12 @@ function areThreadDetailsSelectionsEqual(left: ThreadDetailsSelection, right: Th
         && left.commandPending === right.commandPending
         && left.commandError === right.commandError
         && left.selectedSessionId === right.selectedSessionId
+        && left.selectedSessionMode === right.selectedSessionMode
         && left.selectedSessionUpdatedAt === right.selectedSessionUpdatedAt
+        && left.activeThreadId === right.activeThreadId
         && left.selectedProjectPath === right.selectedProjectPath
+        && left.selectedPlaygroundLabId === right.selectedPlaygroundLabId
+        && left.selectedPlaygroundLabTitle === right.selectedPlaygroundLabTitle
         && left.activeThreadModel === right.activeThreadModel
         && left.activeThreadRuntimeMode === right.activeThreadRuntimeMode
         && left.pendingApprovalsCount === right.pendingApprovalsCount
@@ -136,6 +149,9 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
 
         const selectedSession = getSelectedAssistantSession(state.snapshot)
         const activeThread = getActiveAssistantThread(selectedSession)
+        const selectedLab = selectedSession?.playgroundLabId
+            ? (state.snapshot.playground.labs.find((lab) => lab.id === selectedSession.playgroundLabId) || null)
+            : null
 
         return {
             assistantAvailable: state.status.available,
@@ -143,8 +159,12 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
             commandPending: state.commandPending,
             commandError: state.error,
             selectedSessionId: selectedSession?.id || null,
+            selectedSessionMode: selectedSession?.mode || 'work',
             selectedSessionUpdatedAt: selectedSession?.updatedAt || null,
-            selectedProjectPath: String(selectedSession?.projectPath || activeThread?.cwd || '').trim(),
+            activeThreadId: activeThread?.id || null,
+            selectedProjectPath: selectedSession ? resolveSessionProjectPath(selectedSession) : '',
+            selectedPlaygroundLabId: selectedSession?.playgroundLabId || null,
+            selectedPlaygroundLabTitle: selectedLab?.title || null,
             activeThreadModel: String(activeThread?.model || '').trim(),
             activeThreadRuntimeMode: activeThread?.runtimeMode || 'approval-required',
             latestTurn: activeThread?.latestTurn || null,
@@ -165,9 +185,15 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
     const [logsExpanded, setLogsExpanded] = useState(false)
     const [composerSessionState, setComposerSessionState] = useState<AssistantComposerSessionState>({})
     const [accountOverview, setAccountOverview] = useState<AssistantAccountOverview | null>(null)
-    const [sessionTurnUsage, setSessionTurnUsage] = useState<AssistantSessionTurnUsagePayload | null>(null)
-    const [sessionTurnUsageLoading, setSessionTurnUsageLoading] = useState(false)
-    const [sessionTurnUsageError, setSessionTurnUsageError] = useState<string | null>(null)
+    const {
+        sessionTurnUsage,
+        sessionTurnUsageLoading,
+        sessionTurnUsageError
+    } = useAssistantSessionTurnUsage({
+        sessionId: selection.selectedSessionId,
+        enabled: props.open,
+        refreshKey: `${selection.latestTurn?.id || ''}:${selection.latestTurn?.completedAt || ''}:${selection.latestTurn?.state || ''}`
+    })
 
     useEffect(() => {
         setComposerSessionState(readAssistantComposerSessionState(selection.selectedSessionId))
@@ -184,10 +210,18 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
             setLogsExpanded(false)
             setProjectPathCopied(false)
             setShowFullProjectPath(false)
-            setSessionTurnUsageLoading(false)
-            setSessionTurnUsageError(null)
         }
     }, [props.open])
+
+    useEffect(() => {
+        setSelectedLogActivity(null)
+        setLogsExpanded(false)
+        setProjectPathCopied(false)
+        setShowFullProjectPath(false)
+        setCopiedLogId(null)
+        setCopyErrorByLogId({})
+        setAllLogsCopied(false)
+    }, [selection.activeThreadId, selection.selectedSessionId])
 
     useEffect(() => {
         if (!props.open) return
@@ -204,50 +238,19 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
         }
     }, [props.open])
 
-    useEffect(() => {
-        if (!props.open || !selection.selectedSessionId) {
-            if (!props.open) setSessionTurnUsage(null)
-            return
-        }
-
-        let cancelled = false
-        setSessionTurnUsageLoading(true)
-        setSessionTurnUsageError(null)
-
-        void (async () => {
-            try {
-                const sessionId = selection.selectedSessionId
-                if (!sessionId) return
-                const result = await window.devscope.assistant.getSessionTurnUsage({ sessionId })
-                if (cancelled) return
-                if (!result.success) {
-                    throw new Error(result.error || 'Failed to load assistant turn usage.')
-                }
-                setSessionTurnUsage(result.usage)
-                setSessionTurnUsageError(null)
-            } catch (error) {
-                if (cancelled) return
-                setSessionTurnUsageError(error instanceof Error ? error.message : 'Failed to load assistant turn usage.')
-            } finally {
-                if (!cancelled) setSessionTurnUsageLoading(false)
-            }
-        })()
-
-        return () => {
-            cancelled = true
-        }
-    }, [
-        props.open,
-        selection.selectedSessionId,
-        selection.latestTurn?.id,
-        selection.latestTurn?.completedAt,
-        selection.latestTurn?.state
-    ])
-
     const selectedProjectPath = selection.selectedProjectPath
-    const selectedProjectLabel = selectedProjectPath
-        ? selectedProjectPath.split(/[\\/]/).filter(Boolean).pop() || selectedProjectPath
-        : 'Detached'
+    const selectedChatTypeLabel = selection.selectedSessionMode === 'playground' ? 'Playground chat' : 'Work chat'
+    const selectedLocationTypeLabel = selection.selectedSessionMode === 'work'
+        ? 'Project'
+        : selection.selectedPlaygroundLabId
+            ? 'Lab'
+            : selectedProjectPath
+                ? 'Folder'
+                : 'Chat-only'
+    const selectedProjectLabel = selection.selectedPlaygroundLabTitle
+        || (selectedProjectPath
+            ? selectedProjectPath.split(/[\\/]/).filter(Boolean).pop() || selectedProjectPath
+            : (selection.selectedSessionMode === 'work' ? 'No project selected' : 'Chat-only'))
     const selectedProjectPathWithTilde = selectedProjectPath
         ? selectedProjectPath.replace(/^[A-Z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/')
         : ''
@@ -424,6 +427,8 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
             <AssistantThreadDetailsPanel
                 open={props.open}
                 compact={props.compact}
+                selectedChatTypeLabel={selectedChatTypeLabel}
+                selectedLocationTypeLabel={selectedLocationTypeLabel}
                 selectedProjectPath={selectedProjectPath}
                 selectedProjectLabel={selectedProjectLabel}
                 displayProjectPath={displayProjectPath}

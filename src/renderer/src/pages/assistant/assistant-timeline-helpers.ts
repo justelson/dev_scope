@@ -1,5 +1,13 @@
 import type { AssistantActivity, AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
+import { estimateMarkdownContentHeight } from '@/lib/text-layout/markdown-blocks'
 import { stripProposedPlanBlocks } from './assistant-proposed-plan'
+import {
+    estimateAttachmentGridHeight,
+    getAssistantMessageWidth,
+    getPlanCardContentWidth,
+    getUserMessageBodyWidth,
+    measureTimelinePlainTextHeight
+} from './assistant-timeline-text-metrics'
 
 export type TimelineEntry =
     | { id: string; createdAt: string; type: 'message'; message: AssistantMessage }
@@ -27,6 +35,10 @@ export type ParsedUserAttachment = {
 
 function shouldRenderActivity(activity: AssistantActivity): boolean {
     return activity.tone === 'tool'
+}
+
+export function isSubagentActivity(activity: AssistantActivity): boolean {
+    return activity.kind.startsWith('subagent.') || readActivityString(activity.payload?.category) === 'subagent'
 }
 
 function readActivityString(value: unknown): string {
@@ -139,10 +151,31 @@ export function parseUserMessageAttachments(text: string): { body: string; attac
         return { body, attachments: [] }
     }
 
-    const sections = attachmentBlock
-        .split(/\n{2,}(?=\d+\.\s)/)
-        .map((section) => section.trim())
+    const relevantLines = attachmentBlock
+        .split('\n')
+        .map((line) => line.trim())
         .filter(Boolean)
+
+    const sections: string[] = []
+    let currentSection: string[] = []
+
+    const attachmentHeaderPattern = /^\d+\.\s+.+\s+\[[A-Z]+\]$/
+
+    for (const line of relevantLines) {
+        if (attachmentHeaderPattern.test(line)) {
+            if (currentSection.length > 0) {
+                sections.push(currentSection.join('\n'))
+            }
+            currentSection = [line]
+            continue
+        }
+        if (currentSection.length === 0) continue
+        currentSection.push(line)
+    }
+
+    if (currentSection.length > 0) {
+        sections.push(currentSection.join('\n'))
+    }
 
     const attachments = sections.map((section, index) => {
         const lines = section.split('\n').map((line) => line.trim()).filter(Boolean)
@@ -162,7 +195,7 @@ export function parseUserMessageAttachments(text: string): { body: string; attac
             id: `${header}-${index}`,
             name: headerMatch?.[1]?.trim() || `Attachment ${index + 1}`,
             type: headerMatch?.[2]?.trim() || 'FILE',
-            path: details.get('path') || null,
+            path: details.get('path') || details.get('ref') || null,
             mime: details.get('mime') || null,
             size: details.get('size') || null,
             preview: details.get('preview') || null,
@@ -171,6 +204,10 @@ export function parseUserMessageAttachments(text: string): { body: string; attac
     })
 
     return { body, attachments }
+}
+
+export function isClipboardAttachmentReference(path: string | null): boolean {
+    return String(path || '').trim().toLowerCase().startsWith('clipboard://')
 }
 
 export function canRenderAttachmentImage(path: string | null): boolean {
@@ -266,6 +303,17 @@ export function getTimelineEntries(
 
     for (const entry of allEntries) {
         if (entry.type === 'activity' && entry.activity) {
+            if (
+                currentGroup.length > 0
+                && isSubagentActivity(currentGroup[0]) !== isSubagentActivity(entry.activity)
+            ) {
+                grouped.push(
+                    currentGroup.length === 1
+                        ? { id: currentGroup[0].id, createdAt: currentGroup[0].createdAt, type: 'activity', activity: currentGroup[0] }
+                        : { id: `group-${currentGroup[0].id}`, createdAt: currentGroup[0].createdAt, type: 'activity-group', activities: currentGroup }
+                )
+                currentGroup = []
+            }
             currentGroup.push(entry.activity)
             continue
         }
@@ -370,6 +418,12 @@ export function getActivityFileCount(activity: AssistantActivity): number | null
 }
 
 export function getActivityTitle(activity: AssistantActivity): string {
+    if (activity.kind === 'subagent.spawn') return 'Subagent spawn'
+    if (activity.kind === 'subagent.send-input') return 'Subagent check-in'
+    if (activity.kind === 'subagent.wait') return 'Waiting on subagent'
+    if (activity.kind === 'subagent.resume') return 'Resume subagent'
+    if (activity.kind === 'subagent.close') return 'Close subagent'
+    if (isSubagentActivity(activity)) return 'Subagent activity'
     if (activity.kind === 'user-input.resolved') return 'Consulted user'
     if (activity.kind === 'search') return 'Search'
     if (activity.kind === 'file-read') return 'Read file'
@@ -387,6 +441,49 @@ export function getActivityStatus(activity: AssistantActivity): 'success' | 'run
     return 'success'
 }
 
+type SubagentThreadLabel = {
+    threadId: string | null
+    providerThreadId: string | null
+    label: string
+    role: string | null
+    nickname: string | null
+    state: string | null
+}
+
+function isSubagentThreadLabel(value: unknown): value is SubagentThreadLabel {
+    if (!value || typeof value !== 'object') return false
+    const candidate = value as Record<string, unknown>
+    return typeof candidate.label === 'string'
+}
+
+export function getSubagentActivityThreadLabels(activity: AssistantActivity): SubagentThreadLabel[] {
+    const value = activity.payload?.receiverThreadLabels
+    if (!Array.isArray(value)) return []
+    return value.filter(isSubagentThreadLabel)
+}
+
+export function getSubagentActivityTargets(activity: AssistantActivity): string[] {
+    const labels = getSubagentActivityThreadLabels(activity)
+    if (labels.length > 0) {
+        return labels
+            .map((entry) => readActivityString(entry.label) || readActivityString(entry.nickname) || readActivityString(entry.role))
+            .filter(Boolean)
+    }
+    return readActivityStringArray(activity.payload?.receiverLocalThreadIds)
+}
+
+export function getSubagentActivityPrompt(activity: AssistantActivity): string {
+    return readActivityString(activity.payload?.prompt)
+}
+
+export function getSubagentActivityModel(activity: AssistantActivity): string {
+    return readActivityString(activity.payload?.model)
+}
+
+export function getSubagentActivityReasoning(activity: AssistantActivity): string {
+    return readActivityString(activity.payload?.reasoningEffort)
+}
+
 export function getActivityElapsed(activity: AssistantActivity): string | null {
     const payload = activity.payload || {}
     const durationCandidate = payload.durationMs
@@ -401,14 +498,26 @@ export function getActivityElapsed(activity: AssistantActivity): string | null {
     return startedAt && completedAt ? formatWorkingTimer(startedAt, completedAt) : null
 }
 
-export function estimateTimelineRowHeight(row: TimelineRenderRow): number {
+export function estimateTimelineRowHeight(
+    row: TimelineRenderRow,
+    options: { containerWidth?: number | null } = {}
+): number {
     if (row.kind === 'working') return 48
-    if (row.kind === 'activity') return 168
-    if (row.kind === 'activity-group') return 120 + Math.min(row.activities.length, 6) * 96
+    if (row.kind === 'activity') return isSubagentActivity(row.activity) ? 212 : 168
+    if (row.kind === 'activity-group') {
+        const containsSubagentActivity = row.activities.some((activity) => isSubagentActivity(activity))
+        return containsSubagentActivity
+            ? 132 + Math.min(row.activities.length, 6) * 124
+            : 120 + Math.min(row.activities.length, 6) * 96
+    }
     if (row.kind === 'plan') {
         const displayedPlan = stripProposedPlanBlocks(row.plan.planMarkdown || '')
-        const contentLines = Math.max(4, displayedPlan.split(/\r?\n/).length)
-        return Math.min(2200, 220 + contentLines * 24)
+        const planHeight = estimateMarkdownContentHeight(
+            displayedPlan,
+            getPlanCardContentWidth(options.containerWidth),
+            'assistant'
+        )
+        return Math.min(3200, 136 + planHeight)
     }
 
     const parsedUserMessage = row.message.role === 'user'
@@ -418,23 +527,23 @@ export function estimateTimelineRowHeight(row: TimelineRenderRow): number {
     const rawBody = row.message.role === 'user'
         ? (parsedUserMessage?.body || '')
         : stripProposedPlanBlocks(row.message.text || '')
-    const bodyLines = rawBody.split(/\r?\n/)
-    const lineCount = Math.max(1, bodyLines.length)
-    const estimatedWrappedLines = Math.ceil(Math.max(rawBody.length, 1) / (row.message.role === 'user' ? 56 : 64))
-    const contentLines = Math.max(lineCount, estimatedWrappedLines)
 
     if (row.message.role === 'assistant') {
-        const codeFenceCount = Math.floor((rawBody.match(/```/g)?.length || 0) / 2)
-        const tableLineCount = bodyLines.filter((line) => line.includes('|')).length
-        const listLineCount = bodyLines.filter((line) => /^\s*(?:[-*+]\s|\d+\.\s)/.test(line)).length
-        const quoteLineCount = bodyLines.filter((line) => /^\s*>/.test(line)).length
-        const markdownBias = codeFenceCount * 220
-            + Math.min(tableLineCount, 20) * 14
-            + Math.min(listLineCount, 24) * 8
-            + Math.min(quoteLineCount, 16) * 8
-
-        return Math.min(5600, 156 + contentLines * 30 + markdownBias)
+        const assistantWidth = getAssistantMessageWidth(options.containerWidth)
+        const contentHeight = row.message.streaming
+            ? measureTimelinePlainTextHeight(rawBody || ' ', assistantWidth, 'pre-wrap').height
+            : estimateMarkdownContentHeight(rawBody || ' ', assistantWidth, 'assistant')
+        const footerHeight = row.message.streaming ? 48 : 36
+        return Math.min(5600, 44 + contentHeight + footerHeight)
     }
 
-    return Math.min(3200, 112 + attachmentCount * 164 + contentLines * 24)
+    const userBodyWidth = getUserMessageBodyWidth(options.containerWidth)
+    const textHeight = rawBody
+        ? measureTimelinePlainTextHeight(rawBody, userBodyWidth, 'pre-wrap').height
+        : 0
+    const attachmentHeight = estimateAttachmentGridHeight(attachmentCount, userBodyWidth)
+    const footerHeight = 38
+    const bubbleChromeHeight = 28
+
+    return Math.min(3200, bubbleChromeHeight + attachmentHeight + textHeight + footerHeight)
 }

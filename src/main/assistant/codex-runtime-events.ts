@@ -21,6 +21,121 @@ import {
 interface RuntimeEventHandlerDeps {
     emitRuntime: (event: AssistantRuntimeEvent) => void
     writeMessage: (context: SessionContext, message: Record<string, unknown>) => void
+    registerThreadAlias: (sessionThreadId: string, aliasThreadId: string) => void
+}
+
+type ThreadStartedRuntimePayload = Extract<AssistantRuntimeEvent, { type: 'thread.started' }>['payload']
+
+function readPayloadThreadId(payload: Record<string, unknown>): string | undefined {
+    return asString(asRecord(payload['thread'])?.['id'])
+        || asString(payload['threadId'])
+        || asString(asRecord(payload['turn'])?.['threadId'])
+        || asString(asRecord(asRecord(payload['turn'])?.['thread'])?.['id'])
+        || asString(asRecord(payload['item'])?.['threadId'])
+        || asString(asRecord(asRecord(payload['item'])?.['thread'])?.['id'])
+}
+
+function resolveRuntimeThreadId(context: SessionContext, payload: Record<string, unknown>): string {
+    return readPayloadThreadId(payload) || context.thread.id
+}
+
+function resolveRuntimeProviderThreadId(context: SessionContext, payload: Record<string, unknown>): string | undefined {
+    return readPayloadThreadId(payload) || context.thread.providerThreadId || undefined
+}
+
+function readThreadStartedPayload(payload: Record<string, unknown>): ThreadStartedRuntimePayload & { providerThreadId: string } {
+    const thread = asRecord(payload['thread']) || {}
+    const source = asRecord(thread['source'])
+    const subagent = asRecord(source?.['subagent'])
+    const threadSpawn = asRecord(subagent?.['thread_spawn'])
+    const providerThreadId = asString(thread['id']) || asString(payload['threadId']) || ''
+    const sourceKind: 'root' | 'subagent' | 'other' = threadSpawn
+        ? 'subagent'
+        : source && Object.keys(source).length > 0
+            ? 'other'
+            : 'root'
+    const stateValue = asString(thread['state'])
+    const state = stateValue === 'idle'
+        || stateValue === 'starting'
+        || stateValue === 'ready'
+        || stateValue === 'running'
+        || stateValue === 'waiting'
+        || stateValue === 'interrupted'
+        || stateValue === 'error'
+        || stateValue === 'stopped'
+        ? stateValue
+        : undefined
+
+    return {
+        providerThreadId,
+        source: sourceKind,
+        parentProviderThreadId: asString(threadSpawn?.['parent_thread_id']),
+        agentNickname: asString(thread['agentNickname']) || asString(threadSpawn?.['agent_nickname']),
+        agentRole: asString(thread['agentRole']) || asString(threadSpawn?.['agent_role']),
+        subagentDepth: typeof threadSpawn?.['depth'] === 'number' ? threadSpawn['depth'] as number : undefined,
+        threadName: asString(thread['name']),
+        cwd: asString(thread['cwd']),
+        state
+    }
+}
+
+function buildCollabAgentActivity(item: Record<string, unknown>):
+    | {
+        activityId: string
+        kind: string
+        summary: string
+        detail?: string
+        tone: 'tool'
+        data: Record<string, unknown>
+    }
+    | null {
+    const activityId = asString(item['id'])
+    const tool = asString(item['tool'])
+    const status = asString(item['status'])
+    if (!activityId || !tool) return null
+
+    const toolKindMap: Record<string, string> = {
+        spawnAgent: 'subagent.spawn',
+        sendInput: 'subagent.send-input',
+        resumeAgent: 'subagent.resume',
+        wait: 'subagent.wait',
+        closeAgent: 'subagent.close'
+    }
+    const summaryMap: Record<string, string> = {
+        spawnAgent: status === 'inProgress' ? 'Spawning subagent' : 'Spawned subagent',
+        sendInput: status === 'inProgress' ? 'Checking in with subagent' : 'Checked in with subagent',
+        resumeAgent: status === 'inProgress' ? 'Resuming subagent' : 'Resumed subagent',
+        wait: status === 'inProgress' ? 'Waiting on subagent' : 'Subagent wait completed',
+        closeAgent: status === 'inProgress' ? 'Closing subagent' : 'Closed subagent'
+    }
+    const prompt = readTextValue(item['prompt'])
+    const receiverThreadIds = Array.isArray(item['receiverThreadIds'])
+        ? item['receiverThreadIds'].filter((entry): entry is string => typeof entry === 'string')
+        : []
+    const agentsStates = Array.isArray(item['agentsStates'])
+        ? item['agentsStates'].filter((entry): entry is Record<string, unknown> => Boolean(asRecord(entry)))
+        : []
+    const detail = prompt || (receiverThreadIds.length > 0 ? receiverThreadIds.join('\n') : undefined)
+
+    return {
+        activityId,
+        kind: toolKindMap[tool] || 'subagent.tool',
+        summary: summaryMap[tool] || 'Subagent activity',
+        detail,
+        tone: 'tool',
+        data: {
+            category: 'subagent',
+            itemType: normalizeItemType(item['type'] || item['kind']),
+            tool,
+            status,
+            senderThreadId: asString(item['senderThreadId']),
+            receiverThreadIds,
+            prompt,
+            model: asString(item['model']),
+            reasoningEffort: asString(item['reasoningEffort']) || asString(item['reasoning_effort']),
+            agentsStates
+        }
+    }
 }
 
 function readResolvedUserInputAnswers(value: unknown): Record<string, string | string[]> {
@@ -82,6 +197,8 @@ function handleServerRequest(context: SessionContext, message: JsonRpcMessage, d
     const method = String(message['method'] || '')
     const requestType = toApprovalRequestType(method)
     const payload = asRecord(message['params']) || {}
+    const runtimeThreadId = resolveRuntimeThreadId(context, payload)
+    const runtimeProviderThreadId = resolveRuntimeProviderThreadId(context, payload)
     const requestId = randomUUID()
     const turnId = asString(payload['turnId']) || asString(asRecord(payload['turn'])?.['id'])
     const itemId = asString(payload['itemId']) || asString(asRecord(payload['item'])?.['id'])
@@ -91,7 +208,7 @@ function handleServerRequest(context: SessionContext, message: JsonRpcMessage, d
             requestId,
             jsonRpcId: message['id'] as JsonRpcId,
             requestType,
-            threadId: context.thread.id,
+            threadId: runtimeThreadId,
             turnId,
             itemId
         }
@@ -100,10 +217,11 @@ function handleServerRequest(context: SessionContext, message: JsonRpcMessage, d
             eventId: randomUUID(),
             type: 'approval.requested',
             createdAt: new Date().toISOString(),
-            threadId: context.thread.id,
+            threadId: runtimeThreadId,
             turnId,
             itemId,
             requestId,
+            providerThreadId: runtimeProviderThreadId,
             payload: {
                 requestType,
                 title: asString(payload['title']),
@@ -120,7 +238,7 @@ function handleServerRequest(context: SessionContext, message: JsonRpcMessage, d
         context.pendingUserInputs.set(requestId, {
             requestId,
             jsonRpcId: message['id'] as JsonRpcId,
-            threadId: context.thread.id,
+            threadId: runtimeThreadId,
             turnId,
             itemId
         })
@@ -128,10 +246,11 @@ function handleServerRequest(context: SessionContext, message: JsonRpcMessage, d
             eventId: randomUUID(),
             type: 'user-input.requested',
             createdAt: new Date().toISOString(),
-            threadId: context.thread.id,
+            threadId: runtimeThreadId,
             turnId,
             itemId,
             requestId,
+            providerThreadId: runtimeProviderThreadId,
             payload: { questions }
         })
         return
@@ -154,22 +273,33 @@ function handleNotification(
 ): void {
     const turnId = asString(payload['turnId']) || asString(asRecord(payload['turn'])?.['id'])
     const itemId = asString(payload['itemId']) || asString(asRecord(payload['item'])?.['id'])
+    const runtimeThreadId = resolveRuntimeThreadId(context, payload)
+    const runtimeProviderThreadId = resolveRuntimeProviderThreadId(context, payload)
     const eventBase = {
         eventId: randomUUID(),
         createdAt: new Date().toISOString(),
-        threadId: context.thread.id,
+        threadId: runtimeThreadId,
         turnId,
         itemId,
-        providerThreadId: context.thread.providerThreadId || undefined,
+        providerThreadId: runtimeProviderThreadId,
         rawMethod: method,
         rawPayload: payload
     }
 
     if (method === 'thread/started') {
-        const providerThreadId = asString(asRecord(payload['thread'])?.['id']) || asString(payload['threadId'])
-        if (providerThreadId) {
-            context.thread.providerThreadId = providerThreadId
-            deps.emitRuntime({ ...eventBase, providerThreadId, type: 'thread.started', payload: { providerThreadId } })
+        const threadStartedPayload = readThreadStartedPayload(payload)
+        if (threadStartedPayload.providerThreadId) {
+            deps.registerThreadAlias(context.thread.id, threadStartedPayload.providerThreadId)
+            if (threadStartedPayload.source !== 'subagent') {
+                context.thread.providerThreadId = threadStartedPayload.providerThreadId
+            }
+            deps.emitRuntime({
+                ...eventBase,
+                threadId: threadStartedPayload.providerThreadId,
+                providerThreadId: threadStartedPayload.providerThreadId,
+                type: 'thread.started',
+                payload: threadStartedPayload
+            })
         }
         return
     }
@@ -269,9 +399,21 @@ function handleNotification(
         return
     }
 
-    if (method === 'item/completed') {
+    if (method === 'item/started' || method === 'item/completed') {
         const item = asRecord(payload['item']) || payload
         const itemType = normalizeItemType(item['type'] || item['kind'])
+        const collabActivity = itemType === 'collab agent tool call' ? buildCollabAgentActivity(item) : null
+        if (collabActivity) {
+            deps.emitRuntime({
+                ...eventBase,
+                type: 'activity',
+                payload: collabActivity
+            })
+            return
+        }
+        if (method === 'item/started') {
+            return
+        }
         const text = readTextValue(item['text']) || readTextValue(item['detail']) || readTextValue(item['summary'])
 
         if (isAssistantItemType(itemType)) {

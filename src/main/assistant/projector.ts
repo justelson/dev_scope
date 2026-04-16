@@ -2,6 +2,8 @@ import type { AssistantSnapshot } from '../../shared/assistant/contracts'
 import { applyAssistantDomainEvent, createDefaultAssistantSnapshot } from '../../shared/assistant/projector'
 import {
     clearResolvedApprovals,
+    deriveSessionTitleFromPrompt,
+    isDefaultSessionTitle,
     clearResolvedUserInputs,
     nowIso,
     runtimeStateAfterRestore,
@@ -30,6 +32,14 @@ export function recoverPersistedSnapshot(snapshot: AssistantSnapshot): Assistant
 
     for (const session of recovered.sessions) {
         session.mode = session.mode === 'playground' ? 'playground' : 'work'
+        if (isDefaultSessionTitle(session.title)) {
+            const firstUserMessage = session.threads
+                .flatMap((thread) => thread.messages || [])
+                .find((message) => message.role === 'user' && String(message.text || '').trim().length > 0)
+            session.title = firstUserMessage
+                ? deriveSessionTitleFromPrompt(firstUserMessage.text)
+                : 'New Session'
+        }
         session.updatedAt = session.updatedAt || recoveredAt
         session.playgroundLabId = session.playgroundLabId || null
         session.pendingLabRequest = session.pendingLabRequest || null

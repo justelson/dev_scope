@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { DevScopeGitBranchSummary } from '@shared/contracts/devscope-api'
+import { readProjectGitOverview } from '@/lib/projectGitOverview'
+import { getCachedProjectGitSnapshot } from '@/lib/projectViewCache'
 import {
     getOrCreateMentionIndex,
     primeMentionIndex,
@@ -38,9 +40,9 @@ export function useAssistantComposerProjectData(args: {
         const loadBranchState = async () => {
             setBranchesLoading(true)
             try {
-                const repoResult = await window.devscope.checkIsGitRepo(trimmedPath)
+                const overview = await readProjectGitOverview(trimmedPath)
                 if (cancelled) return
-                if (!repoResult?.success || !repoResult.isGitRepo) {
+                if (!overview?.isGitRepo) {
                     setIsGitRepo(false)
                     setBranches([])
                     return
@@ -90,11 +92,33 @@ export function useAssistantComposerProjectData(args: {
         let cancelled = false
         const loadChangedMentionFiles = async () => {
             try {
-                const repoResult = await window.devscope.checkIsGitRepo(trimmedPath)
-                if (cancelled || !repoResult?.success || !repoResult.isGitRepo) {
+                const overview = await readProjectGitOverview(trimmedPath)
+                if (cancelled || !overview?.isGitRepo) {
                     if (!cancelled) setMentionChangedStateByPath({})
                     return
                 }
+                if (overview.changedCount <= 0) {
+                    if (!cancelled) setMentionChangedStateByPath({})
+                    return
+                }
+
+                const cachedGitSnapshot = getCachedProjectGitSnapshot(trimmedPath)
+                const cachedStatusEntries = Array.isArray(cachedGitSnapshot?.gitStatusDetails)
+                    ? cachedGitSnapshot.gitStatusDetails
+                    : []
+                if (cachedGitSnapshot?.isGitRepo === true && cachedStatusEntries.length === overview.changedCount) {
+                    const nextChangedStateByPath: ChangedState = {}
+                    for (const entry of cachedStatusEntries) {
+                        const relativeKey = normalizeMentionLookupPath(entry.path || '')
+                        if (!relativeKey) continue
+                        const hasStaged = Boolean(entry.staged)
+                        const hasUnstaged = Boolean(entry.unstaged)
+                        nextChangedStateByPath[relativeKey] = hasStaged && hasUnstaged ? 'both' : hasStaged ? 'staged' : 'unstaged'
+                    }
+                    if (!cancelled) setMentionChangedStateByPath(nextChangedStateByPath)
+                    return
+                }
+
                 const statusResult = await window.devscope.getGitStatusDetailed(trimmedPath, { includeStats: false })
                 if (cancelled || !statusResult?.success) {
                     if (!cancelled) setMentionChangedStateByPath({})

@@ -7,11 +7,8 @@ import log from 'electron-log'
 import { systemMetricsBridge } from '../system-metrics/manager'
 import {
     handleGetDetailedSystemStats,
-    handleGetDeveloperTooling,
     handleGetFileSystemRoots,
-    handleGetReadinessReport,
     handleGetSystemOverview,
-    handleRefreshAll,
     handleSystemMetricsBootstrap,
     handleSystemMetricsRead,
     handleSystemMetricsSubscribe,
@@ -36,6 +33,7 @@ import {
     handleAssistantConnect,
     handleAssistantCreatePlaygroundLab,
     handleAssistantCreateSession,
+    handleAssistantDeletePlaygroundLab,
     handleAssistantDeleteMessage,
     handleAssistantDeleteSession,
     handleAssistantDeclinePendingPlaygroundLabRequest,
@@ -50,11 +48,13 @@ import {
     handleAssistantListModels,
     handleAssistantNewThread,
     handleAssistantPersistClipboardImage,
+    handleAssistantResolveClipboardAttachment,
     handleAssistantRenameSession,
     handleAssistantRespondApproval,
     handleAssistantTranscribeAudioWithLocalModel,
     handleAssistantRespondUserInput,
     handleAssistantSelectSession,
+    handleAssistantSelectThread,
     handleAssistantSendPrompt,
     handleAssistantSetPlaygroundRoot,
     handleAssistantSetSessionProjectPath,
@@ -186,9 +186,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     ipcMain.handle('devscope:getSystemOverview', handleGetSystemOverview)
     ipcMain.handle('devscope:getDetailedSystemStats', handleGetDetailedSystemStats)
-    ipcMain.handle('devscope:getDeveloperTooling', handleGetDeveloperTooling)
-    ipcMain.handle('devscope:getReadinessReport', handleGetReadinessReport)
-    ipcMain.handle('devscope:refreshAll', handleRefreshAll)
     ipcMain.handle('devscope:getFileSystemRoots', handleGetFileSystemRoots)
     ipcMain.handle(UPDATE_GET_STATE_CHANNEL, handleGetUpdateState)
     ipcMain.handle(UPDATE_CHECK_CHANNEL, handleCheckForUpdates)
@@ -215,6 +212,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle(ASSISTANT_IPC.disconnect, handleAssistantDisconnect)
     ipcMain.handle(ASSISTANT_IPC.createSession, handleAssistantCreateSession)
     ipcMain.handle(ASSISTANT_IPC.selectSession, handleAssistantSelectSession)
+    ipcMain.handle(ASSISTANT_IPC.selectThread, handleAssistantSelectThread)
     ipcMain.handle(ASSISTANT_IPC.renameSession, handleAssistantRenameSession)
     ipcMain.handle(ASSISTANT_IPC.archiveSession, handleAssistantArchiveSession)
     ipcMain.handle(ASSISTANT_IPC.deleteSession, handleAssistantDeleteSession)
@@ -223,10 +221,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle(ASSISTANT_IPC.setSessionProjectPath, handleAssistantSetSessionProjectPath)
     ipcMain.handle(ASSISTANT_IPC.setPlaygroundRoot, handleAssistantSetPlaygroundRoot)
     ipcMain.handle(ASSISTANT_IPC.createPlaygroundLab, handleAssistantCreatePlaygroundLab)
+    ipcMain.handle(ASSISTANT_IPC.deletePlaygroundLab, handleAssistantDeletePlaygroundLab)
     ipcMain.handle(ASSISTANT_IPC.attachSessionToPlaygroundLab, handleAssistantAttachSessionToPlaygroundLab)
     ipcMain.handle(ASSISTANT_IPC.approvePendingPlaygroundLabRequest, handleAssistantApprovePendingPlaygroundLabRequest)
     ipcMain.handle(ASSISTANT_IPC.declinePendingPlaygroundLabRequest, handleAssistantDeclinePendingPlaygroundLabRequest)
     ipcMain.handle(ASSISTANT_IPC.persistClipboardImage, handleAssistantPersistClipboardImage)
+    ipcMain.handle(ASSISTANT_IPC.resolveClipboardAttachment, handleAssistantResolveClipboardAttachment)
     ipcMain.handle(ASSISTANT_IPC.newThread, handleAssistantNewThread)
     ipcMain.handle(ASSISTANT_IPC.sendPrompt, handleAssistantSendPrompt)
     ipcMain.handle(ASSISTANT_IPC.interruptTurn, handleAssistantInterruptTurn)

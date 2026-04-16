@@ -2,6 +2,7 @@ import type { AssistantActivePlan, AssistantLatestTurn, AssistantProposedPlan } 
 import { useAssistantStoreSelector } from '@/lib/assistant/store'
 import { getActiveAssistantThread, getAssistantLatestProposedPlan, getSelectedAssistantSession } from '@/lib/assistant/selectors'
 import { getAssistantLinkBaseFilePath } from './assistant-file-navigation'
+import { resolveSessionProjectPath } from './assistant-sessions-rail-utils'
 import { AssistantPlanPanel } from './AssistantPlanPanel'
 
 type PlanPanelSelection = {
@@ -68,7 +69,7 @@ export function ConnectedAssistantPlanPanel(props: {
 
         const selectedSession = getSelectedAssistantSession(state.snapshot)
         const activeThread = getActiveAssistantThread(selectedSession)
-        const selectedProjectPath = String(selectedSession?.projectPath || activeThread?.cwd || '').trim()
+        const selectedProjectPath = selectedSession ? resolveSessionProjectPath(selectedSession) : ''
 
         return {
             activePlan: activeThread?.activePlan || null,

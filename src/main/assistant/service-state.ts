@@ -23,6 +23,12 @@ export function createAssistantThread(createdAt: string, previousThread?: Assist
     return {
         id: createAssistantId('assistant-thread'),
         providerThreadId: null,
+        source: previousThread?.source || 'root',
+        parentThreadId: null,
+        providerParentThreadId: null,
+        subagentDepth: null,
+        agentNickname: null,
+        agentRole: null,
         model: previousThread?.model || '',
         cwd: cwd !== undefined ? cwd : (previousThread?.cwd || null),
         messageCount: 0,
@@ -66,14 +72,23 @@ export function requireActiveThread(session: AssistantSession) {
 }
 
 export function findSessionByThreadId(snapshot: AssistantSnapshot, threadId: string) {
-    return snapshot.sessions.find((session) => session.threads.some((thread) => thread.id === threadId)) || null
+    return findThreadRecord(snapshot, threadId)?.session || null
 }
 
 export function requireThread(snapshot: AssistantSnapshot, threadId: string) {
-    const session = findSessionByThreadId(snapshot, threadId)
-    const thread = session?.threads.find((entry) => entry.id === threadId) || null
+    const thread = findThreadRecord(snapshot, threadId)?.thread || null
     if (!thread) throw new Error(`Assistant thread ${threadId} was not found.`)
     return thread
+}
+
+export function findThreadRecord(snapshot: AssistantSnapshot, threadId: string) {
+    for (const session of snapshot.sessions) {
+        const thread = session.threads.find((entry) => entry.id === threadId || entry.providerThreadId === threadId) || null
+        if (thread) {
+            return { session, thread }
+        }
+    }
+    return null
 }
 
 export function findThreadForApproval(snapshot: AssistantSnapshot, requestId: string) {

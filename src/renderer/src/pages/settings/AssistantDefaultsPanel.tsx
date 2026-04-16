@@ -247,6 +247,43 @@ export function AssistantDefaultsPanel() {
                 </div>
             </section>
 
+            <section className="mt-4 w-full rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                    <div>
+                        <h2 className="text-sm font-semibold text-sparkle-text">While Assistant Is Busy</h2>
+                        <p className="mt-1 text-sm text-sparkle-text-secondary">
+                            Choose what the default send action does when a turn is already running.
+                        </p>
+                    </div>
+                    <div className="inline-flex w-full max-w-[280px] justify-self-end rounded-lg border border-white/10 bg-black/10 p-1">
+                        {([
+                            { id: 'queue', label: 'Queue' },
+                            { id: 'force', label: 'Force' }
+                        ] as const).map((mode) => {
+                            const selected = settings.assistantBusyMessageMode === mode.id
+                            return (
+                                <button
+                                    key={mode.id}
+                                    type="button"
+                                    onClick={() => updateSettings({ assistantBusyMessageMode: mode.id })}
+                                    className={cn(
+                                        'flex-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-all',
+                                        selected
+                                            ? 'bg-white/10 text-sparkle-text shadow-sm'
+                                            : 'text-sparkle-text-secondary hover:text-sparkle-text'
+                                    )}
+                                >
+                                    {mode.label}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+                <p className="mt-3 text-xs text-sparkle-text-muted">
+                    Queue waits for the current turn to finish. Force interrupts the current turn and runs the new message first.
+                </p>
+            </section>
+
             <section
                 ref={transcriptionSectionRef}
                 className={cn(

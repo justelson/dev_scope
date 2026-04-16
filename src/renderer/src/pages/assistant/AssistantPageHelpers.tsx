@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Check, Copy, Eye, Loader2, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { AlertCircle, Check, Copy, Eye, Loader2, Trash2, X } from 'lucide-react'
 import type { AssistantActivity } from '@shared/assistant/contracts'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { cn } from '@/lib/utils'
@@ -7,6 +7,72 @@ import { formatAssistantDateTime, formatAssistantRelativeTime } from '@/lib/assi
 
 export type UsageMetricTone = 'low' | 'normal' | 'high' | 'neutral'
 export type LogDetailsTab = 'rendered' | 'raw'
+export type AssistantToastTone = 'success' | 'error' | 'info'
+export type AssistantToastState = {
+    message: string
+    visible: boolean
+    tone?: AssistantToastTone
+}
+export type AssistantToastInput = {
+    message: string
+    tone?: AssistantToastTone
+}
+
+export function useAssistantTransientToast() {
+    const [toast, setToast] = useState<AssistantToastState | null>(null)
+
+    const showToast = useCallback((input: string | AssistantToastInput, tone: AssistantToastTone = 'success') => {
+        const nextToast = typeof input === 'string'
+            ? { message: input, tone }
+            : { message: input.message, tone: input.tone ?? 'success' }
+
+        setToast({ ...nextToast, visible: false })
+        window.setTimeout(() => {
+            setToast((current) => current ? { ...current, visible: true } : current)
+        }, 10)
+    }, [])
+
+    useEffect(() => {
+        if (!toast?.visible) return
+
+        const hideTimer = window.setTimeout(() => {
+            setToast((current) => current ? { ...current, visible: false } : current)
+        }, 2600)
+        const removeTimer = window.setTimeout(() => {
+            setToast(null)
+        }, 3000)
+
+        return () => {
+            window.clearTimeout(hideTimer)
+            window.clearTimeout(removeTimer)
+        }
+    }, [toast?.visible])
+
+    return { toast, showToast }
+}
+
+export function AssistantTransientToast({ toast }: { toast: AssistantToastState | null }) {
+    if (!toast) return null
+
+    return (
+        <div
+            className={cn(
+                'fixed bottom-4 right-4 z-[110] max-w-sm rounded-xl px-4 py-3 text-sm shadow-lg backdrop-blur-md transition-all duration-300',
+                toast.tone === 'error'
+                    ? 'border border-red-500/30 bg-red-500/10 text-red-200'
+                    : toast.tone === 'success'
+                        ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                        : 'border border-amber-500/30 bg-amber-500/10 text-amber-300',
+                toast.visible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0'
+            )}
+        >
+            <div className="flex items-start gap-2">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span>{toast.message}</span>
+            </div>
+        </div>
+    )
+}
 
 export function formatCompactMetric(value: number | null | undefined): string {
     if (value == null || !Number.isFinite(value)) return 'n/a'
@@ -229,8 +295,8 @@ export function DeleteHistoryConfirm({
         <ConfirmModal
             isOpen={isOpen}
             title="Delete message from history?"
-            message="This will remove the selected user message and all later conversation history after it for the current thread. This cannot be undone."
-            confirmLabel={deleting ? 'Deleting...' : 'Delete history'}
+            message="This will remove only the selected user message and its associated assistant turn from this thread history. Later messages stay intact. This cannot be undone."
+            confirmLabel={deleting ? 'Deleting...' : 'Delete message'}
             cancelLabel="Cancel"
             variant="danger"
             onConfirm={onConfirm}

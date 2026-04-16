@@ -186,7 +186,7 @@ export const ComposerMentionMenu = memo(({
     onScroll: (element: HTMLDivElement) => void
     onApplyMention: (candidate: MentionCandidate) => void
 }) => (
-    <div className={cn('pointer-events-none absolute inset-x-0 bottom-full z-30 mb-1 overflow-hidden', isOpen ? 'pointer-events-auto' : 'pointer-events-none')}>
+    <div className={cn('pointer-events-none absolute inset-x-0 bottom-full z-[170] mb-1 overflow-hidden', isOpen ? 'pointer-events-auto' : 'pointer-events-none')}>
         <AnimatedHeight isOpen={isOpen} duration={220}>
             <div className="overflow-hidden rounded-xl border border-white/10 bg-sparkle-card shadow-2xl shadow-black/70 backdrop-blur-xl">
                 <div className="relative">
@@ -400,9 +400,9 @@ export const ComposerFooterControls = memo(({
     displayedProfile: string
     setShowFullAccessConfirm: Dispatch<SetStateAction<boolean>>
 }) => (
-    <div className={cn('flex min-w-0 flex-1 items-center text-[11px]', isCompactFooter ? 'gap-0.5 overflow-hidden' : 'gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:min-w-max sm:overflow-visible')}>
+    <div className={cn('flex min-w-0 flex-1 items-center text-[11px]', isCompactFooter ? 'gap-0.5 overflow-visible' : 'gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:min-w-max sm:overflow-visible')}>
         <div className="relative min-w-0" ref={modelDropdownRef}>
-            <div className={cn('pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-72 overflow-hidden', showModelDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
+            <div className={cn('pointer-events-none absolute bottom-full left-0 z-[170] mb-2 w-72 overflow-hidden', showModelDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
                 <AnimatedHeight isOpen={showModelDropdown} duration={220}>
                     <div className="overflow-hidden rounded-xl border border-white/10 bg-sparkle-card shadow-2xl shadow-black/70 backdrop-blur-xl">
                         <div className="flex items-center justify-between border-b border-white/5 px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sparkle-text-muted"><span>Models</span></div>
@@ -438,7 +438,7 @@ export const ComposerFooterControls = memo(({
         <span className="mx-0.5 hidden h-4 w-px bg-white/10 sm:block" />
 
         <div className="relative min-w-0" ref={traitsDropdownRef}>
-            <div className={cn('pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-56 overflow-hidden', showTraitsDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
+            <div className={cn('pointer-events-none absolute bottom-full left-0 z-[170] mb-2 w-56 overflow-hidden', showTraitsDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
                 <AnimatedHeight isOpen={showTraitsDropdown} duration={220}>
                     <div className="space-y-2 rounded-xl border border-white/10 bg-sparkle-card p-2 shadow-lg">
                         <div className="px-2 pt-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-sparkle-text-muted">Reasoning</div>

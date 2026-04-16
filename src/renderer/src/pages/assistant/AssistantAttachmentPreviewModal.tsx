@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
+import ImagePreviewContent from '@/components/ui/file-preview/ImagePreviewContent'
 import SyntaxPreview from '@/components/ui/file-preview/SyntaxPreview'
 import { detectCodeLanguage } from '@/components/ui/file-preview/utils'
 import type { ComposerContextFile } from './assistant-composer-types'
@@ -16,6 +17,7 @@ interface AssistantAttachmentPreviewModalProps {
     contentType: string
     sizeLabel: string
     showFormattingWarning: boolean
+    onUpdatePastedText?: (fileId: string, nextText: string) => void
     onClose: () => void
 }
 
@@ -71,6 +73,7 @@ export default function AssistantAttachmentPreviewModal({
     contentType,
     sizeLabel,
     showFormattingWarning,
+    onUpdatePastedText,
     onClose
 }: AssistantAttachmentPreviewModalProps) {
     useEffect(() => {
@@ -94,16 +97,23 @@ export default function AssistantAttachmentPreviewModal({
 
     const previewText = String(file.content || file.previewText || '')
     const previewLanguage = resolvePreviewLanguage(file, meta)
+    const isPastedTextPreview = file.source === 'paste' && Boolean(file.content)
+    const isImagePreview = meta.category === 'image'
+    const shouldShowFormattingWarning = showFormattingWarning && !isPastedTextPreview
 
     return (
         <div
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-md"
+            className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-md"
             onClick={onClose}
             onWheel={(event) => event.stopPropagation()}
             style={{ animation: 'fadeIn 0.15s ease-out' }}
         >
             <div
-                className="m-4 flex max-h-[90vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
+                className={
+                    isImagePreview
+                        ? 'pointer-events-auto m-4 flex h-[min(82vh,840px)] w-[min(88vw,1180px)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl'
+                        : 'pointer-events-auto m-4 flex max-h-[90vh] w-full max-w-[90vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl'
+                }
                 onClick={(event) => event.stopPropagation()}
                 onWheel={(event) => event.stopPropagation()}
                 style={{ animation: 'scaleIn 0.15s ease-out' }}
@@ -128,20 +138,41 @@ export default function AssistantAttachmentPreviewModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-md border border-white/10 p-1.5 text-sparkle-text-muted transition-colors hover:bg-white/[0.03] hover:text-sparkle-text"
+                        className="rounded-md border border-white/10 p-1.5 text-sparkle-text-muted transition-colors hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-200"
                         title="Close preview"
                     >
                         <X size={14} />
                     </button>
                 </div>
 
-                <div className="custom-scrollbar flex-1 overflow-auto bg-sparkle-bg p-4" style={{ overscrollBehavior: 'contain' }}>
-                    {meta.category === 'image' && file.previewDataUrl ? (
-                        <div className="flex min-h-full items-start justify-center">
-                            <img
-                                src={file.previewDataUrl}
-                                alt={meta.name}
-                                className="max-h-[78vh] max-w-full rounded-lg border border-white/10 object-contain"
+                <div
+                    className={isImagePreview ? 'min-h-0 flex-1 overflow-hidden bg-black/35 p-0' : 'custom-scrollbar flex-1 overflow-auto bg-sparkle-bg p-4'}
+                    style={{ overscrollBehavior: 'contain' }}
+                >
+                    {isImagePreview ? (
+                        <ImagePreviewContent
+                            filePath={file.path}
+                            fileName={meta.name}
+                            isExpanded
+                        />
+                    ) : isPastedTextPreview ? (
+                        <div className="flex h-[min(72vh,760px)] w-full flex-col overflow-hidden rounded-xl border border-white/5 bg-sparkle-card">
+                            <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-3">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sparkle-text-muted">
+                                    Pasted text
+                                </span>
+                                <span className="text-[10px] text-sparkle-text-muted/70">
+                                    Editable
+                                </span>
+                            </div>
+                            <textarea
+                                value={previewText}
+                                onChange={(event) => {
+                                    if (!file?.id || !onUpdatePastedText) return
+                                    onUpdatePastedText(file.id, event.target.value)
+                                }}
+                                spellCheck={false}
+                                className="custom-scrollbar min-h-0 flex-1 w-full resize-none overflow-auto bg-transparent px-4 py-4 text-[13px] leading-6 text-sparkle-text outline-none selection:bg-sky-400/25"
                             />
                         </div>
                     ) : previewText ? (
@@ -158,7 +189,7 @@ export default function AssistantAttachmentPreviewModal({
                         </div>
                     )}
 
-                    {showFormattingWarning && (
+                    {shouldShowFormattingWarning && (
                         <div className="mt-3 rounded-md border border-amber-400/30 bg-amber-500/10 p-2 text-[11px] text-amber-300/90">
                             Text might have not been properly formatted.
                         </div>

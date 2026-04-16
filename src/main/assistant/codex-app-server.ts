@@ -33,36 +33,14 @@ import {
     type JsonRpcMessage,
     type SessionContext
 } from './codex-runtime-protocol'
-
-function toCodexUserInputAnswer(value: unknown): { answers: string[] } {
-    if (typeof value === 'string') {
-        return { answers: [value] }
-    }
-
-    if (Array.isArray(value)) {
-        return { answers: value.filter((entry): entry is string => typeof entry === 'string') }
-    }
-
-    if (value && typeof value === 'object') {
-        const maybeAnswers = (value as { answers?: unknown }).answers
-        if (Array.isArray(maybeAnswers)) {
-            return { answers: maybeAnswers.filter((entry): entry is string => typeof entry === 'string') }
-        }
-    }
-
-    return { answers: [] }
-}
-
-function toCodexUserInputAnswers(
-    answers: Record<string, string | string[]>
-): Record<string, { answers: string[] }> {
-    return Object.fromEntries(
-        Object.entries(answers).map(([questionId, value]) => [questionId, toCodexUserInputAnswer(value)])
-    )
-}
+import {
+    isMissingRolloutResumeError,
+    toCodexUserInputAnswers
+} from './codex-app-server-runtime-helpers'
 
 export class CodexAppServerRuntime extends EventEmitter {
     private readonly sessions = new Map<string, SessionContext>()
+    private readonly threadContextAliases = new Map<string, string>()
     private readonly codexBinary = process.platform === 'win32' ? 'codex.cmd' : 'codex'
     private modelCache: AssistantModelInfo[] = []
     private modelCacheLoaded = false
@@ -217,6 +195,10 @@ export class CodexAppServerRuntime extends EventEmitter {
         }
 
         this.sessions.set(thread.id, context)
+        this.registerThreadAlias(thread.id, thread.id)
+        if (thread.providerThreadId) {
+            this.registerThreadAlias(thread.id, thread.providerThreadId)
+        }
         this.attachProcessListeners(context)
 
         this.emitRuntime({
@@ -261,7 +243,11 @@ export class CodexAppServerRuntime extends EventEmitter {
                     threadId: thread.providerThreadId
                 })
             } catch (error) {
-                log.warn('[Assistant] thread/resume failed, falling back to thread/start', error)
+                if (isMissingRolloutResumeError(error)) {
+                    log.info('[Assistant] thread/resume missed existing rollout, falling back to thread/start')
+                } else {
+                    log.warn('[Assistant] thread/resume failed, falling back to thread/start', error)
+                }
             }
         }
         if (!response) {
@@ -274,6 +260,7 @@ export class CodexAppServerRuntime extends EventEmitter {
         }
 
         context.thread.providerThreadId = providerThreadId
+        this.registerThreadAlias(thread.id, providerThreadId)
         this.emitRuntime({
             eventId: randomUUID(),
             type: 'thread.started',
@@ -292,6 +279,18 @@ export class CodexAppServerRuntime extends EventEmitter {
         })
     }
 
+    hasSession(threadId: string): boolean {
+        const context = this.getSessionContext(threadId)
+        return Boolean(context?.thread.providerThreadId)
+    }
+
+    registerThreadAlias(sessionThreadId: string, aliasThreadId: string): void {
+        const normalizedSessionThreadId = String(sessionThreadId || '').trim()
+        const normalizedAliasThreadId = String(aliasThreadId || '').trim()
+        if (!normalizedSessionThreadId || !normalizedAliasThreadId) return
+        this.threadContextAliases.set(normalizedAliasThreadId, normalizedSessionThreadId)
+    }
+
     async sendPrompt(
         threadId: string,
         prompt: string,
@@ -304,7 +303,8 @@ export class CodexAppServerRuntime extends EventEmitter {
         }
     ): Promise<{ turnId: string; providerThreadId: string | null }> {
         const context = this.requireSession(threadId)
-        if (!context.thread.providerThreadId) {
+        const targetProviderThreadId = this.resolveTargetProviderThreadId(threadId, context)
+        if (!targetProviderThreadId) {
             throw new Error('Assistant thread is not connected.')
         }
 
@@ -312,7 +312,10 @@ export class CodexAppServerRuntime extends EventEmitter {
             context,
             'turn/start',
             buildTurnParams(
-                context.thread,
+                {
+                    ...context.thread,
+                    providerThreadId: targetProviderThreadId
+                },
                 prompt,
                 options?.model,
                 options?.runtimeMode,
@@ -332,23 +335,25 @@ export class CodexAppServerRuntime extends EventEmitter {
             runtimeMode: options?.runtimeMode || context.thread.runtimeMode,
             interactionMode: options?.interactionMode || context.thread.interactionMode
         }
-        return { turnId, providerThreadId: context.thread.providerThreadId }
+        return { turnId, providerThreadId: targetProviderThreadId }
     }
 
     async interruptTurn(threadId: string, turnId?: string): Promise<void> {
         const context = this.requireSession(threadId)
-        if (!context.thread.providerThreadId || !turnId) return
+        const targetProviderThreadId = this.resolveTargetProviderThreadId(threadId, context)
+        if (!targetProviderThreadId || !turnId) return
         await this.sendRequest(context, 'turn/interrupt', {
-            threadId: context.thread.providerThreadId,
+            threadId: targetProviderThreadId,
             turnId
         }, 8000)
     }
 
     async rollbackThread(threadId: string, numTurns: number): Promise<void> {
         const context = this.requireSession(threadId)
-        if (!context.thread.providerThreadId || numTurns < 1) return
+        const targetProviderThreadId = this.resolveTargetProviderThreadId(threadId, context)
+        if (!targetProviderThreadId || numTurns < 1) return
         await this.sendRequest(context, 'thread/rollback', {
-            threadId: context.thread.providerThreadId,
+            threadId: targetProviderThreadId,
             numTurns
         }, 15000)
     }
@@ -393,7 +398,7 @@ export class CodexAppServerRuntime extends EventEmitter {
     }
 
     disconnect(threadId: string): void {
-        const context = this.sessions.get(threadId)
+        const context = this.getSessionContext(threadId)
         if (!context) return
 
         context.stopping = true
@@ -408,12 +413,18 @@ export class CodexAppServerRuntime extends EventEmitter {
         if (!context.child.killed) {
             killChildTree(context.child)
         }
-        this.sessions.delete(threadId)
+        const sessionThreadId = context.thread.id
+        this.sessions.delete(sessionThreadId)
+        for (const [aliasThreadId, mappedThreadId] of this.threadContextAliases.entries()) {
+            if (mappedThreadId === sessionThreadId) {
+                this.threadContextAliases.delete(aliasThreadId)
+            }
+        }
         this.emitRuntime({
             eventId: randomUUID(),
             type: 'session.state.changed',
             createdAt: new Date().toISOString(),
-            threadId,
+            threadId: sessionThreadId,
             payload: { state: 'stopped', message: 'Session disconnected.' }
         })
     }
@@ -427,7 +438,8 @@ export class CodexAppServerRuntime extends EventEmitter {
     private attachProcessListeners(context: SessionContext): void {
         context.output.on('line', (line) => handleStdoutLine(context, line, {
             emitRuntime: (event) => this.emitRuntime(event),
-            writeMessage: (targetContext, message) => this.writeMessage(targetContext, message)
+            writeMessage: (targetContext, message) => this.writeMessage(targetContext, message),
+            registerThreadAlias: (sessionThreadId, aliasThreadId) => this.registerThreadAlias(sessionThreadId, aliasThreadId)
         }))
         context.child.stderr.on('data', (chunk) => {
             const message = String(chunk || '').trim()
@@ -451,12 +463,18 @@ export class CodexAppServerRuntime extends EventEmitter {
         })
         context.child.on('exit', (code, signal) => {
             if (context.stopping) return
-            this.sessions.delete(context.thread.id)
+            const sessionThreadId = context.thread.id
+            this.sessions.delete(sessionThreadId)
+            for (const [aliasThreadId, mappedThreadId] of this.threadContextAliases.entries()) {
+                if (mappedThreadId === sessionThreadId) {
+                    this.threadContextAliases.delete(aliasThreadId)
+                }
+            }
             this.emitRuntime({
                 eventId: randomUUID(),
                 type: 'session.state.changed',
                 createdAt: new Date().toISOString(),
-                threadId: context.thread.id,
+                threadId: sessionThreadId,
                 payload: {
                     state: code === 0 ? 'stopped' : 'error',
                     message: `codex app-server exited (code=${code ?? 'null'}, signal=${signal ?? 'null'}).`
@@ -486,9 +504,28 @@ export class CodexAppServerRuntime extends EventEmitter {
     }
 
     private requireSession(threadId: string): SessionContext {
-        const session = this.sessions.get(threadId)
+        const session = this.getSessionContext(threadId)
         if (!session) throw new Error(`Unknown assistant runtime session for thread ${threadId}.`)
         return session
+    }
+
+    private getSessionContext(threadId: string): SessionContext | undefined {
+        const direct = this.sessions.get(threadId)
+        if (direct) return direct
+        const contextThreadId = this.threadContextAliases.get(threadId)
+        return contextThreadId ? this.sessions.get(contextThreadId) : undefined
+    }
+
+    private resolveTargetProviderThreadId(threadId: string, context: SessionContext): string | null {
+        const normalizedThreadId = String(threadId || '').trim()
+        if (!normalizedThreadId) return context.thread.providerThreadId || null
+        if (normalizedThreadId === context.thread.id) return context.thread.providerThreadId || null
+        if (normalizedThreadId === context.thread.providerThreadId) return context.thread.providerThreadId || null
+        const mappedThreadId = this.threadContextAliases.get(normalizedThreadId)
+        if (mappedThreadId === context.thread.id) {
+            return normalizedThreadId
+        }
+        return context.thread.providerThreadId || null
     }
 
     private emitRuntime(event: AssistantRuntimeEvent): void {

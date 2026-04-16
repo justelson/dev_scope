@@ -1,5 +1,6 @@
 import type { AssistantInteractionMode, AssistantRuntimeMode } from '@shared/assistant/contracts'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
+import type { AssistantBusyMessageMode } from '@/lib/settings'
 
 export type ComposerContextFile = {
     id: string
@@ -30,7 +31,16 @@ export type AssistantComposerSendOptions = {
     interactionMode: AssistantInteractionMode
     effort: 'low' | 'medium' | 'high' | 'xhigh'
     serviceTier?: 'fast'
+    dispatchMode?: 'immediate' | 'queue' | 'force'
 }
+
+export type AssistantQueuedComposerMessage = {
+    id: string
+    prompt: string
+    dispatchMode: 'queue' | 'force'
+}
+
+export type AssistantComposerDisabledReason = 'no-session' | 'assistant-unavailable' | 'project-required'
 
 export type AssistantComposerProps = {
     sessionId?: string | null
@@ -44,6 +54,7 @@ export type AssistantComposerProps = {
     ) => Promise<void> | void
     onAttachmentShelfBoundsChange?: (bounds: AssistantElementBounds | null) => void
     disabled: boolean
+    disabledReason?: AssistantComposerDisabledReason | null
     allowEmptySubmit?: boolean
     isSending: boolean
     isThinking: boolean
@@ -63,4 +74,7 @@ export type AssistantComposerProps = {
     dirtySubmitLabel?: string
     cancelLabel?: string
     showCancelWhenDirty?: boolean
+    queuedMessageCount?: number
+    queuedMessages?: AssistantQueuedComposerMessage[]
+    busyMessageMode?: AssistantBusyMessageMode
 }

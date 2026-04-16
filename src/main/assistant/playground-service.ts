@@ -19,6 +19,23 @@ function sanitizeLabSlug(input: string): string {
         .slice(0, 48) || 'lab'
 }
 
+function sanitizeLabTitle(input?: string | null): string {
+    const collapsed = String(input || '').trim().replace(/\s+/g, ' ').slice(0, 120)
+    if (!collapsed) return ''
+    return /[a-z0-9]/i.test(collapsed) ? collapsed : ''
+}
+
+function formatGeneratedLabTitle(folderName: string): string {
+    const normalized = String(folderName || '')
+        .trim()
+        .replace(/[-_]+/g, ' ')
+        .replace(/\s+/g, ' ')
+
+    if (!normalized) return 'Untitled Lab'
+
+    return normalized.replace(/\b[a-z]/g, (match) => match.toUpperCase())
+}
+
 function isPathInside(parentPath: string, childPath: string): boolean {
     const relativePath = relative(parentPath, childPath)
     return relativePath === '' || (!relativePath.startsWith('..') && !relativePath.includes(':'))
@@ -34,6 +51,14 @@ async function ensureDirectoryExists(directoryPath: string): Promise<void> {
 
 async function ensurePathExists(directoryPath: string): Promise<void> {
     await access(directoryPath)
+}
+
+async function ensureExistingDirectory(directoryPath: string): Promise<void> {
+    await ensurePathExists(directoryPath)
+    const details = await stat(directoryPath)
+    if (!details.isDirectory()) {
+        throw new Error(`Expected a directory at ${directoryPath}.`)
+    }
 }
 
 async function chooseUniqueChildFolder(rootPath: string, preferredName: string): Promise<string> {
@@ -54,7 +79,7 @@ async function chooseUniqueChildFolder(rootPath: string, preferredName: string):
 }
 
 export function derivePlaygroundLabTitle(input?: string | null, repoUrl?: string | null, existingFolderPath?: string | null): string {
-    const explicit = String(input || '').trim()
+    const explicit = sanitizeLabTitle(input)
     if (explicit) return explicit
     const repoCandidate = String(repoUrl || '').trim()
     if (repoCandidate) {
@@ -67,7 +92,7 @@ export function derivePlaygroundLabTitle(input?: string | null, repoUrl?: string
         const name = basename(existingFolderName)
         if (name) return name
     }
-    return 'Lab'
+    return 'Untitled Lab'
 }
 
 export async function createPlaygroundLabRecord(params: {
@@ -81,17 +106,20 @@ export async function createPlaygroundLabRecord(params: {
     await ensureDirectoryExists(rootPath)
 
     const createdAt = nowIso()
-    const title = derivePlaygroundLabTitle(params.title, params.repoUrl, params.existingFolderPath)
+    const derivedTitle = derivePlaygroundLabTitle(params.title, params.repoUrl, params.existingFolderPath)
 
     if (params.source === 'existing-folder') {
         const existingFolderPath = ensureNonEmptyPath(params.existingFolderPath, 'Existing folder')
-        await ensurePathExists(existingFolderPath)
+        await ensureExistingDirectory(existingFolderPath)
+        if (resolve(existingFolderPath) === rootPath) {
+            throw new Error('Choose a folder inside the Playground root, not the Playground root itself.')
+        }
         if (!isPathInside(rootPath, existingFolderPath)) {
             throw new Error('Existing folder must be inside the Playground root.')
         }
         return {
             id: createAssistantId('assistant-playground-lab'),
-            title,
+            title: derivedTitle,
             rootPath: existingFolderPath,
             source: params.source,
             repoUrl: null,
@@ -100,8 +128,12 @@ export async function createPlaygroundLabRecord(params: {
         }
     }
 
-    const labFolderPath = await chooseUniqueChildFolder(rootPath, title)
+    const labFolderPath = await chooseUniqueChildFolder(rootPath, derivedTitle)
     await mkdir(labFolderPath, { recursive: true })
+    const hasExplicitSourceTitle = Boolean(String(params.title || '').trim() || String(params.repoUrl || '').trim())
+    const title = hasExplicitSourceTitle
+        ? derivedTitle
+        : formatGeneratedLabTitle(basename(labFolderPath))
 
     if (params.source === 'git-clone') {
         const repoUrl = String(params.repoUrl || '').trim()

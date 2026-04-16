@@ -1,6 +1,4 @@
-import type { ClipboardEvent, Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react'
-import type { AssistantInteractionMode, AssistantRuntimeMode } from '@shared/assistant/contracts'
-import type { MentionCandidate } from './assistant-composer-mentions'
+import type { ClipboardEvent, KeyboardEvent } from 'react'
 import {
     InlineMentionTag,
     reconcileInlineMentionTags,
@@ -8,8 +6,6 @@ import {
     replaceInlineMentionTokensWithLabels,
     sortInlineMentionTags
 } from './assistant-composer-inline-mentions'
-import type { AssistantComposerPreferenceEffort } from './assistant-composer-preferences'
-import type { ComposerContextFile } from './assistant-composer-types'
 import {
     ATTACHMENT_REMOVE_MS,
     buildAttachmentPath,
@@ -22,68 +18,7 @@ import {
     readFileAsDataUrl,
     summarizeTextPreview
 } from './assistant-composer-utils'
-
-type SetStringState = Dispatch<SetStateAction<string>>
-type SetBooleanState = Dispatch<SetStateAction<boolean>>
-type SetNumberState = Dispatch<SetStateAction<number>>
-type SetStringArrayState = Dispatch<SetStateAction<string[]>>
-type SetContextFilesState = Dispatch<SetStateAction<ComposerContextFile[]>>
-type SetInlineMentionTagsState = Dispatch<SetStateAction<InlineMentionTag[]>>
-
-export type AssistantComposerHandlersArgs = {
-    disabled: boolean
-    allowEmptySubmit: boolean
-    isConnected: boolean
-    isSending: boolean
-    onStop?: () => Promise<void> | void
-    onSend: (prompt: string, contextFiles: ComposerContextFile[], options: {
-        model?: string
-        runtimeMode: AssistantRuntimeMode
-        interactionMode: AssistantInteractionMode
-        effort: AssistantComposerPreferenceEffort
-        serviceTier?: 'fast'
-    }) => Promise<boolean>
-    text: string
-    setText: SetStringState
-    inlineMentionTags: InlineMentionTag[]
-    setInlineMentionTags: SetInlineMentionTagsState
-    contextFiles: ComposerContextFile[]
-    setContextFiles: SetContextFilesState
-    sentPromptHistory: string[]
-    setSentPromptHistory: SetStringArrayState
-    historyCursor: number | null
-    setHistoryCursor: Dispatch<SetStateAction<number | null>>
-    draftBeforeHistory: string
-    setDraftBeforeHistory: SetStringState
-    showMentionMenu: boolean
-    setShowMentionMenu: SetBooleanState
-    mentionCandidates: MentionCandidate[]
-    mentionState: { start: number; query: string } | null
-    activeMentionCandidate: MentionCandidate | null
-    setActiveMentionIndex: SetNumberState
-    showModelDropdown: boolean
-    setShowModelDropdown: SetBooleanState
-    filteredModelOptions: Array<{ id: string; label: string; description?: string }>
-    activeModelCandidate: { id: string; label: string; description?: string } | null
-    setActiveModelIndex: SetNumberState
-    showBranchDropdown: boolean
-    setShowBranchDropdown: SetBooleanState
-    filteredBranches: Array<{ name: string; label?: string; commit?: string; current?: boolean }>
-    activeBranchCandidate: { name: string; label?: string; commit?: string; current?: boolean } | null
-    setActiveBranchIndex: SetNumberState
-    onSwitchBranch: (branchName: string) => Promise<void>
-    selectedModel: string
-    setSelectedModel: SetStringState
-    selectedRuntimeMode: AssistantRuntimeMode
-    setSelectedRuntimeMode: Dispatch<SetStateAction<AssistantRuntimeMode>>
-    selectedInteractionMode: AssistantInteractionMode
-    selectedEffort: AssistantComposerPreferenceEffort
-    fastModeEnabled: boolean
-    setComposerCursor: SetNumberState
-    removingAttachmentIds: string[]
-    setRemovingAttachmentIds: SetStringArrayState
-    textareaRef: RefObject<HTMLTextAreaElement | null>
-}
+import type { AssistantComposerHandlersArgs } from './assistant-composer-handlers.types'
 
 export function createAssistantComposerHandlers(args: AssistantComposerHandlersArgs) {
     const {
@@ -91,6 +26,8 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         allowEmptySubmit,
         isConnected,
         isSending,
+        isThinking,
+        busyMessageMode,
         onSend,
         text,
         setText,
@@ -131,7 +68,10 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         setComposerCursor,
         removingAttachmentIds,
         setRemovingAttachmentIds,
-        textareaRef
+        textareaRef,
+        onOptimisticSendClear,
+        shouldRestoreAfterFailedSend,
+        onRestoreFailedSendDraft
     } = args
 
     const upsertAttachment = (attachment: ComposerContextFile) => {
@@ -276,7 +216,7 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         }
     }
 
-    const handleSend = async () => {
+    const submitPrompt = async (dispatchMode: 'immediate' | 'queue' | 'force') => {
         const prompt = replaceInlineMentionTokensWithLabels(text, inlineMentionTags).trim()
         const inlineMentionFiles: ComposerContextFile[] = inlineMentionTags.map((tag) => {
             const meta = getContextFileMeta({ path: tag.path, name: tag.label })
@@ -302,23 +242,41 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         setContextFiles([])
         setHistoryCursor(null)
         setDraftBeforeHistory('')
+        onOptimisticSendClear?.()
         restoreComposerFocus()
         const success = await onSend(prompt, contextFilesForSend, {
             model: selectedModel || undefined,
             runtimeMode: selectedRuntimeMode,
             interactionMode: selectedInteractionMode,
             effort: selectedEffort,
-            serviceTier: fastModeEnabled ? 'fast' : undefined
+            serviceTier: fastModeEnabled ? 'fast' : undefined,
+            dispatchMode
         })
         if (!success) {
-            setText(prevText)
-            setInlineMentionTags(prevTags)
-            setContextFiles(prevFiles)
+            const shouldRestore = shouldRestoreAfterFailedSend?.() ?? true
+            if (shouldRestore) {
+                setText(prevText)
+                setInlineMentionTags(prevTags)
+                setContextFiles(prevFiles)
+                onRestoreFailedSendDraft?.(prevText)
+            }
             restoreComposerFocus()
             return
         }
         if (prompt) setSentPromptHistory((prev) => prev[prev.length - 1] === prompt ? prev : [...prev.slice(-49), prompt])
         restoreComposerFocus()
+    }
+
+    const handleSend = async () => {
+        await submitPrompt(isThinking ? busyMessageMode : 'immediate')
+    }
+
+    const handleQueueSend = async () => {
+        await submitPrompt('queue')
+    }
+
+    const handleForceSend = async () => {
+        await submitPrompt('force')
     }
 
     const handleRecallPrevious = () => {
@@ -492,6 +450,8 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         applyMentionCandidate,
         attachFile,
         handleSend,
+        handleQueueSend,
+        handleForceSend,
         handleRecallPrevious,
         handleRecallNext,
         handleKeyDown,
