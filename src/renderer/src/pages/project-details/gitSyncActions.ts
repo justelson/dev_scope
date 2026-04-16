@@ -1,4 +1,5 @@
 import { buildGitPublishPlan, describeGitPublishSuccess, type GitPublishPlan } from '@/lib/gitPublishPlanner'
+import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import type { GitActionParams } from './gitActionTypes'
 import { isTransientPushError, summarizePushError } from './gitActionHelpers'
 
@@ -46,7 +47,8 @@ export function createGitSyncActions(params: GitActionParams) {
                 params.showToast('Push succeeded after retry.')
             }
 
-            await params.refreshGitData(false, { mode: 'unpushed' })
+            invalidateProjectGitOverview(params.decodedPath)
+            await params.refreshGitData(false, { mode: 'full' })
             if (!retriedAfterTransientError) {
                 params.showToast(describeGitPublishSuccess(
                     publishPlan,
@@ -73,7 +75,8 @@ export function createGitSyncActions(params: GitActionParams) {
                 }
 
                 params.setLastFetched(Date.now())
-                await params.refreshGitData(false, { quiet: true, mode: 'pulls' })
+                invalidateProjectGitOverview(params.decodedPath)
+                await params.refreshGitData(false, { mode: 'full' })
                 params.showToast(successLabel || (remoteName ? `Fetched ${remoteName}.` : 'Fetched remote updates.'))
             } catch (err: any) {
                 params.showToast(`Failed to fetch: ${err.message}`, undefined, undefined, 'error')
@@ -93,6 +96,7 @@ export function createGitSyncActions(params: GitActionParams) {
                 }
 
                 params.setLastPulled(Date.now())
+                invalidateProjectGitOverview(params.decodedPath)
                 await params.refreshGitData(true, { mode: 'full' })
                 params.showToast(options?.successLabel || 'Pulled remote updates successfully.')
             } catch (err: any) {
@@ -114,6 +118,7 @@ export function createGitSyncActions(params: GitActionParams) {
                     throw new Error(checkoutResult?.error || 'Failed to switch branch')
                 }
 
+                invalidateProjectGitOverview(params.decodedPath)
                 await params.refreshGitData(true)
                 if (checkoutResult?.cleanedLock && checkoutResult?.stashed) {
                     params.showToast(`Recovered stale Git lock and auto-stashed changes (${checkoutResult.stashRef || 'stash@{0}'}).`)

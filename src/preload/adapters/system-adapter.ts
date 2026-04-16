@@ -58,9 +58,6 @@ export function createSystemAdapter() {
     return {
         getSystemOverview: () => ipcRenderer.invoke('devscope:getSystemOverview'),
         getDetailedSystemStats: () => ipcRenderer.invoke('devscope:getDetailedSystemStats'),
-        getDeveloperTooling: () => ipcRenderer.invoke('devscope:getDeveloperTooling'),
-        getReadinessReport: () => ipcRenderer.invoke('devscope:getReadinessReport'),
-        refreshAll: () => ipcRenderer.invoke('devscope:refreshAll'),
         system: {
             bootstrap: async () => {
                 const payload = await ipcRenderer.invoke('devscope:system:bootstrap')

@@ -1,4 +1,5 @@
 import type { FileTreeNode } from './types'
+import { mergeDirectoryChildren as mergeDirectoryChildrenBase } from '@/lib/filesystem/fileTreeMutations'
 
 export function formatFileSize(bytes?: number): string {
     if (!bytes) return '-'
@@ -77,38 +78,5 @@ export function mergeDirectoryChildren(
     targetPath: string,
     children: FileTreeNode[]
 ): FileTreeNode[] {
-    let changed = false
-
-    const visit = (items: FileTreeNode[]): FileTreeNode[] => {
-        let localChanged = false
-        const nextItems = items.map((node) => {
-            if (node.type === 'directory' && node.path === targetPath) {
-                localChanged = true
-                changed = true
-                return {
-                    ...node,
-                    children,
-                    childrenLoaded: true
-                }
-            }
-
-            if (node.type === 'directory' && node.children) {
-                const nextChildren = visit(node.children)
-                if (nextChildren !== node.children) {
-                    localChanged = true
-                    return {
-                        ...node,
-                        children: nextChildren
-                    }
-                }
-            }
-
-            return node
-        })
-
-        return localChanged ? nextItems : items
-    }
-
-    const nextNodes = visit(nodes)
-    return changed ? nextNodes : nodes
+    return mergeDirectoryChildrenBase(nodes, targetPath, children)
 }

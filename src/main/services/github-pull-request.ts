@@ -61,6 +61,11 @@ export async function createOrOpenPullRequest(
 ) {
     onProgress?.('Checking branch...')
     const branchStateBeforePush = await readBranchState(projectPath)
+    const requestedTargetBranch = String(input.targetBranch || '').trim()
+    const currentBranch = String(branchStateBeforePush.branch || '').trim()
+    if (requestedTargetBranch && currentBranch && currentBranch !== 'HEAD' && requestedTargetBranch === currentBranch) {
+        throw new Error('Choose a target branch that is different from the current branch.')
+    }
     await ensureNoWorkingTreeChanges(branchStateBeforePush)
 
     const preferredRemote = getPreferredGitHubRemote(branchStateBeforePush.remotes)

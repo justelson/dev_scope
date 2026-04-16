@@ -1,4 +1,15 @@
+import {
+    getFileExtensionFromName,
+    getParentFolderPath,
+    validateCreateName
+} from '@/lib/filesystem/fileSystemPaths'
+
 export const FILES_PAGE_SIZE = 300
+export {
+    getFileExtensionFromName,
+    getParentFolderPath,
+    validateCreateName
+} from '@/lib/filesystem/fileSystemPaths'
 
 export type FolderBrowseMode = 'projects' | 'explorer'
 
@@ -24,26 +35,6 @@ export async function yieldToBrowserPaint(): Promise<void> {
     })
 }
 
-export function getParentFolderPath(currentPath: string): string | null {
-    const raw = String(currentPath || '').trim().replace(/\//g, '\\').replace(/[\\]+$/, '')
-    if (!raw) return null
-
-    if (/^[A-Za-z]:\\?$/.test(raw)) return null
-    if (/^\\\\[^\\]+\\[^\\]+$/.test(raw)) return null
-
-    const lastSepIndex = raw.lastIndexOf('\\')
-    if (lastSepIndex < 0) return null
-
-    const parent = raw.slice(0, lastSepIndex)
-    if (!parent || parent === raw) return null
-
-    if (/^[A-Za-z]:$/.test(parent)) {
-        return `${parent}\\`
-    }
-
-    return parent
-}
-
 export function splitFileNameForRename(name: string): { baseName: string; extensionSuffix: string } {
     const raw = String(name || '')
     const dotIndex = raw.lastIndexOf('.')
@@ -54,20 +45,6 @@ export function splitFileNameForRename(name: string): { baseName: string; extens
         baseName: raw.slice(0, dotIndex),
         extensionSuffix: raw.slice(dotIndex)
     }
-}
-
-export function getFileExtensionFromName(name: string): string {
-    const dotIndex = name.lastIndexOf('.')
-    if (dotIndex <= 0 || dotIndex === name.length - 1) return ''
-    return name.slice(dotIndex + 1).toLowerCase()
-}
-
-export function validateCreateName(name: string): string | null {
-    const trimmed = String(name || '').trim()
-    if (!trimmed) return 'Name cannot be empty.'
-    if (trimmed === '.' || trimmed === '..') return 'Name cannot be "." or "..".'
-    if (trimmed.includes('/') || trimmed.includes('\\')) return 'Name cannot include path separators.'
-    return null
 }
 
 export function normalizePath(path: string): string {

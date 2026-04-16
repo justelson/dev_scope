@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
+import { primeProjectDetailsCache } from '@/lib/projectViewCache'
 import type { FolderItem, Project } from './types'
 import type {
     CreateFileSystemTarget,
@@ -106,6 +107,7 @@ export function useFolderBrowseActions(input: {
     }, [toast?.visible])
 
     const handleProjectClick = useCallback((project: Project) => {
+        primeProjectDetailsCache(project)
         navigate(`/projects/${encodeURIComponent(project.path)}`)
     }, [navigate])
 
@@ -114,6 +116,14 @@ export function useFolderBrowseActions(input: {
     }, [browseRoute, navigate])
 
     const handleViewAsProject = useCallback(() => {
+        const fallbackName = String(decodedPath || '').trim().split(/[\\/]/).filter(Boolean).pop() || 'Project'
+        primeProjectDetailsCache({
+            name: fallbackName,
+            path: decodedPath,
+            type: 'unknown',
+            markers: [],
+            frameworks: []
+        })
         navigate(`/projects/${encodeURIComponent(decodedPath)}`)
     }, [decodedPath, navigate])
 

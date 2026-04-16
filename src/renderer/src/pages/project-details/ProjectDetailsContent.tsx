@@ -14,6 +14,7 @@ export function ProjectDetailsContent(props: ProjectDetailsContentProps) {
         activeTab,
         isCondensedLayout,
         project,
+        projectDetailsLoading,
         scriptPredictions,
         scriptIntentContext,
         runScript,
@@ -33,6 +34,7 @@ export function ProjectDetailsContent(props: ProjectDetailsContentProps) {
                         {activeTab === 'readme' ? (
                             <ProjectDetailsReadmeTab
                                 project={project}
+                                loadingProjectDetails={projectDetailsLoading}
                                 openPreview={props.openPreview}
                                 readmeContentRef={props.readmeContentRef}
                                 readmeExpanded={props.readmeExpanded}
@@ -54,6 +56,7 @@ export function ProjectDetailsContent(props: ProjectDetailsContentProps) {
                         dependencies={project.dependencies}
                         devDependencies={project.devDependencies}
                         dependencyInstallStatus={project.dependencyInstallStatus}
+                        loadingProjectDetails={projectDetailsLoading}
                         scriptPredictions={scriptPredictions}
                         scriptIntentContext={scriptIntentContext}
                         onRunScript={runScript}

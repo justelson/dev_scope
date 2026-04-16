@@ -72,7 +72,7 @@ export function PullRequestModal(props: PullRequestModalProps) {
                                         <span className="truncate">{props.projectName}</span>
                                     </div>
                                     <p className="mt-2 text-sm text-white/58">
-                                        Create the PR from the current branch using the real remote branch state, or reopen the existing PR if one is already open.
+                                        DevScope checks the live branch state, publishes the branch if needed, then creates or reopens the pull request.
                                     </p>
                                 </div>
                                 <button

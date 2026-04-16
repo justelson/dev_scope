@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpRight, ChevronDown, RefreshCw, Sparkles } from 'lucide-react'
 import { resolvePreferredGitTextProvider } from '@/lib/gitAi'
+import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import { getProjectPullRequestConfig } from '@/lib/pullRequestWorkflow'
 import { FileDiffDetailModal } from './FileDiffDetailModal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -35,7 +36,8 @@ export function WorkingChangesView({
     handleUnstageAll,
     handleDiscardUnstagedFile,
     handleDiscardUnstagedAll,
-    ensureStatsForPaths
+    ensureStatsForPaths,
+    refreshGitData
 }: {
     stagedFiles: WorkingChangeItem[]
     unstagedFiles: WorkingChangeItem[]
@@ -62,6 +64,7 @@ export function WorkingChangesView({
     handleDiscardUnstagedFile: (path: string) => Promise<void>
     handleDiscardUnstagedAll: () => Promise<void>
     ensureStatsForPaths?: (paths: string[]) => void
+    refreshGitData: (force?: boolean, options?: any) => Promise<void>
 }) {
     const [fileDiffs, setFileDiffs] = useState<Map<string, string>>(new Map())
     const [loadingDiffKeys, setLoadingDiffKeys] = useState<Set<string>>(new Set())
@@ -117,6 +120,8 @@ export function WorkingChangesView({
                 if (!createResult?.success) {
                     throw new Error(createResult?.error || 'Failed to create branch.')
                 }
+                invalidateProjectGitOverview(projectPath)
+                await refreshGitData(false, { quiet: true, mode: 'full' }).catch(() => undefined)
                 showToast(`Created branch ${proposed}.`, undefined, undefined, 'success')
                 await runStackedActionByMode(mode)
             } catch (err: any) {
@@ -148,6 +153,8 @@ export function WorkingChangesView({
             if (!createResult?.success) {
                 throw new Error(createResult?.error || 'Failed to create branch.')
             }
+            invalidateProjectGitOverview(projectPath)
+            await refreshGitData(false, { quiet: true, mode: 'full' }).catch(() => undefined)
 
             if (autoCreateNextTime) {
                 updateSettings({ gitAutoCreateBranchWhenTargetMatches: true })

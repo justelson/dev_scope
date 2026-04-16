@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue } f
 import { Search, X, Folder, File } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useCommandPalette } from '@/lib/commandPalette'
+import { primeProjectDetailsCache } from '@/lib/projectViewCache'
 import { useSettings } from '@/lib/settings'
 import { cn, parseFileSearchQuery } from '@/lib/utils'
 import { buildFileSearchIndex, searchFileIndex, type FileSearchIndex, type SearchTreeNode } from '@/lib/fileSearchIndex'
@@ -264,7 +265,10 @@ export function CommandPalette() {
                 badge: '/ Project',
                 icon: <Folder size={16} />,
                 group: 'Projects',
-                action: () => navigate(`/projects/${encodeURIComponent(project.path)}`)
+                action: () => {
+                    primeProjectDetailsCache(project)
+                    navigate(`/projects/${encodeURIComponent(project.path)}`)
+                }
             }))
 
         const addFiles = () => files.map((file) => ({

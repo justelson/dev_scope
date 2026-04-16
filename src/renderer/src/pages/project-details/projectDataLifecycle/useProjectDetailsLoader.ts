@@ -40,7 +40,7 @@ export function useProjectDetailsLoader({
             setLoadingFiles(false)
         } else {
             setFileTree([])
-            setLoadingFiles(false)
+            setLoadingFiles(true)
         }
 
         setError(null)

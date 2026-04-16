@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { DevScopePullRequestSummary } from '@shared/contracts/devscope-api'
 import {
     getProjectPullRequestConfig,
     mergeProjectPullRequestConfig,
@@ -23,7 +24,9 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
         settings,
         updateSettings,
         showToast,
-        githubPublishContext
+        githubPublishContext,
+        initialPullRequest,
+        onPullRequestResolved
     } = props
 
     const projectDefaults = useMemo(
@@ -41,14 +44,7 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
     const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
     const [isExecuting, setIsExecuting] = useState(false)
     const [isLoadingPullRequest, setIsLoadingPullRequest] = useState(false)
-    const [existingPullRequest, setExistingPullRequest] = useState<{
-        number: number
-        title: string
-        url: string
-        baseBranch: string
-        headBranch: string
-        state: 'open' | 'closed' | 'merged'
-    } | null>(null)
+    const [existingPullRequest, setExistingPullRequest] = useState<DevScopePullRequestSummary | null>(initialPullRequest || null)
 
     useEffect(() => {
         if (!isOpen) return
@@ -61,8 +57,13 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
         setTargetBranch(nextDefaults.targetBranch)
         setDraftMode(nextDefaults.draft)
         setStatusMessage(null)
-        setExistingPullRequest(null)
-    }, [isOpen, projectPath, settings])
+        setExistingPullRequest(initialPullRequest || null)
+    }, [initialPullRequest, isOpen, projectPath, settings])
+
+    useEffect(() => {
+        if (!isOpen) return
+        setExistingPullRequest(initialPullRequest || null)
+    }, [initialPullRequest, isOpen])
 
     useEffect(() => {
         if (!isOpen || typeof document === 'undefined') return
@@ -83,20 +84,36 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
                 const result = await window.devscope.getCurrentBranchPullRequest(projectPath)
                 if (cancelled) return
                 if (!result?.success) {
-                    setExistingPullRequest(null)
+                    if (!initialPullRequest) {
+                        setExistingPullRequest(null)
+                    }
                     return
                 }
                 const nextPullRequest = result.pullRequest ?? null
                 setExistingPullRequest(nextPullRequest)
+                onPullRequestResolved?.(nextPullRequest)
                 if (nextPullRequest?.state === 'open') {
                     setStatusMessage({
                         tone: 'info',
                         text: `Open PR #${nextPullRequest.number} already exists for this branch.`
                     })
+                } else if (nextPullRequest?.state === 'merged') {
+                    setStatusMessage({
+                        tone: 'info',
+                        text: `Latest PR #${nextPullRequest.number} is already merged. Creating a new PR will open a fresh one for this branch.`
+                    })
+                } else if (nextPullRequest?.state === 'closed') {
+                    setStatusMessage({
+                        tone: 'info',
+                        text: `Latest PR #${nextPullRequest.number} is closed. Creating a new PR will open a fresh one for this branch.`
+                    })
                 }
             } catch {
                 if (!cancelled) {
-                    setExistingPullRequest(null)
+                    if (!initialPullRequest) {
+                        setExistingPullRequest(null)
+                        onPullRequestResolved?.(null)
+                    }
                 }
             } finally {
                 if (!cancelled) {
@@ -109,7 +126,7 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
         return () => {
             cancelled = true
         }
-    }, [isOpen, projectPath])
+    }, [initialPullRequest, isOpen, onPullRequestResolved, projectPath])
 
     const projectGuideConfig = useMemo(
         () => ({ mode: guideMode, text: guideText, filePath: guideFilePath }),
@@ -127,15 +144,28 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
     const hasGitHubRemote = Boolean(githubPublishContext?.canOpenPullRequest)
     const hasWorkingTreeChanges = unstagedFiles.length > 0 || stagedFiles.length > 0
     const isDetachedHead = !currentBranch || currentBranch === 'HEAD'
+    const normalizedTargetBranch = String(targetBranch || '').trim()
+    const targetMatchesCurrentBranch = Boolean(
+        normalizedTargetBranch
+        && currentBranch
+        && currentBranch !== 'HEAD'
+        && normalizedTargetBranch === currentBranch
+    )
     const validationError = !hasGitHubRemote
         ? 'Add a GitHub remote before creating a PR.'
         : isDetachedHead
             ? 'Detached HEAD: checkout a branch before creating a PR.'
+            : targetMatchesCurrentBranch
+                ? 'Choose a target branch that is different from the current branch.'
             : hasWorkingTreeChanges
                 ? 'Commit local changes before creating a PR.'
                 : ''
 
-    const primaryActionLabel = existingPullRequest?.state === 'open' ? 'View PR' : 'Create PR'
+    const primaryActionLabel = isLoadingPullRequest && !existingPullRequest
+        ? 'Checking PR...'
+        : existingPullRequest?.state === 'open'
+            ? 'View PR'
+            : 'Create PR'
     const isPrimaryActionDisabled = isExecuting
         || (!existingPullRequest && (isLoadingPullRequest || Boolean(validationError)))
 
@@ -200,6 +230,7 @@ export function usePullRequestModalController(props: PullRequestModalProps) {
             }
 
             setExistingPullRequest(result.pullRequest)
+            onPullRequestResolved?.(result.pullRequest)
             const prNumberLabel = result.pullRequest.number > 0 ? ` #${result.pullRequest.number}` : ''
             const statusText = result.status === 'opened_existing'
                 ? `Opened existing PR${prNumberLabel}.`

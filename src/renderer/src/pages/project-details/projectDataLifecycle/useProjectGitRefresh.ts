@@ -1,4 +1,4 @@
-import { useCallback, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react'
 import { unstable_batchedUpdates } from 'react-dom'
 import { getCachedProjectGitSnapshot } from '@/lib/projectViewCache'
 import { isFileTreeFullyLoaded } from '../fileTreeUtils'
@@ -15,26 +15,12 @@ import {
     type GitRefreshMode,
     yieldToBrowserPaint
 } from './gitLifecycleUtils'
-
-function buildGitDataState(input: UseProjectGitLifecycleParams): GitLifecycleDataState {
-    return {
-        gitView: input.gitView,
-        isGitRepo: input.isGitRepo,
-        gitStatusDetails: input.gitStatusDetails,
-        gitHistory: input.gitHistory,
-        gitHistoryTotalCount: input.gitHistoryTotalCount,
-        incomingCommits: input.incomingCommits,
-        unpushedCommits: input.unpushedCommits,
-        gitUser: input.gitUser,
-        repoOwner: input.repoOwner,
-        hasRemote: input.hasRemote,
-        gitSyncStatus: input.gitSyncStatus,
-        branches: input.branches,
-        remotes: input.remotes,
-        tags: input.tags,
-        stashes: input.stashes
-    }
-}
+import {
+    buildGitDataState,
+    buildGitDataStateFromSnapshot,
+    collapseQueuedGitRefreshRequests,
+    type GitRefreshRequest
+} from './useProjectGitRefresh.helpers'
 
 export function useProjectGitRefresh(
     params: UseProjectGitLifecycleParams,
@@ -91,41 +77,41 @@ export function useProjectGitRefresh(
         gitStatusDetailsRef,
         gitSensorTokenRef
     } = refs
+    const refreshQueueRef = useRef<GitRefreshRequest[]>([])
+    const refreshDrainPromiseRef = useRef<Promise<void> | null>(null)
+    const activePathRef = useRef(decodedPath)
 
-    return useCallback(async (
-        refreshFilesToo: boolean = false,
-        options?: { quiet?: boolean; mode?: GitRefreshMode }
-    ) => {
+    useEffect(() => {
+        activePathRef.current = decodedPath
+        refreshQueueRef.current = []
+        refreshDrainPromiseRef.current = null
+    }, [decodedPath])
+
+    const executeRefresh = useCallback(async (request: GitRefreshRequest) => {
         if (!decodedPath) return
 
-        const quiet = Boolean(options?.quiet)
-        const mode = options?.mode || 'full'
+        const refreshPath = decodedPath
+        const { refreshFilesToo, quiet, mode } = request
         const visibleRequestId = quiet ? refreshGitForegroundRequestRef.current : ++refreshGitForegroundRequestRef.current
         const backgroundRequestId = quiet ? ++refreshGitBackgroundRequestRef.current : refreshGitBackgroundRequestRef.current
         const isStaleRefresh = () => quiet
             ? (
+                refreshPath !== activePathRef.current
+                ||
                 backgroundRequestId !== refreshGitBackgroundRequestRef.current
                 || visibleRequestId !== refreshGitForegroundRequestRef.current
             )
-            : visibleRequestId !== refreshGitForegroundRequestRef.current
-        const cachedGitSnapshot = getCachedProjectGitSnapshot(decodedPath)
-        const hasVisibleFocusedData = hasFocusedGitDataForView(buildGitDataState(params))
-        const hasWarmGitData = hasVisibleGitData({
-            isGitRepo,
-            gitStatusDetails,
-            gitHistory,
-            gitHistoryTotalCount,
-            incomingCommits,
-            unpushedCommits,
-            gitUser,
-            repoOwner,
-            hasRemote,
-            gitSyncStatus,
-            branches,
-            remotes,
-            tags,
-            stashes
-        }) || Boolean(cachedGitSnapshot)
+            : refreshPath !== activePathRef.current || visibleRequestId !== refreshGitForegroundRequestRef.current
+        const cachedGitSnapshot = getCachedProjectGitSnapshot(refreshPath)
+        const currentGitDataState = buildGitDataState(params)
+        const cachedGitDataState = cachedGitSnapshot
+            ? buildGitDataStateFromSnapshot(gitView, cachedGitSnapshot)
+            : null
+        const hasVisibleFocusedData = hasFocusedGitDataForView(currentGitDataState)
+        const hasWarmFocusedData = cachedGitDataState ? hasFocusedGitDataForView(cachedGitDataState) : false
+        const hasWarmVisibleData = cachedGitDataState ? hasVisibleGitData(cachedGitDataState) : false
+        const hasWarmGitData = hasVisibleGitData(currentGitDataState)
+            || (activeTab === 'git' ? hasWarmFocusedData : hasWarmVisibleData)
         const shouldShowForegroundLoading = !quiet && !(hasVisibleFocusedData || hasWarmGitData)
         const shouldUseHistoryLoading = !quiet && activeTab === 'git' && gitView === 'history'
 
@@ -145,7 +131,7 @@ export function useProjectGitRefresh(
                 })
             }
 
-            const repoResult = await window.devscope.checkIsGitRepo(decodedPath)
+            const repoResult = await window.devscope.checkIsGitRepo(refreshPath)
             if (!repoResult?.success) {
                 throw new Error(repoResult?.error || 'Failed to check git repository')
             }
@@ -202,7 +188,7 @@ export function useProjectGitRefresh(
 
             if (mode === 'working') {
                 try {
-                    const statusResult = await window.devscope.getGitStatusDetailed(decodedPath, {
+                    const statusResult = await window.devscope.getGitStatusDetailed(refreshPath, {
                         includeStats: includeStatusStats
                     })
                     if (isStaleRefresh()) return
@@ -234,7 +220,7 @@ export function useProjectGitRefresh(
             }> = [
                 {
                     label: 'status',
-                    task: window.devscope.getGitStatusDetailed(decodedPath, {
+                    task: window.devscope.getGitStatusDetailed(refreshPath, {
                         includeStats: includeStatusStats
                     }),
                     apply: (result) => {
@@ -250,7 +236,7 @@ export function useProjectGitRefresh(
             if (shouldLoadSync) {
                 tasks.push({
                     label: 'sync',
-                    task: window.devscope.getGitSyncStatus(decodedPath),
+                    task: window.devscope.getGitSyncStatus(refreshPath),
                     apply: (result) => {
                         if (result?.success) {
                             setGitSyncStatus(result.sync || null)
@@ -266,7 +252,7 @@ export function useProjectGitRefresh(
             if (shouldLoadIdentity) {
                 tasks.push({
                     label: 'user',
-                    task: window.devscope.getGitUser(decodedPath),
+                    task: window.devscope.getGitUser(refreshPath),
                     apply: (result) => {
                         if (result?.success) {
                             setGitUser(result.user || null)
@@ -280,7 +266,7 @@ export function useProjectGitRefresh(
             if (shouldLoadUnpushed) {
                 tasks.push({
                     label: 'unpushed',
-                    task: window.devscope.getUnpushedCommits(decodedPath),
+                    task: window.devscope.getUnpushedCommits(refreshPath),
                     apply: (result) => {
                         if (result?.success) {
                             setUnpushedCommits((prev) => mergeCommitStats(prev, result.commits || []))
@@ -294,7 +280,7 @@ export function useProjectGitRefresh(
             if (shouldLoadHistory) {
                 tasks.push({
                     label: 'history',
-                    task: window.devscope.getGitHistory(decodedPath, historyLimit, {
+                    task: window.devscope.getGitHistory(refreshPath, historyLimit, {
                         all: false,
                         includeStats: false
                     }),
@@ -311,7 +297,7 @@ export function useProjectGitRefresh(
             if (shouldLoadHistoryCount) {
                 tasks.push({
                     label: 'history-count',
-                    task: window.devscope.getGitHistoryCount(decodedPath, { all: false }),
+                    task: window.devscope.getGitHistoryCount(refreshPath, { all: false }),
                     apply: (result) => {
                         if (result?.success) {
                             setGitHistoryTotalCount(typeof result.totalCount === 'number' ? Math.max(0, result.totalCount) : 0)
@@ -325,7 +311,7 @@ export function useProjectGitRefresh(
             if (shouldLoadIncomingCommits) {
                 tasks.push({
                     label: 'incoming',
-                    task: window.devscope.getIncomingCommits(decodedPath, INCOMING_COMMITS_LIMIT),
+                    task: window.devscope.getIncomingCommits(refreshPath, INCOMING_COMMITS_LIMIT),
                     apply: (result) => {
                         if (result?.success) {
                             setIncomingCommits(result.commits || [])
@@ -340,7 +326,7 @@ export function useProjectGitRefresh(
                 tasks.push(
                     {
                         label: 'branches',
-                        task: window.devscope.listBranches(decodedPath),
+                        task: window.devscope.listBranches(refreshPath),
                         apply: (result) => {
                             if (result?.success) {
                                 setBranches(result.branches || [])
@@ -351,7 +337,7 @@ export function useProjectGitRefresh(
                     },
                     {
                         label: 'remotes',
-                        task: window.devscope.listRemotes(decodedPath),
+                        task: window.devscope.listRemotes(refreshPath),
                         apply: (result) => {
                             if (result?.success) {
                                 const nextRemotes = result.remotes || []
@@ -366,7 +352,7 @@ export function useProjectGitRefresh(
                     },
                     {
                         label: 'tags',
-                        task: window.devscope.listTags(decodedPath),
+                        task: window.devscope.listTags(refreshPath),
                         apply: (result) => {
                             if (result?.success) {
                                 setTags(result.tags || [])
@@ -377,7 +363,7 @@ export function useProjectGitRefresh(
                     },
                     {
                         label: 'stashes',
-                        task: window.devscope.listStashes(decodedPath),
+                        task: window.devscope.listStashes(refreshPath),
                         apply: (result) => {
                             if (result?.success) {
                                 setStashes(result.stashes || [])
@@ -467,6 +453,48 @@ export function useProjectGitRefresh(
         refreshGitBackgroundRequestRef,
         gitStatusDetailsRef,
         gitSensorTokenRef,
+        activePathRef,
         params
     ])
+    const executeRefreshRef = useRef(executeRefresh)
+
+    useEffect(() => {
+        executeRefreshRef.current = executeRefresh
+    }, [executeRefresh])
+
+    return useCallback((
+        refreshFilesToo: boolean = false,
+        options?: { quiet?: boolean; mode?: GitRefreshMode }
+    ) => {
+        if (!decodedPath) {
+            return Promise.resolve()
+        }
+
+        refreshQueueRef.current.push({
+            refreshFilesToo: Boolean(refreshFilesToo),
+            quiet: Boolean(options?.quiet),
+            mode: options?.mode || 'full'
+        })
+
+        if (!refreshDrainPromiseRef.current) {
+            let drainPromise: Promise<void> | null = null
+            drainPromise = (async () => {
+                try {
+                    while (refreshQueueRef.current.length > 0) {
+                        const nextBatch = refreshQueueRef.current.splice(0)
+                        const nextRequest = collapseQueuedGitRefreshRequests(nextBatch)
+                        if (!nextRequest) continue
+                        await executeRefreshRef.current(nextRequest)
+                    }
+                } finally {
+                    if (refreshDrainPromiseRef.current === drainPromise) {
+                        refreshDrainPromiseRef.current = null
+                    }
+                }
+            })()
+            refreshDrainPromiseRef.current = drainPromise
+        }
+
+        return refreshDrainPromiseRef.current
+    }, [decodedPath])
 }

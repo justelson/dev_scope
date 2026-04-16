@@ -34,9 +34,25 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
         tags,
         stashes,
         githubPublishContext,
-        hasGitHubRemote
+        hasGitHubRemote,
+        pullRequestActionLabel,
+        pullRequestActionHint,
+        pullRequestActionDisabled
     } = props
     const loadingCounts = loadingGit && !gitError
+    const hasAnyGitSurfaceData = Boolean(
+        changedFiles.length > 0
+        || unpushedCommits.length > 0
+        || incomingCommits.length > 0
+        || gitHistory.length > 0
+        || gitHistoryTotalCount > 0
+        || branches.length > 0
+        || remotes.length > 0
+        || tags.length > 0
+        || stashes.length > 0
+        || hasRemote !== null
+        || gitSyncStatus !== null
+    )
     const publishPlan = buildGitPublishPlan({
         currentBranch,
         branches,
@@ -64,6 +80,20 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                     <GitBranch size={18} />
                     Initialize Git Repository
                 </button>
+            </div>
+        )
+    }
+
+    if (loadingGit && !gitError && isGitRepo !== false && !hasAnyGitSurfaceData) {
+        return (
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+                    <RefreshCw size={22} className="animate-spin text-white/45" />
+                </div>
+                <h3 className="text-sm font-medium text-white/80">Loading repository data</h3>
+                <p className="mt-2 max-w-md text-center text-xs text-white/45">
+                    Reading branch, status, sync, and history details for this project.
+                </p>
             </div>
         )
     }
@@ -114,7 +144,7 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
             </div>
 
             {hasRemote === true && (
-                <div className="bg-black/20 rounded-xl border border-white/10 p-4">
+                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <h3 className="text-sm font-medium text-white/85 flex items-center gap-2">
@@ -123,16 +153,21 @@ export function ProjectDetailsGitManageView(props: ProjectDetailsGitManageViewPr
                             </h3>
                             <p className="mt-1 text-xs text-white/48">
                                 {hasGitHubRemote
-                                    ? 'Create or reopen the PR for the current branch using GitHub CLI.'
+                                    ? pullRequestActionHint
                                     : 'Add a GitHub remote to use the built-in PR flow. Standard Git push and pull still work with any remote.'}
                             </p>
                         </div>
                         <button
                             onClick={() => onOpenCreatePullRequest?.()}
-                            disabled={!hasGitHubRemote}
-                            className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-medium text-white/75 transition-all hover:border-white/20 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                            disabled={pullRequestActionDisabled}
+                            className={cn(
+                                'rounded-lg px-4 py-2 text-sm font-medium transition-all',
+                                pullRequestActionDisabled
+                                    ? 'cursor-not-allowed bg-white/[0.04] text-white/35'
+                                    : 'bg-[var(--accent-primary)]/16 text-white hover:bg-[var(--accent-primary)]/24'
+                            )}
                         >
-                            {hasGitHubRemote ? 'Create PR' : 'GitHub Remote Required'}
+                            {hasGitHubRemote ? pullRequestActionLabel : 'GitHub Remote Required'}
                         </button>
                     </div>
                 </div>

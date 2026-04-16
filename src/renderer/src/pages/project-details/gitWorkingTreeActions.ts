@@ -1,3 +1,4 @@
+import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import {
     normalizePath,
     toStagedDetail,
@@ -32,6 +33,7 @@ export function createGitWorkingTreeActions(
                 throw new Error(result?.error || 'Failed to stage file')
             }
 
+            invalidateProjectGitOverview(params.decodedPath)
             void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()
@@ -59,6 +61,7 @@ export function createGitWorkingTreeActions(
                 throw new Error(result?.error || 'Failed to unstage file')
             }
 
+            invalidateProjectGitOverview(params.decodedPath)
             void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()
@@ -79,6 +82,7 @@ export function createGitWorkingTreeActions(
                 throw new Error(result?.error || 'Failed to stage all files')
             }
 
+            invalidateProjectGitOverview(params.decodedPath)
             void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()
@@ -99,6 +103,7 @@ export function createGitWorkingTreeActions(
                 throw new Error(result?.error || 'Failed to unstage all files')
             }
 
+            invalidateProjectGitOverview(params.decodedPath)
             void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()
@@ -133,6 +138,7 @@ export function createGitWorkingTreeActions(
                 throw new Error(result?.error || 'Failed to discard file changes')
             }
 
+            invalidateProjectGitOverview(params.decodedPath)
             void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()
@@ -169,6 +175,7 @@ export function createGitWorkingTreeActions(
                 throw new Error(result?.error || 'Failed to discard unstaged changes')
             }
 
+            invalidateProjectGitOverview(params.decodedPath)
             void params.refreshGitData(false, { quiet: true, mode: 'working' })
         } catch (err: any) {
             rollback()

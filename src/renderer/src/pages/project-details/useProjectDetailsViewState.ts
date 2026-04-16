@@ -8,7 +8,6 @@ import type {
     GitStatusDetail,
     GitStashSummary,
     GitTagSummary,
-    InstalledIde,
     ProjectDetails
 } from './types'
 import type { CreateFileSystemTarget, FileSystemClipboardItem } from './projectDetailsPageHelpers'
@@ -25,9 +24,6 @@ export function useProjectDetailsViewState(decodedPath: string, settings: any) {
     const [error, setError] = useState<string | null>(null)
     const [showHidden, setShowHidden] = useState(false)
     const [copiedPath, setCopiedPath] = useState(false)
-    const [installedIdes, setInstalledIdes] = useState<InstalledIde[]>([])
-    const [loadingInstalledIdes, setLoadingInstalledIdes] = useState(false)
-    const [openingIdeId, setOpeningIdeId] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'readme' | 'files' | 'git'>(() => (
         readStoredProjectActiveTab(decodedPath) || 'readme'
     ))
@@ -145,12 +141,6 @@ export function useProjectDetailsViewState(decodedPath: string, settings: any) {
         setShowHidden,
         copiedPath,
         setCopiedPath,
-        installedIdes,
-        setInstalledIdes,
-        loadingInstalledIdes,
-        setLoadingInstalledIdes,
-        openingIdeId,
-        setOpeningIdeId,
         activeTab,
         setActiveTab,
         showDependenciesModal,

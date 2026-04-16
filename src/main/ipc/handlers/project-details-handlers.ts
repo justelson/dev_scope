@@ -176,20 +176,25 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
         await access(projectPath)
 
         const entries = await readdir(projectPath)
+        const statsPromise = stat(projectPath)
         const markers: string[] = []
-        let readme: string | null = null
-        let packageJson: any = null
-        let frameworks: FrameworkDefinition[] = []
-        let dependencyInstallStatus: DependencyInstallStatus | null = null
 
         const readmeFile = getPreferredReadmeFile(entries)
-        if (readmeFile) {
-            try {
-                readme = await readFile(join(projectPath, readmeFile), 'utf-8')
-            } catch (err) {
+        const readmePromise = readmeFile
+            ? readFile(join(projectPath, readmeFile), 'utf-8').catch((err) => {
                 log.warn('Could not read README', err)
-            }
-        }
+                return null
+            })
+            : Promise.resolve<string | null>(null)
+
+        const packageJsonPromise = entries.includes('package.json')
+            ? readFile(join(projectPath, 'package.json'), 'utf-8')
+                .then((pkgContent) => JSON.parse(pkgContent))
+                .catch((err) => {
+                    log.warn('Could not parse package.json', err)
+                    return null
+                })
+            : Promise.resolve<any>(null)
 
         for (const marker of PROJECT_MARKERS) {
             if (marker.startsWith('*')) {
@@ -203,21 +208,27 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
         }
 
         const projectType = detectProjectTypeFromMarkers(markers)
-
-        if (entries.includes('package.json')) {
-            try {
-                const pkgContent = await readFile(join(projectPath, 'package.json'), 'utf-8')
-                packageJson = JSON.parse(pkgContent)
-                frameworks = detectFrameworksFromPackageJson(packageJson, entries)
-                dependencyInstallStatus = await detectNodeDependencyInstallStatus(projectPath, packageJson)
-            } catch (err) {
-                log.warn('Could not parse package.json', err)
-            }
-        }
-
-        const stats = await stat(projectPath)
+        const packageJson = await packageJsonPromise
+        const frameworks: FrameworkDefinition[] = packageJson
+            ? detectFrameworksFromPackageJson(packageJson, entries)
+            : []
+        const dependencyInstallStatusPromise = packageJson
+            ? detectNodeDependencyInstallStatus(projectPath, packageJson).catch((err) => {
+                log.warn('Could not inspect dependency install status', err)
+                return null
+            })
+            : Promise.resolve<DependencyInstallStatus | null>(null)
+        const projectIconPathPromise = resolveProjectIconPath(projectPath, entries, packageJson).catch((err) => {
+            log.warn('Could not resolve project icon', err)
+            return null
+        })
+        const [readme, stats, dependencyInstallStatus, projectIconPath] = await Promise.all([
+            readmePromise,
+            statsPromise,
+            dependencyInstallStatusPromise,
+            projectIconPathPromise
+        ])
         const folderName = projectPath.split(/[\\/]/).pop() || 'Unknown'
-        const projectIconPath = await resolveProjectIconPath(projectPath, entries, packageJson)
 
         return {
             success: true,

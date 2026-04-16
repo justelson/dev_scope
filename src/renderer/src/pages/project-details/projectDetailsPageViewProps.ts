@@ -1,3 +1,7 @@
+import {
+    normalizeAssistantProjectPathKey,
+    resolveAssistantProjectTarget
+} from '@shared/assistant/session-routing'
 import { getParentFolderPath } from './projectDetailsPageHelpers'
 
 export function buildProjectDetailsOverlayProps(props: any) {
@@ -59,6 +63,7 @@ export function buildProjectDetailsOverlayProps(props: any) {
 export function buildProjectDetailsContentProps(props: any) {
     return {
         isCondensedLayout: props.isCondensedLayout,
+        projectDetailsLoading: props.projectDetailsLoading,
         themeColor: props.themeColor,
         project: props.project,
         isProjectLive: props.isProjectLive,
@@ -67,10 +72,6 @@ export function buildProjectDetailsContentProps(props: any) {
         onOpenTerminal: () => props.openTerminal({ displayName: props.projectTerminalLabel, id: 'main', category: 'project' }, props.projectRootPath),
         scriptCount: Object.keys(props.project.scripts || {}).length,
         dependencyCount: Object.keys(props.project.dependencies || {}).length + Object.keys(props.project.devDependencies || {}).length,
-        installedIdes: props.installedIdes,
-        loadingInstalledIdes: props.loadingInstalledIdes,
-        openingIdeId: props.openingIdeId,
-        onOpenProjectInIde: props.handleOpenProjectInIde,
         handleCopyPath: props.handleCopyPath,
         copiedPath: props.copiedPath,
         handleOpenInExplorer: props.handleOpenInExplorer,
@@ -91,8 +92,32 @@ export function buildProjectDetailsContentProps(props: any) {
         },
         onShowScriptsModal: () => props.setShowScriptsModal(true),
         onShowDependenciesModal: () => props.setShowDependenciesModal(true),
+        onOpenWithAssistant: async () => {
+            if (!props.project?.path) return
+            const snapshot = await window.devscope.assistant.getSnapshot()
+            const sessionTarget = resolveAssistantProjectTarget(props.project.path, snapshot.playground)
+            const targetProjectPathKey = normalizeAssistantProjectPathKey(sessionTarget.projectPath)
+            const matchingSession = snapshot.sessions.find((session) => {
+                if (session.archived || session.mode !== sessionTarget.mode) return false
+                return normalizeAssistantProjectPathKey(session.projectPath) === targetProjectPathKey
+            })
+
+            if (matchingSession) {
+                const selectResult = await window.devscope.assistant.selectSession(matchingSession.id)
+                if (!selectResult?.success) return
+            } else {
+                const createResult = await window.devscope.assistant.createSession({
+                    projectPath: props.project.path,
+                    ...(sessionTarget.mode === 'playground' ? { mode: 'playground' as const } : {}),
+                    ...(sessionTarget.playgroundLabId ? { playgroundLabId: sessionTarget.playgroundLabId } : {})
+                })
+                if (!createResult?.success) return
+            }
+
+            props.navigate('/assistant')
+        },
         loadProjectDetails: async () => {
-            await Promise.all([props.loadProjectDetails(), props.loadInstalledIdes()])
+            await props.loadProjectDetails()
         },
         refreshFileTree: props.refreshFileTree,
         onToggleAllFolders: props.handleToggleAllFolders,
@@ -221,6 +246,8 @@ export function buildProjectDetailsTransientUiProps(props: any) {
         closeScriptRunModal: props.closeScriptRunModal,
         handleConfirmScriptRun: props.handleConfirmScriptRun,
         previewFile: props.previewFile,
+        previewTabs: props.previewTabs,
+        activePreviewTabId: props.activePreviewTabId,
         previewMediaItems: props.previewMediaItems,
         previewContent: props.previewContent,
         loadingPreview: props.loadingPreview,
@@ -229,6 +256,10 @@ export function buildProjectDetailsTransientUiProps(props: any) {
         previewBytes: props.previewBytes,
         previewModifiedAt: props.previewModifiedAt,
         openPreview: props.openPreview,
+        openPreviewInNewTab: props.openPreviewInNewTab,
+        setActivePreviewTab: props.setActivePreviewTab,
+        closePreviewTab: props.closePreviewTab,
+        reorderPreviewTabs: props.reorderPreviewTabs,
         onPreviewSaved: async () => {
             await Promise.all([
                 props.refreshVisibleFileTree(getParentFolderPath(props.previewFile?.path || '') || undefined),

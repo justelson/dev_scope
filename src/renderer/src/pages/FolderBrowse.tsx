@@ -6,6 +6,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { readProjectGitOverview } from '@/lib/projectGitOverview'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
 import { useTerminal } from '@/App'
 import { useFilePreview } from '@/components/ui/FilePreviewModal'
@@ -93,6 +94,8 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
     const [indexedTotals, setIndexedTotals] = useState<IndexedTotals | null>(null)
     const [indexedInventory, setIndexedInventory] = useState<IndexedInventory | null>(null)
     const indexTotalsRunRef = useRef(0)
+    const loadContentsRequestRef = useRef(0)
+    const gitOverviewRequestRef = useRef(0)
     const {
         previewFile,
         previewMediaItems,
@@ -109,12 +112,15 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
     const loadContents = useCallback(async (forceRefresh: boolean = false) => {
         if (!decodedPath) return
 
+        const requestId = ++loadContentsRequestRef.current
+        const isStaleRequest = () => requestId !== loadContentsRequestRef.current
         setLoading(true)
         setError(null)
         await yieldToBrowserPaint()
 
         try {
             const result = await window.devscope.scanProjects(decodedPath, { forceRefresh })
+            if (isStaleRequest()) return
             if (!result.success) {
                 setError(result.error || 'Failed to scan folder')
                 return
@@ -124,24 +130,33 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
             setFolders(result.folders || [])
             setFiles(result.files || [])
         } catch (scanError: any) {
-            setError(scanError.message || 'Failed to scan folder')
+            if (!isStaleRequest()) {
+                setError(scanError.message || 'Failed to scan folder')
+            }
         } finally {
-            setLoading(false)
+            if (!isStaleRequest()) {
+                setLoading(false)
+            }
         }
     }, [decodedPath])
 
     useEffect(() => {
         const checkGitRepo = async () => {
             if (!decodedPath) return
+            const requestId = ++gitOverviewRequestRef.current
+            setIsCurrentFolderGitRepo(false)
             try {
-                const result = await window.devscope.checkIsGitRepo(decodedPath)
-                const isRepo = result?.success ? result.isGitRepo === true : false
+                const overview = await readProjectGitOverview(decodedPath)
+                if (requestId !== gitOverviewRequestRef.current) return
+                const isRepo = overview?.isGitRepo === true
                 setIsCurrentFolderGitRepo(isRepo)
                 if (isRepo) {
                     trackRecentProject(decodedPath, 'folder')
                 }
             } catch {
-                setIsCurrentFolderGitRepo(false)
+                if (requestId === gitOverviewRequestRef.current) {
+                    setIsCurrentFolderGitRepo(false)
+                }
             }
         }
 

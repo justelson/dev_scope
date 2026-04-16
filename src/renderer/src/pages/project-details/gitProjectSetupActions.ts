@@ -1,3 +1,4 @@
+import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import type { GitActionParams } from './gitActionTypes'
 
 export function createGitProjectSetupActions(params: GitActionParams) {
@@ -49,6 +50,7 @@ export function createGitProjectSetupActions(params: GitActionParams) {
                     }
                 }
 
+                invalidateProjectGitOverview(params.decodedPath)
                 await params.refreshGitData(true)
                 params.setInitStep('remote')
             } catch (err: any) {
@@ -74,6 +76,7 @@ export function createGitProjectSetupActions(params: GitActionParams) {
                 params.setRemoteUrl('')
                 params.setIsGitRepo(true)
                 params.setHasRemote(true)
+                invalidateProjectGitOverview(params.decodedPath)
                 await params.refreshGitData(true)
             } catch (err: any) {
                 params.showToast(`Failed to add remote: ${err.message}`, undefined, undefined, 'error')
@@ -87,6 +90,7 @@ export function createGitProjectSetupActions(params: GitActionParams) {
             params.setRemoteUrl('')
             params.setIsGitRepo(true)
             params.setHasRemote(false)
+            invalidateProjectGitOverview(params.decodedPath)
             await params.refreshGitData(true)
         },
         handleOpenInExplorer: async () => {

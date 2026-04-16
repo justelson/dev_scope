@@ -28,6 +28,8 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
         handleConfirmScriptRun,
         projectPath,
         previewFile,
+        previewTabs,
+        activePreviewTabId,
         previewMediaItems,
         previewContent,
         loadingPreview,
@@ -36,6 +38,10 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
         previewBytes,
         previewModifiedAt,
         openPreview,
+        openPreviewInNewTab,
+        setActivePreviewTab,
+        closePreviewTab,
+        reorderPreviewTabs,
         closePreview,
         onPreviewSaved,
         toast,
@@ -79,6 +85,8 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
             {previewFile && (
                 <FilePreviewModal
                     file={previewFile}
+                    previewTabs={previewTabs}
+                    activePreviewTabId={activePreviewTabId}
                     content={previewContent}
                     loading={loadingPreview}
                     truncated={previewTruncated}
@@ -87,6 +95,10 @@ export function ProjectDetailsTransientUi(props: ProjectDetailsTransientUiProps)
                     modifiedAt={previewModifiedAt}
                     projectPath={projectPath}
                     onOpenLinkedPreview={openPreview}
+                    onOpenLinkedPreviewInNewTab={openPreviewInNewTab}
+                    onSelectPreviewTab={setActivePreviewTab}
+                    onClosePreviewTab={closePreviewTab}
+                    onReorderPreviewTabs={reorderPreviewTabs}
                     mediaItems={previewMediaItems}
                     onSaved={onPreviewSaved}
                     onClose={closePreview}
