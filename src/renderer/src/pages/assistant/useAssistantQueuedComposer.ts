@@ -13,6 +13,13 @@ type PendingComposerDispatch = {
     options: AssistantComposerSendOptions
 }
 
+function removeQueuedDispatchById(
+    entries: PendingComposerDispatch[],
+    messageId: string
+): PendingComposerDispatch[] {
+    return entries.filter((entry) => entry.id !== messageId)
+}
+
 export function useAssistantQueuedComposer(args: {
     selectedSessionId: string | null
     isAssistantBusy: boolean
@@ -49,9 +56,10 @@ export function useAssistantQueuedComposer(args: {
         queuedComposerMessages.map((entry) => ({
             id: entry.id,
             prompt: entry.prompt,
-            dispatchMode: entry.options.dispatchMode === 'force' ? 'force' : 'queue'
+            dispatchMode: entry.options.dispatchMode === 'force' ? 'force' : 'queue',
+            status: pausedQueueMessageIdBySessionId[selectedSessionId || ''] === entry.id ? 'paused' : 'queued'
         }))
-    ), [queuedComposerMessages])
+    ), [pausedQueueMessageIdBySessionId, queuedComposerMessages, selectedSessionId])
 
     const handleDispatchPrompt = useCallback(async (
         prompt: string,
@@ -65,6 +73,50 @@ export function useAssistantQueuedComposer(args: {
             setSendingComposerPrompt(false)
         }
     }, [dispatchPrompt])
+
+    const restoreQueuedMessage = useCallback((sessionId: string, message: PendingComposerDispatch) => {
+        setQueuedComposerMessagesBySessionId((current) => {
+            const existing = current[sessionId] || []
+            if (existing.some((entry) => entry.id === message.id)) return current
+            return {
+                ...current,
+                [sessionId]: [message, ...existing]
+            }
+        })
+    }, [])
+
+    const dispatchQueuedMessage = useCallback(async (
+        sessionId: string,
+        queuedMessage: PendingComposerDispatch,
+        dispatchMode: 'immediate' | 'force' = 'immediate'
+    ) => {
+        setQueuedComposerMessagesBySessionId((current) => {
+            const existing = current[sessionId] || []
+            if (!existing.some((entry) => entry.id === queuedMessage.id)) return current
+            return {
+                ...current,
+                [sessionId]: removeQueuedDispatchById(existing, queuedMessage.id)
+            }
+        })
+        setPausedQueueMessageIdBySessionId((current) => ({
+            ...current,
+            [sessionId]: null
+        }))
+
+        const success = await handleDispatchPrompt(queuedMessage.prompt, queuedMessage.contextFiles, {
+            ...queuedMessage.options,
+            dispatchMode
+        })
+
+        if (success) return true
+
+        restoreQueuedMessage(sessionId, queuedMessage)
+        setPausedQueueMessageIdBySessionId((current) => ({
+            ...current,
+            [sessionId]: queuedMessage.id
+        }))
+        return false
+    }, [handleDispatchPrompt, restoreQueuedMessage])
 
     const enqueueBusyPrompt = useCallback(async (
         mode: 'queue' | 'force',
@@ -118,6 +170,48 @@ export function useAssistantQueuedComposer(args: {
         return handleDispatchPrompt(prompt, contextFiles, options)
     }, [busyMessageMode, enqueueBusyPrompt, handleDispatchPrompt, isAssistantBusy])
 
+    const handleForceQueuedMessage = useCallback(async (messageId: string) => {
+        if (!selectedSessionId) return
+
+        let hasTargetMessage = false
+        setQueuedComposerMessagesBySessionId((current) => {
+            const existing = current[selectedSessionId] || []
+            const targetIndex = existing.findIndex((entry) => entry.id === messageId)
+            if (targetIndex === -1) return current
+
+            hasTargetMessage = true
+            const nextQueuedMessages = existing.map((entry, index) => (
+                index <= targetIndex
+                    ? {
+                        ...entry,
+                        options: {
+                            ...entry.options,
+                            dispatchMode: 'force'
+                        }
+                    }
+                    : entry
+            ))
+
+            return {
+                ...current,
+                [selectedSessionId]: nextQueuedMessages
+            }
+        })
+
+        if (!hasTargetMessage) return
+
+        setPausedQueueMessageIdBySessionId((current) => ({
+            ...current,
+            [selectedSessionId]: null
+        }))
+
+        if (commandPending || isThreadWorking) {
+            try {
+                await interruptTurn(activeTurnId || undefined, selectedSessionId)
+            } catch {}
+        }
+    }, [activeTurnId, commandPending, interruptTurn, isThreadWorking, selectedSessionId])
+
     useEffect(() => {
         if (!selectedSessionId) return
         if (isAssistantBusy) return
@@ -131,31 +225,8 @@ export function useAssistantQueuedComposer(args: {
         queueDrainSessionIdRef.current = selectedSessionId
 
         void (async () => {
-            const success = await handleDispatchPrompt(nextQueuedMessage.prompt, nextQueuedMessage.contextFiles, {
-                ...nextQueuedMessage.options,
-                dispatchMode: 'immediate'
-            })
+            await dispatchQueuedMessage(selectedSessionId, nextQueuedMessage, 'immediate')
             if (cancelled) return
-
-            if (success) {
-                setQueuedComposerMessagesBySessionId((current) => {
-                    const existing = current[selectedSessionId] || []
-                    if (!existing.length || existing[0]?.id !== nextQueuedMessage.id) return current
-                    return {
-                        ...current,
-                        [selectedSessionId]: existing.slice(1)
-                    }
-                })
-                setPausedQueueMessageIdBySessionId((current) => ({
-                    ...current,
-                    [selectedSessionId]: null
-                }))
-            } else {
-                setPausedQueueMessageIdBySessionId((current) => ({
-                    ...current,
-                    [selectedSessionId]: nextQueuedMessage.id
-                }))
-            }
 
             queueDrainSessionIdRef.current = null
         })()
@@ -167,7 +238,7 @@ export function useAssistantQueuedComposer(args: {
             }
         }
     }, [
-        handleDispatchPrompt,
+        dispatchQueuedMessage,
         isAssistantBusy,
         pausedQueueMessageIdBySessionId,
         queuedComposerMessagesBySessionId,
@@ -178,6 +249,7 @@ export function useAssistantQueuedComposer(args: {
         sendingComposerPrompt,
         queuedComposerMessageCount,
         queuedComposerMessageItems,
-        handleSendPrompt
+        handleSendPrompt,
+        handleForceQueuedMessage
     }
 }

@@ -68,6 +68,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         showCancelWhenDirty = false,
         queuedMessageCount = 0,
         queuedMessages = [],
+        onForceQueuedMessage,
         reconnectPending = false
     } = props
     const normalizedSessionId = sessionId ?? null
@@ -385,6 +386,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         showCancelWhenDirty,
         queuedMessageCount,
         queuedMessages,
+        onForceQueuedMessage,
         reconnectPending,
         settingsAssistantBusyMessageMode: settings.assistantBusyMessageMode,
         isDirty,

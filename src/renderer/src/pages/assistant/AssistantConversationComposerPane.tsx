@@ -15,6 +15,7 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
     thinking: boolean
     queuedMessageCount: number
     queuedMessages: AssistantQueuedComposerMessage[]
+    onForceQueuedMessage?: (messageId: string) => Promise<void> | void
     selectedSessionId: string | null
     selectedSessionMode: 'work' | 'playground'
     assistantAvailable: boolean
@@ -98,6 +99,7 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
                         thinkingLabel={props.activeStatusLabel}
                         queuedMessageCount={props.queuedMessageCount}
                         queuedMessages={props.queuedMessages}
+                        onForceQueuedMessage={props.onForceQueuedMessage}
                         isConnected={props.assistantConnected}
                         isConnecting={isConnecting}
                         activeModel={props.activeModel}

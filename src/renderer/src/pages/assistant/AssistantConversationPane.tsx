@@ -328,7 +328,8 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
         sendingComposerPrompt,
         queuedComposerMessageCount,
         queuedComposerMessageItems,
-        handleSendPrompt
+        handleSendPrompt,
+        handleForceQueuedMessage
     } = useAssistantQueuedComposer({
         selectedSessionId,
         isAssistantBusy,
@@ -460,6 +461,7 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
                         thinking={controller.commandPending || isThreadWorking}
                         queuedMessageCount={queuedComposerMessageCount}
                         queuedMessages={queuedComposerMessageItems}
+                        onForceQueuedMessage={handleForceQueuedMessage}
                         selectedSessionId={controller.selectedSession?.id || null}
                         selectedSessionMode={selectedSessionMode}
                         assistantAvailable={controller.available}

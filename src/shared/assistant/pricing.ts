@@ -10,15 +10,13 @@ type AssistantModelPricing = {
     outputUsdPerMillion: number
 }
 
+type AssistantPricingServiceTier = AssistantSessionTurnUsageEntry['serviceTier'] | null | undefined
+
 export type AssistantSessionCostEstimate = {
     totalUsd: number | null
     meteredTurnCount: number
     pricedTurnCount: number
     unpricedTurnCount: number
-}
-
-const MODEL_ALIASES: Record<string, string> = {
-    'gpt-5.1-codex-max': 'gpt-5.1-codex'
 }
 
 const MODEL_PRICING: Record<string, AssistantModelPricing> = {
@@ -47,7 +45,17 @@ const MODEL_PRICING: Record<string, AssistantModelPricing> = {
         cachedInputUsdPerMillion: 0.175,
         outputUsdPerMillion: 14
     },
+    'gpt-5.1': {
+        inputUsdPerMillion: 1.25,
+        cachedInputUsdPerMillion: 0.125,
+        outputUsdPerMillion: 10
+    },
     'gpt-5.1-codex': {
+        inputUsdPerMillion: 1.25,
+        cachedInputUsdPerMillion: 0.125,
+        outputUsdPerMillion: 10
+    },
+    'gpt-5.1-codex-max': {
         inputUsdPerMillion: 1.25,
         cachedInputUsdPerMillion: 0.125,
         outputUsdPerMillion: 10
@@ -64,18 +72,28 @@ function normalizePricingModel(model: string): string {
     if (!trimmed) return ''
     const withoutProvider = trimmed.includes('/') ? trimmed.split('/').pop() || trimmed : trimmed
     const withoutMetadata = withoutProvider.split(/[:@]/)[0] || withoutProvider
-    return MODEL_ALIASES[withoutMetadata] || withoutMetadata
+    return withoutMetadata
 }
 
 function getUsageNumber(value: number | null | undefined): number {
     return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
 }
 
+function getServiceTierMultiplier(serviceTier: AssistantPricingServiceTier): number {
+    if (serviceTier === 'flex') return 0.5
+    if (serviceTier === 'fast') return 2
+    return 1
+}
+
 export function getAssistantModelPricing(model: string): AssistantModelPricing | null {
     return MODEL_PRICING[normalizePricingModel(model)] || null
 }
 
-export function estimateAssistantTurnCostUsd(model: string, usage: AssistantTurnUsage | null | undefined): number | null {
+export function estimateAssistantTurnCostUsd(
+    model: string,
+    usage: AssistantTurnUsage | null | undefined,
+    serviceTier: AssistantPricingServiceTier = null
+): number | null {
     if (!usage) return null
     const pricing = getAssistantModelPricing(model)
     if (!pricing) return null
@@ -87,9 +105,11 @@ export function estimateAssistantTurnCostUsd(model: string, usage: AssistantTurn
 
     if (inputTokens === 0 && outputTokens === 0) return null
 
-    return (uncachedInputTokens / 1_000_000) * pricing.inputUsdPerMillion
+    const subtotal = (uncachedInputTokens / 1_000_000) * pricing.inputUsdPerMillion
         + (cachedInputTokens / 1_000_000) * pricing.cachedInputUsdPerMillion
         + (outputTokens / 1_000_000) * pricing.outputUsdPerMillion
+
+    return subtotal * getServiceTierMultiplier(serviceTier)
 }
 
 export function estimateAssistantSessionCostUsd(turns: AssistantSessionTurnUsageEntry[]): AssistantSessionCostEstimate {
@@ -103,7 +123,7 @@ export function estimateAssistantSessionCostUsd(turns: AssistantSessionTurnUsage
         const hasMeteredTokens = getUsageNumber(turn.usage.inputTokens) > 0 || getUsageNumber(turn.usage.outputTokens) > 0
         if (!hasMeteredTokens) continue
         meteredTurnCount += 1
-        const turnCost = estimateAssistantTurnCostUsd(turn.model, turn.usage)
+        const turnCost = estimateAssistantTurnCostUsd(turn.model, turn.usage, turn.serviceTier)
         if (turnCost == null) {
             unpricedTurnCount += 1
             continue

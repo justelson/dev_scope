@@ -38,6 +38,7 @@ export type AssistantQueuedComposerMessage = {
     id: string
     prompt: string
     dispatchMode: 'queue' | 'force'
+    status: 'queued' | 'paused'
 }
 
 export type AssistantComposerDisabledReason = 'no-session' | 'project-required'
@@ -79,6 +80,7 @@ export type AssistantComposerProps = {
     showCancelWhenDirty?: boolean
     queuedMessageCount?: number
     queuedMessages?: AssistantQueuedComposerMessage[]
+    onForceQueuedMessage?: (messageId: string) => Promise<void> | void
     busyMessageMode?: AssistantBusyMessageMode
     reconnectPending?: boolean
 }

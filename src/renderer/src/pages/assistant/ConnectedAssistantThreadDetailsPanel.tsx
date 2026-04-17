@@ -236,13 +236,6 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
 
     const selectedProjectPath = selection.selectedProjectPath
     const selectedChatTypeLabel = selection.selectedSessionMode === 'playground' ? 'Playground chat' : 'Work chat'
-    const selectedLocationTypeLabel = selection.selectedSessionMode === 'work'
-        ? 'Project'
-        : selection.selectedPlaygroundLabId
-            ? 'Lab'
-            : selectedProjectPath
-                ? 'Folder'
-                : 'Chat-only'
     const selectedProjectLabel = selection.selectedPlaygroundLabTitle
         || (selectedProjectPath
             ? selectedProjectPath.split(/[\\/]/).filter(Boolean).pop() || selectedProjectPath
@@ -281,7 +274,7 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
             return selection.latestTurn ? 'Not reported' : 'No turns'
         }
         if (sessionCostEstimate.totalUsd != null) return formatAssistantUsd(sessionCostEstimate.totalUsd)
-        if (sessionCostEstimate.unpricedTurnCount > 0) return 'Unpriced model'
+        if (sessionCostEstimate.unpricedTurnCount > 0) return 'Model pricing not available for now'
         return 'Unavailable'
     }, [activeSessionTurnUsage, selection.latestTurn, sessionCostEstimate.meteredTurnCount, sessionCostEstimate.totalUsd, sessionCostEstimate.unpricedTurnCount, sessionTurnUsageError, sessionTurnUsageLoading])
     const sidebarMetricChips = useMemo(() => {
@@ -424,7 +417,6 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
                 open={props.open}
                 compact={props.compact}
                 selectedChatTypeLabel={selectedChatTypeLabel}
-                selectedLocationTypeLabel={selectedLocationTypeLabel}
                 selectedProjectPath={selectedProjectPath}
                 selectedProjectLabel={selectedProjectLabel}
                 displayProjectPath={displayProjectPath}

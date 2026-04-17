@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
     ArrowLeft, FolderOpen, Terminal, ExternalLink,
     RefreshCw, Copy, Check, BookOpen, Package,
@@ -12,6 +13,7 @@ interface ProjectDetailsHeaderSectionProps {
 }
 
 export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionProps) {
+    const [openWithMenuOpen, setOpenWithMenuOpen] = useState(false)
     const {
         themeColor,
         project,
@@ -49,6 +51,7 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
         <>
             <div className={cn(
                 'relative rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.03] to-transparent transition-[margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                openWithMenuOpen ? 'z-30' : 'z-0',
                 isCondensedLayout ? 'mb-6' : 'mb-8'
             )}>
                 <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
@@ -176,7 +179,7 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                 </div>
 
                 <div className={cn(
-                    'relative flex items-center gap-2 overflow-hidden border-t border-white/5 bg-black/20 transition-[padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                    'relative flex items-center gap-2 overflow-visible border-t border-white/5 bg-black/20 transition-[padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
                     isCondensedLayout ? 'px-4 py-2.5' : 'px-5 py-3'
                 )}>
                     <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
@@ -189,12 +192,17 @@ export function ProjectDetailsHeaderSection(props: ProjectDetailsHeaderSectionPr
                             {project.path}
                         </span>
                     </div>
-                    <div className="ml-auto flex shrink-0 items-center gap-1 pl-2">
+                    <div className={cn(
+                        'relative ml-auto flex shrink-0 items-center gap-1 pl-2',
+                        openWithMenuOpen ? 'z-[110]' : 'z-10'
+                    )}>
                         <OpenWithProjectButton
                             projectPath={project?.path || null}
                             preferredShell={settings.defaultShell}
                             menuWidthMode="trigger"
                             menuPresentation="inline"
+                            menuOpen={openWithMenuOpen}
+                            onMenuOpenChange={setOpenWithMenuOpen}
                             contextActions={[{
                                 id: 'assistant',
                                 label: 'Assistant',
