@@ -35,6 +35,27 @@ function normalizeSyntaxContent(content: unknown): string {
     }
 }
 
+function toMonacoModelPath(filePath?: string): string | undefined {
+    if (!filePath) return undefined
+
+    const normalizedPath = filePath.replace(/\\/g, '/')
+    const encodedPath = encodeURI(normalizedPath).replace(/#/g, '%23').replace(/\?/g, '%3F')
+
+    if (normalizedPath.startsWith('//')) {
+        return `file:${encodedPath}`
+    }
+
+    if (/^[a-zA-Z]:\//.test(normalizedPath)) {
+        return `file:///${encodedPath}`
+    }
+
+    if (normalizedPath.startsWith('/')) {
+        return `file://${encodedPath}`
+    }
+
+    return `file:///${encodedPath}`
+}
+
 export default function SyntaxPreview({
     content,
     language,
@@ -56,7 +77,7 @@ export default function SyntaxPreview({
     const safeContent = normalizeSyntaxContent(content)
     const monacoLanguage = resolveMonacoLanguage(language)
     const isLargeFile = safeContent.length > 300_000
-    const modelPath = filePath ? `file://${encodeURI(filePath.replace(/\\/g, '/'))}` : undefined
+    const modelPath = toMonacoModelPath(filePath)
 
     return (
         <div className="w-full h-full min-h-0" style={{ height: height || '100%', background: 'var(--color-card)' }}>

@@ -1,6 +1,6 @@
 import type { AssistantPlaygroundState, AssistantSession } from '@shared/assistant/contracts'
 import type { AssistantToastInput } from './AssistantPageHelpers'
-import type { AssistantMutationResult, SessionProjectGroup } from './assistant-sessions-rail-utils'
+import type { AssistantCreatePlaygroundLabResult, AssistantMutationResult, SessionProjectGroup } from './assistant-sessions-rail-utils'
 import type { AssistantRailMode } from './useAssistantPageSidebarState'
 
 export type ExpandedSessionsRailContentProps = {
@@ -34,7 +34,7 @@ export type ExpandedSessionsRailContentProps = {
         repoUrl?: string
         existingFolderPath?: string
         openSession?: boolean
-    }) => Promise<void> | void
+    }) => Promise<AssistantCreatePlaygroundLabResult> | AssistantCreatePlaygroundLabResult
     onDeletePlaygroundLab: (labId: string) => Promise<AssistantMutationResult> | AssistantMutationResult
     onProjectDragStart: (projectKey: string) => void
     onProjectDragEnd: (activeProjectKey: string, overProjectKey: string | null) => void

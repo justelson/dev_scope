@@ -27,7 +27,10 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
     interactionMode: 'default' | 'plan'
     activeProfile: 'safe-dev' | 'yolo-fast'
     activeStatusLabel: string
+    isConnecting?: boolean
     onStop?: () => Promise<void> | void
+    onReconnect?: () => Promise<void> | void
+    onBlockedSend?: (message: string) => void
     onOpenAttachmentPreview?: (
         file: { name: string; path: string },
         ext: string,
@@ -46,9 +49,9 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
 }) {
     const hasPendingPlaygroundLabRequest = Boolean(props.pendingPlaygroundLabRequest)
     const isWaitingForUserInput = props.pendingUserInputs.length > 0
+    const isConnecting = props.isConnecting ?? (props.commandPending && !props.assistantConnected)
     const composerDisabledReason = deriveAssistantComposerDisabledReason({
         sessionId: props.selectedSessionId,
-        assistantAvailable: props.assistantAvailable,
         sessionMode: props.selectedSessionMode,
         projectPath: props.selectedProjectPath
     })
@@ -79,6 +82,9 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
                     interactionMode={props.interactionMode}
                     activeProfile={props.activeProfile}
                     activeStatusLabel={props.activeStatusLabel}
+                    isConnecting={isConnecting}
+                    onReconnect={props.onReconnect}
+                    reconnectPending={props.commandPending && !props.assistantConnected}
                 />
             ) : null}
             {!hasPendingPlaygroundLabRequest && !isWaitingForUserInput ? (
@@ -93,6 +99,7 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
                         queuedMessageCount={props.queuedMessageCount}
                         queuedMessages={props.queuedMessages}
                         isConnected={props.assistantConnected}
+                        isConnecting={isConnecting}
                         activeModel={props.activeModel}
                         modelOptions={props.availableModels}
                         modelsLoading={props.modelsLoading}
@@ -101,11 +108,14 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
                         runtimeMode={props.runtimeMode}
                         interactionMode={props.interactionMode}
                         projectPath={props.selectedProjectPath}
+                        onReconnect={props.onReconnect}
+                        onBlockedSend={props.onBlockedSend}
                         onOpenAttachmentPreview={props.onOpenAttachmentPreview}
                         onAttachmentShelfBoundsChange={props.onAttachmentShelfBoundsChange}
                         onRefreshModels={props.refreshModels}
                         onStop={props.onStop}
                         onSend={props.sendPrompt}
+                        reconnectPending={props.commandPending && !props.assistantConnected}
                     />
                 </div>
             ) : null}

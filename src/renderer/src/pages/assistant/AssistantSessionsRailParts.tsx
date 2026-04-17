@@ -31,6 +31,26 @@ import {
 
 const CHAT_PAGE_SIZE = 5
 
+function getTrailingPathSegment(value: string): string {
+    const normalized = String(value || '').trim().replace(/[\\/]+$/g, '')
+    if (!normalized) return ''
+    const segment = normalized.split(/[\\/]/).pop()?.trim() || ''
+    return segment.replace(/\.git$/i, '').trim()
+}
+
+function resolveRequestedLabTitle(input: {
+    title: string
+    source: 'empty' | 'git-clone' | 'existing-folder'
+    repoUrl: string
+    existingFolderPath: string
+}): string {
+    const explicitTitle = input.title.trim()
+    if (explicitTitle) return explicitTitle
+    if (input.source === 'git-clone') return getTrailingPathSegment(input.repoUrl) || 'New Lab'
+    if (input.source === 'existing-folder') return getTrailingPathSegment(input.existingFolderPath) || 'New Lab'
+    return 'New Lab'
+}
+
 export { RenameSessionModal, SessionDeleteModal } from './AssistantSessionsRailDialogs'
 
 export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentProps) {
@@ -389,34 +409,76 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
         if (creatingLab) return
         setCreatingLab(true)
         try {
+            const requestedLabTitle = resolveRequestedLabTitle({
+                title: labTitle,
+                source: labSource,
+                repoUrl: labRepoUrl,
+                existingFolderPath: selectedExistingFolderPath
+            })
+
             if (labSource === 'existing-folder') {
                 const existingFolderPath = selectedExistingFolderPath.trim()
                 if (!existingFolderPath) return
                 const existingLab = labByRootPath.get(existingFolderPath) || null
                 if (existingLab) {
-                    onCreatePlaygroundSession(existingLab.id)
+                    await Promise.resolve(onCreatePlaygroundSession(existingLab.id))
+                    setLabDialogOpen(false)
+                    onShowToast({ message: `Opened a new chat in "${existingLab.title}".` })
                 } else {
-                    await onCreatePlaygroundLab({
+                    const result = await onCreatePlaygroundLab({
                         title: labTitle || undefined,
                         source: 'existing-folder',
                         existingFolderPath,
                         openSession: true
                     })
+                    if (!result.success) {
+                        onShowToast({
+                            message: `Failed to create lab "${requestedLabTitle}": ${result.error}`,
+                            tone: 'error'
+                        })
+                        return
+                    }
+                    const createdLabTitle = result.playground.labs.find((lab) => lab.id === result.labId)?.title || requestedLabTitle
+                    if (result.sessionId) {
+                        await Promise.resolve(onSelectSession(result.sessionId))
+                    }
+                    setLabDialogOpen(false)
+                    onShowToast({ message: `"${createdLabTitle}" lab has been created with a new chat open.` })
                 }
-                setLabDialogOpen(false)
                 return
             }
-            await onCreatePlaygroundLab({
+
+            const result = await onCreatePlaygroundLab({
                 title: labTitle || undefined,
                 source: labSource,
                 repoUrl: labSource === 'git-clone' ? labRepoUrl : undefined,
                 openSession: true
             })
+
+            if (!result.success) {
+                onShowToast({
+                    message: labSource === 'git-clone'
+                        ? `Failed to clone repo into "${requestedLabTitle}": ${result.error}`
+                        : `Failed to create lab "${requestedLabTitle}": ${result.error}`,
+                    tone: 'error'
+                })
+                return
+            }
+
+            const createdLabTitle = result.playground.labs.find((lab) => lab.id === result.labId)?.title || requestedLabTitle
+            if (result.sessionId) {
+                await Promise.resolve(onSelectSession(result.sessionId))
+            }
             setLabDialogOpen(false)
+            onShowToast({
+                message: labSource === 'git-clone'
+                    ? `Repo cloned. "${createdLabTitle}" lab has been created with a new chat open.`
+                    : `"${createdLabTitle}" lab has been created with a new chat open.`
+            })
         } finally {
             setCreatingLab(false)
         }
-    }, [creatingLab, labByRootPath, labRepoUrl, labSource, labTitle, onCreatePlaygroundLab, onCreatePlaygroundSession, selectedExistingFolderPath])
+    }, [creatingLab, labByRootPath, labRepoUrl, labSource, labTitle, onCreatePlaygroundLab, onCreatePlaygroundSession, onSelectSession, onShowToast, selectedExistingFolderPath])
 
     const sectionLabel = railMode === 'playground' ? 'Labs' : 'Projects'
     const playgroundRootMissing = railMode === 'playground' && !playground.rootPath
@@ -504,7 +566,10 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
                 existingRootFolders={existingRootFolders}
                 existingRootFoldersLoading={existingRootFoldersLoading}
                 selectedExistingFolderPath={selectedExistingFolderPath}
-                onClose={() => setLabDialogOpen(false)}
+                onClose={() => {
+                    if (creatingLab) return
+                    setLabDialogOpen(false)
+                }}
                 onChangeTitle={setLabTitle}
                 onChangeRepoUrl={setLabRepoUrl}
                 onChangeSource={setLabSource}

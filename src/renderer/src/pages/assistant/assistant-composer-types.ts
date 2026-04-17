@@ -40,12 +40,14 @@ export type AssistantQueuedComposerMessage = {
     dispatchMode: 'queue' | 'force'
 }
 
-export type AssistantComposerDisabledReason = 'no-session' | 'assistant-unavailable' | 'project-required'
+export type AssistantComposerDisabledReason = 'no-session' | 'project-required'
 
 export type AssistantComposerProps = {
     sessionId?: string | null
     onSend: (prompt: string, contextFiles: ComposerContextFile[], options: AssistantComposerSendOptions) => Promise<boolean>
     onStop?: () => Promise<void> | void
+    onReconnect?: () => Promise<void> | void
+    onBlockedSend?: (message: string) => void
     onCancelDirty?: () => void
     onOpenAttachmentPreview?: (
         file: { name: string; path: string },
@@ -60,6 +62,7 @@ export type AssistantComposerProps = {
     isThinking: boolean
     thinkingLabel?: string
     isConnected: boolean
+    isConnecting?: boolean
     activeModel?: string
     modelOptions?: Array<{ id: string; label: string; description?: string }>
     modelsLoading?: boolean
@@ -77,4 +80,5 @@ export type AssistantComposerProps = {
     queuedMessageCount?: number
     queuedMessages?: AssistantQueuedComposerMessage[]
     busyMessageMode?: AssistantBusyMessageMode
+    reconnectPending?: boolean
 }

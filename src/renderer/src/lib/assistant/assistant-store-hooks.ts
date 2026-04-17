@@ -74,6 +74,7 @@ export function useAssistantStoreLifecycle() {
 
 const assistantStoreActions = {
     refresh: () => assistantStore.refresh(),
+    refreshStatus: () => assistantStore.refreshStatus().then(() => undefined),
     refreshModels: () => assistantStore.refreshModels(true),
     createSession: (input?: AssistantCreateSessionInput) => assistantStore.createSession(input).then(() => undefined),
     selectSession: (sessionId: string, options?: { force?: boolean }) => assistantStore.selectSession(sessionId, options).then(() => undefined),
@@ -101,6 +102,7 @@ const assistantStoreActions = {
     sendPromptResult: (prompt: string, options?: AssistantSendPromptOptions) => assistantStore.sendPrompt(prompt, options),
     interruptTurn: (turnId?: string, sessionId?: string) => assistantStore.interruptTurn(turnId, sessionId).then(() => undefined),
     connect: (sessionId?: string) => assistantStore.connect(sessionId ? { sessionId } : undefined).then(() => undefined),
+    connectResult: (sessionId?: string) => assistantStore.connect(sessionId ? { sessionId } : undefined),
     disconnect: (sessionId?: string) => assistantStore.disconnect(sessionId).then(() => undefined),
     respondApproval: (requestId: string, decision: AssistantApprovalResponseInput['decision']) =>
         assistantStore.respondApproval({ requestId, decision }).then(() => undefined),

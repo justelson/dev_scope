@@ -12,7 +12,7 @@ export function deriveAssistantComposerViewState({
     controller,
     settings
 }: AssistantComposerViewStateInput) {
-    const iconTheme = settings.theme === 'light' ? 'light' : 'dark'
+    const iconTheme: 'light' | 'dark' = settings.theme === 'light' ? 'light' : 'dark'
     const voiceBusy = controller.voiceInput.isRecording || controller.voiceInput.isTranscribing
     const composerStatusToneClass = capabilities.tone === 'warning'
         ? 'text-amber-200'

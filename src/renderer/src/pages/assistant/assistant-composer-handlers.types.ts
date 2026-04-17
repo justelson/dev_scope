@@ -4,7 +4,7 @@ import type { AssistantBusyMessageMode } from '@/lib/settings'
 import type { MentionCandidate } from './assistant-composer-mentions'
 import type { InlineMentionTag } from './assistant-composer-inline-mentions'
 import type { AssistantComposerPreferenceEffort } from './assistant-composer-preferences'
-import type { ComposerContextFile } from './assistant-composer-types'
+import type { AssistantComposerDisabledReason, ComposerContextFile } from './assistant-composer-types'
 
 type SetStringState = Dispatch<SetStateAction<string>>
 type SetBooleanState = Dispatch<SetStateAction<boolean>>
@@ -15,6 +15,7 @@ type SetInlineMentionTagsState = Dispatch<SetStateAction<InlineMentionTag[]>>
 
 export type AssistantComposerHandlersArgs = {
     disabled: boolean
+    disabledReason?: AssistantComposerDisabledReason | null
     allowEmptySubmit: boolean
     isConnected: boolean
     isSending: boolean
@@ -69,6 +70,7 @@ export type AssistantComposerHandlersArgs = {
     removingAttachmentIds: string[]
     setRemovingAttachmentIds: SetStringArrayState
     textareaRef: RefObject<HTMLTextAreaElement | null>
+    onBlockedSend?: (message: string) => void
     onOptimisticSendClear?: () => void
     shouldRestoreAfterFailedSend?: () => boolean
     onRestoreFailedSendDraft?: (draft: string) => void

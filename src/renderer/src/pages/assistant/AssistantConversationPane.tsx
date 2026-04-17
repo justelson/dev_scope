@@ -43,7 +43,8 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
     const scrollButtonRafRef = useRef<number | null>(null)
 
     const isThreadWorking = isAssistantThreadActivelyWorking(controller.activeThread)
-    const isThreadConnecting = controller.phase.key === 'starting'
+    const isReconnectPending = controller.commandPending && !controller.connected && !isThreadWorking
+    const isThreadConnecting = controller.phase.key === 'starting' || isReconnectPending
     const activeStatusLabel = isThreadConnecting ? 'Connecting...' : 'Working...'
     const selectedSessionId = controller.selectedSession?.id || null
     const selectedPlaygroundLabId = controller.selectedSession?.playgroundLabId || null
@@ -302,6 +303,11 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
         )
     }, [actions, controller.activeThread?.latestTurn?.id, controller.selectedSession?.id])
 
+    const handleReconnectAssistant = useCallback(() => {
+        if (!selectedSessionId) return
+        void actions.connect(selectedSessionId)
+    }, [actions, selectedSessionId])
+
     const handleDispatchPrompt = useCallback(async (
         prompt: string,
         contextFiles: ComposerContextFile[],
@@ -466,7 +472,10 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
                         interactionMode={effectiveInteractionMode}
                         activeProfile={controller.activeThread?.runtimeMode === 'full-access' ? 'yolo-fast' : 'safe-dev'}
                         activeStatusLabel={activeStatusLabel}
+                        isConnecting={isThreadConnecting}
                         onStop={handleStopTurn}
+                        onReconnect={handleReconnectAssistant}
+                        onBlockedSend={(message) => props.onShowToast?.(message, 'info')}
                         onOpenAttachmentPreview={props.onOpenAttachmentPreview}
                         onAttachmentShelfBoundsChange={setAttachmentShelfBounds}
                         sendPrompt={handleSendPrompt}

@@ -23,6 +23,7 @@ import { useAssistantVisibleText } from './useAssistantVisibleText'
 import { TimelineProposedPlan } from './AssistantTimelineProposedPlan'
 
 export { TimelineToolCallList } from './AssistantTimelineToolCalls'
+export { TimelineProposedPlan } from './AssistantTimelineProposedPlan'
 
 function getAttachmentPreviewTarget(attachmentName: string, attachmentPath: string): { name: string; ext: string } {
     const sourceName = String(attachmentName || '').trim() || String(attachmentPath || '').split(/[\\/]/).pop() || 'attachment'

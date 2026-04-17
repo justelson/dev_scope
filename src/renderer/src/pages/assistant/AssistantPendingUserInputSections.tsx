@@ -5,6 +5,7 @@ import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { cn } from '@/lib/utils'
 import { ComposerFooterControls, ComposerSendButton } from './AssistantComposerSections'
 import type { AssistantComposerController } from './useAssistantComposerController'
+import type { AssistantComposerUxTone } from './assistant-composer-capabilities'
 
 const CUSTOM_ANSWER_LABEL = 'Write your own answer'
 
@@ -306,7 +307,7 @@ export function AssistantPendingUserInputFooter(props: {
         controlsLocked: boolean
         sendDisabled: boolean
         statusLabel: string
-        tone: 'warning' | 'info' | 'default'
+        tone: AssistantComposerUxTone
     }
     responding: boolean
     activePrompt: AssistantPendingUserInput
@@ -315,6 +316,8 @@ export function AssistantPendingUserInputFooter(props: {
     returnToReview: boolean
     canAdvance: boolean
     actionLabel: string
+    onReconnect?: () => Promise<void> | void
+    reconnectPending?: boolean
     onBack: () => void
     onAdvance: () => void
 }) {
@@ -328,9 +331,13 @@ export function AssistantPendingUserInputFooter(props: {
         returnToReview,
         canAdvance,
         actionLabel,
+        onReconnect,
+        reconnectPending = false,
         onBack,
         onAdvance
     } = props
+
+    const showReconnectAction = composerCapabilities.statusLabel === 'Disconnected' && !composerController.isConnected && Boolean(onReconnect)
 
     const composerStatusToneClass = composerCapabilities.tone === 'warning'
         ? 'text-amber-200'
@@ -415,6 +422,16 @@ export function AssistantPendingUserInputFooter(props: {
                         <span className={cn('h-1.5 w-1.5 rounded-full', composerStatusDotClass)} />
                         <span>{composerCapabilities.statusLabel}</span>
                     </span>
+                    {showReconnectAction ? (
+                        <button
+                            type="button"
+                            onClick={() => void onReconnect?.()}
+                            disabled={reconnectPending}
+                            className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold text-sparkle-text-secondary transition-colors hover:border-white/15 hover:bg-white/[0.05] hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {reconnectPending ? 'Reconnecting' : 'Reconnect'}
+                        </button>
+                    ) : null}
                 </div>
 
                 <button

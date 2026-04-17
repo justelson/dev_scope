@@ -5,6 +5,7 @@ import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import codiconFontUrl from 'monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.ttf?url'
 import 'monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css'
 
 type MonacoGlobal = typeof globalThis & {
@@ -12,11 +13,49 @@ type MonacoGlobal = typeof globalThis & {
         getWorker: (_moduleId: string, label: string) => Worker
     }
     __DEVSCOPE_MONACO_LOADER_READY__?: boolean
+    __DEVSCOPE_MONACO_CODICON_READY__?: boolean
 }
 
 const globalWithMonaco = globalThis as MonacoGlobal
 
+function ensureCodiconRuntime() {
+    if (globalWithMonaco.__DEVSCOPE_MONACO_CODICON_READY__) return
+    if (typeof document === 'undefined') return
+
+    const existingStyle = document.getElementById('devscope-monaco-codicon-runtime')
+    if (existingStyle) {
+        globalWithMonaco.__DEVSCOPE_MONACO_CODICON_READY__ = true
+        return
+    }
+
+    const style = document.createElement('style')
+    style.id = 'devscope-monaco-codicon-runtime'
+    style.textContent = `
+@font-face {
+    font-family: "codicon";
+    font-display: block;
+    src: url("${codiconFontUrl}") format("truetype");
+}
+
+.codicon[class*='codicon-'] {
+    font: normal normal normal 16px/1 codicon;
+    display: inline-block;
+    text-decoration: none;
+    text-rendering: auto;
+    text-align: center;
+    text-transform: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    -webkit-user-select: none;
+}`
+    document.head.appendChild(style)
+    globalWithMonaco.__DEVSCOPE_MONACO_CODICON_READY__ = true
+}
+
 export function ensureMonacoRuntime() {
+    ensureCodiconRuntime()
+
     if (!globalWithMonaco.MonacoEnvironment) {
         globalWithMonaco.MonacoEnvironment = {
             getWorker: (_moduleId: string, label: string) => {

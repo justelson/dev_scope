@@ -5,6 +5,7 @@ import type { Settings } from '@/lib/settings'
 import { searchMentionIndex, type MentionCandidate } from './assistant-composer-mentions'
 import { getProfileLabel, readLegacyComposerSessionState } from './assistant-composer-controller-constants'
 import { deriveAssistantComposerCapabilities } from './assistant-composer-capabilities'
+import type { AssistantComposerDisabledReason } from './assistant-composer-types'
 import { getMentionQuery, normalizeMentionLookupPath, type InlineMentionTag } from './assistant-composer-inline-mentions'
 import type { AssistantComposerPreferenceEffort } from './assistant-composer-preferences'
 import {
@@ -279,8 +280,9 @@ export function useAssistantComposerDirtyState(input: {
 
 export function useAssistantComposerCapabilitiesState(input: {
     disabled: boolean
-    disabledReason: string | null
+    disabledReason: AssistantComposerDisabledReason | null
     isConnected: boolean
+    isConnecting: boolean
     isSending: boolean
     isThinking: boolean
     allowEmptySubmit: boolean
@@ -293,6 +295,7 @@ export function useAssistantComposerCapabilitiesState(input: {
         disabled,
         disabledReason,
         isConnected,
+        isConnecting,
         isSending,
         isThinking,
         allowEmptySubmit,
@@ -307,6 +310,7 @@ export function useAssistantComposerCapabilitiesState(input: {
         disabled,
         disabledReason,
         isConnected,
+        isConnecting,
         isSending,
         isThinking,
         allowEmptySubmit,
@@ -320,6 +324,7 @@ export function useAssistantComposerCapabilitiesState(input: {
         disabledReason,
         hasStopHandler,
         isConnected,
+        isConnecting,
         isSending,
         isThinking,
         text,

@@ -101,13 +101,28 @@ function parseUpstreamRef(upstreamRef: string): { remoteName: string; branchName
     return { remoteName, branchName }
 }
 
+function isRemoteAheadPushError(message: string): boolean {
+    const normalized = String(message || '').trim()
+    if (!normalized) return false
+
+    return (
+        /\bnon-fast-forward\b/i.test(normalized)
+        || /\bfetch first\b/i.test(normalized)
+        || /\[rejected\]\s+\(fetch first\)/i.test(normalized)
+    )
+}
+
 async function pushCommitRange(projectPath: string, targetCommitHash?: string, options?: GitPushOptions): Promise<void> {
+    let resolvedRemoteName = String(options?.remoteName || '').trim() || 'origin'
+    let resolvedRemoteBranch = String(options?.branchName || '').trim()
+
     try {
         const remoteNameOverride = String(options?.remoteName || '').trim()
 
         await withIndexLockRecovery(projectPath, 'push commits', async (git) => {
             const remotes = await git.getRemotes()
             const chosenRemoteName = remoteNameOverride || 'origin'
+            resolvedRemoteName = chosenRemoteName
             if (!remotes.some((remote) => remote.name === chosenRemoteName)) {
                 throw new Error(`No remote "${chosenRemoteName}" configured`)
             }
@@ -134,6 +149,8 @@ async function pushCommitRange(projectPath: string, targetCommitHash?: string, o
                 const remoteName = remoteNameOverride || upstream?.remoteName || 'origin'
                 const remoteBranch = upstream?.branchName || branch
                 const remoteTrackingRef = upstreamRef || `${remoteName}/${remoteBranch}`
+                resolvedRemoteName = remoteName
+                resolvedRemoteBranch = remoteBranch
 
                 if (upstreamRef) {
                     await git.raw(['merge-base', '--is-ancestor', remoteTrackingRef, targetHash]).catch(() => {
@@ -149,6 +166,9 @@ async function pushCommitRange(projectPath: string, targetCommitHash?: string, o
             }
 
             if (upstreamRef && !remoteNameOverride && !options?.branchName) {
+                const upstream = parseUpstreamRef(upstreamRef)
+                resolvedRemoteName = upstream?.remoteName || chosenRemoteName
+                resolvedRemoteBranch = upstream?.branchName || resolvedRemoteBranch
                 await git.push()
                 return
             }
@@ -158,9 +178,26 @@ async function pushCommitRange(projectPath: string, targetCommitHash?: string, o
                 throw new Error('Cannot push detached HEAD without specifying a branch')
             }
 
+            resolvedRemoteBranch = branch
             await git.push(['-u', chosenRemoteName, `${branch}:refs/heads/${branch}`])
         })
     } catch (err) {
+        const message = toErrorMessage(err, '')
+        if (isRemoteAheadPushError(message)) {
+            try {
+                await fetchUpdates(projectPath, resolvedRemoteName)
+            } catch {
+                // Best-effort refresh of remote-tracking refs so the UI can reflect the behind state.
+            }
+
+            const targetRef = [resolvedRemoteName, resolvedRemoteBranch].filter(Boolean).join('/')
+            throw new Error(
+                targetRef
+                    ? `Remote branch ${targetRef} has new commits. Pull or rebase the latest remote changes, then push again.`
+                    : 'Remote branch has new commits. Pull or rebase the latest remote changes, then push again.'
+            )
+        }
+
         log.error('Failed to push commits', err)
         throw toError(err, 'Failed to push commits')
     }

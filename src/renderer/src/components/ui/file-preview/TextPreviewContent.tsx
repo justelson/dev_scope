@@ -2,7 +2,6 @@ import { memo, useEffect, useMemo, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import MarkdownRenderer from '../MarkdownRenderer'
-import VirtualizedMarkdownPreview from '../VirtualizedMarkdownPreview'
 import { HIGHLIGHT_MAX_CHARS, HIGHLIGHT_MAX_LINES } from './constants'
 import type { PreviewFile, PreviewMeta } from './types'
 import { formatPreviewBytes } from './utils'
@@ -37,11 +36,6 @@ function TextPreviewContent({
         const lineCount = content.split(/\r?\n/).length
         return content.length > HIGHLIGHT_MAX_CHARS || lineCount > HIGHLIGHT_MAX_LINES
     }, [content])
-    const shouldVirtualizeMarkdown = useMemo(() => {
-        if (file.type !== 'md') return false
-        const lineCount = content.split(/\r?\n/).length
-        return content.length > 12_000 || lineCount > 220
-    }, [content, file.type])
 
     const [jsonState, setJsonState] = useState<{
         formatted: string | null
@@ -54,6 +48,8 @@ function TextPreviewContent({
         isFormatting: false,
         fallbackReason: null
     })
+
+    const useLightweightMarkdown = isLargeTextPreview || meta.truncated
 
     useEffect(() => {
         if (file.type !== 'json') {
@@ -111,17 +107,14 @@ function TextPreviewContent({
 
     const previewSize = formatPreviewBytes(meta.previewBytes)
     const totalSize = formatPreviewBytes(meta.size)
-    const markdownViewportClassName = isExpanded
-        ? 'h-full overflow-y-auto bg-sparkle-card custom-scrollbar'
-        : 'max-h-[70vh] overflow-y-auto bg-sparkle-card custom-scrollbar'
     const markdownContainerClassName = isExpanded
-        ? `w-full flex-1 h-full min-h-0 bg-sparkle-card p-6 ${shouldVirtualizeMarkdown ? 'overflow-hidden' : 'overflow-auto'}`
+        ? 'w-full min-h-full bg-sparkle-card p-6'
         : 'w-full max-w-4xl min-h-full bg-sparkle-card rounded-xl p-6 border border-white/5'
 
     return (
         <div className={cn(
             isExpanded
-                ? 'w-full h-full min-h-0 flex flex-col items-stretch gap-0'
+                ? 'w-full flex flex-col items-stretch gap-0'
                 : 'w-full h-full min-h-0 flex flex-col items-center gap-3',
             isMarkdown && isExpanded && 'bg-sparkle-card'
         )}>
@@ -135,16 +128,12 @@ function TextPreviewContent({
 
             {file.type === 'md' && (
                 <div className={markdownContainerClassName}>
-                    {shouldVirtualizeMarkdown ? (
-                        <VirtualizedMarkdownPreview
-                            content={content}
-                            filePath={file.path}
-                            onInternalLinkClick={onInternalLinkClick}
-                            viewportClassName={markdownViewportClassName}
-                        />
-                    ) : (
-                        <MarkdownRenderer content={content} filePath={file.path} onInternalLinkClick={onInternalLinkClick} />
-                    )}
+                    <MarkdownRenderer
+                        content={content}
+                        filePath={file.path}
+                        onInternalLinkClick={onInternalLinkClick}
+                        lightweight={useLightweightMarkdown}
+                    />
                 </div>
             )}
 

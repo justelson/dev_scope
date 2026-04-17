@@ -62,6 +62,10 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
         controller,
         settings
     })
+    const showReconnectAction = !transientStatus
+        && capabilities.statusLabel === 'Disconnected'
+        && !controller.isConnected
+        && Boolean(controller.onReconnect)
 
     useEffect(() => {
         if (settings.assistantTranscriptionEngine !== 'browser') {
@@ -375,6 +379,16 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                                     <span className={cn('h-1.5 w-1.5 rounded-full', composerStatusDotClass)} />
                                     <span>{capabilities.statusLabel}</span>
                                 </span>
+                                {showReconnectAction ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => void controller.onReconnect?.()}
+                                        disabled={controller.reconnectPending}
+                                        className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold text-sparkle-text-secondary transition-colors hover:border-white/15 hover:bg-white/[0.05] hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {controller.reconnectPending ? 'Reconnecting' : 'Reconnect'}
+                                    </button>
+                                ) : null}
                             </>
                         )}
                         {controller.queuedMessageCount > 0 ? (

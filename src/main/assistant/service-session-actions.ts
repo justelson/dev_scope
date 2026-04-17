@@ -450,12 +450,14 @@ export async function getAssistantRuntimeStatusAction(deps: AssistantServiceActi
     const availability = await deps.runtime.checkAvailability()
     const session = getSelectedSession(deps.getSnapshot())
     const thread = getActiveThread(session)
+    const activeRuntimeThreadId = thread?.providerThreadId || thread?.id || null
+    const liveConnected = activeRuntimeThreadId ? deps.runtime.hasSession(activeRuntimeThreadId) : false
     return {
         available: availability.available,
-        connected: Boolean(thread && (thread.state === 'ready' || thread.state === 'running' || thread.state === 'waiting')),
+        connected: liveConnected,
         selectedSessionId: session?.id || null,
         activeThreadId: thread?.id || null,
-        state: thread?.state || 'disconnected',
+        state: liveConnected ? (thread?.state || 'disconnected') : 'disconnected',
         reason: availability.reason
     }
 }

@@ -40,7 +40,6 @@ import { SIDEBAR_EFFORT_LABELS } from './useAssistantPageSidebarState'
 import { useAssistantSessionTurnUsage } from './useAssistantSessionTurnUsage'
 
 type ThreadDetailsSelection = {
-    assistantAvailable: boolean
     assistantConnected: boolean
     commandPending: boolean
     commandError: string | null
@@ -66,7 +65,6 @@ type IssueActivityGroup = {
 }
 
 const CLOSED_THREAD_DETAILS_SELECTION: ThreadDetailsSelection = {
-    assistantAvailable: false,
     assistantConnected: false,
     commandPending: false,
     commandError: null,
@@ -118,8 +116,7 @@ function getActivitySignature(activities: AssistantActivity[]): string {
 }
 
 function areThreadDetailsSelectionsEqual(left: ThreadDetailsSelection, right: ThreadDetailsSelection): boolean {
-    return left.assistantAvailable === right.assistantAvailable
-        && left.assistantConnected === right.assistantConnected
+    return left.assistantConnected === right.assistantConnected
         && left.commandPending === right.commandPending
         && left.commandError === right.commandError
         && left.selectedSessionId === right.selectedSessionId
@@ -154,7 +151,6 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
             : null
 
         return {
-            assistantAvailable: state.status.available,
             assistantConnected: state.status.connected,
             commandPending: state.commandPending,
             commandError: state.error,
@@ -458,7 +454,6 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
                 logsExpanded={logsExpanded}
                 selectedSessionId={selection.selectedSessionId}
                 assistantConnected={selection.assistantConnected}
-                assistantAvailable={selection.assistantAvailable}
                 commandPending={selection.commandPending}
                 onClose={props.onClose}
                 onShowPlan={props.onShowPlan}

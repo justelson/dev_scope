@@ -18,11 +18,14 @@ import {
     readFileAsDataUrl,
     summarizeTextPreview
 } from './assistant-composer-utils'
+import type { MentionCandidate } from './assistant-composer-mentions'
 import type { AssistantComposerHandlersArgs } from './assistant-composer-handlers.types'
+import type { ComposerContextFile } from './assistant-composer-types'
 
 export function createAssistantComposerHandlers(args: AssistantComposerHandlersArgs) {
     const {
         disabled,
+        disabledReason = null,
         allowEmptySubmit,
         isConnected,
         isSending,
@@ -69,10 +72,21 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         removingAttachmentIds,
         setRemovingAttachmentIds,
         textareaRef,
+        onBlockedSend,
         onOptimisticSendClear,
         shouldRestoreAfterFailedSend,
         onRestoreFailedSendDraft
     } = args
+
+    const resolveBlockedSendReason = (hasContent: boolean): string => {
+        if (!allowEmptySubmit && !hasContent) return 'Write a message or attach a file first.'
+        if (disabledReason === 'no-session') return 'Select or create a chat before sending.'
+        if (disabledReason === 'project-required') return 'Choose a project before sending in a work chat.'
+        if (disabled) return 'Assistant is unavailable right now.'
+        if (!isConnected) return 'Assistant is disconnected. Reconnect before sending.'
+        if (isSending) return 'Message is already sending.'
+        return 'Cannot send this message right now.'
+    }
 
     const upsertAttachment = (attachment: ComposerContextFile) => {
         setContextFiles((prev) => {
@@ -233,7 +247,10 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
             return collection.findIndex((candidate) => `${String(candidate.path || '').toLowerCase()}::${String(candidate.name || '').toLowerCase()}` === fileKey) === index
         })
         const hasContent = Boolean(prompt || contextFilesForSend.length > 0)
-        if ((!allowEmptySubmit && !hasContent) || disabled || isSending || !isConnected) return
+        if ((!allowEmptySubmit && !hasContent) || disabled || isSending || !isConnected) {
+            onBlockedSend?.(resolveBlockedSendReason(hasContent))
+            return
+        }
         const prevText = text
         const prevTags = inlineMentionTags
         const prevFiles = contextFiles

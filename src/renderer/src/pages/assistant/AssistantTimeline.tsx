@@ -12,9 +12,8 @@ import {
     TimelineToolCallList,
     TimelineWorkingIndicator
 } from './AssistantTimelineRows'
-import { buildTimelineRows, estimateTimelineRowHeight, type TimelineRenderRow } from './assistant-timeline-helpers'
+import { buildTimelineRows, type TimelineRenderRow } from './assistant-timeline-helpers'
 import { useAssistantTimelineEntries } from './useAssistantTimelineEntries'
-import { useAssistantTimelineVirtualizer } from './useAssistantTimelineVirtualizer'
 import { useAssistantTimelineWindow } from './useAssistantTimelineWindow'
 
 type AssistantTimelineProps = {
@@ -96,11 +95,6 @@ function AssistantTimelineImpl({
         () => buildTimelineRows(visibleEntries, isWorking, activeWorkStartedAt),
         [activeWorkStartedAt, isWorking, visibleEntries]
     )
-    const timelineVirtualizer = useAssistantTimelineVirtualizer({
-        rows,
-        resetKey: windowKey,
-        scrollContainerRef
-    })
     const hasStreamingAssistantMessage = useMemo(
         () => messages.some((message) => message.role === 'assistant' && message.streaming),
         [messages]
@@ -197,17 +191,12 @@ function AssistantTimelineImpl({
         )
     }
 
-    const renderRowContainer = (row: TimelineRenderRow, content: ReactNode, measured = false) => {
+    const renderRowContainer = (row: TimelineRenderRow, content: ReactNode) => {
         if (!content) return null
         return (
             <div
                 key={row.id}
-                ref={measured ? timelineVirtualizer.getMeasuredRowRef(row.id) : undefined}
                 className="pb-4"
-                style={{
-                    contentVisibility: 'auto',
-                    containIntrinsicSize: `${estimateTimelineRowHeight(row, { containerWidth: timelineVirtualizer.viewportWidth })}px`
-                }}
             >
                 {content}
             </div>
@@ -215,7 +204,7 @@ function AssistantTimelineImpl({
     }
 
     return (
-        <div className="pb-4">
+        <div>
             {timelineWindow.hasHiddenEntries ? (
                 <div className="mb-4">
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/6 bg-white/[0.02] px-4 py-3">
@@ -235,24 +224,7 @@ function AssistantTimelineImpl({
                     </div>
                 </div>
             ) : null}
-            {timelineVirtualizer.paddingTop > 0 ? (
-                <div
-                    aria-hidden="true"
-                    style={{
-                        height: timelineVirtualizer.paddingTop
-                    }}
-                />
-            ) : null}
-            {timelineVirtualizer.virtualRows.map(({ row }) => renderRowContainer(row, renderRow(row), true))}
-            {timelineVirtualizer.tailRows.map((row) => renderRowContainer(row, renderRow(row), true))}
-            {timelineVirtualizer.paddingBottom > 0 ? (
-                <div
-                    aria-hidden="true"
-                    style={{
-                        height: timelineVirtualizer.paddingBottom
-                    }}
-                />
-            ) : null}
+            {rows.map((row) => renderRowContainer(row, renderRow(row)))}
         </div>
     )
 }

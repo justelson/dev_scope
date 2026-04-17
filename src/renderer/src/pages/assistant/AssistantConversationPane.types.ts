@@ -23,4 +23,5 @@ export type AssistantConversationPaneProps = {
     onOpenAssistantLink?: (href: string) => Promise<void> | void
     onOpenEditedFile?: (filePath: string) => Promise<void> | void
     onViewDiff?: (target: AssistantDiffTarget) => void
+    onShowToast?: (message: string, tone?: 'success' | 'error' | 'info') => void
 }

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Check } from 'lucide-react'
+import { Check, Plus } from 'lucide-react'
 import type { AssistantPendingUserInput } from '@shared/assistant/contracts'
 import { cn } from '@/lib/utils'
 import {
@@ -36,12 +36,14 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
     interactionMode: 'default' | 'plan'
     activeProfile: 'safe-dev' | 'yolo-fast'
     activeStatusLabel: string
+    isConnecting?: boolean
+    onReconnect?: () => Promise<void> | void
+    reconnectPending?: boolean
 }) {
     const { pendingUserInputs, responding, onRespond } = props
     const activePrompt = pendingUserInputs[0] || null
     const composerDisabledReason = deriveAssistantComposerDisabledReason({
-        sessionId: props.sessionId,
-        assistantAvailable: props.assistantAvailable
+        sessionId: props.sessionId
     })
     const [draftAnswersByRequestId, setDraftAnswersByRequestId] = useState<Record<string, AssistantPendingUserInputDraftAnswers>>({})
     const [questionIndex, setQuestionIndex] = useState(0)
@@ -62,6 +64,7 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
         isThinking: false,
         thinkingLabel: props.activeStatusLabel,
         isConnected: props.assistantConnected,
+        isConnecting: props.isConnecting ?? false,
         activeModel: props.activeModel,
         modelOptions: props.availableModels,
         modelsLoading: props.modelsLoading,
@@ -264,6 +267,7 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
         disabled: composerController.disabled,
         disabledReason: composerDisabledReason,
         isConnected: composerController.isConnected,
+        isConnecting: props.isConnecting ?? false,
         isSending: false,
         isThinking: false,
         allowEmptySubmit: false,
@@ -344,7 +348,7 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
                                 hasAnswer: progress.hasAnswer,
                                 isReviewStep: progress.isReviewStep,
                                 isCustomAnswer: progress.isCustomAnswer,
-                                selectedAnswer: progress.selectedAnswer
+                                selectedAnswer: progress.selectedAnswer || ''
                             }}
                             reviewAnswers={reviewAnswers}
                             responding={responding}
@@ -415,6 +419,8 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
                         returnToReview={returnToReview}
                         canAdvance={canAdvance}
                         actionLabel={actionLabel}
+                        onReconnect={props.onReconnect}
+                        reconnectPending={props.reconnectPending}
                         onBack={() => {
                             if (returnToReview) {
                                 setQuestionIndex(activePrompt.questions.length)

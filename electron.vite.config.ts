@@ -2,6 +2,7 @@ import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
+const projectRoot = resolve(__dirname)
 const rendererRoot = resolve(__dirname, 'src/renderer')
 
 export default defineConfig({
@@ -60,7 +61,7 @@ export default defineConfig({
             port: 5174,
             fs: {
                 allow: [
-                    rendererRoot
+                    projectRoot
                 ]
             }
         }

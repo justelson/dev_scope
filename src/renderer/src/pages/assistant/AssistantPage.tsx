@@ -23,7 +23,6 @@ import {
 
 type AssistantPageShellSelection = {
     bootstrapped: boolean
-    assistantAvailable: boolean
     assistantConnected: boolean
     commandPending: boolean
     playgroundRootPath: string | null
@@ -35,7 +34,6 @@ type AssistantPageShellSelection = {
 
 function areAssistantPageShellSelectionsEqual(left: AssistantPageShellSelection, right: AssistantPageShellSelection): boolean {
     return left.bootstrapped === right.bootstrapped
-        && left.assistantAvailable === right.assistantAvailable
         && left.assistantConnected === right.assistantConnected
         && left.commandPending === right.commandPending
         && left.playgroundRootPath === right.playgroundRootPath
@@ -54,6 +52,11 @@ function readAssistantMainSidebarCollapsedPreference(): boolean {
     }
 }
 
+const AUTO_CONNECT_RECOVERY_ERRORS = new Set([
+    'Assistant session not found.',
+    'Assistant session has no active thread.'
+])
+
 export default function AssistantPage() {
     const navigate = useNavigate()
     const actions = useAssistantStoreActions()
@@ -63,7 +66,6 @@ export default function AssistantPage() {
 
         return {
             bootstrapped: state.hydrated,
-            assistantAvailable: state.status.available,
             assistantConnected: state.status.connected,
             commandPending: state.commandPending,
             playgroundRootPath: state.snapshot.playground.rootPath || null,
@@ -75,7 +77,8 @@ export default function AssistantPage() {
     }, areAssistantPageShellSelectionsEqual)
     const preview = useFilePreview()
     const { isCollapsed: mainSidebarCollapsed, setIsCollapsed: setMainSidebarCollapsed } = useSidebar()
-    const autoConnectAttemptedSessionRef = useRef<string | null>(null)
+    const autoConnectAttemptedThreadRef = useRef<string | null>(null)
+    const autoConnectRecoveredThreadRef = useRef<string | null>(null)
     const autoRoutedSelectionRef = useRef<string | null>(null)
     const autoStartedDetachedPlaygroundRef = useRef(false)
     const mainSidebarBeforeAssistantRef = useRef<boolean | null>(null)
@@ -145,12 +148,42 @@ export default function AssistantPage() {
     }, [leftSidebarCollapsed, mainSidebarCollapsed, rightPanelMode, setLeftSidebarCollapsed])
 
     useEffect(() => {
-        if (!shell.bootstrapped || !shell.assistantAvailable || shell.assistantConnected || shell.commandPending) return
+        if (shell.assistantConnected) {
+            autoConnectAttemptedThreadRef.current = null
+            autoConnectRecoveredThreadRef.current = null
+        }
+    }, [shell.assistantConnected])
+
+    useEffect(() => {
+        if (!shell.bootstrapped || shell.assistantConnected || shell.commandPending) return
         const sessionId = shell.selectedSessionId
-        if (!sessionId || autoConnectAttemptedSessionRef.current === sessionId) return
-        autoConnectAttemptedSessionRef.current = sessionId
-        void actions.connect(sessionId)
-    }, [actions, shell.assistantAvailable, shell.assistantConnected, shell.bootstrapped, shell.commandPending, shell.selectedSessionId])
+        const threadId = shell.activeThreadId
+        if (!sessionId) {
+            autoConnectAttemptedThreadRef.current = null
+            autoConnectRecoveredThreadRef.current = null
+            return
+        }
+        const threadConnectKey = `${sessionId}:${threadId || 'pending-thread'}`
+        if (autoConnectAttemptedThreadRef.current === threadConnectKey) return
+        autoConnectAttemptedThreadRef.current = threadConnectKey
+        let cancelled = false
+        void (async () => {
+            const result = await actions.connectResult(sessionId)
+            if (
+                cancelled
+                || result.success
+                || !AUTO_CONNECT_RECOVERY_ERRORS.has(result.error)
+                || autoConnectRecoveredThreadRef.current === threadConnectKey
+            ) {
+                return
+            }
+            autoConnectRecoveredThreadRef.current = threadConnectKey
+            autoConnectAttemptedThreadRef.current = null
+        })()
+        return () => {
+            cancelled = true
+        }
+    }, [actions, shell.activeThreadId, shell.assistantConnected, shell.bootstrapped, shell.commandPending, shell.selectedSessionId])
 
     useEffect(() => {
         const sessionId = shell.selectedSessionId
@@ -326,6 +359,7 @@ export default function AssistantPage() {
                             onOpenAttachmentPreview={handleOpenAttachmentPreview}
                             onOpenEditedFile={handleOpenEditedFile}
                             onViewDiff={handleViewActivityDiff}
+                            onShowToast={showToast}
                         />
                         <AssistantDiffPanel
                             open={rightPanelMode === 'diff'}

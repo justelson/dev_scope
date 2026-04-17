@@ -39,21 +39,36 @@ import {
 } from './codex-app-server-runtime-helpers'
 
 export class CodexAppServerRuntime extends EventEmitter {
+    private static readonly AVAILABILITY_SUCCESS_TTL_MS = 60_000
+
     private readonly sessions = new Map<string, SessionContext>()
     private readonly threadContextAliases = new Map<string, string>()
     private readonly codexBinary = process.platform === 'win32' ? 'codex.cmd' : 'codex'
     private modelCache: AssistantModelInfo[] = []
     private modelCacheLoaded = false
     private modelListPromise: Promise<AssistantModelInfo[]> | null = null
-    private availability: { available: boolean; reason: string | null } | null = null
+    private availability: { available: boolean; reason: string | null; checkedAt: number } | null = null
     private availabilityPromise: Promise<{ available: boolean; reason: string | null }> | null = null
 
     async checkAvailability(): Promise<{ available: boolean; reason: string | null }> {
-        if (this.availability) return this.availability
+        if (this.availability) {
+            if (
+                this.availability.available
+                && (Date.now() - this.availability.checkedAt) < CodexAppServerRuntime.AVAILABILITY_SUCCESS_TTL_MS
+            ) {
+                return {
+                    available: this.availability.available,
+                    reason: this.availability.reason
+                }
+            }
+        }
         if (this.availabilityPromise) return this.availabilityPromise
 
         this.availabilityPromise = checkCodexAvailability(this.codexBinary).then((result) => {
-            this.availability = result
+            this.availability = {
+                ...result,
+                checkedAt: Date.now()
+            }
             return result
         })
 
@@ -260,6 +275,11 @@ export class CodexAppServerRuntime extends EventEmitter {
         }
 
         context.thread.providerThreadId = providerThreadId
+        this.availability = {
+            available: true,
+            reason: null,
+            checkedAt: Date.now()
+        }
         this.registerThreadAlias(thread.id, providerThreadId)
         this.emitRuntime({
             eventId: randomUUID(),

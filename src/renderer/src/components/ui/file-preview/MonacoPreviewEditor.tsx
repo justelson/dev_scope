@@ -7,9 +7,22 @@ import { parseUnifiedDiffMarkers, type GitLineMarker } from './gitDiff'
 
 const MONACO_THEME_ID = 'devscope-preview'
 
+function areLineMarkersEqual(left: GitLineMarker[], right: GitLineMarker[]): boolean {
+    if (left === right) return true
+    if (left.length !== right.length) return false
+    for (let index = 0; index < left.length; index += 1) {
+        if (left[index].line !== right[index].line || left[index].type !== right[index].type) {
+            return false
+        }
+    }
+    return true
+}
+
 const baseOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
     readOnly: true,
     domReadOnly: true,
+    folding: true,
+    showFoldingControls: 'always',
     minimap: {
         enabled: true,
         side: 'right',
@@ -28,7 +41,7 @@ const baseOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
     contextmenu: true,
     overviewRulerLanes: 3,
     hideCursorInOverviewRuler: true,
-    wordWrap: 'off',
+    wordWrap: 'on',
     wrappingStrategy: 'advanced',
     cursorBlinking: 'solid',
     occurrencesHighlight: 'off',
@@ -157,7 +170,7 @@ export default function MonacoPreviewEditor({
     readOnly = true,
     onChange,
     onEditorMount,
-    wordWrap = 'off',
+    wordWrap = 'on',
     minimapEnabled = true,
     fontSize = 13,
     findRequestToken = 0,
@@ -174,6 +187,7 @@ export default function MonacoPreviewEditor({
     const [lineMarkers, setLineMarkers] = useState<GitLineMarker[]>([])
     const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
     const decorationIdsRef = useRef<string[]>([])
+    const externalSyncInFlightRef = useRef(false)
 
     useEffect(() => {
         applyMonacoTheme(settings.theme)
@@ -192,7 +206,7 @@ export default function MonacoPreviewEditor({
 
     useEffect(() => {
         if (Array.isArray(lineMarkersOverride)) {
-            setLineMarkers(lineMarkersOverride)
+            setLineMarkers((current) => areLineMarkersEqual(current, lineMarkersOverride) ? current : lineMarkersOverride)
             return
         }
 
@@ -201,27 +215,36 @@ export default function MonacoPreviewEditor({
         const loadGitMarkers = async () => {
             if (typeof gitDiffText === 'string') {
                 if (!disposed) {
-                    setLineMarkers(parseUnifiedDiffMarkers(gitDiffText))
+                    const nextMarkers = parseUnifiedDiffMarkers(gitDiffText)
+                    setLineMarkers((current) => areLineMarkersEqual(current, nextMarkers) ? current : nextMarkers)
                 }
                 return
             }
 
             if (!projectPath || !filePath || isLargeFile) {
-                if (!disposed) setLineMarkers([])
+                if (!disposed) {
+                    setLineMarkers((current) => current.length === 0 ? current : [])
+                }
                 return
             }
 
             try {
                 const response = await window.devscope.getWorkingDiff(projectPath, filePath, 'combined')
                 if (disposed || !response?.success) {
-                    if (!disposed) setLineMarkers([])
+                    if (!disposed) {
+                        setLineMarkers((current) => current.length === 0 ? current : [])
+                    }
                     return
                 }
 
                 const nextMarkers = parseUnifiedDiffMarkers(String(response.diff || ''))
-                if (!disposed) setLineMarkers(nextMarkers)
+                if (!disposed) {
+                    setLineMarkers((current) => areLineMarkersEqual(current, nextMarkers) ? current : nextMarkers)
+                }
             } catch {
-                if (!disposed) setLineMarkers([])
+                if (!disposed) {
+                    setLineMarkers((current) => current.length === 0 ? current : [])
+                }
             }
         }
 
@@ -229,7 +252,7 @@ export default function MonacoPreviewEditor({
         return () => {
             disposed = true
         }
-    }, [gitDiffText, projectPath, filePath, isLargeFile, value, lineMarkersOverride])
+    }, [gitDiffText, projectPath, filePath, isLargeFile, lineMarkersOverride])
 
     useEffect(() => {
         const editor = editorRef.current
@@ -275,6 +298,31 @@ export default function MonacoPreviewEditor({
             editorRef.current = null
         }
     }, [])
+
+    useEffect(() => {
+        const editor = editorRef.current
+        const model = editor?.getModel()
+        if (!editor || !model) return
+
+        const currentValue = model.getValue(monaco.editor.EndOfLinePreference.LF, false)
+        if (currentValue === value) return
+
+        const selection = editor.getSelection()
+        const scrollTop = editor.getScrollTop()
+        const scrollLeft = editor.getScrollLeft()
+
+        externalSyncInFlightRef.current = true
+        editor.executeEdits('devscope-external-sync', [{
+            range: model.getFullModelRange(),
+            text: value
+        }])
+        if (selection) {
+            editor.setSelection(selection)
+        }
+        editor.setScrollTop(scrollTop)
+        editor.setScrollLeft(scrollLeft)
+        externalSyncInFlightRef.current = false
+    }, [value, modelPath])
 
     const editorOptions = useMemo<MonacoEditor.IStandaloneEditorConstructionOptions>(() => {
         const base = isLargeFile ? largeFileOptions : baseOptions
@@ -341,13 +389,14 @@ export default function MonacoPreviewEditor({
 
     return (
         <Editor
-            value={value}
+            defaultValue={value}
             language={language}
             path={modelPath}
             theme={editorTheme}
             options={editorOptions}
             onChange={(nextValue) => {
                 if (typeof onChange !== 'function') return
+                if (externalSyncInFlightRef.current) return
                 onChange(typeof nextValue === 'string' ? nextValue : '')
             }}
             onMount={(editor) => {

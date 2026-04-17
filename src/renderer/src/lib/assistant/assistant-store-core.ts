@@ -22,6 +22,10 @@ import { deriveAssistantRuntimeStatus, INITIAL_ASSISTANT_RUNTIME_STATUS, type As
 import { runAssistantStoreAction } from './assistant-store-action-runner'
 import { selectAssistantStoreSession } from './assistant-store-session-selection'
 const ASSISTANT_DELTA_EVENT_FLUSH_DELAY_MS = 64
+const SNAPSHOT_REFRESH_RECOVERY_ERRORS = new Set([
+    'Assistant session not found.',
+    'Assistant session has no active thread.'
+])
 
 class AssistantStore {
     private state: AssistantStoreState = {
@@ -146,6 +150,18 @@ class AssistantStore {
         await this.hydrate()
     }
 
+    async refreshStatus() {
+        try {
+            const status = await window.devscope.assistant.getStatus()
+            this.setState({ status, error: null })
+            return { success: true as const, status }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to refresh assistant status.'
+            this.setState({ error: message })
+            return { success: false as const, error: message }
+        }
+    }
+
     async createSession(input?: AssistantCreateSessionInput) {
         const previousSnapshot = this.state.snapshot
         this.setState((current) => {
@@ -165,6 +181,15 @@ class AssistantStore {
                     status: deriveAssistantRuntimeStatus(previousSnapshot, current.status)
                 }))
                 return result
+            }
+            const selectionResult = await this.selectSession(result.sessionId, { force: true })
+            if (!selectionResult.success) {
+                this.setState((current) => ({
+                    error: selectionResult.error,
+                    snapshot: previousSnapshot,
+                    status: deriveAssistantRuntimeStatus(previousSnapshot, current.status)
+                }))
+                return selectionResult
             }
             return result
         } catch (error) {
@@ -335,7 +360,11 @@ class AssistantStore {
     }
 
     async connect(options?: AssistantConnectOptions) {
-        return this.runAction(() => window.devscope.assistant.connect(options), true)
+        const result = await this.runAction(() => window.devscope.assistant.connect(options), true)
+        if (!result.success && SNAPSHOT_REFRESH_RECOVERY_ERRORS.has(result.error)) {
+            await this.hydrate()
+        }
+        return result
     }
 
     async disconnect(sessionId?: string) {
@@ -510,16 +539,23 @@ class AssistantStore {
 
     private async runAction<T = Record<string, unknown>>(
         work: () => Promise<DevScopeResult<T>>,
-        _refreshStatusAfter: boolean
+        refreshStatusAfter: boolean
     ): Promise<DevScopeResult<T>> {
-        return runAssistantStoreAction(this.setState, work)
+        const result = await runAssistantStoreAction(this.setState, work)
+        if (refreshStatusAfter) {
+            try {
+                const status = await window.devscope.assistant.getStatus()
+                this.setState({ status })
+            } catch {}
+        }
+        return result
     }
 
-    private setState(
+    private setState = (
         nextState:
             | Partial<AssistantStoreState>
             | ((current: AssistantStoreState) => Partial<AssistantStoreState>)
-    ) {
+    ) => {
         const partial = typeof nextState === 'function' ? nextState(this.state) : nextState
         const partialKeys = Object.keys(partial) as Array<keyof AssistantStoreState>
         if (partialKeys.length === 0) return

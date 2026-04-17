@@ -6,6 +6,7 @@ import { useSettings } from '@/lib/settings'
 import type { PreviewFile, PreviewTab } from './types'
 import type { ViewportPreset } from './viewport'
 import { PreviewExpandedHeaderBar } from './PreviewExpandedHeaderBar'
+import { PreviewHeaderEditMenu } from './PreviewHeaderEditMenu'
 import { PreviewHeaderStatusActions } from './PreviewHeaderStatusActions'
 import { PreviewHeaderHtmlControls } from './PreviewHeaderHtmlControls'
 
@@ -201,6 +202,7 @@ function PreviewWindowedHeader({
     const activeIconButtonClass = `${iconButtonBaseClass} border-white/15 bg-white/10 text-white`
     const modeToggleGroupClass = 'flex items-center gap-1 rounded-lg bg-white/5 p-1 shrink-0'
     const modeToggleButtonClass = 'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all'
+    const showWindowedEditMenu = !isMediaFile && !previewModeEnabled && isEditable
 
     return (
         <div
@@ -260,6 +262,20 @@ function PreviewWindowedHeader({
                             <span className="sr-only">Edit</span>
                         </button>
                     </div>
+                ) : null}
+
+                {showWindowedEditMenu ? (
+                    <PreviewHeaderEditMenu
+                        previewModeEnabled={previewModeEnabled}
+                        isEditable={isEditable}
+                        isEditMode={isEditMode}
+                        isDirty={isDirty}
+                        isSaving={isSaving}
+                        loadingEditableContent={loadingEditableContent}
+                        onModeChange={onModeChange}
+                        onSave={onSave}
+                        onRevert={onRevert}
+                    />
                 ) : null}
 
                 {!isMediaFile && (canUseTerminal || canRunPython) ? (

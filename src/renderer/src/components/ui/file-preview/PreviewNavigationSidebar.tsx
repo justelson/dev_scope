@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, FolderOpen, ListTree, PanelLeft } from 'lucide-react'
 import type { DevScopeFileTreeNode } from '@shared/contracts/devscope-project-contracts'
+import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
 import { useSettings } from '@/lib/settings'
 import { cn, getFileExtension } from '@/lib/utils'
 import type { OutlineItem, OutlineItemKind } from './modalShared'
@@ -300,7 +301,10 @@ export function PreviewNavigationSidebar({
                             onDoubleClick={() => { void reload() }}
                             title={activeFolderPath ? `${activeFolderPath}\nDouble-click to refresh` : 'No folder context'}
                         >
-                            <div className="min-w-0 flex-1 truncate text-[11px] text-white/55">
+                            <div
+                                className="min-w-0 flex-1 truncate text-[11px] text-white/55"
+                                style={{ direction: 'rtl', textAlign: 'left' }}
+                            >
                                 {activeFolderPath || 'No folder context'}
                             </div>
                             <button

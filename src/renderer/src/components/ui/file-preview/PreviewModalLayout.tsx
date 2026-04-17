@@ -2,9 +2,7 @@ import { cn } from '@/lib/utils'
 import PreviewBody from './PreviewBody'
 import PreviewErrorBoundary from './PreviewErrorBoundary'
 import PreviewModalHeader from './PreviewModalHeader'
-import { VIEWPORT_PRESETS, type ViewportPreset } from './viewport'
 import { PreviewModalDialogs } from './PreviewModalDialogs'
-import { PreviewFloatingInfo, type PreviewFloatingInfoChip } from './PreviewFloatingInfo'
 import { PreviewNavigationSidebar } from './PreviewNavigationSidebar'
 import { PreviewExpandedWorkspace } from './PreviewExpandedWorkspace'
 import { PreviewInspectorSidebar } from './PreviewInspectorSidebar'
@@ -67,8 +65,6 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
         onOpenInBrowser,
         gitDiffText,
         gitDiffSummary,
-        liveDiffPreview,
-        totalFileLines,
         handleModeChange,
         handleSave,
         handleRevert,
@@ -119,85 +115,14 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
     } = props
 
     const isMediaFile = file.type === 'image' || file.type === 'video' || file.type === 'audio'
-    const isEditMode = mode === 'edit'
-    const hasUnsavedChanges = isEditMode && isDirty
+    const previewSurfaceBackgroundClass = file.type === 'md' && mode === 'preview'
+        ? 'bg-sparkle-card'
+        : 'bg-sparkle-bg'
     const lockPreviewBodyHeight = mode === 'edit'
         || isCsv
         || isHtml
         || hasBottomPanel
-    const shouldStretchPreviewBody = lockPreviewBodyHeight || isMediaFile || file.type === 'md'
-    const showUnsavedDiffSummary = hasUnsavedChanges && !!liveDiffPreview
-    const showGitSummary = !!gitDiffSummary && !showUnsavedDiffSummary
-    const viewportMetaLabel = isHtml && mode !== 'edit' && viewport !== 'responsive'
-        ? `${presetConfig.width}x${presetConfig.height}`
-        : undefined
-    const floatingInfoChips: PreviewFloatingInfoChip[] = !isMediaFile
-        ? [
-            ...(canRunPython
-                ? [{
-                    label:
-                        pythonRunState === 'success'
-                            ? 'Run OK'
-                            : pythonRunState === 'failed'
-                                ? 'Run Failed'
-                                : pythonRunState === 'stopped'
-                                    ? 'Run Stopped'
-                                    : pythonRunState === 'running'
-                                        ? 'Running'
-                                        : 'Idle',
-                    className: `rounded px-2 py-1 text-[10px] font-semibold uppercase ${pythonRunState === 'success'
-                        ? 'bg-emerald-500/20 text-emerald-300'
-                        : pythonRunState === 'failed'
-                            ? 'bg-red-500/20 text-red-300'
-                            : pythonRunState === 'stopped'
-                                ? 'bg-amber-500/20 text-amber-300'
-                                : pythonRunState === 'running'
-                                    ? 'bg-sky-500/20 text-sky-300'
-                                    : 'bg-white/10 text-white/60'}`
-                }]
-                : []),
-            ...(showGitSummary
-                ? [
-                    {
-                        label: gitDiffSummary?.status ? gitDiffSummary.status.charAt(0).toUpperCase() + gitDiffSummary.status.slice(1) : 'Unknown',
-                        className: `rounded px-2 py-1 text-[10px] font-semibold uppercase ${!gitDiffSummary
-                            ? 'bg-white/10 text-white/60'
-                            : gitDiffSummary.status === 'added'
-                                ? 'bg-[#73C991]/20 text-[#73C991]'
-                                : gitDiffSummary.status === 'deleted'
-                                    ? 'bg-[#FF6B6B]/20 text-[#FF6B6B]'
-                                    : gitDiffSummary.status === 'renamed'
-                                        ? 'bg-blue-500/20 text-blue-300'
-                                        : gitDiffSummary.status === 'modified'
-                                            ? 'bg-[#E2C08D]/20 text-[#E2C08D]'
-                                            : 'bg-white/10 text-white/60'}`
-                    },
-                    { label: `+${gitDiffSummary?.additions ?? 0}`, className: 'rounded bg-emerald-500/10 px-1.5 py-1 text-[10px] text-emerald-300' },
-                    { label: `-${gitDiffSummary?.deletions ?? 0}`, className: 'rounded bg-red-500/10 px-1.5 py-1 text-[10px] text-red-300' },
-                    { label: `${totalFileLines} lines`, className: 'rounded bg-white/5 px-1.5 py-1 text-[10px] text-white/50' }
-                ]
-                : []),
-            ...(showUnsavedDiffSummary && liveDiffPreview
-                ? [
-                    { label: 'Unsaved', className: 'rounded bg-sky-500/20 px-2 py-1 text-[10px] font-semibold uppercase text-sky-300' },
-                    { label: `+${liveDiffPreview.additions}`, className: 'rounded bg-emerald-500/10 px-1.5 py-1 text-[10px] text-emerald-300' },
-                    { label: `-${liveDiffPreview.deletions}`, className: 'rounded bg-red-500/10 px-1.5 py-1 text-[10px] text-red-300' }
-                ]
-                : []),
-            {
-                label: [
-                    file.type,
-                    isEditMode ? 'edit' : null,
-                    isHtml && !isEditMode ? 'rendered' : null,
-                    viewportMetaLabel
-                ].filter(Boolean).join(' / '),
-                className: 'rounded bg-white/5 px-2 py-1 text-[10px] uppercase text-white/30'
-            },
-            ...(hasUnsavedChanges && !showUnsavedDiffSummary
-                ? [{ label: 'Unsaved', className: 'rounded bg-amber-500/15 px-1.5 py-1 text-[10px] text-amber-200' }]
-                : [])
-        ]
-        : []
+    const shouldStretchPreviewBody = lockPreviewBodyHeight || isMediaFile
 
     const isWindowShell = shellMode === 'window'
 
@@ -288,11 +213,11 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
             centerHtmlRenderedPreview={centerHtmlRenderedPreview}
             isCompactHtmlViewport={isCompactHtmlViewport}
             overflowLocked={mode === 'edit' || isCsv || isHtml || hasBottomPanel}
+            surfaceBackgroundClass={previewSurfaceBackgroundClass}
             shouldStretchPreviewBody={shouldStretchPreviewBody}
             hasBottomPanel={hasBottomPanel}
             mode={mode}
             previewContent={renderPreviewBody(true)}
-            floatingInfoChips={floatingInfoChips}
         />
     )
 
@@ -382,7 +307,8 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
                         <div
                             ref={previewSurfaceRef}
                             className={cn(
-                                'h-full w-full custom-scrollbar flex items-stretch justify-center bg-sparkle-bg',
+                                'h-full w-full custom-scrollbar flex items-stretch justify-center',
+                                previewSurfaceBackgroundClass,
                                 isMediaFile
                                     ? 'p-0'
                                     : flushResponsiveHtmlPreview
@@ -393,10 +319,9 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
                                     : 'overflow-auto'
                             )}
                             style={{ overscrollBehavior: 'contain' }}
-                        >
+                    >
                             <div className={cn('w-full flex flex-col', shouldStretchPreviewBody ? 'h-full min-h-0' : 'min-h-full')}><div className={cn(shouldStretchPreviewBody && 'min-h-0', hasBottomPanel ? 'flex-1' : (shouldStretchPreviewBody ? 'h-full' : ''), hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : '', centerHtmlRenderedPreview ? 'flex items-center justify-center' : '')}>{renderPreviewBody(false)}</div></div>
                         </div>
-                        <PreviewFloatingInfo chips={floatingInfoChips} />
                     </div>
                 )}
                 {pythonPanel}

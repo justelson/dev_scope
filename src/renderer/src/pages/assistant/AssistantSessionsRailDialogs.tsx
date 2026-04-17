@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { Edit2 } from 'lucide-react'
+import { Edit2, Loader2 } from 'lucide-react'
 import type { AssistantPlaygroundState, AssistantSession } from '@shared/assistant/contracts'
 import type { DevScopeFolderItem } from '@shared/contracts/devscope-api'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -41,14 +41,27 @@ export function PlaygroundLabModal(props: {
         onSubmit
     } = props
     if (!open || typeof document === 'undefined') return null
+    const handleRequestClose = () => {
+        if (creating) return
+        onClose()
+    }
     const registeredLabByPath = new Map(playground.labs.map((lab) => [lab.rootPath, lab]))
     const hasExistingFolders = existingRootFolders.length > 0
     const submitDisabled = creating
         || (source === 'git-clone' && !repoUrl.trim())
         || (source === 'existing-folder' && !selectedExistingFolderPath && hasExistingFolders)
+    const submitLabel = creating
+        ? source === 'git-clone'
+            ? 'Cloning Repo...'
+            : source === 'existing-folder'
+                ? 'Preparing Chat...'
+                : 'Creating Lab...'
+        : source === 'existing-folder' && registeredLabByPath.get(selectedExistingFolderPath)
+            ? 'Open Lab Chat'
+            : 'Create Lab'
 
     return createPortal(
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" onClick={handleRequestClose}>
             <div className="absolute inset-0 bg-black/60 backdrop-blur-md animate-fadeIn" />
             <div className="relative w-full max-w-md overflow-hidden rounded-[24px] border border-white/10 bg-sparkle-card shadow-2xl animate-scaleIn" onClick={(event) => event.stopPropagation()}>
                 <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[var(--accent-primary)]/40 via-[var(--accent-primary)]/10 to-transparent" />
@@ -64,12 +77,14 @@ export function PlaygroundLabModal(props: {
                             <button
                                 key={value}
                                 type="button"
+                                disabled={creating}
                                 onClick={() => onChangeSource(value)}
                                 className={cn(
                                     'rounded-lg border px-2 py-2 text-xs font-medium transition-colors',
                                     source === value
                                         ? 'border-white/20 bg-white/[0.08] text-sparkle-text'
-                                        : 'border-white/10 bg-white/[0.02] text-sparkle-text-muted/70 hover:bg-white/[0.04] hover:text-sparkle-text'
+                                        : 'border-white/10 bg-white/[0.02] text-sparkle-text-muted/70 hover:bg-white/[0.04] hover:text-sparkle-text',
+                                    creating && 'cursor-not-allowed opacity-55 hover:bg-white/[0.02] hover:text-sparkle-text-muted/70'
                                 )}
                             >
                                 {label}
@@ -79,6 +94,7 @@ export function PlaygroundLabModal(props: {
                     <div className="space-y-3">
                         <input
                             value={title}
+                            disabled={creating}
                             onChange={(event) => onChangeTitle(event.target.value)}
                             className="w-full rounded-xl border border-white/10 bg-sparkle-bg px-4 py-3 text-sm text-sparkle-text outline-none transition-all focus:border-[var(--accent-primary)]/40 focus:ring-4 focus:ring-[var(--accent-primary)]/10"
                             placeholder="Lab name"
@@ -87,6 +103,7 @@ export function PlaygroundLabModal(props: {
                         {source === 'git-clone' ? (
                             <input
                                 value={repoUrl}
+                                disabled={creating}
                                 onChange={(event) => onChangeRepoUrl(event.target.value)}
                                 className="w-full rounded-xl border border-white/10 bg-sparkle-bg px-4 py-3 text-sm text-sparkle-text outline-none transition-all focus:border-[var(--accent-primary)]/40 focus:ring-4 focus:ring-[var(--accent-primary)]/10"
                                 placeholder="https://github.com/owner/repo.git"
@@ -106,12 +123,14 @@ export function PlaygroundLabModal(props: {
                                                 <button
                                                     key={folder.path}
                                                     type="button"
+                                                    disabled={creating}
                                                     onClick={() => onChangeSelectedExistingFolderPath(folder.path)}
                                                     className={cn(
                                                         'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors',
                                                         selectedExistingFolderPath === folder.path
                                                             ? 'bg-white/[0.08] text-sparkle-text'
-                                                            : 'text-sparkle-text-secondary hover:bg-white/[0.04]'
+                                                            : 'text-sparkle-text-secondary hover:bg-white/[0.04]',
+                                                        creating && 'cursor-not-allowed opacity-55 hover:bg-transparent'
                                                     )}
                                                 >
                                                     <div className="min-w-0">
@@ -140,8 +159,31 @@ export function PlaygroundLabModal(props: {
                             </div>
                         ) : null}
                     </div>
+                    {creating ? (
+                        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
+                            <div className="flex items-center gap-2 text-sm font-medium text-sparkle-text">
+                                <Loader2 size={15} className="animate-spin text-[var(--accent-primary)]" />
+                                <span>{source === 'git-clone' ? 'Cloning repository...' : 'Preparing lab...'}</span>
+                            </div>
+                            <p className="mt-1 text-xs text-sparkle-text-muted/70">
+                                {source === 'git-clone'
+                                    ? 'The dialog stays open until the clone finishes and the new chat is ready.'
+                                    : 'The dialog stays open until the new chat is ready.'}
+                            </p>
+                        </div>
+                    ) : null}
                     <div className="mt-7 flex items-center gap-3">
-                        <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-white/10 bg-sparkle-bg px-4 py-2.5 text-sm font-semibold text-sparkle-text-secondary transition-all hover:border-white/20 hover:bg-sparkle-card-hover hover:text-white">Cancel</button>
+                        <button
+                            type="button"
+                            onClick={handleRequestClose}
+                            disabled={creating}
+                            className={cn(
+                                'flex-1 rounded-xl border border-white/10 bg-sparkle-bg px-4 py-2.5 text-sm font-semibold text-sparkle-text-secondary transition-all hover:border-white/20 hover:bg-sparkle-card-hover hover:text-white',
+                                creating && 'cursor-not-allowed opacity-55 hover:border-white/10 hover:bg-sparkle-bg hover:text-sparkle-text-secondary'
+                            )}
+                        >
+                            Cancel
+                        </button>
                         <button
                             type="button"
                             onClick={onSubmit}
@@ -153,7 +195,7 @@ export function PlaygroundLabModal(props: {
                                     : 'bg-[var(--accent-primary)] text-white hover:bg-[var(--accent-primary)]/90 shadow-[var(--accent-primary)]/20 active:scale-[0.98]'
                             )}
                         >
-                            {creating ? 'Creating...' : source === 'existing-folder' && registeredLabByPath.get(selectedExistingFolderPath) ? 'Open Lab Chat' : 'Create Lab'}
+                            {submitLabel}
                         </button>
                     </div>
                 </div>

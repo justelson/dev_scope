@@ -396,7 +396,7 @@ export function AssistantSessionsRail({
                             onDeleteSession={(sessionId) => onDeleteSession(sessionId)}
                             onSetShowArchivedSessions={setShowArchivedSessions}
                             onSetPlaygroundRoot={(rootPath) => void onSetPlaygroundRoot(rootPath)}
-                            onCreatePlaygroundLab={(input) => void onCreatePlaygroundLab(input)}
+                            onCreatePlaygroundLab={(input) => onCreatePlaygroundLab(input)}
                             onDeletePlaygroundLab={onDeletePlaygroundLab}
                             onProjectDragStart={handleProjectDragStart}
                             onProjectDragEnd={handleProjectDragEnd}

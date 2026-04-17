@@ -1,17 +1,16 @@
 import type { ReactNode, RefObject } from 'react'
 import { cn } from '@/lib/utils'
-import { PreviewFloatingInfo, type PreviewFloatingInfoChip } from './PreviewFloatingInfo'
 
 type PreviewExpandedPreviewAreaProps = {
     previewSurfaceRef: RefObject<HTMLDivElement | null>
     centerHtmlRenderedPreview: boolean
     isCompactHtmlViewport: boolean
     overflowLocked: boolean
+    surfaceBackgroundClass: string
     shouldStretchPreviewBody: boolean
     hasBottomPanel: boolean
     mode: 'preview' | 'edit'
     previewContent: ReactNode
-    floatingInfoChips: PreviewFloatingInfoChip[]
 }
 
 export function PreviewExpandedPreviewArea({
@@ -19,17 +18,18 @@ export function PreviewExpandedPreviewArea({
     centerHtmlRenderedPreview,
     isCompactHtmlViewport,
     overflowLocked,
+    surfaceBackgroundClass,
     shouldStretchPreviewBody,
     hasBottomPanel,
     mode,
-    previewContent,
-    floatingInfoChips
+    previewContent
 }: PreviewExpandedPreviewAreaProps) {
     return (
         <div
             ref={previewSurfaceRef}
             className={cn(
                 'h-full w-full custom-scrollbar flex',
+                surfaceBackgroundClass,
                 centerHtmlRenderedPreview ? 'items-center justify-center' : 'items-stretch justify-start',
                 isCompactHtmlViewport ? 'p-2 sm:p-3' : 'p-0',
                 overflowLocked ? 'overflow-hidden' : 'overflow-auto'
@@ -48,7 +48,6 @@ export function PreviewExpandedPreviewArea({
                     {previewContent}
                 </div>
             </div>
-            <PreviewFloatingInfo chips={floatingInfoChips} />
         </div>
     )
 }

@@ -39,6 +39,8 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         sessionId,
         onSend,
         onStop,
+        onReconnect,
+        onBlockedSend,
         onCancelDirty,
         onOpenAttachmentPreview,
         onAttachmentShelfBoundsChange,
@@ -49,6 +51,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         isThinking,
         thinkingLabel = 'Working...',
         isConnected,
+        isConnecting = false,
         activeModel,
         modelOptions,
         modelsLoading = false,
@@ -64,8 +67,10 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         cancelLabel = 'Cancel',
         showCancelWhenDirty = false,
         queuedMessageCount = 0,
-        queuedMessages = []
+        queuedMessages = [],
+        reconnectPending = false
     } = props
+    const normalizedSessionId = sessionId ?? null
 
     const {
         availableModelOptions,
@@ -75,7 +80,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         initialComposerSessionState,
         legacyComposerSessionState,
         resolvedModel
-    } = useAssistantComposerSessionDefaults({ settings, activeProfile, runtimeMode, interactionMode, activeModel, modelOptions, sessionId })
+    } = useAssistantComposerSessionDefaults({ settings, activeProfile, runtimeMode, interactionMode, activeModel, modelOptions, sessionId: normalizedSessionId })
     const [text, setText] = useState(initialComposerSessionState.draft || '')
     const [inlineMentionTags, setInlineMentionTags] = useState<InlineMentionTag[]>([])
     const [contextFiles, setContextFiles] = useState<ComposerContextFile[]>([])
@@ -112,7 +117,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     const [selectedEffort, setSelectedEffort] = useState<AssistantComposerPreferenceEffort>(initialComposerSessionState.effort || globalDefaultComposerState.effort || 'high')
     const [fastModeEnabled, setFastModeEnabled] = useState(initialComposerSessionState.fastModeEnabled ?? globalDefaultComposerState.fastModeEnabled ?? false)
     const [isCompactFooter, setIsCompactFooter] = useState(compact)
-    const [loadedSessionId, setLoadedSessionId] = useState<string | null>(sessionId || null)
+    const [loadedSessionId, setLoadedSessionId] = useState<string | null>(normalizedSessionId)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const filePickerRef = useRef<HTMLInputElement>(null)
     const composerRootRef = useRef<HTMLDivElement>(null)
@@ -161,12 +166,12 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     latestContextFilesRef.current = contextFiles
 
     const persistComposerSessionStateImmediately = (nextState: AssistantComposerSessionState) =>
-        persistAssistantComposerSessionStateImmediately({ sessionId, nextState, persistedSessionStateRef, persistTimeoutRef })
+        persistAssistantComposerSessionStateImmediately({ sessionId: normalizedSessionId, nextState, persistedSessionStateRef, persistTimeoutRef })
 
     const syncComposerCursor = (element: HTMLTextAreaElement | null) => setComposerCursor(element?.selectionStart ?? 0)
     useAssistantComposerControllerEffects({
         compact,
-        sessionId,
+        sessionId: normalizedSessionId,
         loadedSessionId,
         currentComposerState,
         globalDefaultComposerState,
@@ -257,6 +262,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     })
     const handlers = createAssistantComposerHandlers({
         disabled,
+        disabledReason,
         allowEmptySubmit,
         isConnected,
         isSending,
@@ -304,6 +310,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         removingAttachmentIds,
         setRemovingAttachmentIds,
         textareaRef,
+        onBlockedSend,
         onOptimisticSendClear: () => {
             persistComposerSessionStateImmediately(buildAssistantComposerSessionState({
                 selectedModel,
@@ -332,7 +339,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     })
     const voiceInput = useAssistantSpeechInput({ text, setText, setComposerCursor, textareaRef, disabled, isConnected, engine: settings.assistantTranscriptionEngine })
     const capabilities = useAssistantComposerCapabilitiesState({
-        disabled, disabledReason, isConnected, isSending, isThinking, allowEmptySubmit, text,
+        disabled, disabledReason, isConnected, isConnecting, isSending, isThinking, allowEmptySubmit, text,
         contextFilesLength: contextFiles.length, voiceBusy: voiceInput.isRecording || voiceInput.isTranscribing, hasStopHandler: Boolean(onStop)
     })
     const handleCancelDirty = () => {
@@ -378,9 +385,11 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         showCancelWhenDirty,
         queuedMessageCount,
         queuedMessages,
+        reconnectPending,
         settingsAssistantBusyMessageMode: settings.assistantBusyMessageMode,
         isDirty,
         onStop,
+        onReconnect,
         onOpenAttachmentPreview,
         onAttachmentShelfBoundsChange,
         handleCancelDirty,

@@ -19,11 +19,18 @@ export type AssistantComposerCapabilities = {
     tone: AssistantComposerUxTone
 }
 
+const DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER = 'Ask anything, @tag files/folders'
+const NO_SESSION_PLACEHOLDER = 'Select or start a chat to write here'
+const PROJECT_REQUIRED_PLACEHOLDER = 'Choose a project to start this work chat'
+const GUIDED_INPUT_PLACEHOLDER = 'Choose an option above or write your own answer here'
+const REVIEW_ANSWERS_PLACEHOLDER = 'Review your answers before finishing'
+
 type DeriveAssistantComposerCapabilitiesArgs = {
     mode: AssistantComposerUxMode
     disabled: boolean
     disabledReason?: AssistantComposerDisabledReason | null
     isConnected: boolean
+    isConnecting?: boolean
     isSending: boolean
     isThinking: boolean
     allowEmptySubmit: boolean
@@ -39,14 +46,12 @@ type DeriveAssistantComposerCapabilitiesArgs = {
 export function deriveAssistantComposerDisabledReason(
     args: {
         sessionId?: string | null
-        assistantAvailable?: boolean
         sessionMode?: 'work' | 'playground'
         projectPath?: string | null
     }
 ): AssistantComposerDisabledReason | null {
-    const { sessionId, assistantAvailable, sessionMode, projectPath } = args
+    const { sessionId, sessionMode, projectPath } = args
     if (!sessionId) return 'no-session'
-    if (!assistantAvailable) return 'assistant-unavailable'
     if (sessionMode === 'work' && !String(projectPath || '').trim()) return 'project-required'
     return null
 }
@@ -59,6 +64,7 @@ export function deriveAssistantComposerCapabilities(
         disabled,
         disabledReason = null,
         isConnected,
+        isConnecting = false,
         isSending,
         isThinking,
         allowEmptySubmit,
@@ -84,7 +90,7 @@ export function deriveAssistantComposerCapabilities(
             canStop: false,
             sendDisabled: true,
             showBusySendActions: false,
-            placeholder: 'Select or start a chat to write here',
+            placeholder: NO_SESSION_PLACEHOLDER,
             statusLabel: 'No active chat',
             detailLabel: 'Create or select a thread before composing a message.',
             tone: 'warning'
@@ -101,14 +107,14 @@ export function deriveAssistantComposerCapabilities(
             canStop: false,
             sendDisabled: true,
             showBusySendActions: false,
-            placeholder: 'Choose a project to start this work chat',
+            placeholder: PROJECT_REQUIRED_PLACEHOLDER,
             statusLabel: 'Project required',
             detailLabel: 'Work chats need a project folder before you can send messages.',
             tone: 'warning'
         }
     }
 
-    if (disabledReason === 'assistant-unavailable' || disabled) {
+    if (disabled) {
         return {
             inputDisabled: true,
             attachDisabled: true,
@@ -118,7 +124,7 @@ export function deriveAssistantComposerCapabilities(
             canStop: false,
             sendDisabled: true,
             showBusySendActions: false,
-            placeholder: 'Assistant is unavailable right now',
+            placeholder: DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER,
             statusLabel: 'Assistant unavailable',
             detailLabel: 'Wait for the assistant to become available before sending messages.',
             tone: 'warning'
@@ -126,6 +132,25 @@ export function deriveAssistantComposerCapabilities(
     }
 
     if (mode === 'guided') {
+        if (isConnecting && !isResponding) {
+            return {
+                inputDisabled: isReviewStep,
+                attachDisabled: true,
+                controlsLocked: true,
+                voiceDisabled: true,
+                canSend,
+                canStop: false,
+                sendDisabled: true,
+                showBusySendActions: false,
+                placeholder: REVIEW_ANSWERS_PLACEHOLDER,
+                statusLabel: 'Connecting...',
+                detailLabel: isReviewStep
+                    ? 'Review stays available. Finish once the assistant is connected again.'
+                    : 'Your draft stays here while the assistant session reconnects.',
+                tone: 'info'
+            }
+        }
+
         if (!isConnected && !isResponding) {
             return {
                 inputDisabled: isReviewStep,
@@ -136,9 +161,7 @@ export function deriveAssistantComposerCapabilities(
                 canStop: false,
                 sendDisabled: true,
                 showBusySendActions: false,
-                placeholder: isReviewStep
-                    ? 'Reconnect to finish after reviewing your answers'
-                    : 'Write your answer here while the assistant reconnects...',
+                placeholder: DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER,
                 statusLabel: 'Disconnected',
                 detailLabel: isReviewStep
                     ? 'Review stays available. Reconnect before finishing.'
@@ -157,7 +180,7 @@ export function deriveAssistantComposerCapabilities(
                 canStop: false,
                 sendDisabled: true,
                 showBusySendActions: false,
-                placeholder: 'Submitting your answers...',
+                placeholder: DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER,
                 statusLabel: 'Submitting answers',
                 detailLabel: 'Your guided response is being sent back to the assistant.',
                 tone: 'info'
@@ -174,7 +197,7 @@ export function deriveAssistantComposerCapabilities(
                 canStop: false,
                 sendDisabled: !canSend,
                 showBusySendActions: false,
-                placeholder: 'Review your answers above before finishing',
+                placeholder: DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER,
                 statusLabel: 'Review answers',
                 detailLabel: 'Use Back or Change to revise anything before finishing.',
                 tone: 'info'
@@ -190,9 +213,26 @@ export function deriveAssistantComposerCapabilities(
             canStop: false,
             sendDisabled: !canSend,
             showBusySendActions: false,
-            placeholder: 'Choose an option above or write your own answer here...',
+            placeholder: GUIDED_INPUT_PLACEHOLDER,
             statusLabel: 'Guided input',
             detailLabel: 'Pick one of the suggested answers or write a custom response below.',
+            tone: 'info'
+        }
+    }
+
+    if (isConnecting) {
+        return {
+            inputDisabled: false,
+            attachDisabled: attachmentsLocked,
+            controlsLocked,
+            voiceDisabled: true,
+            canSend,
+            canStop: false,
+            sendDisabled: true,
+            showBusySendActions: false,
+            placeholder: DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER,
+            statusLabel: 'Connecting...',
+            detailLabel: 'Drafting stays available while the assistant session reconnects.',
             tone: 'info'
         }
     }
@@ -207,7 +247,7 @@ export function deriveAssistantComposerCapabilities(
             canStop: false,
             sendDisabled: true,
             showBusySendActions: false,
-            placeholder: 'Draft here while the assistant reconnects...',
+            placeholder: DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER,
             statusLabel: 'Disconnected',
             detailLabel: 'Drafting stays available. Reconnect before sending.',
             tone: 'warning'
@@ -224,7 +264,7 @@ export function deriveAssistantComposerCapabilities(
             canStop,
             sendDisabled: !(canStop || canSend),
             showBusySendActions: canSend && !voiceBusy,
-            placeholder: 'Ask anything, @tag files/folders',
+            placeholder: DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER,
             statusLabel: 'Assistant is working',
             detailLabel: canSend
                 ? 'Queue or force the next message while the current turn is still running.'
@@ -243,7 +283,7 @@ export function deriveAssistantComposerCapabilities(
             canStop: false,
             sendDisabled: true,
             showBusySendActions: false,
-            placeholder: 'Ask anything, @tag files/folders',
+            placeholder: DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER,
             statusLabel: 'Sending message',
             detailLabel: 'You can keep editing the draft while the current send completes.',
             tone: 'info'
@@ -259,7 +299,7 @@ export function deriveAssistantComposerCapabilities(
         canStop: false,
         sendDisabled: !canSend,
         showBusySendActions: false,
-        placeholder: 'Ask anything, @tag files/folders',
+        placeholder: DEFAULT_ASSISTANT_COMPOSER_PLACEHOLDER,
         statusLabel: 'Ready',
         detailLabel: hasContent ? 'Ready to send when you are.' : null,
         tone: 'neutral'

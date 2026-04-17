@@ -39,7 +39,6 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
     logsExpanded: boolean
     selectedSessionId?: string | null
     assistantConnected: boolean
-    assistantAvailable: boolean
     commandPending: boolean
     onClose: () => void
     onShowPlan: () => void
@@ -52,7 +51,7 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
     onShowLogDetails: (activity: AssistantActivity) => void
     onToggleAssistantConnection: () => void
 }) {
-    const { open, compact = false, selectedChatTypeLabel, selectedLocationTypeLabel, selectedProjectPath, selectedProjectLabel, displayProjectPath, showFullProjectPath, projectPathCopied, contextPercentage, contextColor, contextUsedDisplay, contextAvailableDisplay, pendingApprovalsCount, pendingUserInputsCount, sidebarSelectedModel, selectedRuntimeLabel, selectedThinkingLabel, selectedSpeedLabel, sessionCostLabel, sessionCostDisplay, sessionCostTone, sidebarMetricChips, issueActivities, latestIssueGroup, olderIssueGroups, copiedLogId, copyErrorByLogId, allLogsCopied, clearingLogs, logsExpanded, selectedSessionId, assistantConnected, assistantAvailable, commandPending, onClose, onShowPlan, onToggleProjectPath, onCopyProjectPath, onToggleLogsExpanded, onCopyAllLogs, onClearLogs, onCopyLog, onShowLogDetails, onToggleAssistantConnection } = props
+    const { open, compact = false, selectedChatTypeLabel, selectedLocationTypeLabel, selectedProjectPath, selectedProjectLabel, displayProjectPath, showFullProjectPath, projectPathCopied, contextPercentage, contextColor, contextUsedDisplay, contextAvailableDisplay, pendingApprovalsCount, pendingUserInputsCount, sidebarSelectedModel, selectedRuntimeLabel, selectedThinkingLabel, selectedSpeedLabel, sessionCostLabel, sessionCostDisplay, sessionCostTone, sidebarMetricChips, issueActivities, latestIssueGroup, olderIssueGroups, copiedLogId, copyErrorByLogId, allLogsCopied, clearingLogs, logsExpanded, selectedSessionId, assistantConnected, commandPending, onClose, onShowPlan, onToggleProjectPath, onCopyProjectPath, onToggleLogsExpanded, onCopyAllLogs, onClearLogs, onCopyLog, onShowLogDetails, onToggleAssistantConnection } = props
 
     return (
         <div className={cn('relative overflow-hidden transition-all duration-300', open ? 'opacity-100' : 'opacity-0 pointer-events-none')} style={{ width: open ? (compact ? '360px' : '460px') : '0px' }}>
@@ -63,7 +62,7 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
                         <button
                             type="button"
                             onClick={onToggleAssistantConnection}
-                            disabled={!assistantAvailable || commandPending}
+                            disabled={commandPending || (!assistantConnected && !selectedSessionId)}
                             className={cn(
                                 'inline-flex size-7 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                                 assistantConnected

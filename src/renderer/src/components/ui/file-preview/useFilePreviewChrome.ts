@@ -23,7 +23,7 @@ export function useFilePreviewChrome({
     const [rightPanelWidth, setRightPanelWidth] = useState(288)
     const [isResizingPanels, setIsResizingPanels] = useState(false)
     const [csvDistinctColorsEnabled, setCsvDistinctColorsEnabled] = useState(true)
-    const [editorWordWrap, setEditorWordWrap] = useState<'on' | 'off'>('off')
+    const [editorWordWrap, setEditorWordWrap] = useState<'on' | 'off'>('on')
     const [editorMinimapEnabled, setEditorMinimapEnabled] = useState(true)
     const [editorFontSize, setEditorFontSize] = useState(13)
     const [findRequestToken, setFindRequestToken] = useState(0)

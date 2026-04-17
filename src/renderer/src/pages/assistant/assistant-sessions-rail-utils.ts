@@ -1,9 +1,15 @@
 import type { AssistantPlaygroundState, AssistantSession, AssistantThread } from '@shared/assistant/contracts'
+import type { DevScopeResult } from '@shared/contracts/devscope-api'
 import { getAssistantThreadPhase } from '@/lib/assistant/selectors'
 import { getCachedProjectDetails, primeProjectDetailsCache } from '@/lib/projectViewCache'
 import type { AssistantRailMode } from './useAssistantPageSidebarState'
 
 export type AssistantMutationResult = { success: true } | { success: false; error: string }
+export type AssistantCreatePlaygroundLabResult = DevScopeResult<{
+    labId: string
+    sessionId?: string | null
+    playground: AssistantPlaygroundState
+}>
 
 export type AssistantSessionsRailProps = {
     collapsed: boolean
@@ -33,7 +39,7 @@ export type AssistantSessionsRailProps = {
         repoUrl?: string
         existingFolderPath?: string
         openSession?: boolean
-    }) => Promise<unknown> | void
+    }) => Promise<AssistantCreatePlaygroundLabResult> | AssistantCreatePlaygroundLabResult
     onDeletePlaygroundLab: (labId: string) => Promise<AssistantMutationResult>
 }
 

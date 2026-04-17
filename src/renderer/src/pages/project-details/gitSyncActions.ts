@@ -1,7 +1,7 @@
 import { buildGitPublishPlan, describeGitPublishSuccess, type GitPublishPlan } from '@/lib/gitPublishPlanner'
 import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import type { GitActionParams } from './gitActionTypes'
-import { isTransientPushError, summarizePushError } from './gitActionHelpers'
+import { isNonFastForwardPushError, isTransientPushError, summarizePushError } from './gitActionHelpers'
 
 export function createGitSyncActions(params: GitActionParams) {
     const handlePush = async (
@@ -57,6 +57,10 @@ export function createGitSyncActions(params: GitActionParams) {
             }
         } catch (err: any) {
             const rawMessage = String(err?.message || err || 'Failed to push commits')
+            if (isNonFastForwardPushError(rawMessage)) {
+                invalidateProjectGitOverview(params.decodedPath)
+                await params.refreshGitData(false, { mode: 'full' }).catch(() => {})
+            }
             params.showToast(`Failed to push: ${summarizePushError(rawMessage)}`, undefined, undefined, 'error')
         } finally {
             params.setIsPushing(false)

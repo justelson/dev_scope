@@ -182,17 +182,17 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                 fileTreeCount={fileTree.length}
             />
 
-            <div className="grid grid-cols-12 gap-2 px-4 py-2 border-b border-white/5 text-[10px] uppercase tracking-wider text-white/30 font-medium bg-black/10">
-                <div className="col-span-6 flex items-center gap-1 cursor-pointer hover:text-white/50" onClick={() => { setSortBy('name'); setSortAsc(sortBy === 'name' ? !sortAsc : true) }}>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-b border-white/5 bg-black/10 px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-white/30 sm:grid-cols-12">
+                <div className="col-span-1 flex items-center gap-1 cursor-pointer hover:text-white/50 sm:col-span-6" onClick={() => { setSortBy('name'); setSortAsc(sortBy === 'name' ? !sortAsc : true) }}>
                     Name {sortBy === 'name' && (sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
                 </div>
-                <div className="col-span-2 flex items-center gap-1 cursor-pointer hover:text-white/50" onClick={() => { setSortBy('type'); setSortAsc(sortBy === 'type' ? !sortAsc : true) }}>
+                <div className="hidden items-center gap-1 cursor-pointer hover:text-white/50 sm:col-span-2 sm:flex" onClick={() => { setSortBy('type'); setSortAsc(sortBy === 'type' ? !sortAsc : true) }}>
                     Type {sortBy === 'type' && (sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
                 </div>
-                <div className="col-span-2 flex items-center gap-1 cursor-pointer hover:text-white/50" onClick={() => { setSortBy('size'); setSortAsc(sortBy === 'size' ? !sortAsc : true) }}>
+                <div className="hidden items-center gap-1 cursor-pointer hover:text-white/50 sm:col-span-2 sm:flex" onClick={() => { setSortBy('size'); setSortAsc(sortBy === 'size' ? !sortAsc : true) }}>
                     Size {sortBy === 'size' && (sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
                 </div>
-                <div className="col-span-2 text-right">Info</div>
+                <div className="col-span-1 text-right sm:col-span-2">Info</div>
             </div>
 
                 <div
@@ -223,7 +223,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                         )}
                     </div>
                 ) : (
-                    visibleFileList.map(({ node, depth, isExpanded, isFolder, ext, isPreviewable, childInfo }: any) => {
+                    visibleFileList.map(({ node, depth, isExpanded, isFolder, ext, isPreviewable }: any) => {
                         const normalizedNodePath = normalizeFileSystemPath(node.path || '')
                         const isDragTarget = Boolean(
                             normalizedDragOverPath
@@ -243,7 +243,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                             <div
                                 key={node.path}
                                 className={cn(
-                                    "grid grid-cols-12 gap-2 px-4 py-0.5 border-b border-white/5 hover:bg-white/5 transition-colors group cursor-pointer",
+                                    "grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-b border-white/5 px-4 py-0.5 transition-colors group cursor-pointer sm:grid-cols-12 hover:bg-white/5",
                                     node.isHidden && "opacity-50",
                                     isDragTarget && "bg-white/[0.03]",
                                     isDragTargetRoot && "bg-white/[0.06] border-white/20"
@@ -295,7 +295,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                     }
                                 }}
                             >
-                                    <div className="col-span-6 flex items-center gap-2 min-w-0">
+                                    <div className="col-span-1 flex min-w-0 items-center gap-2 sm:col-span-6">
                                         {isFolder ? (
                                             isFolderLoading ? (
                                                 <RefreshCw size={12} className="text-white/40 animate-spin" />
@@ -348,7 +348,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         )}
                                     </div>
 
-                                    <div className="col-span-2 flex items-center">
+                                    <div className="hidden items-center sm:col-span-2 sm:flex">
                                         <span
                                             className={cn("text-[12px] text-white/40 uppercase", effectiveVisual.metaClass)}
                                         >
@@ -356,7 +356,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         </span>
                                     </div>
 
-                                    <div className="col-span-2 flex items-center">
+                                    <div className="hidden items-center sm:col-span-2 sm:flex">
                                         <span
                                             className={cn("text-[12px] text-white/40 font-mono", effectiveVisual.metaClass)}
                                         >
@@ -364,16 +364,7 @@ export function ProjectDetailsFilesTab(props: ProjectDetailsFilesTabProps) {
                                         </span>
                                     </div>
 
-                                    <div className="col-span-2 flex items-center justify-end gap-2">
-                                        {isFolder && childInfo && (
-                                            <span
-                                                className={cn("text-[11px] text-white/30", effectiveVisual.metaClass)}
-                                            >
-                                                {childInfo.folders > 0 && `${childInfo.folders} folders`}
-                                                {childInfo.folders > 0 && childInfo.files > 0 && ', '}
-                                                {childInfo.files > 0 && `${childInfo.files} files`}
-                                            </span>
-                                        )}
+                                    <div className="col-span-1 flex min-w-0 items-center justify-end gap-2 sm:col-span-2">
                                         {isPreviewable && !isFolder && (
                                             <span className="text-[10px] text-[var(--accent-primary)] opacity-0 group-hover:opacity-100 transition-opacity">
                                                 Preview

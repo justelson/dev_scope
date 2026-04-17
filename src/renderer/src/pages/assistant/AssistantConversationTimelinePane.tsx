@@ -96,9 +96,9 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
                     <div
                         ref={props.timelineScrollRef}
                         onScroll={(event) => props.onScrollTimeline(event.currentTarget)}
-                        className="custom-scrollbar relative h-full overflow-y-auto px-4 py-4"
+                        className="custom-scrollbar relative h-full overflow-y-auto overflow-x-hidden"
                     >
-                        <div ref={props.timelineContentRef} className="mx-auto w-full max-w-3xl">
+                        <div ref={props.timelineContentRef} className="mx-auto w-full max-w-3xl px-4 pb-4 pt-0">
                             <AssistantTimeline
                                 messages={props.messages}
                                 activities={props.activities}

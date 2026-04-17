@@ -38,6 +38,7 @@ export function PreviewHeaderEditMenu({
     const canRevert = isEditable && isDirty && !isSaving
     const canSwitchToEdit = isEditable && !loadingEditableContent
     const canToggleMode = previewModeEnabled && (isEditMode || canSwitchToEdit)
+    const canOpenMenuFromPrimary = !previewModeEnabled
 
     const ActiveModeIcon = isEditMode ? Edit3 : Eye
     const activeModeLabel = isEditMode ? 'Edit' : 'Preview'
@@ -96,7 +97,14 @@ export function PreviewHeaderEditMenu({
     }, [])
 
     const handlePrimaryAction = () => {
-        if (!previewModeEnabled) return
+        if (!previewModeEnabled) {
+            if (menuVisible && menuOpen) {
+                closeMenu()
+            } else {
+                openMenu()
+            }
+            return
+        }
         if (isEditMode) {
             onModeChange('preview')
             return
@@ -116,10 +124,10 @@ export function PreviewHeaderEditMenu({
                 <button
                     type="button"
                     onClick={handlePrimaryAction}
-                    disabled={!canToggleMode}
+                    disabled={!canToggleMode && !canOpenMenuFromPrimary}
                     className={cn(
                         'inline-flex h-6 min-w-[112px] items-center gap-1.5 px-2.5 text-[11px] transition-colors',
-                        canToggleMode
+                        canToggleMode || canOpenMenuFromPrimary
                             ? 'text-white/84 hover:bg-white/[0.03] hover:text-white'
                             : 'cursor-not-allowed text-white/32'
                     )}

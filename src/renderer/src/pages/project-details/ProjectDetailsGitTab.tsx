@@ -99,14 +99,12 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         showFetchUpstreamButton,
         canSyncFromUpstream,
         pushAccessIndicator,
-        compactPushSummaryLines,
         currentBranchNeedsPublish,
         showPushAction,
         visibleHistorySource,
         visibleHistoryCommits,
         effectiveHistoryTotalCount,
         totalHistoryPages,
-        unpushedStatsLoading,
         incomingStatsLoading,
         historyLoading,
         shouldHighlightPull,
@@ -273,13 +271,14 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         setInitStep={setInitStep}
                         setShowInitModal={setShowInitModal}
                         showPushAction={showPushAction}
-                        unpushedStatsLoading={unpushedStatsLoading}
-                        currentBranchNeedsPublish={currentBranchNeedsPublish}
-                        compactPushSummaryLines={compactPushSummaryLines}
+                        currentBranch={currentBranch}
+                        branches={branches}
+                        remotes={remotes}
                         hasGitHubRemote={hasGitHubRemote}
                         pullRequestActionLabel={pullRequestActionLabel}
-                        pullRequestActionHint={pullRequestActionHint}
                         pullRequestActionDisabled={!hasGitHubRemote || loadingCurrentBranchPullRequest}
+                        onPushCommits={handlePush}
+                        isPushing={isPushing}
                         onOpenCreatePullRequest={handlePrimaryPullRequestAction}
                         unpushedCommits={unpushedCommits}
                         onCommitClick={handleCommitClick}

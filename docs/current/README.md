@@ -18,6 +18,8 @@ The source-of-truth runtime is the Windows Electron app at the repository root. 
   Scope and layering rules for changes.
 - [`CHANGE_VALIDATION_CHECKLIST.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CHANGE_VALIDATION_CHECKLIST.md)
   Lightweight validation guidance.
+- [`WORKTREE_TO_PR_WORKFLOW.md`](C:\Users\elson\my_coding_play\devscope\docs\current\WORKTREE_TO_PR_WORKFLOW.md)
+  End-to-end playbook for LOC sweeps, modularization, validation, commit batching, and PR filing.
 - [`BRANCH_WORKFLOW.md`](C:\Users\elson\my_coding_play\devscope\docs\current\BRANCH_WORKFLOW.md)
   Default branch intent for `main` versus `dev`.
 - [`RELEASE_VERSIONING.md`](C:\Users\elson\my_coding_play\devscope\docs\current\RELEASE_VERSIONING.md)
