@@ -28,6 +28,8 @@ The source-of-truth runtime is the Windows Electron app at the repository root. 
   Packaging and release operations.
 - [`UI_BORDER_AND_DIVIDER_STANDARDS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\UI_BORDER_AND_DIVIDER_STANDARDS.md)
   Canonical border, divider, and subtle-line treatment for the current UI.
+- [`CONNECTED_DROPDOWN_BUTTON_PATTERN.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CONNECTED_DROPDOWN_BUTTON_PATTERN.md)
+  Canonical attached split-button/dropdown pattern for compact state controls.
 - [`UPDATE_TESTING_PLAYBOOK.md`](C:\Users\elson\my_coding_play\devscope\docs\current\UPDATE_TESTING_PLAYBOOK.md)
   Updater validation workflow.
 - [`BRANDING_ASSETS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\BRANDING_ASSETS.md)

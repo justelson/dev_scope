@@ -1,6 +1,6 @@
 # Change Validation Checklist
 
-Last updated: March 18, 2026
+Last updated: April 19, 2026
 
 Use this checklist for PRs/patches in the current DevScope desktop codebase.
 
@@ -24,9 +24,9 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
   - `/projects/:projectPath`
   - `/folder-browse/:folderPath`
   - `/assistant`
+  - `/terminals`
   - `/settings/about`
 - If enabled in settings, verify:
-  - `/tasks`
   - `/explorer`
 - Verify buttons/controls are aligned and responsive after UI changes.
 - Verify copy/open/refresh actions continue working for path-based flows.
@@ -47,15 +47,15 @@ Given current repo policy in `AGENTS.md`:
 
 Suggested default order when validation is approved:
 
-1. `npm run typecheck`
+1. `bun run typecheck`
 2. targeted package/app-specific checks
 3. full builds only when necessary
 
 If full validation is explicitly approved:
 
 ```bash
-npm run typecheck
-npm run build
+bun run typecheck
+bun run build
 ```
 
 ## 6) Documentation Check

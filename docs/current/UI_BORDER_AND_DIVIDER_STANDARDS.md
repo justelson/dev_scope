@@ -1,6 +1,6 @@
 # UI Border And Divider Standards
 
-Last updated: March 24, 2026
+Last updated: April 19, 2026
 
 This document defines the default border and subtle-separator treatment for the current DevScope UI.
 
@@ -8,6 +8,7 @@ Use it together with:
 
 - `.codex/skills/devscope-ui-standards/SKILL.md`
 - `docs/current/CURRENT_CODEBASE_ARCHITECTURE.md`
+- `docs/current/CONNECTED_DROPDOWN_BUTTON_PATTERN.md` for attached split-button/dropdown controls
 
 ## Primary Rule
 

@@ -1,6 +1,6 @@
 # Current Codebase Architecture
 
-Last validated against code on March 18, 2026.
+Last validated against code on April 19, 2026.
 
 ## Runtime Layers
 
@@ -11,7 +11,7 @@ Last validated against code on March 18, 2026.
 3. Main-process IPC (`src/main/ipc`)
    Handler registration plus domain-specific request translation.
 4. Main-process services (`src/main/*`)
-   Assistant service, project discovery, Git integrations, update manager, and system/task inspection.
+   Assistant service, project discovery, Git integrations, update manager, and process coordination.
 5. Shared contracts (`src/shared`)
    Cross-process contract types and assistant/event contract definitions.
 
@@ -24,8 +24,8 @@ From `src/renderer/src/App.tsx`, the desktop app currently exposes:
 - `/projects/:projectPath`
 - `/folder-browse/:folderPath`
 - `/assistant`
+- `/terminals`
 - `/settings` and its subroutes
-- `/tasks` when task view is enabled in settings
 - `/explorer` when explorer is enabled in settings
 
 Legacy helper routes still redirect into the live assistant/settings surface instead of serving separate deprecated pages.
@@ -38,11 +38,10 @@ Windows shell folder launches route into `/explorer/:folderPath` with a transien
 
 `src/main/ipc/handlers.ts` registers handlers for:
 
-- system metrics and readiness
 - startup settings and AI provider utilities
 - assistant sessions and assistant event streaming
 - project discovery and IDE launch flows
-- project details and running-process/session views
+- project details and per-project process views
 - file tree, file reads, and file writes
 - external terminal launch plus preview-terminal and Python preview flows
 - Windows shell launch routing for file previews and folder opens
@@ -64,12 +63,14 @@ Assistant timeline tool-call cards also support path-aware file navigation: edit
 
 Assistant conversation status labels are phase-driven from the active thread state; generic pending UI actions should not be treated as thread connection state.
 
+Playground chats can now exist without an attached lab. In that state the runtime still has a detached safety cwd, but the model is explicitly instructed to treat the chat as non-filesystem by default and to use guided user-input escalation when it truly needs a real lab/workspace before continuing.
+
 ## Shared Contract Model
 
 Two contract groups matter most:
 
 - `src/shared/contracts/devscope-api.ts`
-  General desktop API surface for projects, files, Git, updates, system, and settings.
+  General desktop API surface for projects, files, Git, updates, terminals, and settings.
 - `src/shared/assistant/contracts/*`
   Assistant IPC names, runtime/session types, and streamed read-model events.
 
@@ -77,11 +78,11 @@ The intended architecture direction remains contract-first: define shared contra
 
 ## Caching and Performance Shape
 
-- Project discovery and indexing are centralized in main-process services with cache/dedupe behavior.
+- Project discovery and deep indexing are centralized in main-process services with cache/dedupe behavior.
 - Renderer route state persists key navigation state in local storage and gates optional tabs through settings.
 - File preview and project details flows use narrower read operations to avoid unnecessary full reloads; the fullscreen preview sidebar now caches per-directory listings and expands folders one level at a time instead of pulling full subtrees on every toggle.
 - Update state is tracked in a dedicated main-process update subsystem instead of being ad hoc renderer state.
-- Assistant streaming batches text deltas before projection/broadcast, coalesces renderer event application behind a short delta-flush window plus animation-frame delivery for non-delta events, batches main-to-renderer assistant event IPC, keeps hot persistence writes off the immediate UI interaction path, avoids deep-cloning hydrated thread history on every renderer store update, splits renderer subscriptions so the assistant page shell, conversation pane, and right-side panels do not all rerender on live timeline churn, relies on a sliding tail history window plus row virtualization/per-row deferred rendering to keep long conversations responsive while still allowing explicit older-history expansion, now uses a Pretext-backed text measurement pipeline for assistant row-height estimation and user-message collapse decisions, virtualizes large markdown file previews by parsed block instead of mounting the entire document body at once, conditionally skips raw-HTML markdown parsing unless a message actually contains HTML-like tags, persists per-turn usage in a dedicated `assistant_turns` ledger that the thread-details panel fetches on demand instead of inflating the hot assistant snapshot, rehydrates the selected thread plus hot running/waiting threads on restore, and in the dev runtime resets incompatible assistant persistence versions instead of carrying stale schema forward.
+- Assistant streaming batches text deltas before projection/broadcast, coalesces renderer event application behind a short delta-flush window plus animation-frame delivery for non-delta events, batches main-to-renderer assistant event IPC, keeps hot persistence writes off the immediate UI interaction path, applies session/thread selection locally in the renderer before requesting uncached thread hydration as a background refresh, avoids deep-cloning hydrated thread history on every renderer store update, splits renderer subscriptions so the assistant page shell, conversation pane, and right-side panels do not all rerender on live timeline churn, relies on a sliding tail history window plus row virtualization/per-row deferred rendering to keep long conversations responsive while still allowing explicit older-history expansion, now uses a Pretext-backed text measurement pipeline for assistant row-height estimation and user-message collapse decisions, virtualizes large markdown file previews by parsed block instead of mounting the entire document body at once, conditionally skips raw-HTML markdown parsing unless a message actually contains HTML-like tags, persists per-turn usage in a dedicated `assistant_turns` ledger that the thread-details panel fetches on demand instead of inflating the hot assistant snapshot, rehydrates the selected thread plus hot running/waiting threads on restore, and in the dev runtime resets incompatible assistant persistence versions instead of carrying stale schema forward.
 
 ## Current Boundary Rules
 

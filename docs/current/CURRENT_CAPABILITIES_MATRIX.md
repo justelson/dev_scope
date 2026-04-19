@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on March 20, 2026.
+Last validated against code on April 19, 2026.
 
 ## Status Legend
 
@@ -9,19 +9,16 @@ Last validated against code on March 20, 2026.
 - `Planning-only`: documented direction, not a first-class implementation in this repo yet.
 - `Archived`: retained for reference only, not part of the live runtime.
 
-## Desktop Shell and System
+## Desktop Shell
 
 - Window controls: `Implemented`
 - Windows File Explorer shell integration for `Open with DevScope Air` file/folder entry points: `Implemented`
-- System overview and detailed system stats: `Implemented`
 - Readiness and developer-tooling detection: `Implemented`
-- Shared metrics bootstrap, subscribe, and read flows: `Implemented`
-- Active task listing: `Implemented`
 
-## Projects and File Workflows
+## Projects, Files, and Terminals
 
 - Folder selection and root scanning: `Implemented`
-- Project indexing across multiple roots: `Implemented`
+- Project indexing across multiple roots with deep recursive discovery and cached rebuilds: `Implemented`
 - Project details read model: `Implemented`
 - Project details progressive shell rendering with inline loading states for README, files, metadata, and refresh hydration: `Implemented`
 - Installed IDE listing and open-in-IDE flows: `Implemented`
@@ -31,13 +28,14 @@ Last validated against code on March 20, 2026.
 - Fullscreen file preview uses an IDE-style workspace shell with a full-height left navigation rail, tab-like top file bar, right-aligned action chrome, and integrated folder/file-map navigation: `Implemented`
 - File writes, rename, move, paste, and delete flows: `Implemented`
 - Preview terminal sessions: `Implemented`
+- Dedicated terminals management page: `Implemented`
 - Python preview runs: `Implemented`
 
 ## Git Workflows
 
 - Read flows for status, history, sync, remotes, tags, stashes, repo owner, publish context, and working diff: `Implemented`
 - Write flows for stage, unstage, discard, branch/tag actions, stash actions, fetch, pull, push, and repo init/setup: `Implemented`
-- AI-generated commit message flow with Groq, Gemini, or Codex model selection: `Implemented`
+- AI-generated commit message flow with Groq, Gemini, or dedicated Codex Git models for commit/PR work: `Implemented`
 - One-click staged `commit -> push -> create/open PR` flow for GitHub remotes: `Implemented`
 - GitHub CLI-backed pull request create/open flow with AI-or-template draft generation: `Implemented`
 
@@ -46,7 +44,7 @@ Last validated against code on March 20, 2026.
 - Assistant page in renderer: `Implemented`
 - Session create/select/rename/archive/delete: `Implemented`
 - Assistant delete flows reconcile auto-titled chats after history removal, drop empty detached Playground chats, and detach/remove lab-linked chats even when the link is path-derived: `Implemented`
-- Assistant sidebar project grouping with newest-first chats for new sessions, remaining-count `Show more` expansion, and drag reordering: `Implemented`
+- Assistant sidebar supports grouped-project or flat-list organization, updated-vs-created ordering, a redesigned per-project mini header with count/recency metadata, remaining-count `Show more` expansion, and drag reordering within the active view: `Implemented`
 - Assistant sidebar subagent tree with collapsible child threads nested under each chat and per-thread selection: `Implemented`
 - Connect/disconnect and model listing: `Implemented`
 - Prompt send and interrupt: `Implemented` (empty composer text falls back to a default send prompt)
@@ -59,6 +57,7 @@ Last validated against code on March 20, 2026.
 - Session project-path association and new thread flow: `Implemented`
 - Session project-path routing auto-classifies folders under the configured Playground root into Playground sessions/labs, and the assistant rail auto-switches to the selected session mode when opening or switching into those chats: `Implemented`
 - Playground mode now requires a configured Playground root before creating labs or starting new Playground chats, with a dedicated root-selection onboarding overlay and disabled new-chat entry points until the root is set: `Implemented`
+- Playground chats can start without an attached lab; in that no-lab state the assistant is instructed to treat the chat as non-filesystem by default and can escalate into a guided lab-create/clone question flow only when it actually needs workspace access: `Implemented`
 - Event subscription and snapshot/status reads: `Implemented`
 - Session switching with cached selected-thread hydration: `Implemented`
 - Subagent runtime threads stream into their own selectable thread views, and parent-thread subagent control events render as dedicated orchestration cards instead of generic tool calls: `Implemented`
@@ -71,6 +70,8 @@ Last validated against code on March 20, 2026.
 - Force-pushed assistant turns keep the conversation in a working state when the runtime session is still live, and assistant turn footers show per-turn elapsed time on the last assistant message when timing data is available: `Implemented`
 - Assistant composer image attachments open the file preview renderer directly from the shelf while non-image attachments keep the local attachment preview flow: `Implemented`
 - Assistant composer pasted text attachments render as compact paper-card previews and open a dedicated text preview modal: `Implemented`
+- Sent clipboard attachments in assistant history now hide generated paste filenames behind generic pasted labels, reuse the composer-style attachment cards inside user bubbles, switch to a sideways attachment rail when many files are attached, open pasted text in a read-only preview modal from chat history, and derive auto-titled chats from the typed body or generic attachment labels instead of serialized attachment metadata: `Implemented`
+- Assistant composer inline `@` mention highlighting currently uses a mirrored overlay on top of a native textarea; pending follow-up is to replace that hack with either plain-text mentions or a true inline-styled editor surface: `Implemented with follow-up`
 - Clipboard-origin assistant attachments keep local previews while prompts serialize a safe `clipboard://` reference instead of the local storage path, and explicitly mark those attachments as not being the active repo/project root or current working directory: `Implemented`
 - Assistant defaults/settings page exposes transcription enablement, browser-vs-local engine selection, local Vosk model download/install prep, and highlight-targeted deep linking from assistant error recovery flows: `Implemented`
 - App-level assistant defaults for starter prompt template, model, chat/plan mode, supervised/full-access mode, reasoning level, and fast mode: `Implemented`
@@ -80,8 +81,8 @@ Last validated against code on March 20, 2026.
 
 - Home page: `Implemented`
 - Projects page: `Implemented`
-- Settings pages: `Implemented`
-- Tasks page: `Implemented (setting-gated)`
+- Settings pages, including a paginated dark-theme appearance library: `Implemented`
+- Terminals page: `Implemented`
 - Explorer page: `Implemented (setting-gated)`
 - Quick-open/command palette support: `Implemented`
 
