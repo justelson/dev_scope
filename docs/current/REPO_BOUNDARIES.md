@@ -1,6 +1,6 @@
 # Repo Boundaries
 
-Last updated: March 19, 2026
+Last updated: April 20, 2026
 
 This document is the focused layer-boundary reference for day-to-day engineering work.
 

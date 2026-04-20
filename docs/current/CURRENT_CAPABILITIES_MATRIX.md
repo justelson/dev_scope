@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on April 19, 2026.
+Last validated against code on April 20, 2026.
 
 ## Status Legend
 
@@ -18,16 +18,18 @@ Last validated against code on April 19, 2026.
 ## Projects, Files, and Terminals
 
 - Folder selection and root scanning: `Implemented`
-- Project indexing across multiple roots with deep recursive discovery and cached rebuilds: `Implemented`
+- Persistent file and folder indexing across multiple roots with cached rebuilds and indexed search reuse: `Implemented`
 - Project details read model: `Implemented`
-- Project details progressive shell rendering with inline loading states for README, files, metadata, and refresh hydration: `Implemented`
+- Project details progressive shell rendering with inline loading states for README, files, metadata, and refresh hydration, including shallow-first file tree loading plus indexed search for deep matches: `Implemented`
 - Installed IDE listing and open-in-IDE flows: `Implemented`
 - File tree reads and path info: `Implemented`
+- Indexed file search reused by command palette, folder browse, and project file-tree search surfaces: `Implemented`
 - File preview reads across text/media/image content: `Implemented`
 - Rendered HTML file preview loads the actual on-disk HTML document through the app file protocol, so relative local JS/CSS/assets referenced by that file resolve in preview mode: `Implemented`
 - Fullscreen file preview uses an IDE-style workspace shell with a full-height left navigation rail, tab-like top file bar, right-aligned action chrome, and integrated folder/file-map navigation: `Implemented`
 - File writes, rename, move, paste, and delete flows: `Implemented`
 - Preview terminal sessions: `Implemented`
+- File preview terminal opens as a bottom overlay panel inside the preview workspace instead of consuming sidebar/layout height, uses panel-style in/out motion, and live session titles now sync from terminal output and command submissions even while sessions continue in the background: `Implemented`
 - Dedicated terminals management page: `Implemented`
 - Python preview runs: `Implemented`
 
@@ -43,7 +45,7 @@ Last validated against code on April 19, 2026.
 
 - Assistant page in renderer: `Implemented`
 - Session create/select/rename/archive/delete: `Implemented`
-- Assistant delete flows reconcile auto-titled chats after history removal, drop empty detached Playground chats, and detach/remove lab-linked chats even when the link is path-derived: `Implemented`
+- Assistant delete flows reconcile auto-titled chats after history removal, drop empty detached Playground chats, and detach or remove lab-linked chats even when the link is path-derived: `Implemented`
 - Assistant sidebar supports grouped-project or flat-list organization, updated-vs-created ordering, a redesigned per-project mini header with count/recency metadata, remaining-count `Show more` expansion, and drag reordering within the active view: `Implemented`
 - Assistant sidebar subagent tree with collapsible child threads nested under each chat and per-thread selection: `Implemented`
 - Connect/disconnect and model listing: `Implemented`
@@ -57,7 +59,7 @@ Last validated against code on April 19, 2026.
 - Session project-path association and new thread flow: `Implemented`
 - Session project-path routing auto-classifies folders under the configured Playground root into Playground sessions/labs, and the assistant rail auto-switches to the selected session mode when opening or switching into those chats: `Implemented`
 - Playground mode now requires a configured Playground root before creating labs or starting new Playground chats, with a dedicated root-selection onboarding overlay and disabled new-chat entry points until the root is set: `Implemented`
-- Playground chats can start without an attached lab; in that no-lab state the assistant is instructed to treat the chat as non-filesystem by default and can escalate into a guided lab-create/clone question flow only when it actually needs workspace access: `Implemented`
+- Playground chats can start without an attached lab; in that no-lab state the assistant is instructed to treat the chat as non-filesystem by default and can escalate into a guided lab-create or clone question flow only when it actually needs workspace access: `Implemented`
 - Event subscription and snapshot/status reads: `Implemented`
 - Session switching with cached selected-thread hydration: `Implemented`
 - Subagent runtime threads stream into their own selectable thread views, and parent-thread subagent control events render as dedicated orchestration cards instead of generic tool calls: `Implemented`

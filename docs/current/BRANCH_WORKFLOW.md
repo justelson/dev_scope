@@ -1,6 +1,6 @@
 # Branch Workflow
 
-Last updated: March 19, 2026
+Last updated: April 20, 2026
 
 This document defines the default branch intent for work in this repository.
 
