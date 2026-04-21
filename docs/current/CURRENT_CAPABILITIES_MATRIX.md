@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on April 20, 2026.
+Last validated against code on April 21, 2026.
 
 ## Status Legend
 
@@ -45,6 +45,8 @@ Last validated against code on April 20, 2026.
 
 - Assistant page in renderer: `Implemented`
 - Session create/select/rename/archive/delete: `Implemented`
+- Explicit session hydration after selection plus deletion fallback that keeps the assistant rail usable when the selected session is removed: `Implemented`
+- Assistant prompt sends queue background session-title generation when the title is still default, so new chats auto-name themselves from the first prompt: `Implemented`
 - Assistant delete flows reconcile auto-titled chats after history removal, drop empty detached Playground chats, and detach or remove lab-linked chats even when the link is path-derived: `Implemented`
 - Assistant sidebar supports grouped-project or flat-list organization, updated-vs-created ordering, a redesigned per-project mini header with count/recency metadata, remaining-count `Show more` expansion, and drag reordering within the active view: `Implemented`
 - Assistant sidebar subagent tree with collapsible child threads nested under each chat and per-thread selection: `Implemented`
@@ -60,6 +62,7 @@ Last validated against code on April 20, 2026.
 - Session project-path routing auto-classifies folders under the configured Playground root into Playground sessions/labs, and the assistant rail auto-switches to the selected session mode when opening or switching into those chats: `Implemented`
 - Playground mode now requires a configured Playground root before creating labs or starting new Playground chats, with a dedicated root-selection onboarding overlay and disabled new-chat entry points until the root is set: `Implemented`
 - Playground chats can start without an attached lab; in that no-lab state the assistant is instructed to treat the chat as non-filesystem by default and can escalate into a guided lab-create or clone question flow only when it actually needs workspace access: `Implemented`
+- Assistant connection recovery banner and retry flow for dropped runtime sessions: `Implemented`
 - Event subscription and snapshot/status reads: `Implemented`
 - Session switching with cached selected-thread hydration: `Implemented`
 - Subagent runtime threads stream into their own selectable thread views, and parent-thread subagent control events render as dedicated orchestration cards instead of generic tool calls: `Implemented`
@@ -85,6 +88,7 @@ Last validated against code on April 20, 2026.
 - Projects page: `Implemented`
 - Settings pages, including a paginated dark-theme appearance library: `Implemented`
 - Terminals page: `Implemented`
+- Legacy `/tasks` route redirects to `Terminals`, which is now the sole live terminal-management surface: `Implemented`
 - Explorer page: `Implemented (setting-gated)`
 - Quick-open/command palette support: `Implemented`
 

@@ -1,6 +1,6 @@
 # Current Codebase Architecture
 
-Last validated against code on April 20, 2026.
+Last validated against code on April 21, 2026.
 
 ## Runtime Layers
 
@@ -39,12 +39,12 @@ Windows shell folder launches route into `/explorer/:folderPath` with a transien
 `src/main/ipc/handlers.ts` registers handlers for:
 
 - startup settings and AI provider utilities
-- assistant sessions, assistant event streaming, and Playground lab flows
-- session title generation and assistant message/thread lifecycle
+- assistant sessions, assistant event streaming, explicit session hydration, and Playground lab flows
+- session title generation, selected-session deletion fallback, and assistant message/thread lifecycle
 - project discovery, indexed file search, and IDE launch flows
 - project details and per-project process views
 - file tree, file reads, and file writes
-- external terminal launch plus preview-terminal and Python preview flows
+- external terminal launch plus preview-terminal and Python preview flows, including live preview-terminal title sync
 - Windows shell launch routing for file previews and folder opens
 - Git read/write operations
 - desktop update state and install actions
@@ -58,13 +58,15 @@ The assistant is part of the active app, not a removed feature.
 - Shared contract: `src/shared/assistant/contracts/*`
 - Renderer route entry: `src/renderer/src/pages/Assistant.tsx`
 
-Current assistant capabilities include session lifecycle, model listing, connect/disconnect, prompt send, interrupt, approval responses, user-input responses, project-path association, Playground root and lab setup, session title generation, attachment persistence, and event subscription.
+Current assistant capabilities include session lifecycle, model listing, connect/disconnect, prompt send, interrupt, approval responses, user-input responses, project-path association, Playground root and lab setup, explicit session hydration, session title generation, attachment persistence, and event subscription.
 
 Assistant timeline tool-call cards also support path-aware file navigation: edited-file rows and plain file-path lines in tool results can open directly into the shared file-preview renderer.
 
 Assistant conversation status labels are phase-driven from the active thread state; generic pending UI actions should not be treated as thread connection state.
 
 Playground chats can now exist without an attached lab. In that state the runtime still has a detached safety cwd, but the model is explicitly instructed to treat the chat as non-filesystem by default and to use guided user-input escalation when it truly needs a real lab/workspace before continuing.
+
+When the selected assistant session is deleted, the runtime now routes through a replacement-input fallback so the rail stays on a live session instead of dropping selection.
 
 ## Shared Contract Model
 

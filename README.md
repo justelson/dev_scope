@@ -53,8 +53,8 @@ Current package version:
 | **Project Discovery** | Scan a main projects root plus additional folders, detect project types, and keep an indexed search cache for fast project/file lookup. |
 | **Project Browsing** | Browse folders, inspect project details, and preview files or project tree changes without leaving the app shell. |
 | **Git Productivity** | View status, diffs, history, branches, remotes, stashes, tags, commits, push state, and repository setup actions. |
-| **Assistant Workflows** | Run assistant sessions with approvals, user input, attachments, Playground labs, and project-aware context. |
-| **Terminal Workspace** | Manage live terminal sessions and preview-terminal runs from the dedicated terminals surface. |
+| **Assistant Workflows** | Run assistant sessions with approvals, user input, attachments, Playground labs, auto-generated chat titles, and project-aware context. |
+| **Terminal Workspace** | Manage live terminal sessions and preview-terminal runs from the dedicated terminals surface; the legacy `/tasks` route now redirects there. |
 | **Desktop Updates** | Check, download, and install release updates through the built-in updater flow. |
 | **Settings Surface** | Configure appearance, behavior, projects, assistant, Git, terminal preferences, logs, and app metadata. |
 
