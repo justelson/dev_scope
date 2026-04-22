@@ -2,13 +2,14 @@ import { memo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
 import { cn } from '@/lib/utils'
-import { Check, ChevronDown, ChevronUp, FileCode2, FileText, GitBranch, ListTodo, Loader2, Lock, LockOpen, MessageSquare, Mic, RefreshCw, SendHorizontal, Square, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, GitBranch, ListTodo, Loader2, Lock, LockOpen, MessageSquare, Mic, RefreshCw, SendHorizontal, Square } from 'lucide-react'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import { formatAssistantModelLabel } from './assistant-model-labels'
 import { OpenAILogo } from './assistant-composer-inline-mentions'
 import { getContentTypeTag, getContextFileMeta, isPastedTextAttachment } from './assistant-composer-utils'
 import type { ComposerContextFile } from './assistant-composer-types'
 import type { MentionCandidate } from './assistant-composer-mentions'
+import { AssistantFileAttachmentCard, AssistantPastedTextCard } from './AssistantAttachmentCards'
 import { AssistantAttachmentImageCard } from './AssistantAttachmentImageCard'
 
 export const ComposerAttachmentsShelf = memo(({
@@ -65,97 +66,28 @@ export const ComposerAttachmentsShelf = memo(({
                                 removing={isRemoving || isEntering}
                             />
                     ) : isPastedText ? (
-                        <article
+                        <AssistantPastedTextCard
                             key={file.id}
-                            data-composer-attachment-item="true"
-                            className={cn(
-                                'group relative overflow-hidden rounded-lg border border-white/10 bg-sparkle-card/95 shadow-lg shadow-black/20 backdrop-blur-xl transition-colors hover:border-white/20 hover:bg-white/[0.05]',
-                                cardWidthClass,
-                                'h-[96px]'
-                            )}
-                            style={{
-                                transition: 'transform 190ms ease, opacity 190ms ease, filter 190ms ease',
-                                transform: isRemoving ? 'translateY(6px) scale(0.82)' : isEntering ? 'translateY(-2px) scale(0.96)' : 'translateY(0) scale(1)',
-                                opacity: isRemoving || isEntering ? 0 : 1,
-                                filter: isRemoving ? 'blur(1px)' : 'blur(0)'
-                            }}
-                        >
-                            <button
-                                type="button"
-                                onClick={handleOpenPastedTextPreview}
-                                className="relative flex h-full w-full flex-col items-center justify-start gap-1.5 p-[6px] text-left"
-                                disabled={isRemoving}
-                                title="Open pasted text"
-                            >
-                                <div className="relative flex h-[64px] w-full items-center justify-center overflow-hidden rounded-[10px] border border-white/10 bg-sparkle-card/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                                    <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-white/8 to-transparent" />
-                                    <FileText size={28} className="relative z-10 text-sparkle-text-secondary" />
-                                </div>
-                                <span className="block w-full text-center text-[10px] font-semibold uppercase tracking-[0.08em] leading-none text-sparkle-text-secondary">
-                                    Pasted Text
-                                </span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={(event) => {
-                                    event.stopPropagation()
-                                    onRemove(file.id)
-                                }}
-                                className="absolute right-1 top-1 shrink-0 rounded-md border border-white/10 bg-black/35 p-1 text-sparkle-text-muted opacity-90 backdrop-blur-sm transition-colors hover:bg-rose-500/10 hover:text-rose-300"
-                                disabled={isRemoving}
-                                title="Remove attachment"
-                            >
-                                <X size={11} />
-                            </button>
-                        </article>
+                            widthClassName={cardWidthClass}
+                            onClick={handleOpenPastedTextPreview}
+                            onRemove={() => onRemove(file.id)}
+                            removable
+                            removing={isRemoving || isEntering}
+                            previewText={file.content || file.previewText}
+                        />
                     ) : (
-                        <article
+                        <AssistantFileAttachmentCard
                             key={file.id}
-                            data-composer-attachment-item="true"
-                            className={cn(
-                                'group relative overflow-hidden rounded-lg border border-white/10 bg-sparkle-card/95 shadow-lg shadow-black/20 backdrop-blur-xl transition-colors hover:border-white/20 hover:bg-white/[0.05]',
-                                cardWidthClass
-                            )}
-                            style={{
-                                transition: 'transform 190ms ease, opacity 190ms ease, filter 190ms ease',
-                                transform: isRemoving ? 'translateY(6px) scale(0.82)' : isEntering ? 'translateY(-4px) scale(0.92)' : 'translateY(0) scale(1)',
-                                opacity: isRemoving || isEntering ? 0 : 1,
-                                filter: isRemoving ? 'blur(1px)' : 'blur(0)'
-                            }}
-                        >
-                            <button
-                                type="button"
-                                onClick={() => onPreview(file)}
-                                className="relative block w-full text-left"
-                                disabled={isRemoving}
-                                title="Open preview"
-                            >
-                                <div className="flex items-start gap-2 p-2">
-                                    <div className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-md border', meta.category === 'code' ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-300' : 'border-white/10 bg-sparkle-bg text-sparkle-text-secondary')}>
-                                        {meta.category === 'code' ? <FileCode2 size={13} /> : <FileText size={13} />}
-                                    </div>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block truncate text-[9px] font-medium text-sparkle-text">{meta.name}</span>
-                                        <span className="block truncate font-mono text-[7px] uppercase tracking-[0.1em] text-sparkle-text-muted">{contentType}</span>
-                                    </span>
-                                </div>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={(event) => {
-                                    event.stopPropagation()
-                                    onRemove(file.id)
-                                }}
-                                className="absolute right-1 top-1 shrink-0 rounded-md border border-white/10 bg-black/35 p-1 text-sparkle-text-muted opacity-90 backdrop-blur-sm transition-colors hover:bg-rose-500/10 hover:text-rose-300"
-                                disabled={isRemoving}
-                                title="Remove attachment"
-                            >
-                                <X size={11} />
-                            </button>
-                            <div className="px-2 pb-1.5 pt-0">
-                                <div className="truncate font-mono text-[8px] text-sparkle-text-muted/80">{file.path}</div>
-                            </div>
-                        </article>
+                            widthClassName={cardWidthClass}
+                            name={meta.name}
+                            contentType={contentType}
+                            category={meta.category}
+                            pathLabel={file.path}
+                            onClick={() => onPreview(file)}
+                            onRemove={() => onRemove(file.id)}
+                            removable
+                            removing={isRemoving || isEntering}
+                        />
                     )
                 )
             })}
@@ -406,27 +338,27 @@ export const ComposerFooterControls = memo(({
                 <AnimatedHeight isOpen={showModelDropdown} duration={220}>
                     <div className="overflow-hidden rounded-xl border border-white/10 bg-sparkle-card shadow-2xl shadow-black/70 backdrop-blur-xl">
                         <div className="flex items-center justify-between border-b border-white/5 px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sparkle-text-muted"><span>Models</span></div>
-                        <div className="px-2.5 py-2"><input value={modelQuery} onChange={(event) => { setModelQuery(event.target.value); setActiveModelIndex(0) }} placeholder="Search models..." className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.03] px-2.5 text-[11px] text-sparkle-text outline-none placeholder:text-sparkle-text-muted/60 focus:border-white/20" /></div>
+                        <div className="px-2.5 py-2"><input value={modelQuery} onChange={(event) => { setModelQuery(event.target.value); setActiveModelIndex(0) }} placeholder="Search models..." className="h-7 w-full rounded-md border border-white/10 bg-white/[0.03] px-2 text-[10px] text-sparkle-text outline-none placeholder:text-sparkle-text-muted/60 focus:border-white/20" /></div>
                         <div className="relative">
-                            {modelCanScrollUp ? <div className="pointer-events-none absolute inset-x-1.5 top-0 z-10 flex h-8 items-start justify-center before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[200%] before:rounded-t-[10px] before:bg-gradient-to-b before:from-sparkle-card before:from-50% before:to-transparent"><ChevronUp size={13} className="relative mt-1 text-sparkle-text-muted/85" /></div> : null}
-                            <div ref={modelListRef} onScroll={(event) => syncScrollAffordanceState(event.currentTarget, setModelCanScrollUp, setModelCanScrollDown)} className="max-h-64 overflow-y-auto px-1.5 pb-6 pt-6">
+                            {modelCanScrollUp ? <div className="pointer-events-none absolute inset-x-1.5 top-0 z-10 flex h-7 items-start justify-center before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[180%] before:rounded-t-[10px] before:bg-gradient-to-b before:from-sparkle-card before:from-50% before:to-transparent"><ChevronUp size={12} className="relative mt-1 text-sparkle-text-muted/85" /></div> : null}
+                            <div ref={modelListRef} onScroll={(event) => syncScrollAffordanceState(event.currentTarget, setModelCanScrollUp, setModelCanScrollDown)} className="max-h-56 overflow-y-auto px-1.5 pb-5 pt-5">
                                 {filteredModelOptions.length === 0 ? <div className="px-2 py-2.5 text-[11px] text-sparkle-text-secondary">No models found.</div> : filteredModelOptions.map((model, index) => {
                                     const isActive = model.id === selectedModel
                                     const isHighlighted = index === activeModelIndex
                                     const isLatestModel = model.id === latestModelId
                                     return (
-                                        <button key={model.id} type="button" data-model-index={index} onClick={() => { setSelectedModel(model.id); setShowModelDropdown(false) }} className={cn('grid min-h-8 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors', isLatestModel ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15' : isActive ? 'bg-white/[0.06] text-sparkle-text' : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text', isHighlighted && !isActive && !isLatestModel && 'bg-white/[0.04] text-sparkle-text')}>
-                                            <OpenAILogo className="h-3 w-3 shrink-0 text-current opacity-70" />
-                                            <span className="min-w-0 truncate text-[12px] font-medium">{formatAssistantModelLabel(model.label || model.id)}</span>
+                                        <button key={model.id} type="button" data-model-index={index} onClick={() => { setSelectedModel(model.id); setShowModelDropdown(false) }} className={cn('grid min-h-7 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 rounded-lg px-2 py-1 text-left transition-colors', isLatestModel ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15' : isActive ? 'bg-white/[0.06] text-sparkle-text' : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text', isHighlighted && !isActive && !isLatestModel && 'bg-white/[0.04] text-sparkle-text')}>
+                                            <OpenAILogo className="h-2.5 w-2.5 shrink-0 text-current opacity-70" />
+                                            <span className="min-w-0 truncate text-[11px] font-medium leading-none">{formatAssistantModelLabel(model.label || model.id)}</span>
                                             <span className="ml-2 flex items-center gap-1">
-                                                {isActive ? <span className="rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-medium text-sparkle-text">Selected</span> : null}
-                                                {isLatestModel ? <span className="rounded border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-300">Latest</span> : null}
+                                                {isActive ? <span className="rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[8px] font-medium leading-none text-sparkle-text">Selected</span> : null}
+                                                {isLatestModel ? <span className="rounded border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-medium leading-none text-emerald-300">Latest</span> : null}
                                             </span>
                                         </button>
                                     )
                                 })}
                             </div>
-                            {modelCanScrollDown ? <div className="pointer-events-none absolute inset-x-1.5 bottom-0 z-10 flex h-8 items-end justify-center before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-[200%] before:rounded-b-[10px] before:bg-gradient-to-t before:from-sparkle-card before:from-50% before:to-transparent"><ChevronDown size={13} className="relative mb-1 text-sparkle-text-muted/85" /></div> : null}
+                            {modelCanScrollDown ? <div className="pointer-events-none absolute inset-x-1.5 bottom-0 z-10 flex h-7 items-end justify-center before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-[180%] before:rounded-b-[10px] before:bg-gradient-to-t before:from-sparkle-card before:from-50% before:to-transparent"><ChevronDown size={12} className="relative mb-1 text-sparkle-text-muted/85" /></div> : null}
                         </div>
                         {modelsError ? <div className="px-3 pb-2"><p className="text-[10px] font-medium text-rose-400">{modelsError}</p></div> : null}
                     </div>

@@ -24,6 +24,7 @@ import {
     formatCompactMetric,
     formatContextMetric,
     getIssueActivities,
+    groupIssueActivities,
     IssueLogDetailsModal,
     resolveUsageMetricTone,
     type LogDetailsTab,
@@ -56,12 +57,6 @@ type ThreadDetailsSelection = {
     activityFeed: AssistantActivity[]
     pendingApprovalsCount: number
     pendingUserInputsCount: number
-}
-
-type IssueActivityGroup = {
-    activity: AssistantActivity
-    activities: AssistantActivity[]
-    count: number
 }
 
 const CLOSED_THREAD_DETAILS_SELECTION: ThreadDetailsSelection = {
@@ -173,6 +168,7 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
     const [showFullProjectPath, setShowFullProjectPath] = useState(false)
     const [projectPathCopied, setProjectPathCopied] = useState(false)
     const [selectedLogActivity, setSelectedLogActivity] = useState<AssistantActivity | null>(null)
+    const [selectedLogActivities, setSelectedLogActivities] = useState<AssistantActivity[] | null>(null)
     const [logDetailsTab, setLogDetailsTab] = useState<LogDetailsTab>('rendered')
     const [copiedLogId, setCopiedLogId] = useState<string | null>(null)
     const [copyErrorByLogId, setCopyErrorByLogId] = useState<Record<string, string | null>>({})
@@ -203,6 +199,7 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
     useEffect(() => {
         if (!props.open) {
             setSelectedLogActivity(null)
+            setSelectedLogActivities(null)
             setLogsExpanded(false)
             setProjectPathCopied(false)
             setShowFullProjectPath(false)
@@ -211,6 +208,7 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
 
     useEffect(() => {
         setSelectedLogActivity(null)
+        setSelectedLogActivities(null)
         setLogsExpanded(false)
         setProjectPathCopied(false)
         setShowFullProjectPath(false)
@@ -327,19 +325,7 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
         return nextActivities
     }, [selection.activityFeed, selection.commandError, selection.latestTurn?.completedAt, selection.latestTurn?.id, selection.latestTurn?.startedAt, selection.selectedSessionUpdatedAt])
 
-    const groupedIssueActivities = useMemo<IssueActivityGroup[]>(() => {
-        const groups: IssueActivityGroup[] = []
-        for (const activity of issueActivities) {
-            const lastGroup = groups[groups.length - 1]
-            if (lastGroup && lastGroup.activity.summary === activity.summary && lastGroup.activity.tone === activity.tone) {
-                lastGroup.count += 1
-                lastGroup.activities.push(activity)
-            } else {
-                groups.push({ activity, activities: [activity], count: 1 })
-            }
-        }
-        return groups
-    }, [issueActivities])
+    const groupedIssueActivities = useMemo(() => groupIssueActivities(issueActivities), [issueActivities])
 
     const latestIssueGroup = groupedIssueActivities[0] || null
     const olderIssueGroups = groupedIssueActivities.slice(1)
@@ -406,8 +392,9 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
         }
     }, [clearCommandError, clearLogsResult, clearingLogs, latestIssueGroup, selection.selectedSessionId])
 
-    const handleShowLogDetails = useCallback((activity: AssistantActivity) => {
+    const handleShowLogDetails = useCallback((activity: AssistantActivity, activities?: AssistantActivity[]) => {
         setSelectedLogActivity(activity)
+        setSelectedLogActivities(activities && activities.length > 0 ? activities : null)
         setLogDetailsTab('rendered')
     }, [])
 
@@ -460,9 +447,13 @@ export function ConnectedAssistantThreadDetailsPanel(props: {
             />
             <IssueLogDetailsModal
                 activity={selectedLogActivity}
+                activities={selectedLogActivities}
                 tab={logDetailsTab}
                 onChangeTab={setLogDetailsTab}
-                onClose={() => setSelectedLogActivity(null)}
+                onClose={() => {
+                    setSelectedLogActivity(null)
+                    setSelectedLogActivities(null)
+                }}
             />
         </>
     )

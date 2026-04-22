@@ -2,7 +2,12 @@ import type { AssistantPlaygroundState, AssistantSession, AssistantThread } from
 import type { DevScopeResult } from '@shared/contracts/devscope-api'
 import { getAssistantThreadPhase } from '@/lib/assistant/selectors'
 import { getCachedProjectDetails, primeProjectDetailsCache } from '@/lib/projectViewCache'
-import type { AssistantRailMode } from './useAssistantPageSidebarState'
+import type {
+    AssistantRailFilterMode,
+    AssistantRailGroupMode,
+    AssistantRailMode,
+    AssistantRailSortMode
+} from './useAssistantPageSidebarState'
 
 export type AssistantMutationResult = { success: true } | { success: false; error: string }
 export type AssistantCreatePlaygroundLabResult = DevScopeResult<{
@@ -16,7 +21,13 @@ export type AssistantSessionsRailProps = {
     width: number
     compact?: boolean
     railMode: AssistantRailMode
+    railGroupMode: AssistantRailGroupMode
+    railSortMode: AssistantRailSortMode
+    railFilterMode: AssistantRailFilterMode
     onRailModeChange: (next: AssistantRailMode) => void
+    onRailGroupModeChange: (next: AssistantRailGroupMode) => void
+    onRailSortModeChange: (next: AssistantRailSortMode) => void
+    onRailFilterModeChange: (next: AssistantRailFilterMode) => void
     sessions: AssistantSession[]
     playground: AssistantPlaygroundState
     backgroundActivitySessions: AssistantSession[]
@@ -48,6 +59,7 @@ export type SessionProjectGroup = {
     label: string
     path: string
     createdAt: string
+    updatedAt: string
     projectIconPath: string | null
     projectType: string | null
     framework: string | null
@@ -144,7 +156,8 @@ export function resolveAssistantThreadStatusPill(
                 colorClass: 'text-sky-400',
                 dotClass: 'bg-sky-400',
                 badgeClass: 'bg-sky-500/[0.12] text-sky-100',
-                pulse: true
+                pulse: true,
+                showLabel: !isActiveThread
             }
         case 'running':
         case 'waiting':
@@ -153,7 +166,8 @@ export function resolveAssistantThreadStatusPill(
                 colorClass: 'text-sky-400',
                 dotClass: 'bg-sky-400',
                 badgeClass: 'bg-sky-500/[0.12] text-sky-100',
-                pulse: true
+                pulse: true,
+                showLabel: !isActiveThread
             }
         case 'waiting-approval':
             return {
@@ -200,6 +214,48 @@ export function resolveAssistantThreadStatusPill(
         default:
             return resolveAssistantThreadRecencyPill(thread, isActiveThread, recencyTierByThreadId)
     }
+}
+
+export function getSessionLastActivityAt(session: AssistantSession): string {
+    const threadUpdatedAt = session.threads.reduce<string | null>((latest, thread) => {
+        if (!latest) return thread.updatedAt
+        return getSortableTimestamp(thread.updatedAt) > getSortableTimestamp(latest) ? thread.updatedAt : latest
+    }, null)
+    return threadUpdatedAt || session.updatedAt || session.createdAt
+}
+
+const RELEVANT_RECENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+export function isRelevantAssistantSession(session: AssistantSession, activeSessionId: string | null): boolean {
+    if (session.id === activeSessionId) return true
+
+    const primaryThread = getPrimarySessionThread(session)
+    if (primaryThread) {
+        const phase = getAssistantThreadPhase(primaryThread)
+        if (phase.key !== 'ready' && phase.key !== 'idle' && phase.key !== 'stopped') return true
+        if (
+            primaryThread.latestTurn?.state === 'completed'
+            && primaryThread.lastSeenCompletedTurnId !== primaryThread.latestTurn.id
+        ) {
+            return true
+        }
+    }
+
+    const lastActivityAt = getSortableTimestamp(getSessionLastActivityAt(session))
+    if (lastActivityAt > 0 && Date.now() - lastActivityAt <= RELEVANT_RECENCY_WINDOW_MS) {
+        return true
+    }
+
+    return false
+}
+
+export function filterAssistantSessions(
+    sessions: AssistantSession[],
+    filterMode: AssistantRailFilterMode,
+    activeSessionId: string | null
+): AssistantSession[] {
+    if (filterMode === 'all') return sessions
+    return sessions.filter((session) => isRelevantAssistantSession(session, activeSessionId))
 }
 
 const NO_PROJECT_KEY = '__assistant-no-project__'
@@ -462,6 +518,7 @@ export function groupSessionsByProject(sessions: AssistantSession[]): SessionPro
         const normalizedPath = resolveSessionProjectPath(session)
         const projectPresentation = resolveProjectPresentation(normalizedPath)
         const key = getProjectKey(normalizedPath)
+        const sessionUpdatedAt = getSessionLastActivityAt(session)
         const existing = groups.get(key)
         if (!existing) {
             groups.set(key, {
@@ -469,6 +526,7 @@ export function groupSessionsByProject(sessions: AssistantSession[]): SessionPro
                 label: getProjectLabel(normalizedPath),
                 path: normalizedPath,
                 createdAt: session.createdAt,
+                updatedAt: sessionUpdatedAt,
                 projectIconPath: projectPresentation.projectIconPath,
                 projectType: projectPresentation.projectType,
                 framework: projectPresentation.framework,
@@ -479,6 +537,9 @@ export function groupSessionsByProject(sessions: AssistantSession[]): SessionPro
         existing.sessions.push(session)
         if (getSortableTimestamp(session.createdAt) > getSortableTimestamp(existing.createdAt)) {
             existing.createdAt = session.createdAt
+        }
+        if (getSortableTimestamp(sessionUpdatedAt) > getSortableTimestamp(existing.updatedAt)) {
+            existing.updatedAt = sessionUpdatedAt
         }
         if (!existing.projectIconPath && projectPresentation.projectIconPath) {
             existing.projectIconPath = projectPresentation.projectIconPath
@@ -494,8 +555,29 @@ export function groupSessionsByProject(sessions: AssistantSession[]): SessionPro
         .map((group) => ({
             ...group,
             sessions: [...group.sessions].sort((left, right) =>
-                getSortableTimestamp(right.createdAt) - getSortableTimestamp(left.createdAt)
+                getSortableTimestamp(getSessionLastActivityAt(right)) - getSortableTimestamp(getSessionLastActivityAt(left))
             )
         }))
-        .sort((left, right) => getSortableTimestamp(right.createdAt) - getSortableTimestamp(left.createdAt))
+        .sort((left, right) => getSortableTimestamp(right.updatedAt) - getSortableTimestamp(left.updatedAt))
+}
+
+export function buildFlatSessionsGroup(sessions: AssistantSession[]): SessionProjectGroup | null {
+    if (sessions.length === 0) return null
+    const sortedSessions = [...sessions].sort((left, right) => {
+        const updatedDelta = getSortableTimestamp(getSessionLastActivityAt(right)) - getSortableTimestamp(getSessionLastActivityAt(left))
+        if (updatedDelta !== 0) return updatedDelta
+        return getSortableTimestamp(right.createdAt) - getSortableTimestamp(left.createdAt)
+    })
+    const newestSession = sortedSessions[0]
+    return {
+        key: '__assistant_flat_list__',
+        label: 'Chats',
+        path: '',
+        createdAt: newestSession?.createdAt || new Date(0).toISOString(),
+        updatedAt: newestSession ? getSessionLastActivityAt(newestSession) : new Date(0).toISOString(),
+        projectIconPath: null,
+        projectType: null,
+        framework: null,
+        sessions: sortedSessions
+    }
 }

@@ -52,11 +52,6 @@ function readAssistantMainSidebarCollapsedPreference(): boolean {
     }
 }
 
-const AUTO_CONNECT_RECOVERY_ERRORS = new Set([
-    'Assistant session not found.',
-    'Assistant session has no active thread.'
-])
-
 export default function AssistantPage() {
     const navigate = useNavigate()
     const actions = useAssistantStoreActions()
@@ -77,8 +72,6 @@ export default function AssistantPage() {
     }, areAssistantPageShellSelectionsEqual)
     const preview = useFilePreview()
     const { isCollapsed: mainSidebarCollapsed, setIsCollapsed: setMainSidebarCollapsed } = useSidebar()
-    const autoConnectAttemptedThreadRef = useRef<string | null>(null)
-    const autoConnectRecoveredThreadRef = useRef<string | null>(null)
     const autoRoutedSelectionRef = useRef<string | null>(null)
     const autoStartedDetachedPlaygroundRef = useRef(false)
     const mainSidebarBeforeAssistantRef = useRef<boolean | null>(null)
@@ -92,6 +85,12 @@ export default function AssistantPage() {
         setLeftSidebarWidth,
         railMode,
         setRailMode,
+        railGroupMode,
+        setRailGroupMode,
+        railSortMode,
+        setRailSortMode,
+        railFilterMode,
+        setRailFilterMode,
         rightPanelMode,
         setRightPanelMode
     } = useAssistantPageSidebarState()
@@ -146,44 +145,6 @@ export default function AssistantPage() {
         autoCollapsedInnerSidebarRef.current = true
         setLeftSidebarCollapsed(true)
     }, [leftSidebarCollapsed, mainSidebarCollapsed, rightPanelMode, setLeftSidebarCollapsed])
-
-    useEffect(() => {
-        if (shell.assistantConnected) {
-            autoConnectAttemptedThreadRef.current = null
-            autoConnectRecoveredThreadRef.current = null
-        }
-    }, [shell.assistantConnected])
-
-    useEffect(() => {
-        if (!shell.bootstrapped || shell.assistantConnected || shell.commandPending) return
-        const sessionId = shell.selectedSessionId
-        const threadId = shell.activeThreadId
-        if (!sessionId) {
-            autoConnectAttemptedThreadRef.current = null
-            autoConnectRecoveredThreadRef.current = null
-            return
-        }
-        const threadConnectKey = `${sessionId}:${threadId || 'pending-thread'}`
-        if (autoConnectAttemptedThreadRef.current === threadConnectKey) return
-        autoConnectAttemptedThreadRef.current = threadConnectKey
-        let cancelled = false
-        void (async () => {
-            const result = await actions.connectResult(sessionId)
-            if (
-                cancelled
-                || result.success
-                || !AUTO_CONNECT_RECOVERY_ERRORS.has(result.error)
-                || autoConnectRecoveredThreadRef.current === threadConnectKey
-            ) {
-                return
-            }
-            autoConnectRecoveredThreadRef.current = threadConnectKey
-            autoConnectAttemptedThreadRef.current = null
-        })()
-        return () => {
-            cancelled = true
-        }
-    }, [actions, shell.activeThreadId, shell.assistantConnected, shell.bootstrapped, shell.commandPending, shell.selectedSessionId])
 
     useEffect(() => {
         const sessionId = shell.selectedSessionId
@@ -337,7 +298,13 @@ export default function AssistantPage() {
                         collapsed={leftSidebarCollapsed}
                         width={sessionSidebarWidth}
                         railMode={railMode}
+                        railGroupMode={railGroupMode}
+                        railSortMode={railSortMode}
+                        railFilterMode={railFilterMode}
                         onRailModeChange={setRailMode}
+                        onRailGroupModeChange={setRailGroupMode}
+                        onRailSortModeChange={setRailSortMode}
+                        onRailFilterModeChange={setRailFilterMode}
                         onWidthChange={setLeftSidebarWidth}
                         onShowToast={showToast}
                     />
@@ -349,6 +316,7 @@ export default function AssistantPage() {
                             leftSidebarCollapsed={leftSidebarCollapsed}
                             fallbackSessionMode={railMode}
                             playgroundRootMissing={railMode === 'playground' && !shell.playgroundRootPath}
+                            autoStartDetachedPlaygroundChat={railMode === 'playground' && Boolean(shell.playgroundRootPath)}
                             onToggleLeftSidebar={handleToggleAssistantLeftSidebar}
                             onChoosePlaygroundRoot={handleChoosePlaygroundRoot}
                             onStartDetachedPlaygroundChat={handleStartDetachedPlaygroundChat}
@@ -400,6 +368,7 @@ export default function AssistantPage() {
                     previewBytes={preview.previewBytes}
                     modifiedAt={preview.previewModifiedAt}
                     projectPath={shell.selectedProjectPath || undefined}
+                    disableFullscreen
                     onOpenLinkedPreview={preview.openPreview}
                     mediaItems={preview.previewMediaItems}
                     onClose={preview.closePreview}

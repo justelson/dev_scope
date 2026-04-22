@@ -1,4 +1,4 @@
-import type { AssistantInteractionMode, AssistantRuntimeMode } from '@shared/assistant/contracts'
+import type { AssistantInteractionMode, AssistantRuntimeMode, AssistantTurnUsage } from '@shared/assistant/contracts'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import type { AssistantBusyMessageMode } from '@/lib/settings'
 
@@ -37,6 +37,7 @@ export type AssistantComposerSendOptions = {
 export type AssistantQueuedComposerMessage = {
     id: string
     prompt: string
+    contextFiles: ComposerContextFile[]
     dispatchMode: 'queue' | 'force'
     status: 'queued' | 'paused'
 }
@@ -48,6 +49,7 @@ export type AssistantComposerProps = {
     onSend: (prompt: string, contextFiles: ComposerContextFile[], options: AssistantComposerSendOptions) => Promise<boolean>
     onStop?: () => Promise<void> | void
     onReconnect?: () => Promise<void> | void
+    onOverflowWheel?: (deltaY: number) => void
     onBlockedSend?: (message: string) => void
     onCancelDirty?: () => void
     onOpenAttachmentPreview?: (
@@ -81,6 +83,10 @@ export type AssistantComposerProps = {
     queuedMessageCount?: number
     queuedMessages?: AssistantQueuedComposerMessage[]
     onForceQueuedMessage?: (messageId: string) => Promise<void> | void
+    onDeleteQueuedMessage?: (messageId: string) => Promise<void> | void
+    onMoveQueuedMessage?: (messageId: string, targetMessageId: string) => Promise<void> | void
+    onUpdateQueuedMessage?: (messageId: string, prompt: string) => Promise<void> | void
     busyMessageMode?: AssistantBusyMessageMode
     reconnectPending?: boolean
+    latestTurnUsage?: AssistantTurnUsage | null
 }

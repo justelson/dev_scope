@@ -1,20 +1,25 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, CircleDot, Copy, FileImage, FileText, Loader2, Trash2 } from 'lucide-react'
-import type { AssistantMessage, AssistantProposedPlan, AssistantSessionTurnUsageEntry } from '@shared/assistant/contracts'
+import { memo, useEffect, useMemo, useState } from 'react'
+import { Check, Copy, Loader2, Trash2 } from 'lucide-react'
+import type { AssistantActivity, AssistantMessage, AssistantProposedPlan, AssistantSessionTurnUsageEntry } from '@shared/assistant/contracts'
+import type { ComposerContextFile } from './assistant-composer-types'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import type { AssistantTextStreamingMode } from '@/lib/settings'
 import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
 import { getFileUrl } from '@/components/ui/file-preview/utils'
 import { cn } from '@/lib/utils'
 import { formatAssistantDateTime } from '@/lib/assistant/selectors'
+import AssistantAttachmentPreviewModal from './AssistantAttachmentPreviewModal'
+import { AssistantFileAttachmentCard, AssistantPastedTextCard } from './AssistantAttachmentCards'
 import { AssistantAttachmentImageCard } from './AssistantAttachmentImageCard'
 import { JulianLogo, OpenAILogo, T3CodeLogo } from './AssistantBrandMarks'
 import { CollapsibleUserMessageBody, StreamingAssistantText } from './AssistantTimelineText'
+import { getContentTypeTag, getContextFileMeta, toKbLabel } from './assistant-composer-utils'
 import {
     areMessagesEqual,
     canRenderAttachmentImage,
     copyTextToClipboard,
     formatWorkingTimer,
+    getContextCompactionStatus,
     isClipboardAttachmentReference,
     parseUserMessageAttachments
 } from './assistant-timeline-helpers'
@@ -23,6 +28,7 @@ import { useAssistantVisibleText } from './useAssistantVisibleText'
 import { TimelineProposedPlan } from './AssistantTimelineProposedPlan'
 
 export { TimelineToolCallList } from './AssistantTimelineToolCalls'
+export { TimelineIssueList } from './AssistantTimelineIssueList'
 export { TimelineProposedPlan } from './AssistantTimelineProposedPlan'
 
 function getAttachmentPreviewTarget(attachmentName: string, attachmentPath: string): { name: string; ext: string } {
@@ -77,6 +83,7 @@ export const TimelineMessage = memo(({
     const [resolvedClipboardAttachmentPaths, setResolvedClipboardAttachmentPaths] = useState<Record<string, string>>({})
     const [copied, setCopied] = useState(false)
     const [nowIso, setNowIso] = useState(() => new Date().toISOString())
+    const [previewAttachment, setPreviewAttachment] = useState<ComposerContextFile | null>(null)
     const visibleAssistantText = useAssistantVisibleText(message.text || '', Boolean(message.streaming), assistantTextStreamingMode)
 
     useEffect(() => {
@@ -148,8 +155,9 @@ export const TimelineMessage = memo(({
         const assistantText = message.streaming ? (visibleAssistantText || ' ') : (message.text || ' ')
         const renderedAssistantText = stripProposedPlanBlocks(assistantText) || (message.streaming ? ' ' : '')
         if (!renderedAssistantText.trim() && !message.streaming) return null
+
         return (
-            <div className="max-w-4xl py-1">
+            <div className="group max-w-4xl py-1">
                 {message.streaming ? (
                     <StreamingAssistantText
                         content={renderedAssistantText || ' '}
@@ -163,9 +171,31 @@ export const TimelineMessage = memo(({
                         className="text-[13px] leading-6 text-sparkle-text [&_p]:mb-3 [&_p]:leading-6 [&_li]:leading-6 [&_ul]:text-[13px] [&_ol]:text-[13px] [&_table]:text-[13px] [&_pre]:text-[12px] [&_code]:text-[12px]"
                     />
                 )}
-                <div className="mt-3">
-                    <p className="text-[11px] text-sparkle-text-muted">{formatAssistantDateTime(message.updatedAt)}{assistantElapsed ? <span className="ml-1.5 text-white"> • {assistantElapsed}</span> : null}</p>
-                    {message.streaming ? <span className="inline-flex items-center gap-1 text-[11px] text-sparkle-text-secondary"><CircleDot size={10} className="animate-pulse" />{assistantTextStreamingMode === 'chunks' ? 'updating in chunks' : 'streaming'}</span> : null}
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-sparkle-text-muted">
+                    <span>{formatAssistantDateTime(message.updatedAt)}</span>
+                    {assistantElapsed ? <span className="text-sparkle-text">| {assistantElapsed}</span> : null}
+                    {isLastAssistantInTurn && copyValue.trim() ? (
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                try {
+                                    await copyTextToClipboard(copyValue)
+                                    setCopied(true)
+                                    window.setTimeout(() => setCopied(false), 1600)
+                                } catch {}
+                            }}
+                            className={cn(
+                                'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 opacity-0 transition-all duration-150 group-hover:opacity-100',
+                                copied
+                                    ? 'border-emerald-400/20 bg-emerald-500/[0.08] text-emerald-200'
+                                    : 'border-transparent bg-white/[0.03] text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
+                            )}
+                            title={copied ? 'Copied' : 'Copy message'}
+                        >
+                            {copied ? <Check size={11} /> : <Copy size={11} />}
+                            <span>{copied ? 'Copied' : 'Copy'}</span>
+                        </button>
+                    ) : null}
                 </div>
             </div>
         )
@@ -173,62 +203,113 @@ export const TimelineMessage = memo(({
 
     return (
         <div className="ml-auto flex flex-col items-end py-1">
-            <div className="group relative max-w-[36rem] rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5">
-                {parsedUserMessage.attachments.length > 0 ? (
-                    <div className="mb-1.5 grid gap-1">
-                        {parsedUserMessage.attachments.map((attachment) => {
-                            const isImage = attachment.type === 'IMAGE'
-                            const resolvedAttachmentPath = attachment.path && isClipboardAttachmentReference(attachment.path)
-                                ? (resolvedClipboardAttachmentPaths[attachment.id] || null)
-                                : attachment.path
-                            const renderImage = isImage && canRenderAttachmentImage(resolvedAttachmentPath)
-                            const previewTarget = resolvedAttachmentPath ? getAttachmentPreviewTarget(attachment.name, resolvedAttachmentPath) : null
-                            return (
-                                renderImage ? (
-                                    <AssistantAttachmentImageCard
-                                        key={attachment.id}
-                                        name={attachment.name}
-                                        src={getFileUrl(String(resolvedAttachmentPath))}
-                                        widthClassName="w-[116px]"
-                                        heightClassName="h-[84px]"
-                                        onClick={(onOpenAttachmentPreview || onOpenFilePath) && resolvedAttachmentPath ? () => {
-                                            if (onOpenAttachmentPreview && previewTarget) {
-                                                void onOpenAttachmentPreview({ name: previewTarget.name, path: resolvedAttachmentPath }, previewTarget.ext)
-                                                return
-                                            }
-                                            void onOpenFilePath?.(resolvedAttachmentPath)
-                                        } : undefined}
-                                    />
-                                ) : (
-                                    <div key={attachment.id} className="w-[116px] overflow-hidden rounded-lg border border-white/10 bg-sparkle-card/95 shadow-lg shadow-black/20 backdrop-blur-xl">
-                                        <div className="flex items-start gap-1 p-1.5">
-                                            <div className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-md border', isImage ? 'border-cyan-400/20 bg-cyan-500/[0.10] text-cyan-300' : 'border-white/10 bg-white/[0.03] text-sparkle-text-secondary')}>
-                                                {isImage ? <FileImage size={12} /> : <FileText size={12} />}
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-1">
-                                                    <p className="min-w-0 truncate text-[9px] font-medium text-sparkle-text">{attachment.name}</p>
-                                                    <span className="shrink-0 rounded border border-white/10 bg-white/[0.03] px-1 py-0.5 font-mono text-[7px] uppercase tracking-[0.12em] text-sparkle-text-muted">{attachment.type}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+            <div className="group relative max-w-[36rem]">
+                <div className="rounded-[1.15rem] border border-white/10 bg-white/[0.03] px-4 py-2.5">
+                    {parsedUserMessage.attachments.length > 0 ? (
+                        <div
+                            className={cn(
+                                'mb-1.5 max-w-full overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                                parsedUserMessage.attachments.length > 3 ? 'w-full max-w-[372px]' : 'max-w-[372px]'
+                            )}
+                        >
+                            <div className="flex w-max min-w-full gap-2">
+                            {parsedUserMessage.attachments.map((attachment) => {
+                                const isImage = attachment.type === 'IMAGE'
+                                const resolvedAttachmentPath = attachment.path && isClipboardAttachmentReference(attachment.path)
+                                    ? (resolvedClipboardAttachmentPaths[attachment.id] || null)
+                                    : attachment.path
+                                const renderImage = isImage && canRenderAttachmentImage(resolvedAttachmentPath)
+                                const previewTarget = resolvedAttachmentPath ? getAttachmentPreviewTarget(attachment.name, resolvedAttachmentPath) : null
+                                const canPreviewInlineText = Boolean(
+                                    attachment.content
+                                    && attachment.type !== 'IMAGE'
                                 )
-                            )
-                        })}
-                    </div>
-                ) : null}
-                {parsedUserMessage.body ? (
-                    <CollapsibleUserMessageBody content={parsedUserMessage.body} />
-                ) : null}
-                <div className="mt-2 flex items-center justify-between gap-3 border-t border-white/5 pt-2">
+                                const previewAttachmentFile: ComposerContextFile | null = canPreviewInlineText
+                                    ? {
+                                        id: attachment.id,
+                                        path: attachment.path || attachment.displayName,
+                                        name: attachment.displayName,
+                                        mimeType: attachment.mime || 'text/plain',
+                                        kind: attachment.type === 'CODE' ? 'code' : 'doc',
+                                        content: attachment.content || '',
+                                        previewText: attachment.preview || undefined,
+                                        sizeBytes: attachment.size ? Number.parseInt(attachment.size, 10) : undefined,
+                                        source: 'paste' as const
+                                    }
+                                    : null
+                                return (
+                                    renderImage ? (
+                                        <AssistantAttachmentImageCard
+                                            key={attachment.id}
+                                            name={attachment.displayName}
+                                            src={getFileUrl(String(resolvedAttachmentPath))}
+                                            widthClassName="w-[116px]"
+                                            heightClassName="h-[84px]"
+                                            onClick={(onOpenAttachmentPreview || onOpenFilePath) && resolvedAttachmentPath ? () => {
+                                                if (onOpenAttachmentPreview && previewTarget) {
+                                                    void onOpenAttachmentPreview({ name: previewTarget.name, path: resolvedAttachmentPath }, previewTarget.ext)
+                                                    return
+                                                }
+                                                void onOpenFilePath?.(resolvedAttachmentPath)
+                                            } : undefined}
+                                        />
+                                    ) : attachment.isClipboard && attachment.type !== 'IMAGE' ? (
+                                        <AssistantPastedTextCard
+                                            key={attachment.id}
+                                            widthClassName="w-[108px]"
+                                            onClick={previewAttachmentFile ? () => setPreviewAttachment(previewAttachmentFile) : undefined}
+                                            previewText={attachment.content || attachment.preview}
+                                        />
+                                    ) : (
+                                        <AssistantFileAttachmentCard
+                                            key={attachment.id}
+                                            widthClassName="w-[116px]"
+                                            name={attachment.displayName}
+                                            contentType={attachment.type}
+                                            category={attachment.type === 'CODE' ? 'code' : 'doc'}
+                                            pathLabel={attachment.isClipboard ? null : attachment.path}
+                                            previewText={attachment.preview}
+                                            onClick={
+                                                resolvedAttachmentPath && (onOpenAttachmentPreview || onOpenFilePath)
+                                                    ? () => {
+                                                        if (onOpenAttachmentPreview && previewTarget) {
+                                                            void onOpenAttachmentPreview({ name: previewTarget.name, path: resolvedAttachmentPath }, previewTarget.ext)
+                                                            return
+                                                        }
+                                                        void onOpenFilePath?.(resolvedAttachmentPath)
+                                                    }
+                                                    : previewAttachmentFile
+                                                        ? () => setPreviewAttachment(previewAttachmentFile)
+                                                        : undefined
+                                            }
+                                        />
+                                    )
+                                )
+                            })}
+                            </div>
+                        </div>
+                    ) : null}
+                    {parsedUserMessage.body ? (
+                        <CollapsibleUserMessageBody content={parsedUserMessage.body} />
+                    ) : null}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 px-1 opacity-0 transition-all duration-150 group-hover:opacity-100">
                     <p className="text-[10px] text-sparkle-text-muted">{formatAssistantDateTime(message.updatedAt)}</p>
-                    <div className="flex items-center gap-1 opacity-0 transition-all group-hover:opacity-100">
+                    <div className="flex items-center gap-1">
                         <button type="button" onClick={async () => { try { await copyTextToClipboard(copyValue); setCopied(true); window.setTimeout(() => setCopied(false), 1600) } catch {} }} className={cn('rounded-md border p-1 transition-all', copied ? 'border-emerald-400/20 bg-emerald-500/[0.08] text-emerald-300' : 'border-white/10 bg-white/[0.03] text-sparkle-text-muted hover:border-white/20 hover:text-sparkle-text')} title={copied ? 'Copied' : 'Copy message'}>{copied ? <Check size={12} /> : <Copy size={12} />}</button>
                         {onRequestDelete ? <button type="button" onClick={() => onRequestDelete(message)} disabled={deleting} className={cn('rounded-md border p-1 transition-all', deleting ? 'cursor-not-allowed border-red-400/20 bg-red-500/[0.08] text-red-200/70' : 'border-white/10 bg-white/[0.03] text-sparkle-text-muted hover:border-red-400/20 hover:bg-red-500/[0.08] hover:text-red-200')} title="Delete message from history"><Trash2 size={12} /></button> : null}
                     </div>
                 </div>
             </div>
+            <AssistantAttachmentPreviewModal
+                file={previewAttachment}
+                meta={previewAttachment ? getContextFileMeta(previewAttachment) : null}
+                contentType={previewAttachment ? getContentTypeTag(previewAttachment) : ''}
+                sizeLabel={previewAttachment ? toKbLabel(previewAttachment.sizeBytes) : ''}
+                showFormattingWarning={false}
+                readOnly
+                onClose={() => setPreviewAttachment(null)}
+            />
         </div>
     )
 }, (prev, next) => {
@@ -249,6 +330,33 @@ export const TimelineMessage = memo(({
         && areMessagesEqual(prev.message, next.message)
 })
 
+export function TimelineContextCompactionMarker({ activity }: { activity: AssistantActivity }) {
+    const status = getContextCompactionStatus(activity)
+    const isRunning = status === 'running'
+    const label = isRunning ? 'AUTO-COMPACTING' : 'AUTO-COMPACTED'
+
+    return (
+        <div className="max-w-4xl py-2" aria-live={isRunning ? 'polite' : undefined}>
+            <div className="flex items-center gap-3">
+                <span className={cn(
+                    'h-px flex-1 bg-gradient-to-r from-transparent via-white/8 to-white/10',
+                    isRunning && 'via-sky-300/25 to-sky-300/15'
+                )} />
+                <span className={cn(
+                    'relative isolate overflow-hidden rounded-full border border-transparent bg-white/[0.03] px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-sparkle-text-secondary shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]',
+                    isRunning && 'bg-sky-500/[0.08] text-sky-100'
+                )}>
+                    {isRunning ? <span className="absolute inset-0 animate-shimmer opacity-80" aria-hidden="true" /> : null}
+                    <span className="relative z-10">{label}</span>
+                </span>
+                <span className={cn(
+                    'h-px flex-1 bg-gradient-to-r from-white/10 via-white/8 to-transparent',
+                    isRunning && 'from-sky-300/15 via-sky-300/25'
+                )} />
+            </div>
+        </div>
+    )
+}
 
 export function TimelineWorkingIndicator({ startedAt, label = 'Working...' }: { startedAt?: string | null; label?: string }) {
     const [nowIso, setNowIso] = useState(() => new Date().toISOString())

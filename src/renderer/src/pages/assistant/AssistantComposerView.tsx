@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type WheelEvent as ReactWheelEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
@@ -6,7 +6,6 @@ import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
 import {
-    Clock3,
     Check,
     ChevronDown,
     ChevronUp,
@@ -15,20 +14,25 @@ import {
     FileImage,
     FileText,
     GitBranch,
+    GripVertical,
     ListTodo,
     Loader2,
     Lock,
     LockOpen,
     MessageSquare,
+    Pencil,
     Plus,
     SendHorizontal,
+    Trash2,
     X
 } from 'lucide-react'
 import AssistantAttachmentPreviewModal from './AssistantAttachmentPreviewModal'
+import { AssistantComposerContextIndicator } from './AssistantComposerContextIndicator'
 import { ComposerAttachmentsShelf, ComposerFooterControls, ComposerMentionMenu, ComposerSendButton, ComposerVoiceButton } from './AssistantComposerSections'
 import { formatAssistantModelLabel } from './assistant-model-labels'
 import {
     OpenAILogo,
+    renderInlineMentionOverlay,
     reconcileInlineMentionTags,
 } from './assistant-composer-inline-mentions'
 import type { AssistantComposerController } from './useAssistantComposerController'
@@ -50,7 +54,11 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
     const defaultBusyActionLabel = controller.busyMessageMode === 'force' ? 'Force' : 'Queue'
     const secondaryBusyActionLabel = controller.busyMessageMode === 'force' ? 'Queue' : 'Force'
     const [showBrowserSpeechFallbackModal, setShowBrowserSpeechFallbackModal] = useState(false)
+    const [textareaScrollTop, setTextareaScrollTop] = useState(0)
+    const [draggedQueuedMessageId, setDraggedQueuedMessageId] = useState<string | null>(null)
     const attachmentShelfRef = useRef<HTMLDivElement | null>(null)
+    const hasFloatingShelf = controller.queuedMessages.length > 0 || controller.contextFiles.length > 0
+    const hasInlineMentionOverlay = controller.text.length > 0 && controller.inlineMentionTags.length > 0
     const {
         composerStatusDotClass,
         composerStatusToneClass,
@@ -79,7 +87,10 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
 
     useLayoutEffect(() => {
         const host = attachmentShelfRef.current
-        if (!host) return
+        if (!host) {
+            controller.onAttachmentShelfBoundsChange?.(null)
+            return
+        }
 
         const measure = () => {
             const itemRects = Array.from(host.querySelectorAll<HTMLElement>('[data-composer-attachment-item="true"]'))
@@ -126,100 +137,220 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
         }
     }, [controller.contextFiles.length, controller.onAttachmentShelfBoundsChange])
 
+    const syncTextareaScroll = useCallback((element: HTMLTextAreaElement | null) => {
+        setTextareaScrollTop(element?.scrollTop ?? 0)
+    }, [])
+
+    const getNormalizedWheelDelta = useCallback((element: HTMLElement, deltaY: number, deltaMode: number) => {
+        const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight || '0') || 20
+        const pageHeight = element.clientHeight || lineHeight * 3
+        const deltaFactor = deltaMode === 1 ? lineHeight : deltaMode === 2 ? pageHeight : 1
+        return deltaY * deltaFactor
+    }, [])
+
+    const handleShelfWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+        if (!controller.onOverflowWheel || event.deltaY === 0) return
+        event.preventDefault()
+        controller.onOverflowWheel(getNormalizedWheelDelta(event.currentTarget, event.deltaY, event.deltaMode))
+    }, [controller.onOverflowWheel, getNormalizedWheelDelta])
+
+    const handleTextareaWheel = useCallback((event: ReactWheelEvent<HTMLTextAreaElement>) => {
+        if (!controller.onOverflowWheel || event.deltaY === 0) return
+
+        const element = event.currentTarget
+        const normalizedDeltaY = getNormalizedWheelDelta(element, event.deltaY, event.deltaMode)
+        const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight)
+
+        if (maxScrollTop <= 0) {
+            event.preventDefault()
+            syncTextareaScroll(element)
+            controller.onOverflowWheel(normalizedDeltaY)
+            return
+        }
+
+        if (normalizedDeltaY < 0) {
+            const availableScroll = Math.max(0, element.scrollTop)
+            if (Math.abs(normalizedDeltaY) <= availableScroll) return
+            event.preventDefault()
+            element.scrollTop = 0
+            syncTextareaScroll(element)
+            controller.onOverflowWheel(normalizedDeltaY + availableScroll)
+            return
+        }
+
+        if (normalizedDeltaY > 0) {
+            const availableScroll = Math.max(0, maxScrollTop - element.scrollTop)
+            if (normalizedDeltaY <= availableScroll) return
+            event.preventDefault()
+            element.scrollTop = maxScrollTop
+            syncTextareaScroll(element)
+            controller.onOverflowWheel(normalizedDeltaY - availableScroll)
+        }
+    }, [controller.onOverflowWheel, getNormalizedWheelDelta, syncTextareaScroll])
+
     return (
         <>
             <div className="relative flex pointer-events-none flex-col gap-0">
-                <div ref={attachmentShelfRef} className="pointer-events-none absolute inset-x-0 bottom-full z-20 mb-1">
-                    <div className="flex flex-col gap-1.5">
-                        <AnimatedHeight isOpen={controller.queuedMessages.length > 0} duration={220}>
-                            <div className="pointer-events-auto flex flex-col gap-1.5">
-                                {controller.queuedMessages.map((queuedMessage, index) => {
-                                    const isForce = queuedMessage.dispatchMode === 'force'
-                                    const isPaused = queuedMessage.status === 'paused'
-                                    return (
-                                        <div
-                                            key={queuedMessage.id}
-                                            data-composer-attachment-item="true"
-                                            className={cn(
-                                                'overflow-hidden rounded-xl border bg-sparkle-card/95 px-3 py-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-xl',
-                                                isForce
-                                                    ? 'border-amber-400/20'
-                                                    : isPaused
-                                                        ? 'border-rose-300/20'
-                                                        : 'border-white/10'
-                                            )}
-                                        >
-                                            <div className="flex items-start gap-2.5">
-                                                <div className={cn(
-                                                    'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg',
-                                                    isForce
-                                                        ? 'bg-amber-500/12 text-amber-200'
-                                                        : isPaused
-                                                            ? 'bg-rose-500/12 text-rose-200'
-                                                            : 'bg-white/[0.05] text-sparkle-text-secondary'
-                                                )}>
-                                                    {isForce ? <Zap size={13} /> : <Clock3 size={13} />}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className={cn(
-                                                            'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]',
-                                                            isForce
-                                                                ? 'bg-amber-500/12 text-amber-100'
-                                                                : isPaused
-                                                                    ? 'bg-rose-500/12 text-rose-100'
-                                                                    : 'bg-white/[0.05] text-sparkle-text-muted'
-                                                        )}>
-                                                            {isForce ? 'Force next' : isPaused ? `Queued ${index + 1} paused` : `Queued ${index + 1}`}
-                                                        </span>
-                                                    </div>
-                                                    <p
-                                                        className="mt-1.5 whitespace-pre-wrap break-words text-[12px] leading-5 text-sparkle-text"
-                                                        style={{
-                                                            display: '-webkit-box',
-                                                            WebkitBoxOrient: 'vertical',
-                                                            WebkitLineClamp: 3,
-                                                            overflow: 'hidden'
+                {hasFloatingShelf ? (
+                    <div ref={attachmentShelfRef} className="pointer-events-none absolute inset-x-0 bottom-full z-50 mb-[-2px]">
+                        <div className="flex flex-col gap-1" onWheel={handleShelfWheel}>
+                            <AnimatedHeight isOpen={controller.queuedMessages.length > 0} duration={220}>
+                                <div
+                                    data-composer-attachment-item="true"
+                                    className="pointer-events-auto mx-auto w-[calc(100%-1rem)] overflow-hidden rounded-[20px] rounded-b-[4px] border border-white/[0.06] bg-sparkle-card/95 shadow-[0_8px_18px_rgba(0,0,0,0.10)] backdrop-blur-xl sm:w-[calc(100%-2.25rem)]"
+                                >
+                                    <div className="flex items-center justify-between border-b border-white/[0.06] px-3.5 py-1.5">
+                                        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
+                                            Queued {controller.queuedMessages.length}
+                                        </span>
+                                    </div>
+                                    <div className={cn(
+                                        'custom-scrollbar overflow-y-auto',
+                                        controller.queuedMessages.length >= 3 && 'max-h-[9.75rem]'
+                                    )}>
+                                        {controller.queuedMessages.map((queuedMessage, index) => {
+                                            const isForce = queuedMessage.dispatchMode === 'force'
+                                            const isPaused = queuedMessage.status === 'paused'
+                                            const queuePromptLabel = queuedMessage.prompt.trim() || 'Attachment-only message'
+                                            const queuedFileCount = queuedMessage.contextFiles.length
+                                            const canForceQueuedMessage = Boolean(controller.onForceQueuedMessage) && (!isForce || isPaused)
+                                            const canEditQueuedMessage = Boolean(controller.onDeleteQueuedMessage)
+                                            const editQueuedMessage = () => {
+                                                if (!canEditQueuedMessage) return
+                                                controller.restoreQueuedMessageToDraft(queuedMessage)
+                                                void controller.onDeleteQueuedMessage?.(queuedMessage.id)
+                                            }
+                                            return (
+                                                <div
+                                                    key={queuedMessage.id}
+                                                    onDragOver={(event) => {
+                                                        if (!controller.onMoveQueuedMessage || !draggedQueuedMessageId || draggedQueuedMessageId === queuedMessage.id) return
+                                                        event.preventDefault()
+                                                        event.dataTransfer.dropEffect = 'move'
+                                                    }}
+                                                    onDrop={(event) => {
+                                                        if (!controller.onMoveQueuedMessage || !draggedQueuedMessageId || draggedQueuedMessageId === queuedMessage.id) return
+                                                        event.preventDefault()
+                                                        void controller.onMoveQueuedMessage(draggedQueuedMessageId, queuedMessage.id)
+                                                        setDraggedQueuedMessageId(null)
+                                                    }}
+                                                    className={cn(
+                                                        'relative flex items-start gap-2.5 px-3.5 py-2',
+                                                        index > 0 && 'border-t border-white/[0.06]',
+                                                        isForce && 'bg-amber-500/10',
+                                                        isPaused && 'bg-rose-500/10',
+                                                        draggedQueuedMessageId === queuedMessage.id && 'opacity-45'
+                                                    )}
+                                                >
+                                                    <div className={cn(
+                                                        'mt-1 shrink-0',
+                                                        controller.onMoveQueuedMessage ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
+                                                        isForce
+                                                            ? 'text-amber-100/45'
+                                                            : isPaused
+                                                                ? 'text-rose-100/45'
+                                                                : 'text-white/20'
+                                                    )}
+                                                        draggable={Boolean(controller.onMoveQueuedMessage)}
+                                                        onDragStart={(event) => {
+                                                            if (!controller.onMoveQueuedMessage) return
+                                                            setDraggedQueuedMessageId(queuedMessage.id)
+                                                            event.dataTransfer.effectAllowed = 'move'
+                                                            event.dataTransfer.setData('text/plain', queuedMessage.id)
                                                         }}
+                                                        onDragEnd={() => setDraggedQueuedMessageId(null)}
+                                                        title="Drag to reorder queued messages"
                                                     >
-                                                        {queuedMessage.prompt.trim() || 'Attachment-only message'}
-                                                    </p>
-                                                    {isPaused ? (
-                                                        <p className="mt-1.5 text-[10px] font-medium text-rose-200/90">
-                                                            Send start failed. Force send will interrupt the active turn and retry this prompt.
-                                                        </p>
-                                                    ) : null}
-                                                    {(!isForce || isPaused) && controller.onForceQueuedMessage ? (
-                                                        <div className="mt-2.5 flex justify-end">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => void controller.onForceQueuedMessage?.(queuedMessage.id)}
-                                                                className="inline-flex h-7 items-center justify-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/12 px-2.5 text-[10px] font-semibold text-amber-100 transition-colors hover:border-amber-300/30 hover:bg-amber-500/18"
-                                                                title="Interrupt the current turn and send this queued message next"
-                                                            >
-                                                                <Zap size={11} />
-                                                                <span>Force Send</span>
-                                                            </button>
-                                                        </div>
-                                                    ) : null}
+                                                        <GripVertical size={14} />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        {isPaused || queuedFileCount > 0 ? (
+                                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                                {isPaused ? (
+                                                                    <span className="rounded-full bg-rose-500/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-rose-100/85">
+                                                                        Retry needed
+                                                                    </span>
+                                                                ) : null}
+                                                                {queuedFileCount > 0 ? (
+                                                                    <span className="text-[10px] uppercase tracking-[0.14em] text-white/28">
+                                                                        {queuedFileCount} file{queuedFileCount === 1 ? '' : 's'}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                        ) : null}
+                                                        <button
+                                                            type="button"
+                                                            onClick={editQueuedMessage}
+                                                            disabled={!canEditQueuedMessage}
+                                                            className="mt-0.5 block w-full cursor-text whitespace-pre-wrap break-words text-left text-[12.5px] leading-5 text-sparkle-text transition-colors hover:text-white disabled:cursor-default disabled:text-sparkle-text"
+                                                            title={queuePromptLabel}
+                                                            style={{
+                                                                display: '-webkit-box',
+                                                                WebkitBoxOrient: 'vertical',
+                                                                WebkitLineClamp: 2,
+                                                                overflow: 'hidden'
+                                                            }}
+                                                        >
+                                                            {queuePromptLabel}
+                                                        </button>
+                                                    </div>
+                                                    <div className="ml-2 flex shrink-0 items-center justify-end gap-1 self-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void controller.onDeleteQueuedMessage?.(queuedMessage.id)}
+                                                            disabled={!controller.onDeleteQueuedMessage}
+                                                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent bg-white/[0.02] text-white/38 transition-colors hover:bg-rose-500/12 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-35"
+                                                            title="Delete queued message"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </button>
+                                                        <button
+                                                        type="button"
+                                                        onClick={editQueuedMessage}
+                                                            disabled={!canEditQueuedMessage}
+                                                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent bg-white/[0.02] text-white/38 transition-colors hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+                                                            title="Edit queued message"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => void controller.onForceQueuedMessage?.(queuedMessage.id)}
+                                                            disabled={!canForceQueuedMessage}
+                                                            className={cn(
+                                                                'inline-flex h-8 items-center justify-center gap-1.5 rounded-full px-3 text-[11px] font-semibold transition-colors',
+                                                                canForceQueuedMessage
+                                                                    ? 'bg-amber-500/12 text-amber-100 hover:bg-amber-500/18'
+                                                                    : 'bg-white/[0.05] text-white/35'
+                                                            )}
+                                                            title={canForceQueuedMessage
+                                                                ? 'Interrupt the current turn and send this queued message next'
+                                                                : isForce
+                                                                    ? 'This queued message is already forced'
+                                                                    : 'Force send is unavailable right now'}
+                                                        >
+                                                            <Zap size={11} />
+                                                            <span>{canForceQueuedMessage ? 'Force' : 'Forced'}</span>
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </AnimatedHeight>
-                        <ComposerAttachmentsShelf
-                            contextFiles={controller.contextFiles}
-                            compact={controller.compact}
-                            removingAttachmentIds={controller.removingAttachmentIds}
-                            onOpenAttachmentPreview={controller.onOpenAttachmentPreview}
-                            onPreview={controller.setPreviewAttachment}
-                            onRemove={controller.removeAttachment}
-                        />
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            </AnimatedHeight>
+                            <ComposerAttachmentsShelf
+                                contextFiles={controller.contextFiles}
+                                compact={controller.compact}
+                                removingAttachmentIds={controller.removingAttachmentIds}
+                                onOpenAttachmentPreview={controller.onOpenAttachmentPreview}
+                                onPreview={controller.setPreviewAttachment}
+                                onRemove={controller.removeAttachment}
+                            />
+                        </div>
                     </div>
-                </div>
-                <div ref={controller.composerRootRef} className="pointer-events-auto relative z-10">
+                ) : null}
+                <div ref={controller.composerRootRef} className="pointer-events-auto relative z-40">
                     <div className="group rounded-[20px] border border-white/10 bg-sparkle-card transition-[border-color,box-shadow] duration-200 focus-within:border-[var(--accent-primary)]/28 focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent-primary)_18%,transparent),0_0_18px_color-mix(in_srgb,var(--accent-primary)_12%,transparent)]">
                         <input
                             ref={controller.filePickerRef}
@@ -262,6 +393,29 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                                     <Plus size={18} />
                                 </button>
                                 <div className="relative min-w-0 flex-1">
+                                    {hasInlineMentionOverlay ? (
+                                        <div
+                                            aria-hidden="true"
+                                            className="pointer-events-none absolute inset-0 overflow-hidden"
+                                        >
+                                            <div
+                                                className={cn(
+                                                    'whitespace-pre-wrap break-words pl-[3px] pr-2 text-sparkle-text',
+                                                    controller.compact ? 'min-h-[52px] text-[13px] leading-[1.35rem]' : 'min-h-[58px] text-[14px] leading-[1.45rem]'
+                                                )}
+                                                style={{ transform: `translateY(-${textareaScrollTop}px)` }}
+                                            >
+                                                {renderInlineMentionOverlay(controller.text, controller.inlineMentionTags, (tag, rawToken) => (
+                                                    <span
+                                                        key={tag.id}
+                                                        className="rounded-md bg-[var(--accent-primary)]/12 px-1 py-0.5 text-[var(--accent-primary)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent-primary)_18%,transparent)] [box-decoration-break:clone]"
+                                                    >
+                                                        {rawToken}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : null}
                                     <textarea
                                         ref={controller.textareaRef}
                                         rows={3}
@@ -274,11 +428,18 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                                             if (controller.historyCursor != null) controller.setHistoryCursor(null)
                                         }}
                                         onClick={(event) => controller.syncComposerCursor(event.currentTarget)}
+                                        onScroll={(event) => syncTextareaScroll(event.currentTarget)}
                                         onKeyUp={(event) => controller.syncComposerCursor(event.currentTarget)}
                                         onSelect={(event) => controller.syncComposerCursor(event.currentTarget)}
                                         onKeyDown={controller.handleKeyDown}
                                         onPaste={controller.handlePaste}
-                                        className={cn('relative w-full resize-none overflow-y-auto bg-transparent pl-[3px] pr-2 text-sparkle-text outline-none placeholder:text-sparkle-text/20 selection:bg-white/15', controller.compact ? 'min-h-[52px] text-[13px] leading-[1.35rem]' : 'min-h-[58px] text-[14px] leading-[1.45rem]')}
+                                        onWheel={handleTextareaWheel}
+                                        spellCheck={!hasInlineMentionOverlay}
+                                        className={cn(
+                                            'relative w-full resize-none overflow-y-auto bg-transparent pl-[3px] pr-2 caret-sparkle-text outline-none placeholder:text-sparkle-text/20 selection:bg-white/15',
+                                            controller.compact ? 'min-h-[52px] text-[13px] leading-[1.35rem]' : 'min-h-[58px] text-[14px] leading-[1.45rem]',
+                                            hasInlineMentionOverlay ? 'text-transparent' : 'text-sparkle-text'
+                                        )}
                                         placeholder={capabilities.placeholder}
                                         disabled={capabilities.inputDisabled || voiceBusy}
                                     />
@@ -347,6 +508,7 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                                         {controller.queuedMessageCount} queued
                                     </span>
                                 ) : null}
+                                <AssistantComposerContextIndicator usage={controller.latestTurnUsage} />
                                 {showBusySendActions ? (
                                     <>
                                         <button

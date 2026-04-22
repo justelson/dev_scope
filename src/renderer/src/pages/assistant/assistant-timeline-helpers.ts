@@ -1,4 +1,9 @@
 import type { AssistantActivity, AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
+import {
+    getSerializedAttachmentDisplayName,
+    isSerializedClipboardAttachment,
+    parseSerializedAssistantMessage
+} from '@shared/assistant/message-attachments'
 import { estimateMarkdownContentHeight } from '@/lib/text-layout/markdown-blocks'
 import { stripProposedPlanBlocks } from './assistant-proposed-plan'
 import {
@@ -25,20 +30,70 @@ export type TimelineRenderRow =
 export type ParsedUserAttachment = {
     id: string
     name: string
+    displayName: string
     type: string
     path: string | null
     mime: string | null
     size: string | null
     preview: string | null
     note: string | null
+    origin: string | null
+    content: string | null
+    isClipboard: boolean
 }
 
 function shouldRenderActivity(activity: AssistantActivity): boolean {
     return activity.tone === 'tool'
 }
 
+function normalizeAssistantWarningText(value: string): string {
+    return value
+        .replace(/\u001b\[[0-9;]*m/g, '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[ \t]+/g, ' ')
+        .trim()
+}
+
+export function isWarningOnlyAssistantMessage(message: AssistantMessage): boolean {
+    if (message.role !== 'assistant') return false
+
+    const text = normalizeAssistantWarningText(message.text || '')
+    if (!text || text.includes('```') || text.length > 700) return false
+
+    return /^warning occurred\b/i.test(text)
+        || /^error occurred\b/i.test(text)
+        || /\bthe shell wrapper timed out\b/i.test(text)
+        || /\bshell wrapper timed out\b/i.test(text)
+        || /\bcommand timed out after \d+(?:\.\d+)?\s*(?:milliseconds?|ms|seconds?|s)\b/i.test(text)
+}
+
+export function shouldRenderMessage(message: AssistantMessage): boolean {
+    return !isWarningOnlyAssistantMessage(message)
+}
+
 export function isSubagentActivity(activity: AssistantActivity): boolean {
     return activity.kind.startsWith('subagent.') || readActivityString(activity.payload?.category) === 'subagent'
+}
+
+export function isContextCompactionActivity(activity: AssistantActivity): boolean {
+    return activity.kind === 'context.compaction'
+        || readActivityString(activity.payload?.category) === 'context-compaction'
+        || readActivityString(activity.payload?.itemType) === 'context compaction'
+}
+
+export function isIssueActivity(activity: AssistantActivity): boolean {
+    return activity.tone === 'warning'
+        || activity.tone === 'error'
+        || activity.kind === 'process.stderr'
+        || activity.kind === 'runtime.error'
+}
+
+function getActivityRenderGroupKind(activity: AssistantActivity): 'issue' | 'subagent' | 'tool' | null {
+    if (isContextCompactionActivity(activity)) return null
+    if (isIssueActivity(activity)) return 'issue'
+    if (isSubagentActivity(activity)) return 'subagent'
+    if (activity.tone === 'tool') return 'tool'
+    return null
 }
 
 function readActivityString(value: unknown): string {
@@ -139,71 +194,24 @@ export function areActivityListsEqual(left: AssistantActivity[], right: Assistan
 }
 
 export function parseUserMessageAttachments(text: string): { body: string; attachments: ParsedUserAttachment[] } {
-    const source = String(text || '')
-    const markerMatch = source.match(/\n\nAttached files \((\d+)\):\n/)
-    if (!markerMatch || markerMatch.index == null) {
-        return { body: source, attachments: [] }
+    const parsed = parseSerializedAssistantMessage(text)
+    return {
+        body: parsed.body,
+        attachments: parsed.attachments.map((attachment, index) => ({
+            id: `${attachment.name}-${index}`,
+            name: attachment.name,
+            displayName: getSerializedAttachmentDisplayName(attachment),
+            type: attachment.type,
+            path: attachment.path,
+            mime: attachment.mime,
+            size: attachment.size,
+            preview: attachment.preview,
+            note: attachment.note,
+            origin: attachment.origin,
+            content: attachment.content,
+            isClipboard: isSerializedClipboardAttachment(attachment)
+        }))
     }
-
-    const body = source.slice(0, markerMatch.index).trimEnd()
-    const attachmentBlock = source.slice(markerMatch.index + markerMatch[0].length).trim()
-    if (!attachmentBlock) {
-        return { body, attachments: [] }
-    }
-
-    const relevantLines = attachmentBlock
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean)
-
-    const sections: string[] = []
-    let currentSection: string[] = []
-
-    const attachmentHeaderPattern = /^\d+\.\s+.+\s+\[[A-Z]+\]$/
-
-    for (const line of relevantLines) {
-        if (attachmentHeaderPattern.test(line)) {
-            if (currentSection.length > 0) {
-                sections.push(currentSection.join('\n'))
-            }
-            currentSection = [line]
-            continue
-        }
-        if (currentSection.length === 0) continue
-        currentSection.push(line)
-    }
-
-    if (currentSection.length > 0) {
-        sections.push(currentSection.join('\n'))
-    }
-
-    const attachments = sections.map((section, index) => {
-        const lines = section.split('\n').map((line) => line.trim()).filter(Boolean)
-        const header = lines[0] || `${index + 1}. Attachment [FILE]`
-        const headerMatch = header.match(/^\d+\.\s+(.+?)\s+\[([A-Z]+)\]$/)
-        const details = new Map<string, string>()
-
-        for (const line of lines.slice(1)) {
-            const separatorIndex = line.indexOf(':')
-            if (separatorIndex <= 0) continue
-            const key = line.slice(0, separatorIndex).trim().toLowerCase()
-            const value = line.slice(separatorIndex + 1).trim()
-            if (key && value) details.set(key, value)
-        }
-
-        return {
-            id: `${header}-${index}`,
-            name: headerMatch?.[1]?.trim() || `Attachment ${index + 1}`,
-            type: headerMatch?.[2]?.trim() || 'FILE',
-            path: details.get('path') || details.get('ref') || null,
-            mime: details.get('mime') || null,
-            size: details.get('size') || null,
-            preview: details.get('preview') || null,
-            note: details.get('note') || null
-        }
-    })
-
-    return { body, attachments }
 }
 
 export function isClipboardAttachmentReference(path: string | null): boolean {
@@ -269,9 +277,10 @@ export function getTimelineEntries(
     activities: AssistantActivity[],
     proposedPlans: AssistantProposedPlan[] = []
 ): TimelineEntry[] {
+    const renderedMessages = messages.filter(shouldRenderMessage)
     const renderedActivities = activities.filter(shouldRenderActivity)
     const allEntries: TimelineEntry[] = [
-        ...messages.map((message) => ({
+        ...renderedMessages.map((message) => ({
             id: message.id,
             createdAt: message.createdAt,
             type: 'message' as const,
@@ -284,7 +293,7 @@ export function getTimelineEntries(
             activity
         })),
         ...proposedPlans.map((plan, index) => {
-            const hasLaterMessage = messages.some((message) => {
+            const hasLaterMessage = renderedMessages.some((message) => {
                 if (message.turnId && plan.turnId && message.turnId === plan.turnId) return false
                 return compareTimelinePosition(plan.createdAt, plan.id, message.createdAt, message.id) < 0
             })
@@ -303,9 +312,22 @@ export function getTimelineEntries(
 
     for (const entry of allEntries) {
         if (entry.type === 'activity' && entry.activity) {
+            const groupKind = getActivityRenderGroupKind(entry.activity)
+            if (!groupKind) {
+                if (currentGroup.length > 0) {
+                    grouped.push(
+                        currentGroup.length === 1
+                            ? { id: currentGroup[0].id, createdAt: currentGroup[0].createdAt, type: 'activity', activity: currentGroup[0] }
+                            : { id: `group-${currentGroup[0].id}`, createdAt: currentGroup[0].createdAt, type: 'activity-group', activities: currentGroup }
+                    )
+                    currentGroup = []
+                }
+                grouped.push(entry)
+                continue
+            }
             if (
                 currentGroup.length > 0
-                && isSubagentActivity(currentGroup[0]) !== isSubagentActivity(entry.activity)
+                && getActivityRenderGroupKind(currentGroup[0]) !== groupKind
             ) {
                 grouped.push(
                     currentGroup.length === 1
@@ -441,6 +463,26 @@ export function getActivityStatus(activity: AssistantActivity): 'success' | 'run
     return 'success'
 }
 
+export function getContextCompactionStatus(activity: AssistantActivity): 'running' | 'completed' {
+    const payload = activity.payload || {}
+    const rawStatus = readActivityString(payload.status)
+        || readActivityString(payload.state)
+        || readActivityString(payload.phase)
+        || readActivityString(activity.summary)
+    const normalized = rawStatus.toLowerCase().replace(/[-_\s]/g, '')
+    if (
+        normalized === 'running'
+        || normalized === 'inprogress'
+        || normalized === 'pending'
+        || normalized === 'started'
+        || normalized === 'autocompacting'
+        || normalized === 'compacting'
+    ) {
+        return 'running'
+    }
+    return 'completed'
+}
+
 type SubagentThreadLabel = {
     threadId: string | null
     providerThreadId: string | null
@@ -503,9 +545,17 @@ export function estimateTimelineRowHeight(
     options: { containerWidth?: number | null } = {}
 ): number {
     if (row.kind === 'working') return 48
-    if (row.kind === 'activity') return isSubagentActivity(row.activity) ? 212 : 168
+    if (row.kind === 'activity') {
+        if (isContextCompactionActivity(row.activity)) return 72
+        if (isIssueActivity(row.activity)) return 124
+        return isSubagentActivity(row.activity) ? 212 : 168
+    }
     if (row.kind === 'activity-group') {
+        const containsIssueActivity = row.activities.some((activity) => isIssueActivity(activity))
         const containsSubagentActivity = row.activities.some((activity) => isSubagentActivity(activity))
+        if (containsIssueActivity) {
+            return 112 + Math.min(row.activities.length, 6) * 86
+        }
         return containsSubagentActivity
             ? 132 + Math.min(row.activities.length, 6) * 124
             : 120 + Math.min(row.activities.length, 6) * 96

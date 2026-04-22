@@ -57,6 +57,9 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
     const {
         compact,
         railMode,
+        railGroupMode,
+        railSortMode,
+        railFilterMode,
         playground,
         backgroundActivitySessions,
         commandPending,
@@ -67,6 +70,9 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
         expandedGroupKeys,
         showArchivedSessions,
         onRailModeChange,
+        onRailGroupModeChange,
+        onRailSortModeChange,
+        onRailFilterModeChange,
         onToggleGroup,
         onChooseProjectPath,
         onCreateSession,
@@ -480,12 +486,16 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
         }
     }, [creatingLab, labByRootPath, labRepoUrl, labSource, labTitle, onCreatePlaygroundLab, onCreatePlaygroundSession, onSelectSession, onShowToast, selectedExistingFolderPath])
 
-    const sectionLabel = railMode === 'playground' ? 'Labs' : 'Projects'
+    const sectionLabel = railGroupMode === 'flat'
+        ? 'Chats'
+        : (railMode === 'playground' ? 'Labs' : 'Projects')
     const playgroundRootMissing = railMode === 'playground' && !playground.rootPath
     const unassignedGroup = railMode === 'playground'
         ? groupedSessions.find((group) => !group.path) || null
         : null
-    const labGroups = railMode === 'playground'
+    const labGroups = railGroupMode === 'flat'
+        ? groupedSessions
+        : railMode === 'playground'
         ? groupedSessions.filter((group) => Boolean(group.path))
         : groupedSessions
 
@@ -505,6 +515,8 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
             <AssistantSessionsRailBody
                 compact={compact}
                 railMode={railMode}
+                railGroupMode={railGroupMode}
+                railSortMode={railSortMode}
                 playgroundRootMissing={playgroundRootMissing}
                 sectionLabel={sectionLabel}
                 unassignedGroup={unassignedGroup}
@@ -534,6 +546,8 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
                 onCreateProjectChat={handleCreateProjectChat}
                 onDeleteProjectGroup={handleDeleteProjectGroup}
                 onChoosePlaygroundRoot={handleChoosePlaygroundRoot}
+                onRailGroupModeChange={onRailGroupModeChange}
+                onRailSortModeChange={onRailSortModeChange}
                 onShowMoreSessions={handleShowMoreSessions}
                 onShowLessSessions={handleShowLessSessions}
                 getGroupPlaygroundLabId={getGroupPlaygroundLabId}

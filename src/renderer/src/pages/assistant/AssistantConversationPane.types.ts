@@ -9,6 +9,7 @@ export type AssistantConversationPaneProps = {
     leftSidebarCollapsed: boolean
     fallbackSessionMode: 'work' | 'playground'
     playgroundRootMissing: boolean
+    autoStartDetachedPlaygroundChat: boolean
     onToggleLeftSidebar: () => void
     onChoosePlaygroundRoot: () => Promise<void> | void
     onRequestDeleteUserMessage: (message: AssistantMessage) => void

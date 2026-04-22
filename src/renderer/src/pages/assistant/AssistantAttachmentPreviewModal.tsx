@@ -17,6 +17,7 @@ interface AssistantAttachmentPreviewModalProps {
     contentType: string
     sizeLabel: string
     showFormattingWarning: boolean
+    readOnly?: boolean
     onUpdatePastedText?: (fileId: string, nextText: string) => void
     onClose: () => void
 }
@@ -73,6 +74,7 @@ export default function AssistantAttachmentPreviewModal({
     contentType,
     sizeLabel,
     showFormattingWarning,
+    readOnly = false,
     onUpdatePastedText,
     onClose
 }: AssistantAttachmentPreviewModalProps) {
@@ -162,15 +164,16 @@ export default function AssistantAttachmentPreviewModal({
                                     Pasted text
                                 </span>
                                 <span className="text-[10px] text-sparkle-text-muted/70">
-                                    Editable
+                                    {readOnly ? 'Read only' : 'Editable'}
                                 </span>
                             </div>
                             <textarea
                                 value={previewText}
                                 onChange={(event) => {
-                                    if (!file?.id || !onUpdatePastedText) return
+                                    if (readOnly || !file?.id || !onUpdatePastedText) return
                                     onUpdatePastedText(file.id, event.target.value)
                                 }}
+                                readOnly={readOnly}
                                 spellCheck={false}
                                 className="custom-scrollbar min-h-0 flex-1 w-full resize-none overflow-auto bg-transparent px-4 py-4 text-[13px] leading-6 text-sparkle-text outline-none selection:bg-sky-400/25"
                             />

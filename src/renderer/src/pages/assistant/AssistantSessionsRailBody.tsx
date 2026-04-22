@@ -5,6 +5,7 @@ import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from '@dnd-
 import { ChevronRight, GitBranch, SquarePen, Trash2 } from 'lucide-react'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { cn } from '@/lib/utils'
+import { AssistantSessionsRailViewMenu } from './AssistantSessionsRailViewMenu'
 import {
     ProjectGroupIcon,
     SortableProjectItem,
@@ -17,6 +18,8 @@ import { getGroupPrimaryThreadOrNull } from './assistant-sessions-rail-body-util
 export function AssistantSessionsRailBody(props: {
     compact: boolean
     railMode: 'work' | 'playground'
+    railGroupMode: 'project' | 'flat'
+    railSortMode: 'updated' | 'created'
     playgroundRootMissing: boolean
     sectionLabel: string
     unassignedGroup: SessionProjectGroup | null
@@ -46,6 +49,8 @@ export function AssistantSessionsRailBody(props: {
     onCreateProjectChat: (group: SessionProjectGroup) => void
     onDeleteProjectGroup: (group: SessionProjectGroup) => void
     onChoosePlaygroundRoot: () => Promise<void> | void
+    onRailGroupModeChange: (mode: 'project' | 'flat') => void
+    onRailSortModeChange: (mode: 'updated' | 'created') => void
     onShowMoreSessions: (groupKey: string, nextVisibleCount: number) => void
     onShowLessSessions: (groupKey: string, minimumVisibleCount: number) => void
     getGroupPlaygroundLabId: (group: SessionProjectGroup) => string | null
@@ -53,6 +58,8 @@ export function AssistantSessionsRailBody(props: {
     const {
         compact,
         railMode,
+        railGroupMode,
+        railSortMode,
         playgroundRootMissing,
         sectionLabel,
         unassignedGroup,
@@ -81,6 +88,8 @@ export function AssistantSessionsRailBody(props: {
         onCreateProjectChat,
         onDeleteProjectGroup,
         onChoosePlaygroundRoot,
+        onRailGroupModeChange,
+        onRailSortModeChange,
         onShowMoreSessions,
         onShowLessSessions,
         getGroupPlaygroundLabId
@@ -106,7 +115,32 @@ export function AssistantSessionsRailBody(props: {
 
             {!playgroundRootMissing ? (
                 <div className="space-y-3">
-                    {unassignedGroup ? (
+                    {railGroupMode === 'flat' ? (
+                        labGroups[0] ? (
+                            <UnassignedSessionsSection
+                                compact={compact}
+                                group={labGroups[0]}
+                                activeSessionId={activeSessionId}
+                                activeThreadId={activeThreadId}
+                                expandedThreadKeys={expandedThreadKeys}
+                                visibleSessionCountByGroup={visibleSessionCountByGroup}
+                                recencyTierByThreadId={recencyTierByThreadId}
+                                getSessionMenuItems={getSessionMenuItems}
+                                onToggleThread={onToggleThread}
+                                onSelectThread={onSelectThread}
+                                onSessionContextMenu={onSessionContextMenu}
+                                onSessionDragStart={onSessionDragStart}
+                                onSessionDragEnd={onSessionDragEnd}
+                                onSessionDragCancel={onSessionDragCancel}
+                                onShowMoreSessions={onShowMoreSessions}
+                                onShowLessSessions={onShowLessSessions}
+                            />
+                        ) : (
+                            <div className="px-3 py-3 text-center text-[11px] text-sparkle-text-muted/55">
+                                No chats yet
+                            </div>
+                        )
+                    ) : unassignedGroup ? (
                         <UnassignedSessionsSection
                             compact={compact}
                             group={unassignedGroup}
@@ -133,13 +167,19 @@ export function AssistantSessionsRailBody(props: {
                         ) : null
                     )}
 
-                    <div className="relative flex items-center px-3">
+                    <div className="flex items-center gap-2 px-3">
+                        <span className="text-[10px] tracking-wide text-sparkle-text-muted/28">{sectionLabel}</span>
                         <div className="h-px flex-1 bg-white/5" />
-                        <span className="px-3 text-[10px] tracking-wide text-sparkle-text-muted/25">{sectionLabel}</span>
-                        <div className="h-px flex-1 bg-white/5" />
+                        <AssistantSessionsRailViewMenu
+                            groupMode={railGroupMode}
+                            sortMode={railSortMode}
+                            onGroupModeChange={onRailGroupModeChange}
+                            onSortModeChange={onRailSortModeChange}
+                            iconOnly
+                        />
                     </div>
 
-                    {labGroups.length > 0 ? (
+                    {railGroupMode === 'project' && labGroups.length > 0 ? (
                         <DndContext
                             sensors={projectSensors}
                             collisionDetection={collisionDetection}
@@ -182,11 +222,11 @@ export function AssistantSessionsRailBody(props: {
                                 </div>
                             </SortableContext>
                         </DndContext>
-                    ) : (
+                    ) : railGroupMode === 'project' ? (
                         <div className="px-3 py-3 text-center text-[11px] text-sparkle-text-muted/55">
                             No labs yet
                         </div>
-                    )}
+                    ) : null}
                 </div>
             ) : null}
         </div>
@@ -350,7 +390,6 @@ function ProjectSessionsSection(props: {
     const hasMoreChats = hiddenChatsCount > 0
     const canShowLessChats = resolvedVisibleCount > minimumVisibleCount
     const canDeleteLab = railMode === 'playground' && Boolean(getGroupPlaygroundLabId(group))
-
     return (
         <SortableProjectItem projectKey={group.key}>
             {(handleProps) => (

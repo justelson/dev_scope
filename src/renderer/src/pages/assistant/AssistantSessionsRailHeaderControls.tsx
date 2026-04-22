@@ -1,6 +1,8 @@
 import { BriefcaseBusiness, GitBranch, Plus, SquarePen } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { AssistantRailMode } from './useAssistantPageSidebarState'
+import type {
+    AssistantRailMode,
+} from './useAssistantPageSidebarState'
 
 export function AssistantSessionsRailHeaderControls(props: {
     railMode: AssistantRailMode
@@ -39,20 +41,22 @@ export function AssistantSessionsRailHeaderControls(props: {
                     <span className="text-sm font-semibold tracking-tight text-sparkle-text">T3 x dvs</span>
                     <span className="rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-sparkle-text-muted/60">Alpha</span>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => onRailModeChange(nextRailMode)}
-                    className={cn(
-                        'inline-flex h-8 items-center gap-1.5 rounded-full border border-transparent px-3 text-[11px] font-medium transition-colors',
-                        nextRailMode === 'playground'
-                            ? 'bg-violet-500/[0.12] text-violet-200 hover:bg-violet-500/[0.18] hover:text-violet-100'
-                            : 'bg-sky-500/[0.12] text-sky-200 hover:bg-sky-500/[0.18] hover:text-sky-100'
-                    )}
-                    title={railToggleTitle}
-                >
-                    <RailToggleIcon size={12} className="shrink-0" />
-                    <span>{railToggleLabel}</span>
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                        type="button"
+                        onClick={() => onRailModeChange(nextRailMode)}
+                        className={cn(
+                            'inline-flex h-8 items-center gap-1.5 rounded-full border border-transparent px-3 text-[11px] font-medium transition-colors',
+                            nextRailMode === 'playground'
+                                ? 'bg-violet-500/[0.12] text-violet-200 hover:bg-violet-500/[0.18] hover:text-violet-100'
+                                : 'bg-sky-500/[0.12] text-sky-200 hover:bg-sky-500/[0.18] hover:text-sky-100'
+                        )}
+                        title={railToggleTitle}
+                    >
+                        <RailToggleIcon size={12} className="shrink-0" />
+                        <span>{railToggleLabel}</span>
+                    </button>
+                </div>
             </div>
 
             <div className="mb-3 px-2">

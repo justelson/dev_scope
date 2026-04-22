@@ -1,11 +1,19 @@
 import type { AssistantPlaygroundState, AssistantSession } from '@shared/assistant/contracts'
 import type { AssistantToastInput } from './AssistantPageHelpers'
 import type { AssistantCreatePlaygroundLabResult, AssistantMutationResult, SessionProjectGroup } from './assistant-sessions-rail-utils'
-import type { AssistantRailMode } from './useAssistantPageSidebarState'
+import type {
+    AssistantRailFilterMode,
+    AssistantRailGroupMode,
+    AssistantRailMode,
+    AssistantRailSortMode
+} from './useAssistantPageSidebarState'
 
 export type ExpandedSessionsRailContentProps = {
     compact: boolean
     railMode: AssistantRailMode
+    railGroupMode: AssistantRailGroupMode
+    railSortMode: AssistantRailSortMode
+    railFilterMode: AssistantRailFilterMode
     playground: AssistantPlaygroundState
     backgroundActivitySessions: AssistantSession[]
     commandPending: boolean
@@ -16,6 +24,9 @@ export type ExpandedSessionsRailContentProps = {
     expandedGroupKeys: Set<string>
     showArchivedSessions: boolean
     onRailModeChange: (mode: AssistantRailMode) => void
+    onRailGroupModeChange: (mode: AssistantRailGroupMode) => void
+    onRailSortModeChange: (mode: AssistantRailSortMode) => void
+    onRailFilterModeChange: (mode: AssistantRailFilterMode) => void
     onToggleGroup: (key: string) => void
     onChooseProjectPath: () => void
     onCreateSession: (projectPath?: string) => void

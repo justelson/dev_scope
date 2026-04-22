@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react'
 import type { AssistantActivity, AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
-import { getTimelineEntries, type TimelineEntry } from './assistant-timeline-helpers'
+import { getTimelineEntries, shouldRenderMessage, type TimelineEntry } from './assistant-timeline-helpers'
 
 type TimelineEntriesCache = {
     messages: AssistantMessage[]
@@ -53,7 +53,11 @@ export function useAssistantTimelineEntries(
                     && previousLastMessage.id === nextLastMessage.id
                 ) {
                     const messageEntryIndex = findLastMessageEntryIndex(cached.entries)
-                    if (messageEntryIndex >= 0) {
+                    if (
+                        messageEntryIndex >= 0
+                        && cached.entries[messageEntryIndex]?.id === nextLastMessage.id
+                        && shouldRenderMessage(nextLastMessage)
+                    ) {
                         const nextEntries = [...cached.entries]
                         nextEntries[messageEntryIndex] = {
                             id: nextLastMessage.id,
@@ -71,6 +75,10 @@ export function useAssistantTimelineEntries(
                     && haveStableMessagePrefix(cached.messages, messages, cached.messages.length)
                 ) {
                     const appendedMessage = messages[messages.length - 1]
+                    if (!shouldRenderMessage(appendedMessage)) {
+                        cacheRef.current = { messages, activities, proposedPlans, entries: cached.entries }
+                        return cached.entries
+                    }
                     const nextEntries = [
                         ...cached.entries,
                         {

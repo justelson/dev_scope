@@ -1,5 +1,6 @@
 import type { SessionProjectGroup } from './assistant-sessions-rail-utils'
-import { getSortableTimestamp } from './assistant-sessions-rail-utils'
+import { getSessionLastActivityAt, getSortableTimestamp } from './assistant-sessions-rail-utils'
+import type { AssistantRailSortMode } from './useAssistantPageSidebarState'
 
 const STORAGE_KEY = 'devscope-assistant-sessions-rail-order-v1'
 
@@ -63,15 +64,21 @@ export function saveAssistantSessionsRailOrder(order: AssistantSessionsRailOrder
     }
 }
 
-function compareByOrderAndCreated<T extends { id: string; createdAt: string }>(
+function compareByOrderAndSortMode<T extends { id: string; createdAt: string; updatedAt?: string }>(
     left: T,
     right: T,
-    orderIndex: Map<string, number>
+    orderIndex: Map<string, number>,
+    sortMode: AssistantRailSortMode
 ): number {
     const leftIndex = orderIndex.get(left.id)
     const rightIndex = orderIndex.get(right.id)
+    const resolveUpdatedAt = (value: T) => value.updatedAt || value.createdAt
 
     if (leftIndex == null && rightIndex == null) {
+        if (sortMode === 'updated') {
+            const updatedDelta = getSortableTimestamp(resolveUpdatedAt(right)) - getSortableTimestamp(resolveUpdatedAt(left))
+            if (updatedDelta !== 0) return updatedDelta
+        }
         const createdDelta = getSortableTimestamp(right.createdAt) - getSortableTimestamp(left.createdAt)
         if (createdDelta !== 0) return createdDelta
         return left.id.localeCompare(right.id)
@@ -84,15 +91,20 @@ function compareByOrderAndCreated<T extends { id: string; createdAt: string }>(
         return leftIndex - rightIndex
     }
 
+    if (sortMode === 'updated') {
+        const updatedDelta = getSortableTimestamp(resolveUpdatedAt(right)) - getSortableTimestamp(resolveUpdatedAt(left))
+        if (updatedDelta !== 0) return updatedDelta
+    }
     const createdDelta = getSortableTimestamp(right.createdAt) - getSortableTimestamp(left.createdAt)
     if (createdDelta !== 0) return createdDelta
     return left.id.localeCompare(right.id)
 }
 
-function compareGroupsByOrderAndCreated(
+function compareGroupsByOrderAndSortMode(
     left: SessionProjectGroup,
     right: SessionProjectGroup,
-    orderIndex: Map<string, number>
+    orderIndex: Map<string, number>,
+    sortMode: AssistantRailSortMode
 ): number {
     const leftIndex = orderIndex.get(left.key)
     const rightIndex = orderIndex.get(right.key)
@@ -102,12 +114,20 @@ function compareGroupsByOrderAndCreated(
     if (leftIndex != null) return -1
     if (rightIndex != null) return 1
 
+    if (sortMode === 'updated') {
+        const updatedDelta = getSortableTimestamp(right.updatedAt) - getSortableTimestamp(left.updatedAt)
+        if (updatedDelta !== 0) return updatedDelta
+    }
     const createdDelta = getSortableTimestamp(right.createdAt) - getSortableTimestamp(left.createdAt)
     if (createdDelta !== 0) return createdDelta
     return left.label.localeCompare(right.label) || left.key.localeCompare(right.key)
 }
 
-export function orderAssistantSessionsGroups(groups: SessionProjectGroup[], order: AssistantSessionsRailOrder): SessionProjectGroup[] {
+export function orderAssistantSessionsGroups(
+    groups: SessionProjectGroup[],
+    order: AssistantSessionsRailOrder,
+    sortMode: AssistantRailSortMode = 'updated'
+): SessionProjectGroup[] {
     const projectOrderIndex = new Map(order.projectOrder.map((projectKey, index) => [projectKey, index]))
 
     return [...groups]
@@ -115,10 +135,24 @@ export function orderAssistantSessionsGroups(groups: SessionProjectGroup[], orde
             const sessionOrderIndex = new Map((order.sessionOrderByProject[group.key] || []).map((sessionId, index) => [sessionId, index]))
             return {
                 ...group,
-                sessions: [...group.sessions].sort((left, right) => compareByOrderAndCreated(left, right, sessionOrderIndex))
+                sessions: [...group.sessions].sort((left, right) => compareByOrderAndSortMode(
+                    { ...left, updatedAt: getSessionLastActivityAt(left) },
+                    { ...right, updatedAt: getSessionLastActivityAt(right) },
+                    sessionOrderIndex,
+                    sortMode
+                ))
             }
         })
-        .sort((left, right) => compareGroupsByOrderAndCreated(left, right, projectOrderIndex))
+        .sort((left, right) => compareGroupsByOrderAndSortMode(left, right, projectOrderIndex, sortMode))
+}
+
+export function orderAssistantSessionsList<T extends { id: string; createdAt: string; updatedAt?: string }>(
+    sessions: T[],
+    orderedSessionIds: string[],
+    sortMode: AssistantRailSortMode = 'updated'
+): T[] {
+    const sessionOrderIndex = new Map(orderedSessionIds.map((sessionId, index) => [sessionId, index]))
+    return [...sessions].sort((left, right) => compareByOrderAndSortMode(left, right, sessionOrderIndex, sortMode))
 }
 
 export function moveArrayItem(

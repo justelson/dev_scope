@@ -143,14 +143,15 @@ export async function readFileAsDataUrl(file: File): Promise<string> {
 
 export function buildTextAttachmentFromPaste(text: string): ComposerContextFile {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const name = `pasted-snippet-${timestamp}.txt`
+    const name = 'Pasted text'
+    const referenceName = `pasted-text-${timestamp}.txt`
     const trimmed = text.length > MAX_ATTACHMENT_CONTENT_CHARS
         ? `${text.slice(0, MAX_ATTACHMENT_CONTENT_CHARS)}\n\n[truncated]`
         : text
 
     return {
         id: createAttachmentId(),
-        path: buildAttachmentPath('paste', name),
+        path: buildAttachmentPath('paste', referenceName),
         name,
         kind: 'doc',
         mimeType: 'text/plain',
@@ -185,6 +186,22 @@ function isClipboardOriginAttachment(file: ComposerContextFile): boolean {
     return /[\\/](assistant|codex)[\\/].*?[\\/]attachments[\\/]clipboard[\\/]/i.test(normalizedPath)
 }
 
+function getClipboardAttachmentDisplayName(file: ComposerContextFile, category: ReturnType<typeof getContextFileMeta>['category']): string {
+    const mime = String(file.mimeType || '').toLowerCase()
+    if (category === 'image') return 'Pasted image'
+    if (
+        category === 'code'
+        || isPastedTextAttachment(file)
+        || mime.startsWith('text/')
+        || mime.includes('json')
+        || mime.includes('xml')
+        || mime.includes('yaml')
+    ) {
+        return 'Pasted text'
+    }
+    return 'Pasted file'
+}
+
 export function buildPromptWithContextFiles(prompt: string, contextFiles: ComposerContextFile[]): string {
     const normalizedPrompt = String(prompt || '').trim()
     if (!contextFiles.length) return normalizedPrompt
@@ -193,7 +210,10 @@ export function buildPromptWithContextFiles(prompt: string, contextFiles: Compos
         const meta = getContextFileMeta(file)
         const isClipboardAttachment = isClipboardOriginAttachment(file)
         const inlineContent = meta.category === 'image' ? '' : String(file.content || '')
-        const header = `${index + 1}. ${meta.name} [${getContentTypeTag(file)}]`
+        const headerLabel = isClipboardAttachment
+            ? getClipboardAttachmentDisplayName(file, meta.category)
+            : meta.name
+        const header = `${index + 1}. ${headerLabel} [${getContentTypeTag(file)}]`
         const details = meta.category === 'image'
             ? [
                 isClipboardAttachment

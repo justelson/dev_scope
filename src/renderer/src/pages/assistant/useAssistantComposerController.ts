@@ -31,7 +31,7 @@ import type { AssistantComposerPreferenceEffort } from './assistant-composer-pre
 import {
     type AssistantComposerSessionState
 } from './assistant-composer-session-state'
-import type { AssistantComposerProps, ComposerContextFile } from './assistant-composer-types'
+import type { AssistantComposerProps, AssistantQueuedComposerMessage, ComposerContextFile } from './assistant-composer-types'
 
 export function useAssistantComposerController(props: AssistantComposerProps) {
     const { settings } = useSettings()
@@ -40,6 +40,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         onSend,
         onStop,
         onReconnect,
+        onOverflowWheel,
         onBlockedSend,
         onCancelDirty,
         onOpenAttachmentPreview,
@@ -69,7 +70,10 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         queuedMessageCount = 0,
         queuedMessages = [],
         onForceQueuedMessage,
-        reconnectPending = false
+        onDeleteQueuedMessage,
+        onMoveQueuedMessage,
+        reconnectPending = false,
+        latestTurnUsage = null
     } = props
     const normalizedSessionId = sessionId ?? null
 
@@ -371,6 +375,31 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         })
     }
 
+    const restoreQueuedMessageToDraft = useCallback((queuedMessage: AssistantQueuedComposerMessage) => {
+        const nextPrompt = queuedMessage.prompt
+        const nextContextFiles = queuedMessage.contextFiles.map((file) => ({ ...file }))
+        const cursorPosition = nextPrompt.length
+
+        setText(nextPrompt)
+        setInlineMentionTags([])
+        setContextFiles(nextContextFiles)
+        setPreviewAttachment(null)
+        setRemovingAttachmentIds([])
+        setShowMentionMenu(false)
+        setHistoryCursor(null)
+        setDraftBeforeHistory('')
+        setComposerCursor(cursorPosition)
+
+        if (typeof window !== 'undefined') {
+            window.requestAnimationFrame(() => {
+                const element = textareaRef.current
+                if (!element) return
+                element.focus()
+                element.setSelectionRange(cursorPosition, cursorPosition)
+            })
+        }
+    }, [textareaRef])
+
     return buildAssistantComposerControllerResult({
         disabled,
         allowEmptySubmit,
@@ -387,14 +416,19 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
         queuedMessageCount,
         queuedMessages,
         onForceQueuedMessage,
+        onDeleteQueuedMessage,
+        onMoveQueuedMessage,
         reconnectPending,
+        latestTurnUsage,
         settingsAssistantBusyMessageMode: settings.assistantBusyMessageMode,
         isDirty,
         onStop,
         onReconnect,
+        onOverflowWheel,
         onOpenAttachmentPreview,
         onAttachmentShelfBoundsChange,
         handleCancelDirty,
+        restoreQueuedMessageToDraft,
         text,
         setText,
         inlineMentionTags,

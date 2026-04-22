@@ -6,13 +6,15 @@ import type { AssistantTextStreamingMode } from '@/lib/settings'
 import { LoadingSpinner } from '@/components/ui/LoadingState'
 import type { AssistantDiffTarget } from './assistant-diff-types'
 import {
+    TimelineContextCompactionMarker,
     TimelineEmptyState,
+    TimelineIssueList,
     TimelineMessage,
     TimelineProposedPlan,
     TimelineToolCallList,
     TimelineWorkingIndicator
 } from './AssistantTimelineRows'
-import { buildTimelineRows, type TimelineRenderRow } from './assistant-timeline-helpers'
+import { buildTimelineRows, isContextCompactionActivity, isIssueActivity, type TimelineRenderRow } from './assistant-timeline-helpers'
 import { useAssistantTimelineEntries } from './useAssistantTimelineEntries'
 import { useAssistantTimelineWindow } from './useAssistantTimelineWindow'
 
@@ -95,10 +97,6 @@ function AssistantTimelineImpl({
         () => buildTimelineRows(visibleEntries, isWorking, activeWorkStartedAt),
         [activeWorkStartedAt, isWorking, visibleEntries]
     )
-    const hasStreamingAssistantMessage = useMemo(
-        () => messages.some((message) => message.role === 'assistant' && message.streaming),
-        [messages]
-    )
     const lastAssistantMessageIdByTurn = useMemo(() => {
         const next = new Map<string, string>()
         for (const message of messages) {
@@ -112,9 +110,8 @@ function AssistantTimelineImpl({
         return (
             <LoadingSpinner
                 message="Loading chat..."
-                detail="Restoring the selected conversation."
                 className="py-0"
-                minHeightClassName="min-h-[280px]"
+                minHeightClassName="min-h-[220px]"
             />
         )
     }
@@ -133,6 +130,14 @@ function AssistantTimelineImpl({
 
     const renderRow = (row: TimelineRenderRow) => {
         if (row.kind === 'activity-group') {
+            if (row.activities.every((activity) => isIssueActivity(activity))) {
+                return (
+                    <TimelineIssueList
+                        key={row.id}
+                        activities={row.activities}
+                    />
+                )
+            }
             return (
                 <TimelineToolCallList
                     key={row.id}
@@ -144,6 +149,22 @@ function AssistantTimelineImpl({
             )
         }
         if (row.kind === 'activity') {
+            if (isContextCompactionActivity(row.activity)) {
+                return (
+                    <TimelineContextCompactionMarker
+                        key={row.id}
+                        activity={row.activity}
+                    />
+                )
+            }
+            if (isIssueActivity(row.activity)) {
+                return (
+                    <TimelineIssueList
+                        key={row.id}
+                        activities={[row.activity]}
+                    />
+                )
+            }
             return (
                 <TimelineToolCallList
                     key={row.id}
@@ -155,7 +176,7 @@ function AssistantTimelineImpl({
             )
         }
         if (row.kind === 'working') {
-            return hasStreamingAssistantMessage ? null : <TimelineWorkingIndicator key={row.id} startedAt={activeWorkStartedAt} label={workingLabel} />
+            return <TimelineWorkingIndicator key={row.id} startedAt={activeWorkStartedAt} label={workingLabel} />
         }
         if (row.kind === 'plan') {
             return (
@@ -205,25 +226,6 @@ function AssistantTimelineImpl({
 
     return (
         <div>
-            {timelineWindow.hasHiddenEntries ? (
-                <div className="mb-4">
-                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/6 bg-white/[0.02] px-4 py-3">
-                        <div className="min-w-0">
-                            <p className="text-[12px] font-medium text-sparkle-text">Older timeline entries are collapsed for performance.</p>
-                            <p className="mt-1 text-[11px] text-sparkle-text-muted">
-                                Showing latest {timelineWindow.loadedEntryCount} of {entries.length} entries, with {timelineWindow.hiddenEntryCount} hidden above.
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={timelineWindow.loadOlder}
-                            className="shrink-0 rounded-full border border-transparent bg-white/[0.03] px-3 py-1.5 text-[11px] font-medium text-sparkle-text-secondary transition-colors hover:bg-white/[0.05] hover:text-sparkle-text"
-                        >
-                            Load older
-                        </button>
-                    </div>
-                </div>
-            ) : null}
             {rows.map((row) => renderRowContainer(row, renderRow(row)))}
         </div>
     )

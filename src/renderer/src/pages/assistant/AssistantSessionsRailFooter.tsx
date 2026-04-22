@@ -1,5 +1,5 @@
 import type { ComponentProps, MouseEvent as ReactMouseEvent } from 'react'
-import { Archive } from 'lucide-react'
+import { Archive, MoreVertical } from 'lucide-react'
 import type { AssistantSession } from '@shared/assistant/contracts'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
@@ -70,7 +70,7 @@ export function AssistantSessionsRailFooter(props: {
                                                 onSelectSession(session.id)
                                             }
                                         }}
-                                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 pr-10 text-left transition-colors hover:bg-white/[0.04]"
+                                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 pr-6 text-left transition-colors hover:bg-white/[0.04]"
                                     >
                                         <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', status?.dotClass || (session.mode === 'playground' ? 'bg-violet-400' : 'bg-sky-400'))} />
                                         <div className="min-w-0 flex-1">
@@ -78,12 +78,14 @@ export function AssistantSessionsRailFooter(props: {
                                             <div className="truncate text-[10px] text-sparkle-text-muted/55">{session.mode === 'playground' ? 'Playground' : 'Work'} · {status?.label || 'Active'}</div>
                                         </div>
                                     </button>
-                                    <div className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                                    <div className="pointer-events-auto absolute right-1 top-1/2 -translate-y-1/2 opacity-100 transition-opacity">
                                         <FileActionsMenu
                                             items={sessionMenuItems}
                                             title={`${getSessionDisplayTitle(session)} actions`}
+                                            triggerIcon={<MoreVertical size={11} strokeWidth={1.65} className="mx-auto" />}
                                             presentation="portal"
-                                            buttonClassName="h-7 w-7 border-transparent bg-white/[0.03] text-sparkle-text-secondary/65 hover:bg-white/[0.06] hover:text-sparkle-text"
+                                            buttonClassName="h-3.5 w-3.5 rounded-none border-transparent bg-transparent p-0 text-sparkle-text-muted/45 hover:border-transparent hover:bg-transparent hover:text-sparkle-text"
+                                            openButtonClassName="rounded-none border-transparent bg-transparent p-0 text-sparkle-text"
                                         />
                                     </div>
                                 </div>

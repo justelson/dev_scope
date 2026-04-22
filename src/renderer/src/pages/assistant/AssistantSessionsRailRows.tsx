@@ -209,7 +209,7 @@ export function SessionRow({
             <div
                 className={cn(
                     'flex min-w-0 flex-1 items-center gap-1 text-left',
-                    menuItems && menuItems.length > 0 && 'pr-5'
+                    menuItems && menuItems.length > 0 && 'pr-6'
                 )}
             >
                 <span
@@ -231,15 +231,16 @@ export function SessionRow({
                     </span>
                 ) : null}
                 <span className={cn(
-                    'mr-1 shrink-0 text-[8.5px] leading-none',
+                    'shrink-0 text-[8.5px] leading-none',
+                    'mr-1',
                     isActive ? 'text-sparkle-text/60' : 'text-sparkle-text-muted/40'
                 )}>{timeLabel}</span>
             </div>
             {menuItems && menuItems.length > 0 ? (
                 <div
                     className={cn(
-                        'pointer-events-none absolute right-1 top-1/2 z-[1] -translate-y-1/2 opacity-0 transition-opacity',
-                        !isDragging && 'group-hover/menu-item:pointer-events-auto group-hover/menu-item:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
+                        'absolute right-1 top-1/2 z-[1] -translate-y-1/2 transition-opacity',
+                        isDragging ? 'pointer-events-none opacity-0' : 'pointer-events-auto opacity-100'
                     )}
                 >
                     <FileActionsMenu
@@ -247,8 +248,8 @@ export function SessionRow({
                         title={archived ? 'Archived chat actions' : 'Chat actions'}
                         triggerIcon={<MoreVertical size={11} strokeWidth={1.65} className="mx-auto" />}
                         presentation="portal"
-                        buttonClassName="h-3.5 w-3.5 border-transparent bg-transparent p-0 text-sparkle-text-muted/45 hover:border-transparent hover:bg-transparent hover:text-sparkle-text"
-                        openButtonClassName="border-transparent bg-transparent p-0 text-sparkle-text"
+                        buttonClassName="h-3.5 w-3.5 rounded-none border-transparent bg-transparent p-0 text-sparkle-text-muted/45 hover:border-transparent hover:bg-transparent hover:text-sparkle-text"
+                        openButtonClassName="rounded-none border-transparent bg-transparent p-0 text-sparkle-text"
                     />
                 </div>
             ) : null}

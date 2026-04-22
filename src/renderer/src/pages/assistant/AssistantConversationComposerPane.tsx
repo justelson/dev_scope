@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import type { AssistantPendingUserInput, AssistantPlaygroundPendingLabRequest } from '@shared/assistant/contracts'
+import type { AssistantPendingUserInput, AssistantPlaygroundPendingLabRequest, AssistantTurnUsage } from '@shared/assistant/contracts'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import { AssistantComposer } from './AssistantComposer'
 import { AssistantPendingPlaygroundLabPanel } from './AssistantPendingPlaygroundLabPanel'
@@ -16,6 +16,8 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
     queuedMessageCount: number
     queuedMessages: AssistantQueuedComposerMessage[]
     onForceQueuedMessage?: (messageId: string) => Promise<void> | void
+    onDeleteQueuedMessage?: (messageId: string) => Promise<void> | void
+    onMoveQueuedMessage?: (messageId: string, targetMessageId: string) => Promise<void> | void
     selectedSessionId: string | null
     selectedSessionMode: 'work' | 'playground'
     assistantAvailable: boolean
@@ -24,13 +26,16 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
     availableModels: Array<{ id: string; label: string; description?: string }>
     activeModel: string | undefined
     modelsLoading: boolean
+    latestTurnUsage?: AssistantTurnUsage | null
     runtimeMode: 'approval-required' | 'full-access'
     interactionMode: 'default' | 'plan'
     activeProfile: 'safe-dev' | 'yolo-fast'
     activeStatusLabel: string
     isConnecting?: boolean
+    reconnectPending?: boolean
     onStop?: () => Promise<void> | void
     onReconnect?: () => Promise<void> | void
+    onOverflowWheel?: (deltaY: number) => void
     onBlockedSend?: (message: string) => void
     onOpenAttachmentPreview?: (
         file: { name: string; path: string },
@@ -51,6 +56,7 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
     const hasPendingPlaygroundLabRequest = Boolean(props.pendingPlaygroundLabRequest)
     const isWaitingForUserInput = props.pendingUserInputs.length > 0
     const isConnecting = props.isConnecting ?? (props.commandPending && !props.assistantConnected)
+    const reconnectPending = props.reconnectPending ?? (props.commandPending && !props.assistantConnected)
     const composerDisabledReason = deriveAssistantComposerDisabledReason({
         sessionId: props.selectedSessionId,
         sessionMode: props.selectedSessionMode,
@@ -58,16 +64,8 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
     })
 
     return (
-        <div className="relative px-4 py-3">
-            {hasPendingPlaygroundLabRequest && props.pendingPlaygroundLabRequest ? (
-                <AssistantPendingPlaygroundLabPanel
-                    request={props.pendingPlaygroundLabRequest}
-                    responding={props.commandPending}
-                    onApprove={props.approvePendingPlaygroundLabRequest}
-                    onDecline={props.declinePendingPlaygroundLabRequest}
-                />
-            ) : null}
-            {!hasPendingPlaygroundLabRequest && isWaitingForUserInput ? (
+        <div className="relative px-4 pb-3 pt-0.5">
+            {isWaitingForUserInput ? (
                 <AssistantPendingUserInputPanel
                     pendingUserInputs={props.pendingUserInputs}
                     responding={props.commandPending}
@@ -85,7 +83,15 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
                     activeStatusLabel={props.activeStatusLabel}
                     isConnecting={isConnecting}
                     onReconnect={props.onReconnect}
-                    reconnectPending={props.commandPending && !props.assistantConnected}
+                    reconnectPending={reconnectPending}
+                />
+            ) : null}
+            {!isWaitingForUserInput && hasPendingPlaygroundLabRequest && props.pendingPlaygroundLabRequest ? (
+                <AssistantPendingPlaygroundLabPanel
+                    request={props.pendingPlaygroundLabRequest}
+                    responding={props.commandPending}
+                    onApprove={props.approvePendingPlaygroundLabRequest}
+                    onDecline={props.declinePendingPlaygroundLabRequest}
                 />
             ) : null}
             {!hasPendingPlaygroundLabRequest && !isWaitingForUserInput ? (
@@ -100,24 +106,28 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
                         queuedMessageCount={props.queuedMessageCount}
                         queuedMessages={props.queuedMessages}
                         onForceQueuedMessage={props.onForceQueuedMessage}
+                        onDeleteQueuedMessage={props.onDeleteQueuedMessage}
+                        onMoveQueuedMessage={props.onMoveQueuedMessage}
                         isConnected={props.assistantConnected}
                         isConnecting={isConnecting}
                         activeModel={props.activeModel}
                         modelOptions={props.availableModels}
                         modelsLoading={props.modelsLoading}
                         modelsError={null}
+                        latestTurnUsage={props.latestTurnUsage}
                         activeProfile={props.activeProfile}
                         runtimeMode={props.runtimeMode}
                         interactionMode={props.interactionMode}
                         projectPath={props.selectedProjectPath}
                         onReconnect={props.onReconnect}
+                        onOverflowWheel={props.onOverflowWheel}
                         onBlockedSend={props.onBlockedSend}
                         onOpenAttachmentPreview={props.onOpenAttachmentPreview}
                         onAttachmentShelfBoundsChange={props.onAttachmentShelfBoundsChange}
                         onRefreshModels={props.refreshModels}
                         onStop={props.onStop}
                         onSend={props.sendPrompt}
-                        reconnectPending={props.commandPending && !props.assistantConnected}
+                        reconnectPending={reconnectPending}
                     />
                 </div>
             ) : null}

@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AssistantBusyMessageMode } from '@/lib/settings'
+import { parseDevContextCompactionTestCommand } from '@shared/assistant/dev-context-compaction-test'
 import type {
     AssistantComposerSendOptions,
     AssistantQueuedComposerMessage,
     ComposerContextFile
 } from './assistant-composer-types'
+import { parseDevAssistantQueuePreviewCommand, type AssistantQueuePreviewCommand } from './assistant-queue-preview-protocol'
 
 type PendingComposerDispatch = {
     id: string
+    sessionId: string
     prompt: string
     contextFiles: ComposerContextFile[]
     options: AssistantComposerSendOptions
+    previewOnly?: boolean
 }
 
 function removeQueuedDispatchById(
@@ -18,6 +22,33 @@ function removeQueuedDispatchById(
     messageId: string
 ): PendingComposerDispatch[] {
     return entries.filter((entry) => entry.id !== messageId)
+}
+
+function moveQueuedDispatch(
+    entries: PendingComposerDispatch[],
+    messageId: string,
+    targetMessageId: string
+): PendingComposerDispatch[] {
+    const fromIndex = entries.findIndex((entry) => entry.id === messageId)
+    const targetIndex = entries.findIndex((entry) => entry.id === targetMessageId)
+    if (fromIndex === -1 || targetIndex === -1 || fromIndex === targetIndex) return entries
+
+    const nextEntries = [...entries]
+    const [movedEntry] = nextEntries.splice(fromIndex, 1)
+    if (!movedEntry) return entries
+
+    const adjustedTargetIndex = nextEntries.findIndex((entry) => entry.id === targetMessageId)
+    if (adjustedTargetIndex === -1) return entries
+    nextEntries.splice(fromIndex < targetIndex ? adjustedTargetIndex + 1 : adjustedTargetIndex, 0, movedEntry)
+    return nextEntries
+}
+
+function createQueuedDispatchId(prefix: 'queued' | 'preview'): string {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function cloneContextFiles(contextFiles: ComposerContextFile[]): ComposerContextFile[] {
+    return contextFiles.map((file) => ({ ...file }))
 }
 
 export function useAssistantQueuedComposer(args: {
@@ -28,6 +59,7 @@ export function useAssistantQueuedComposer(args: {
     activeTurnId: string | null
     busyMessageMode: AssistantBusyMessageMode
     dispatchPrompt: (
+        sessionId: string,
         prompt: string,
         contextFiles: ComposerContextFile[],
         options: AssistantComposerSendOptions
@@ -56,23 +88,56 @@ export function useAssistantQueuedComposer(args: {
         queuedComposerMessages.map((entry) => ({
             id: entry.id,
             prompt: entry.prompt,
+            contextFiles: entry.contextFiles.map((file) => ({ ...file })),
             dispatchMode: entry.options.dispatchMode === 'force' ? 'force' : 'queue',
             status: pausedQueueMessageIdBySessionId[selectedSessionId || ''] === entry.id ? 'paused' : 'queued'
         }))
     ), [pausedQueueMessageIdBySessionId, queuedComposerMessages, selectedSessionId])
 
     const handleDispatchPrompt = useCallback(async (
+        sessionId: string,
         prompt: string,
         contextFiles: ComposerContextFile[],
         options: AssistantComposerSendOptions
     ) => {
         setSendingComposerPrompt(true)
         try {
-            return await dispatchPrompt(prompt, contextFiles, options)
+            return await dispatchPrompt(sessionId, prompt, contextFiles, options)
         } finally {
             setSendingComposerPrompt(false)
         }
     }, [dispatchPrompt])
+
+    const enqueuePreviewPrompt = useCallback((
+        command: AssistantQueuePreviewCommand,
+        contextFiles: ComposerContextFile[],
+        options: AssistantComposerSendOptions
+    ) => {
+        if (!selectedSessionId) return false
+
+        const nextDispatches: PendingComposerDispatch[] = Array.from({ length: command.count }, (_, index) => ({
+            id: createQueuedDispatchId('preview'),
+            sessionId: selectedSessionId,
+            prompt: command.count > 1 ? `${command.prompt} (${index + 1})` : command.prompt,
+            contextFiles: cloneContextFiles(contextFiles),
+            options: {
+                ...options,
+                dispatchMode: command.dispatchMode
+            },
+            previewOnly: true
+        }))
+
+        setQueuedComposerMessagesBySessionId((current) => {
+            const existing = current[selectedSessionId] || []
+            return {
+                ...current,
+                [selectedSessionId]: command.dispatchMode === 'force'
+                    ? [...nextDispatches, ...existing]
+                    : [...existing, ...nextDispatches]
+            }
+        })
+        return true
+    }, [selectedSessionId])
 
     const restoreQueuedMessage = useCallback((sessionId: string, message: PendingComposerDispatch) => {
         setQueuedComposerMessagesBySessionId((current) => {
@@ -90,6 +155,8 @@ export function useAssistantQueuedComposer(args: {
         queuedMessage: PendingComposerDispatch,
         dispatchMode: 'immediate' | 'force' = 'immediate'
     ) => {
+        if (queuedMessage.previewOnly) return true
+
         setQueuedComposerMessagesBySessionId((current) => {
             const existing = current[sessionId] || []
             if (!existing.some((entry) => entry.id === queuedMessage.id)) return current
@@ -103,10 +170,15 @@ export function useAssistantQueuedComposer(args: {
             [sessionId]: null
         }))
 
-        const success = await handleDispatchPrompt(queuedMessage.prompt, queuedMessage.contextFiles, {
-            ...queuedMessage.options,
-            dispatchMode
-        })
+        const success = await handleDispatchPrompt(
+            queuedMessage.sessionId,
+            queuedMessage.prompt,
+            queuedMessage.contextFiles,
+            {
+                ...queuedMessage.options,
+                dispatchMode
+            }
+        )
 
         if (success) return true
 
@@ -127,9 +199,10 @@ export function useAssistantQueuedComposer(args: {
         if (!selectedSessionId) return false
 
         const nextDispatch: PendingComposerDispatch = {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id: createQueuedDispatchId('queued'),
+            sessionId: selectedSessionId,
             prompt,
-            contextFiles,
+            contextFiles: cloneContextFiles(contextFiles),
             options: {
                 ...options,
                 dispatchMode: mode
@@ -161,32 +234,53 @@ export function useAssistantQueuedComposer(args: {
         contextFiles: ComposerContextFile[],
         options: AssistantComposerSendOptions
     ) => {
+        if (!selectedSessionId) return false
+        const compactionTestCommand = parseDevContextCompactionTestCommand(prompt, { enabled: import.meta.env.DEV })
+        if (compactionTestCommand) {
+            return handleDispatchPrompt(selectedSessionId, prompt, contextFiles, options)
+        }
+
+        const previewCommand = parseDevAssistantQueuePreviewCommand(prompt)
+        if (previewCommand) return enqueuePreviewPrompt(previewCommand, contextFiles, options)
+
         if (isAssistantBusy) {
             const dispatchMode = options.dispatchMode === 'force' || options.dispatchMode === 'queue'
                 ? options.dispatchMode
                 : busyMessageMode
             return enqueueBusyPrompt(dispatchMode, prompt, contextFiles, options)
         }
-        return handleDispatchPrompt(prompt, contextFiles, options)
-    }, [busyMessageMode, enqueueBusyPrompt, handleDispatchPrompt, isAssistantBusy])
+        return handleDispatchPrompt(selectedSessionId, prompt, contextFiles, options)
+    }, [busyMessageMode, enqueueBusyPrompt, enqueuePreviewPrompt, handleDispatchPrompt, isAssistantBusy, selectedSessionId])
 
     const handleForceQueuedMessage = useCallback(async (messageId: string) => {
         if (!selectedSessionId) return
 
         let hasTargetMessage = false
+        let targetIsPreviewOnly = false
         setQueuedComposerMessagesBySessionId((current) => {
             const existing = current[selectedSessionId] || []
             const targetIndex = existing.findIndex((entry) => entry.id === messageId)
             if (targetIndex === -1) return current
 
             hasTargetMessage = true
-            const nextQueuedMessages = existing.map((entry, index) => (
-                index <= targetIndex
+            targetIsPreviewOnly = Boolean(existing[targetIndex]?.previewOnly)
+            const nextQueuedMessages: PendingComposerDispatch[] = existing.map((entry, index) => (
+                targetIsPreviewOnly
+                    ? entry.id === messageId
+                        ? {
+                            ...entry,
+                            options: {
+                                ...entry.options,
+                                dispatchMode: 'force' as const
+                            }
+                        }
+                        : entry
+                    : index <= targetIndex
                     ? {
                         ...entry,
                         options: {
                             ...entry.options,
-                            dispatchMode: 'force'
+                            dispatchMode: 'force' as const
                         }
                     }
                     : entry
@@ -198,7 +292,7 @@ export function useAssistantQueuedComposer(args: {
             }
         })
 
-        if (!hasTargetMessage) return
+        if (!hasTargetMessage || targetIsPreviewOnly) return
 
         setPausedQueueMessageIdBySessionId((current) => ({
             ...current,
@@ -212,12 +306,47 @@ export function useAssistantQueuedComposer(args: {
         }
     }, [activeTurnId, commandPending, interruptTurn, isThreadWorking, selectedSessionId])
 
+    const handleDeleteQueuedMessage = useCallback((messageId: string) => {
+        if (!selectedSessionId) return
+
+        setQueuedComposerMessagesBySessionId((current) => {
+            const existing = current[selectedSessionId] || []
+            if (!existing.some((entry) => entry.id === messageId)) return current
+            return {
+                ...current,
+                [selectedSessionId]: removeQueuedDispatchById(existing, messageId)
+            }
+        })
+
+        setPausedQueueMessageIdBySessionId((current) => {
+            if (current[selectedSessionId] !== messageId) return current
+            return {
+                ...current,
+                [selectedSessionId]: null
+            }
+        })
+    }, [selectedSessionId])
+
+    const handleMoveQueuedMessage = useCallback((messageId: string, targetMessageId: string) => {
+        if (!selectedSessionId || messageId === targetMessageId) return
+
+        setQueuedComposerMessagesBySessionId((current) => {
+            const existing = current[selectedSessionId] || []
+            const moved = moveQueuedDispatch(existing, messageId, targetMessageId)
+            if (moved === existing) return current
+            return {
+                ...current,
+                [selectedSessionId]: moved
+            }
+        })
+    }, [selectedSessionId])
+
     useEffect(() => {
         if (!selectedSessionId) return
         if (isAssistantBusy) return
         if (queueDrainSessionIdRef.current === selectedSessionId) return
 
-        const nextQueuedMessage = queuedComposerMessagesBySessionId[selectedSessionId]?.[0]
+        const nextQueuedMessage = queuedComposerMessagesBySessionId[selectedSessionId]?.find((entry) => !entry.previewOnly)
         if (!nextQueuedMessage) return
         if (pausedQueueMessageIdBySessionId[selectedSessionId] === nextQueuedMessage.id) return
 
@@ -250,6 +379,8 @@ export function useAssistantQueuedComposer(args: {
         queuedComposerMessageCount,
         queuedComposerMessageItems,
         handleSendPrompt,
-        handleForceQueuedMessage
+        handleForceQueuedMessage,
+        handleDeleteQueuedMessage,
+        handleMoveQueuedMessage
     }
 }

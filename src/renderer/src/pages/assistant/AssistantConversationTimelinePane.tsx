@@ -132,10 +132,7 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
                         </div>
                     </div>
                     <div ref={floatingPlanOverlayRef} className="pointer-events-none absolute inset-0 z-20" />
-                    <div className={cn(
-                        'pointer-events-none absolute inset-x-0 z-30 flex justify-center px-4 transition-all duration-200',
-                        props.elevateScrollToBottom ? 'bottom-24' : 'bottom-4'
-                    )}>
+                    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4 transition-all duration-200">
                         <button
                             ref={scrollButtonRef}
                             type="button"

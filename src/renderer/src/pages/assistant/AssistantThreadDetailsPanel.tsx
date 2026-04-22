@@ -47,7 +47,7 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
     onCopyAllLogs: () => void
     onClearLogs: () => void
     onCopyLog: (activity: AssistantActivity) => void
-    onShowLogDetails: (activity: AssistantActivity) => void
+    onShowLogDetails: (activity: AssistantActivity, activities?: AssistantActivity[]) => void
     onToggleAssistantConnection: () => void
 }) {
     const { open, compact = false, selectedChatTypeLabel, selectedProjectPath, selectedProjectLabel, displayProjectPath, showFullProjectPath, projectPathCopied, contextPercentage, contextColor, contextUsedDisplay, contextAvailableDisplay, pendingApprovalsCount, pendingUserInputsCount, sidebarSelectedModel, selectedRuntimeLabel, selectedThinkingLabel, selectedSpeedLabel, sessionCostLabel, sessionCostDisplay, sessionCostTone, sidebarMetricChips, issueActivities, latestIssueGroup, olderIssueGroups, copiedLogId, copyErrorByLogId, allLogsCopied, clearingLogs, logsExpanded, selectedSessionId, assistantConnected, commandPending, onClose, onShowPlan, onToggleProjectPath, onCopyProjectPath, onToggleLogsExpanded, onCopyAllLogs, onClearLogs, onCopyLog, onShowLogDetails, onToggleAssistantConnection } = props

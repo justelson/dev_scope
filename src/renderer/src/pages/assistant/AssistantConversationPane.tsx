@@ -6,14 +6,16 @@ import { isAssistantThreadActivelyWorking } from '@/lib/assistant/selectors'
 import { cn } from '@/lib/utils'
 import { buildPromptWithContextFiles } from './assistant-composer-utils'
 import { AssistantChatOnboardingOverlay } from './AssistantChatOnboardingOverlay'
+import { AssistantConnectionRecoveryBanner } from './AssistantConnectionRecoveryBanner'
 import { AssistantConversationHeader } from './AssistantConversationHeader'
 import { AssistantConversationComposerPane } from './AssistantConversationComposerPane'
 import { AssistantConversationTimelinePane } from './AssistantConversationTimelinePane'
 import type { AssistantConversationPaneProps } from './AssistantConversationPane.types'
-import type { AssistantComposerSendOptions, AssistantElementBounds, ComposerContextFile } from './assistant-composer-types'
+import type { AssistantComposerSendOptions, ComposerContextFile } from './assistant-composer-types'
 import { getAssistantLinkBaseFilePath } from './assistant-file-navigation'
 import { getAssistantActivePlanProgress, hasAssistantPlanPanelContent } from './assistant-plan-utils'
 import { getAssistantThreadDisplayTitle, getSessionDisplayTitle, resolveSessionProjectPath } from './assistant-sessions-rail-utils'
+import { useAssistantConnectionRecovery } from './useAssistantConnectionRecovery'
 import { useAssistantQueuedComposer } from './useAssistantQueuedComposer'
 import { useAssistantSessionTurnUsage } from './useAssistantSessionTurnUsage'
 import { useAssistantPageTimelineScroll } from './useAssistantPageTimelineScroll'
@@ -21,11 +23,6 @@ import { useAssistantPageTimelineScroll } from './useAssistantPageTimelineScroll
 const TIMELINE_SHOW_SCROLL_BUTTON_THRESHOLD_PX = 420
 const TIMELINE_HIDE_SCROLL_BUTTON_THRESHOLD_PX = 180
 const IMPLEMENT_MODE_TOAST_MS = 2600
-const SCROLL_BUTTON_ELEVATED_OFFSET_PX = 80
-
-function rectsOverlap(a: AssistantElementBounds, b: AssistantElementBounds): boolean {
-    return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
-}
 
 export function AssistantConversationPane(props: AssistantConversationPaneProps) {
     const controller = useAssistantConversationStore()
@@ -34,18 +31,12 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
     const headerMenuRef = useRef<HTMLDivElement | null>(null)
     const [activeHeaderMenu, setActiveHeaderMenu] = useState<'none' | 'open-with' | 'more'>('none')
     const [showScrollToBottom, setShowScrollToBottom] = useState(false)
-    const [elevateScrollToBottom, setElevateScrollToBottom] = useState(false)
-    const [attachmentShelfBounds, setAttachmentShelfBounds] = useState<AssistantElementBounds | null>(null)
-    const [scrollButtonBounds, setScrollButtonBounds] = useState<AssistantElementBounds | null>(null)
     const [interactionModeOverride, setInteractionModeOverride] = useState<'default' | null>(null)
     const [implementationToastVisible, setImplementationToastVisible] = useState(false)
     const showScrollToBottomRef = useRef(false)
     const scrollButtonRafRef = useRef<number | null>(null)
 
     const isThreadWorking = isAssistantThreadActivelyWorking(controller.activeThread)
-    const isReconnectPending = controller.commandPending && !controller.connected && !isThreadWorking
-    const isThreadConnecting = controller.phase.key === 'starting' || isReconnectPending
-    const activeStatusLabel = isThreadConnecting ? 'Connecting...' : 'Working...'
     const selectedSessionId = controller.selectedSession?.id || null
     const selectedPlaygroundLabId = controller.selectedSession?.playgroundLabId || null
     const selectedPlaygroundLabTitle = useAssistantStoreSelector((state) => {
@@ -116,6 +107,22 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
         || (controller.activeThread?.pendingApprovals.length || 0) > 0
         || (controller.activeThread?.pendingUserInputs.length || 0) > 0
     )
+    const connectionRecovery = useAssistantConnectionRecovery({
+        selectedSessionId,
+        activeThreadId: controller.activeThread?.id || null,
+        threadState: controller.activeThread?.state || null,
+        loading: controller.loading,
+        connected: controller.connected,
+        commandPending: controller.commandPending,
+        threadLastError: controller.activeThread?.lastError || null,
+        commandError: controller.commandError,
+        activities: controller.activityFeed,
+        connectResult: (sessionId) => actions.connectResult(sessionId),
+        disconnect: (sessionId) => actions.disconnect(sessionId)
+    })
+    const isReconnectPending = connectionRecovery.reconnectPending || (controller.commandPending && !controller.connected && !isThreadWorking)
+    const isThreadConnecting = controller.phase.key === 'starting' || isReconnectPending
+    const activeStatusLabel = isThreadConnecting ? 'Connecting...' : 'Working...'
     const { timelineContentRef, timelineScrollRef, onScrollTimeline, onScrollToBottom } = useAssistantPageTimelineScroll({
         sessionId: controller.selectedSession?.id || null,
         threadId: controller.activeThread?.id || null,
@@ -133,11 +140,16 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
     })
     const isLoadingSelectedChat = Boolean(
         !isThreadConnecting
-        && !controller.loading
         && controller.selectedSession
-        && selectedThreadHasHistoricalContent
         && controller.timelineMessages.length === 0
         && controller.activityFeed.length === 0
+        && (
+            controller.selectionHydrating
+            || (
+                !controller.loading
+                && selectedThreadHasHistoricalContent
+            )
+        )
     )
     const showPlaygroundRootOnboarding = !controller.loading
         && props.fallbackSessionMode === 'playground'
@@ -149,6 +161,7 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
         && !displayProjectPath
     const showPlaygroundDetachedOnboarding = !showPlaygroundRootOnboarding
         && !controller.loading
+        && !props.autoStartDetachedPlaygroundChat
         && selectedSessionMode === 'playground'
         && !controller.selectedSession
     const showChatOnboardingOverlay = showPlaygroundRootOnboarding || showWorkProjectOnboarding || showPlaygroundDetachedOnboarding
@@ -223,23 +236,6 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
     ])
 
     useEffect(() => {
-        if (!attachmentShelfBounds || !scrollButtonBounds) {
-            setElevateScrollToBottom(false)
-            return
-        }
-
-        const defaultScrollButtonBounds = elevateScrollToBottom
-            ? {
-                ...scrollButtonBounds,
-                top: scrollButtonBounds.top + SCROLL_BUTTON_ELEVATED_OFFSET_PX,
-                bottom: scrollButtonBounds.bottom + SCROLL_BUTTON_ELEVATED_OFFSET_PX
-            }
-            : scrollButtonBounds
-
-        setElevateScrollToBottom(rectsOverlap(attachmentShelfBounds, defaultScrollButtonBounds))
-    }, [attachmentShelfBounds, elevateScrollToBottom, scrollButtonBounds])
-
-    useEffect(() => {
         return () => {
             if (scrollButtonRafRef.current !== null) {
                 window.cancelAnimationFrame(scrollButtonRafRef.current)
@@ -270,6 +266,14 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
         setShowScrollToBottom(false)
         onScrollToBottom()
     }, [onScrollToBottom])
+
+    const handleComposerOverflowWheel = useCallback((deltaY: number) => {
+        if (deltaY === 0) return
+        const element = timelineScrollRef.current
+        if (!element) return
+        element.scrollTop += deltaY
+        handleTimelineScrollEvent(element)
+    }, [handleTimelineScrollEvent, timelineScrollRef])
 
     const handleRefreshModels = useCallback(() => {
         actions.refreshModels()
@@ -304,17 +308,18 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
     }, [actions, controller.activeThread?.latestTurn?.id, controller.selectedSession?.id])
 
     const handleReconnectAssistant = useCallback(() => {
-        if (!selectedSessionId) return
-        void actions.connect(selectedSessionId)
-    }, [actions, selectedSessionId])
+        connectionRecovery.reconnect()
+    }, [connectionRecovery])
 
     const handleDispatchPrompt = useCallback(async (
+        sessionId: string,
         prompt: string,
         contextFiles: ComposerContextFile[],
         options: AssistantComposerSendOptions
     ) => {
+        if (!sessionId) return false
         const result = await actions.sendPromptResult(buildPromptWithContextFiles(prompt, contextFiles), {
-            sessionId: controller.selectedSession?.id || undefined,
+            sessionId,
             model: options.model,
             runtimeMode: options.runtimeMode,
             interactionMode: options.interactionMode,
@@ -322,14 +327,16 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
             serviceTier: options.serviceTier
         })
         return result.success
-    }, [actions, controller.selectedSession?.id])
+    }, [actions])
     const isAssistantBusy = controller.commandPending || isThreadWorking
     const {
         sendingComposerPrompt,
         queuedComposerMessageCount,
         queuedComposerMessageItems,
         handleSendPrompt,
-        handleForceQueuedMessage
+        handleForceQueuedMessage,
+        handleDeleteQueuedMessage,
+        handleMoveQueuedMessage
     } = useAssistantQueuedComposer({
         selectedSessionId,
         isAssistantBusy,
@@ -349,7 +356,7 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
         await actions.sendPromptResult(
             `Implement the approved plan below. Do not re-plan unless you hit a real blocking contradiction. Start executing now.\n\n<approved_plan>\n${planMarkdown}\n</approved_plan>`,
             {
-                sessionId: controller.selectedSession?.id || undefined,
+                sessionId: selectedSessionId || undefined,
                 model: controller.activeThread?.model || undefined,
                 runtimeMode: controller.activeThread?.runtimeMode || 'approval-required',
                 interactionMode: 'default',
@@ -363,7 +370,7 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
         controller.activeThread?.latestTurn?.serviceTier,
         controller.activeThread?.model,
         controller.activeThread?.runtimeMode,
-        controller.selectedSession?.id
+        selectedSessionId
     ])
 
     const handleCreateThread = useCallback(() => {
@@ -418,6 +425,16 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
                     onToggleRightSidebar={handleToggleDetailsPanel}
                 />
                 <div className="relative flex min-h-0 flex-1 flex-col">
+                    {connectionRecovery.showBanner && connectionRecovery.issue ? (
+                        <AssistantConnectionRecoveryBanner
+                            issue={connectionRecovery.issue}
+                            reconnectPending={connectionRecovery.reconnectPending}
+                            reconnectAttempt={connectionRecovery.reconnectAttempt}
+                            reconnectMaxAttempts={connectionRecovery.reconnectMaxAttempts}
+                            reconnectExhausted={connectionRecovery.reconnectExhausted}
+                            onReconnect={handleReconnectAssistant}
+                        />
+                    ) : null}
                     <AssistantConversationTimelinePane
                         loading={controller.loading}
                         timelineContentRef={timelineContentRef}
@@ -441,8 +458,6 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
                         loadingChats={isLoadingSelectedChat}
                         assistantTextStreamingMode={settings.assistantTextStreamingMode}
                         showScrollToBottom={showScrollToBottom}
-                        elevateScrollToBottom={elevateScrollToBottom}
-                        onScrollButtonBoundsChange={setScrollButtonBounds}
                         onScrollTimeline={handleTimelineScrollEvent}
                         onScrollToBottom={handleScrollToBottomClick}
                         onRequestDeleteUserMessage={props.onRequestDeleteUserMessage}
@@ -462,6 +477,8 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
                         queuedMessageCount={queuedComposerMessageCount}
                         queuedMessages={queuedComposerMessageItems}
                         onForceQueuedMessage={handleForceQueuedMessage}
+                        onDeleteQueuedMessage={handleDeleteQueuedMessage}
+                        onMoveQueuedMessage={handleMoveQueuedMessage}
                         selectedSessionId={controller.selectedSession?.id || null}
                         selectedSessionMode={selectedSessionMode}
                         assistantAvailable={controller.available}
@@ -470,16 +487,18 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
                         availableModels={availableModels}
                         activeModel={controller.activeThread?.model || availableModels[0]?.id || undefined}
                         modelsLoading={controller.modelsLoading}
+                        latestTurnUsage={controller.activeThread?.latestTurn?.usage || null}
                         runtimeMode={controller.activeThread?.runtimeMode || 'approval-required'}
                         interactionMode={effectiveInteractionMode}
                         activeProfile={controller.activeThread?.runtimeMode === 'full-access' ? 'yolo-fast' : 'safe-dev'}
                         activeStatusLabel={activeStatusLabel}
                         isConnecting={isThreadConnecting}
+                        reconnectPending={connectionRecovery.reconnectPending}
+                        onOverflowWheel={handleComposerOverflowWheel}
                         onStop={handleStopTurn}
                         onReconnect={handleReconnectAssistant}
                         onBlockedSend={(message) => props.onShowToast?.(message, 'info')}
                         onOpenAttachmentPreview={props.onOpenAttachmentPreview}
-                        onAttachmentShelfBoundsChange={setAttachmentShelfBounds}
                         sendPrompt={handleSendPrompt}
                         refreshModels={handleRefreshModels}
                         respondUserInput={handleRespondUserInput}

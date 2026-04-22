@@ -7,6 +7,8 @@ import {
     SessionDeleteModal
 } from './AssistantSessionsRailParts'
 import {
+    buildFlatSessionsGroup,
+    filterAssistantSessions,
     getSessionDisplayTitle,
     groupSessionsByProject,
     hydrateProjectMetadataForPaths,
@@ -21,6 +23,7 @@ import {
     loadAssistantSessionsRailOrder,
     normalizeRailOrder,
     orderAssistantSessionsGroups,
+    orderAssistantSessionsList,
     saveAssistantSessionsRailOrder,
     type AssistantSessionsRailOrder
 } from './assistant-sessions-rail-order'
@@ -54,7 +57,13 @@ export function AssistantSessionsRail({
     width,
     compact = false,
     railMode,
+    railGroupMode,
+    railSortMode,
+    railFilterMode,
     onRailModeChange,
+    onRailGroupModeChange,
+    onRailSortModeChange,
+    onRailFilterModeChange,
     sessions,
     playground,
     backgroundActivitySessions,
@@ -103,10 +112,31 @@ export function AssistantSessionsRail({
 
     const activeSessions = useMemo(() => sessions.filter((session) => !session.archived && hasVisibleProjectPath(session)), [sessions])
     const archivedSessions = useMemo(() => sessions.filter((session) => session.archived && hasVisibleProjectPath(session)), [sessions])
-    const groupedSessions = useMemo(() => groupSessionsByProject(activeSessions), [activeSessions, projectMetadataVersion])
+    const filteredActiveSessions = useMemo(
+        () => filterAssistantSessions(activeSessions, railFilterMode, activeSessionId),
+        [activeSessionId, activeSessions, railFilterMode]
+    )
+    const groupedSessions = useMemo(() => groupSessionsByProject(filteredActiveSessions), [filteredActiveSessions, projectMetadataVersion])
     const groupedArchivedSessions = useMemo(() => groupSessionsByProject(archivedSessions), [archivedSessions, projectMetadataVersion])
-    const orderedGroupedSessions = useMemo(() => orderAssistantSessionsGroups(groupedSessions, railOrder), [groupedSessions, railOrder])
-    const orderedArchivedSessions = useMemo(() => orderAssistantSessionsGroups(groupedArchivedSessions, railOrder), [groupedArchivedSessions, railOrder])
+    const orderedProjectGroups = useMemo(
+        () => orderAssistantSessionsGroups(groupedSessions, railOrder, railSortMode),
+        [groupedSessions, railOrder, railSortMode]
+    )
+    const orderedFlatSessions = useMemo(
+        () => orderAssistantSessionsList(filteredActiveSessions, railOrder.sessionOrderByProject.__assistant_flat_list__ || [], railSortMode),
+        [filteredActiveSessions, railOrder.sessionOrderByProject, railSortMode]
+    )
+    const flatSessionsGroup = useMemo(() => buildFlatSessionsGroup(orderedFlatSessions), [orderedFlatSessions])
+    const orderedGroupedSessions = useMemo(
+        () => railGroupMode === 'flat'
+            ? (flatSessionsGroup ? [flatSessionsGroup] : [])
+            : orderedProjectGroups,
+        [flatSessionsGroup, orderedProjectGroups, railGroupMode]
+    )
+    const orderedArchivedSessions = useMemo(
+        () => orderAssistantSessionsGroups(groupedArchivedSessions, railOrder, railSortMode),
+        [groupedArchivedSessions, railOrder, railSortMode]
+    )
     const projectPathSignature = useMemo(
         () => sessions
             .map(resolveSessionProjectPath)
@@ -374,6 +404,9 @@ export function AssistantSessionsRail({
                         <ExpandedSessionsRailContent
                             compact={compact}
                             railMode={railMode}
+                            railGroupMode={railGroupMode}
+                            railSortMode={railSortMode}
+                            railFilterMode={railFilterMode}
                             playground={playground}
                             backgroundActivitySessions={backgroundActivitySessions}
                             commandPending={commandPending}
@@ -384,6 +417,9 @@ export function AssistantSessionsRail({
                             expandedGroupKeys={expandedGroupKeys}
                             showArchivedSessions={showArchivedSessions}
                             onRailModeChange={onRailModeChange}
+                            onRailGroupModeChange={onRailGroupModeChange}
+                            onRailSortModeChange={onRailSortModeChange}
+                            onRailFilterModeChange={onRailFilterModeChange}
                             onToggleGroup={(key) => setExpandedGroupKeys((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next })}
                             onChooseProjectPath={() => void onChooseProjectPath()}
                             onCreateSession={(projectPath) => void onCreateSession(projectPath)}
