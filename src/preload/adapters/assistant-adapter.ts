@@ -39,6 +39,7 @@ export function createAssistantAdapter() {
             createSession: (input?: AssistantCreateSessionInput) => ipcRenderer.invoke(ASSISTANT_IPC.createSession, input),
             selectSession: (sessionId: string) => ipcRenderer.invoke(ASSISTANT_IPC.selectSession, sessionId),
             selectThread: (input: AssistantSelectThreadInput) => ipcRenderer.invoke(ASSISTANT_IPC.selectThread, input),
+            hydrateSession: (sessionId: string) => ipcRenderer.invoke(ASSISTANT_IPC.hydrateSession, sessionId),
             renameSession: (sessionId: string, title: string) => ipcRenderer.invoke(ASSISTANT_IPC.renameSession, sessionId, title),
             archiveSession: (sessionId: string, archived = true) => ipcRenderer.invoke(ASSISTANT_IPC.archiveSession, sessionId, archived),
             deleteSession: (sessionId: string) => ipcRenderer.invoke(ASSISTANT_IPC.deleteSession, sessionId),

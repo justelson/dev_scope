@@ -21,10 +21,11 @@ import type {
 } from '../../shared/assistant/contracts'
 import { AssistantTextDeltaBuffer } from './assistant-text-delta-buffer'
 import { CodexAppServerRuntime } from './codex-app-server'
+import { sanitizeOptionalPath, nowIso } from './utils'
 import type { AssistantServiceActionDeps } from './service-action-deps'
 import { AssistantPersistence } from './persistence'
 import { applyDomainEvent, createDefaultSnapshot } from './projector'
-import { buildPendingPlaygroundLabRequest, approvePendingPlaygroundLabRequestAction, attachSessionToPlaygroundLabAction, createPlaygroundLabAction, declinePendingPlaygroundLabRequestAction, deletePlaygroundLabAction, setPlaygroundRootAction } from './service-playground-actions'
+import { approvePendingPlaygroundLabRequestAction, attachSessionToPlaygroundLabAction, createPlaygroundLabAction, declinePendingPlaygroundLabRequestAction, deletePlaygroundLabAction, setPlaygroundRootAction } from './service-playground-actions'
 import {
     clearAssistantLogsAction,
     connectAssistantSession,
@@ -58,9 +59,9 @@ import {
     findThreadRecord,
     getActiveThread,
     getSelectedSession,
+    requireSession,
     requireThread
 } from './service-state'
-import { nowIso, sanitizeOptionalPath } from './utils'
 
 export class AssistantService {
     private static readonly MAX_IN_MEMORY_EVENTS = 256
@@ -105,7 +106,6 @@ export class AssistantService {
                 this.appendEvent(type, occurredAt, payload, sessionId, threadId)
             },
             getSessionRuntimeCwd: (session, thread) => this.getSessionRuntimeCwd(session, thread),
-            maybeBuildPendingPlaygroundLabRequest: (session, prompt) => this.maybeBuildPendingPlaygroundLabRequest(session, prompt),
             createSession: (input?: AssistantCreateSessionInput) => this.createSession(input),
             createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) => this.createPlaygroundLab(input),
             sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) => this.sendPrompt(prompt, options)
@@ -196,6 +196,17 @@ export class AssistantService {
 
     async selectThread(sessionId: string, threadId: string) {
         return selectAssistantThreadAction(this.actionDeps, sessionId, threadId)
+    }
+
+    async hydrateSession(sessionId: string) {
+        await this.ensureReady()
+        requireSession(this.state.snapshot, sessionId)
+        this.state.snapshot = await this.persistence.hydrateSelectedSession(this.state.snapshot, sessionId)
+        return {
+            success: true as const,
+            sessionId,
+            snapshot: structuredClone(this.state.snapshot)
+        }
     }
 
     async renameSession(sessionId: string, title: string) {
@@ -297,10 +308,6 @@ export class AssistantService {
         const rootPath = join(app.getPath('userData'), 'assistant', 'playground-chat-only')
         mkdirSync(rootPath, { recursive: true })
         return rootPath
-    }
-
-    private maybeBuildPendingPlaygroundLabRequest(session: AssistantSession, prompt: string) {
-        return buildPendingPlaygroundLabRequest(session, prompt)
     }
 
     private appendEvent(

@@ -10,6 +10,7 @@ import type {
     AssistantDeleteMessageInput,
     AssistantDomainEvent,
     AssistantModelInfo,
+    AssistantPlaygroundState,
     AssistantSendPromptOptions,
     AssistantSelectThreadInput,
     AssistantUserInputResponseInput
@@ -35,6 +36,7 @@ class AssistantStore {
         hydrated: false,
         modelsLoading: false,
         commandPending: false,
+        selectionHydrationKey: null,
         error: null
     }
     private readonly listeners = new Set<() => void>()
@@ -46,7 +48,7 @@ class AssistantStore {
     private pendingAssistantEvents: AssistantDomainEvent[] = []
     private pendingAssistantEventFlushFrame: number | null = null
     private pendingAssistantEventFlushTimeout: number | null = null
-    private hydratingSelectedSessionId: string | null = null
+    private readonly pendingSelectionHydrations = new Set<string>()
 
     subscribe = (listener: () => void) => {
         this.listeners.add(listener)
@@ -182,6 +184,19 @@ class AssistantStore {
                 }))
                 return result
             }
+            const sessionExists = this.state.snapshot.sessions.some((session) => session.id === result.sessionId)
+            if (!sessionExists) {
+                const hydrateResult = await this.hydrateSessionSnapshot(result.sessionId)
+                if (!hydrateResult.success) {
+                    this.setState((current) => ({
+                        error: hydrateResult.error,
+                        snapshot: previousSnapshot,
+                        status: deriveAssistantRuntimeStatus(previousSnapshot, current.status)
+                    }))
+                    return hydrateResult
+                }
+                return result
+            }
             const selectionResult = await this.selectSession(result.sessionId, { force: true })
             if (!selectionResult.success) {
                 this.setState((current) => ({
@@ -209,7 +224,8 @@ class AssistantStore {
         return selectAssistantStoreSession({
             state: this.state,
             hydratedThreadCache: this.hydratedThreadCache,
-            setState: this.setState
+            setState: this.setState,
+            requestSessionHydration: (targetSessionId, targetThreadId) => this.requestSessionHydration(targetSessionId, targetThreadId)
         }, sessionId, options)
     }
 
@@ -238,11 +254,11 @@ class AssistantStore {
     }
 
     async setPlaygroundRoot(rootPath: string | null) {
-        return this.runAction(() => window.devscope.assistant.setPlaygroundRoot({ rootPath }), true)
+        return this.runPlaygroundAction(() => window.devscope.assistant.setPlaygroundRoot({ rootPath }), true)
     }
 
     async createPlaygroundLab(input: AssistantCreatePlaygroundLabInput) {
-        return this.runAction(() => window.devscope.assistant.createPlaygroundLab(input), true)
+        return this.runPlaygroundAction(() => window.devscope.assistant.createPlaygroundLab(input), true)
     }
 
     async selectThread(input: AssistantSelectThreadInput, options?: { force?: boolean }) {
@@ -282,10 +298,15 @@ class AssistantStore {
                 this.setState({ error: result.error })
                 return result
             }
-            this.setState((current) => ({
-                snapshot: result.snapshot,
-                status: deriveAssistantRuntimeStatus(result.snapshot, current.status)
-            }))
+            const snapshot = result.snapshot
+            if (snapshot) {
+                this.setState((current) => ({
+                    snapshot,
+                    status: deriveAssistantRuntimeStatus(snapshot, current.status)
+                }))
+            } else if (!canHydrateFromCache) {
+                void this.requestSessionHydration(input.sessionId, input.threadId)
+            }
             return result
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Assistant command failed.'
@@ -297,15 +318,15 @@ class AssistantStore {
     }
 
     async deletePlaygroundLab(input: { labId: string }) {
-        return this.runAction(() => window.devscope.assistant.deletePlaygroundLab(input), true)
+        return this.runPlaygroundAction(() => window.devscope.assistant.deletePlaygroundLab(input), true)
     }
 
     async attachSessionToPlaygroundLab(input: AssistantAttachSessionToPlaygroundLabInput) {
-        return this.runAction(() => window.devscope.assistant.attachSessionToPlaygroundLab(input), true)
+        return this.runPlaygroundAction(() => window.devscope.assistant.attachSessionToPlaygroundLab(input), true)
     }
 
     async approvePendingPlaygroundLabRequest(input: AssistantApprovePendingPlaygroundLabRequestInput) {
-        return this.runAction(() => window.devscope.assistant.approvePendingPlaygroundLabRequest(input), true)
+        return this.runPlaygroundAction(() => window.devscope.assistant.approvePendingPlaygroundLabRequest(input), true)
     }
 
     async declinePendingPlaygroundLabRequest(input: AssistantDeclinePendingPlaygroundLabRequestInput) {
@@ -344,6 +365,21 @@ class AssistantStore {
                     status: deriveAssistantRuntimeStatus(previousSnapshot, current.status)
                 }))
                 return result
+            }
+            const activeSessionId = targetSessionId
+            const threadExists = activeSessionId
+                ? Boolean(this.state.snapshot.sessions.find((session) => session.id === activeSessionId)?.threads.some((thread) => thread.id === result.threadId))
+                : false
+            if (activeSessionId && !threadExists) {
+                const hydrateResult = await this.hydrateSessionSnapshot(activeSessionId)
+                if (!hydrateResult.success) {
+                    this.setState((current) => ({
+                        error: hydrateResult.error,
+                        snapshot: previousSnapshot,
+                        status: deriveAssistantRuntimeStatus(previousSnapshot, current.status)
+                    }))
+                    return hydrateResult
+                }
             }
             return result
         } catch (error) {
@@ -507,20 +543,32 @@ class AssistantStore {
 
     private async hydrateSelectedSessionIfNeeded(): Promise<void> {
         const sessionId = this.state.snapshot.selectedSessionId
-        if (!sessionId || this.hydratingSelectedSessionId === sessionId) return
-
         const selectedSession = this.state.snapshot.sessions.find((session) => session.id === sessionId) || null
         const activeThreadId = selectedSession?.activeThreadId || null
-        if (!selectedSession || !activeThreadId) return
-        if (hasCachedSessionSelection(this.state.snapshot, sessionId, activeThreadId, this.hydratedThreadCache)) return
+        if (!sessionId || !selectedSession || !activeThreadId) return
+        await this.requestSessionHydration(sessionId, activeThreadId)
+    }
 
-        this.hydratingSelectedSessionId = sessionId
+    private buildSelectionHydrationKey(sessionId: string, threadId: string | null) {
+        return `${sessionId}:${threadId || ''}`
+    }
+
+    private async requestSessionHydration(sessionId: string, threadId: string | null): Promise<void> {
+        if (!sessionId || !threadId) return
+        if (hasCachedSessionSelection(this.state.snapshot, sessionId, threadId, this.hydratedThreadCache)) return
+
+        const hydrationKey = this.buildSelectionHydrationKey(sessionId, threadId)
+        if (this.pendingSelectionHydrations.has(hydrationKey)) return
+
+        this.pendingSelectionHydrations.add(hydrationKey)
+        this.setState({ selectionHydrationKey: hydrationKey })
         try {
-            const result = await window.devscope.assistant.selectSession(sessionId)
+            const result = await window.devscope.assistant.hydrateSession(sessionId)
             if (!result.success) return
 
             this.setState((current) => {
-                if (current.snapshot.selectedSessionId !== sessionId) {
+                const selectedSession = current.snapshot.sessions.find((session) => session.id === sessionId) || null
+                if (current.snapshot.selectedSessionId !== sessionId || selectedSession?.activeThreadId !== threadId) {
                     return {}
                 }
                 return {
@@ -529,12 +577,46 @@ class AssistantStore {
                 }
             })
         } catch (error) {
-            console.warn('[AssistantStore] Failed to hydrate selected session after delete.', error)
+            console.warn('[AssistantStore] Failed to hydrate selected session.', error)
         } finally {
-            if (this.hydratingSelectedSessionId === sessionId) {
-                this.hydratingSelectedSessionId = null
-            }
+            this.pendingSelectionHydrations.delete(hydrationKey)
+            this.setState((current) => (
+                current.selectionHydrationKey === hydrationKey
+                    ? { selectionHydrationKey: null }
+                    : {}
+            ))
         }
+    }
+
+    private applyPlaygroundState(playground: AssistantPlaygroundState) {
+        this.setState((current) => ({
+            snapshot: {
+                ...current.snapshot,
+                playground
+            }
+        }))
+    }
+
+    private async hydrateSessionSnapshot(sessionId: string) {
+        const result = await window.devscope.assistant.hydrateSession(sessionId)
+        if (!result.success) return result
+
+        this.setState((current) => ({
+            snapshot: result.snapshot,
+            status: deriveAssistantRuntimeStatus(result.snapshot, current.status)
+        }))
+        return result
+    }
+
+    private async runPlaygroundAction<T extends { playground: AssistantPlaygroundState }>(
+        work: () => Promise<DevScopeResult<T>>,
+        refreshStatusAfter: boolean
+    ): Promise<DevScopeResult<T>> {
+        const result = await this.runAction(work, refreshStatusAfter)
+        if (result.success) {
+            this.applyPlaygroundState(result.playground)
+        }
+        return result
     }
 
     private async runAction<T = Record<string, unknown>>(

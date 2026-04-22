@@ -5,6 +5,10 @@ import type {
     AssistantPendingUserInput,
     AssistantThread
 } from '../../shared/assistant/contracts'
+import {
+    deriveAttachmentOnlySessionTitle,
+    parseSerializedAssistantMessage
+} from '../../shared/assistant/message-attachments'
 
 const DEFAULT_SESSION_TITLE = 'New Session'
 const LEGACY_DEFAULT_SESSION_TITLES = new Set([
@@ -22,9 +26,13 @@ export function createAssistantId(prefix: string): string {
 }
 
 export function deriveSessionTitleFromPrompt(prompt: string): string {
-    const normalized = String(prompt || '')
+    const parsedMessage = parseSerializedAssistantMessage(prompt)
+    const normalized = String(parsedMessage.body || '')
         .replace(/\s+/g, ' ')
         .trim()
+    if (!normalized && parsedMessage.attachments.length > 0) {
+        return deriveAttachmentOnlySessionTitle(parsedMessage.attachments)
+    }
     if (!normalized) return DEFAULT_SESSION_TITLE
     return normalized.slice(0, 60)
 }

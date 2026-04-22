@@ -26,6 +26,7 @@ export const ASSISTANT_IPC = {
     createSession: 'devscope:assistant:createSession',
     selectSession: 'devscope:assistant:selectSession',
     selectThread: 'devscope:assistant:selectThread',
+    hydrateSession: 'devscope:assistant:hydrateSession',
     renameSession: 'devscope:assistant:renameSession',
     archiveSession: 'devscope:assistant:archiveSession',
     deleteSession: 'devscope:assistant:deleteSession',

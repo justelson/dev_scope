@@ -18,6 +18,7 @@ type AssistantStoreSessionSelectionContext = {
     state: AssistantStoreState
     hydratedThreadCache: Map<string, CachedHydratedThreadState>
     setState: SetAssistantStoreState
+    requestSessionHydration: (sessionId: string, threadId: string | null) => Promise<void>
 }
 
 export async function selectAssistantStoreSession(
@@ -31,10 +32,11 @@ export async function selectAssistantStoreSession(
     }
 
     const selectedSession = context.state.snapshot.sessions.find((session) => session.id === sessionId) || null
+    const targetThreadId = selectedSession?.activeThreadId || null
     const canHydrateFromCache = hasCachedSessionSelection(
         context.state.snapshot,
         sessionId,
-        selectedSession?.activeThreadId || null,
+        targetThreadId,
         context.hydratedThreadCache
     )
 
@@ -60,10 +62,15 @@ export async function selectAssistantStoreSession(
             context.setState({ error: result.error })
             return result
         }
-        context.setState((current) => ({
-            snapshot: result.snapshot,
-            status: deriveAssistantRuntimeStatus(result.snapshot, current.status)
-        }))
+        const snapshot = result.snapshot
+        if (snapshot) {
+            context.setState((current) => ({
+                snapshot,
+                status: deriveAssistantRuntimeStatus(snapshot, current.status)
+            }))
+        } else if (!canHydrateFromCache) {
+            void context.requestSessionHydration(sessionId, targetThreadId)
+        }
         return result
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Assistant command failed.'

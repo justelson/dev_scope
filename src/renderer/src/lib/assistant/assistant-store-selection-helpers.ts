@@ -180,6 +180,8 @@ export function areAssistantConversationSelectionsEqual(left: AssistantConversat
         && left.loading === right.loading
         && left.modelsLoading === right.modelsLoading
         && left.commandPending === right.commandPending
+        && left.commandError === right.commandError
+        && left.selectionHydrating === right.selectionHydrating
         && left.phase.key === right.phase.key
         && left.phase.label === right.phase.label
         && areAssistantModelsEqual(left.knownModels, right.knownModels)

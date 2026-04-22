@@ -10,9 +10,18 @@ import type {
     AssistantSessionTurnUsagePayload,
     AssistantThread
 } from '../../shared/assistant/contracts'
+import {
+    parseDevContextCompactionTestCommand,
+    type AssistantDevContextCompactionTestCommand
+} from '../../shared/assistant/dev-context-compaction-test'
+import { is } from '../utils'
 import { buildDeleteMessagePlan } from './service-history'
 import { createAssistantSessionRecord, createAssistantUserMessage, createRunningLatestTurn } from './service-records'
 import type { AssistantServiceActionDeps } from './service-action-deps'
+import {
+    buildDeletedSessionReplacementInput,
+    ensureAssistantSessionSelectionAfterDeletion
+} from './service-session-delete-fallback'
 import { resolveAssistantSessionRoute } from './service-session-route'
 import {
     createAssistantThread,
@@ -24,7 +33,23 @@ import {
     requireActiveThread,
     requireSession
 } from './service-state'
+import {
+    buildPlaygroundLabContinuationAnswer,
+    buildPlaygroundLabCreatedAnswer,
+    buildPlaygroundNoLabRuntimePrompt,
+    buildPendingPlaygroundLabRequest,
+    isPlaygroundLabUserInputRequest,
+    isPlaygroundNoLabSession,
+    PLAYGROUND_LAB_DECISION_QUESTION_ID,
+    PLAYGROUND_LAB_NAME_QUESTION_ID,
+    PLAYGROUND_REPO_URL_QUESTION_ID,
+    resolvePlaygroundLabGuidedAnswers
+} from './playground-guided-lab'
 import { buildSessionHistoryMutationResult } from './session-mutation-utils'
+import {
+    queueGeneratedSessionTitle,
+    shouldGenerateSessionTitleForPrompt
+} from './session-title-generation'
 import {
     createAssistantId,
     deriveSessionTitleFromPrompt,
@@ -84,12 +109,11 @@ export async function createAssistantSessionAction(deps: AssistantServiceActionD
 export async function selectAssistantSessionAction(deps: AssistantServiceActionDeps, sessionId: string) {
     await deps.ensureReady()
     requireSession(deps.getSnapshot(), sessionId)
-    await deps.hydrateSelectedSession(sessionId)
-    const session = requireSession(deps.getSnapshot(), sessionId)
     const occurredAt = nowIso()
     deps.appendEvent('session.selected', occurredAt, { sessionId }, sessionId)
+    const session = requireSession(deps.getSnapshot(), sessionId)
     markThreadCompletionSeen(deps, session, occurredAt)
-    return { success: true as const, sessionId, snapshot: structuredClone(deps.getSnapshot()) }
+    return { success: true as const, sessionId }
 }
 
 export async function selectAssistantThreadAction(deps: AssistantServiceActionDeps, sessionId: string, threadId: string) {
@@ -109,10 +133,9 @@ export async function selectAssistantThreadAction(deps: AssistantServiceActionDe
     if (deps.getSnapshot().selectedSessionId !== sessionId) {
         deps.appendEvent('session.selected', occurredAt, { sessionId }, session.id, threadId)
     }
-    await deps.hydrateSelectedSession(sessionId)
     const updatedSession = requireSession(deps.getSnapshot(), sessionId)
     markThreadCompletionSeen(deps, updatedSession, occurredAt)
-    return { success: true as const, sessionId, threadId, snapshot: structuredClone(deps.getSnapshot()) }
+    return { success: true as const, sessionId, threadId }
 }
 
 export async function renameAssistantSessionAction(deps: AssistantServiceActionDeps, sessionId: string, title: string) {
@@ -148,7 +171,11 @@ export async function deleteAssistantSessionAction(deps: AssistantServiceActionD
     if (thread) {
         deps.runtime.disconnect(thread.providerThreadId || thread.id)
     }
-    deps.appendEvent('session.deleted', nowIso(), { sessionId }, sessionId)
+    const occurredAt = nowIso()
+    deps.appendEvent('session.deleted', occurredAt, { sessionId }, sessionId)
+    await ensureAssistantSessionSelectionAfterDeletion(deps, session, {
+        replacementInput: buildDeletedSessionReplacementInput(session)
+    })
     return { success: true as const }
 }
 
@@ -208,6 +235,9 @@ export async function deleteAssistantMessageAction(deps: AssistantServiceActionD
     if (sessionHistoryMutation.deleteSession) {
         deps.runtime.disconnect(thread.providerThreadId || thread.id)
         deps.appendEvent('session.deleted', occurredAt, { sessionId: session.id }, session.id)
+        await ensureAssistantSessionSelectionAfterDeletion(deps, session, {
+            replacementInput: buildDeletedSessionReplacementInput(session)
+        })
         return { success: true as const }
     }
 
@@ -290,6 +320,80 @@ export async function createAssistantThreadAction(deps: AssistantServiceActionDe
     return { success: true as const, threadId: thread.id }
 }
 
+function buildDevContextCompactionTestActivity(input: {
+    command: AssistantDevContextCompactionTestCommand
+    markerId: string
+    status: 'running' | 'completed'
+    turnId: string
+    createdAt: string
+    completedAt?: string
+}): AssistantThread['activities'][number] {
+    const summary = input.status === 'running' ? 'AUTO-COMPACTING' : 'AUTO-COMPACTED'
+    return {
+        id: `context-compaction-dev-${input.markerId}`,
+        kind: 'context.compaction',
+        tone: 'tool',
+        summary,
+        detail: 'Dev-only context compaction marker test.',
+        turnId: input.turnId,
+        createdAt: input.createdAt,
+        payload: {
+            category: 'context-compaction',
+            itemType: 'context compaction',
+            status: input.status,
+            sourceMethod: 'dev-prompt-flag',
+            protocol: 'dev-context-compaction-test',
+            devOnly: true,
+            markerId: input.markerId,
+            holdMs: input.command.holdMs,
+            completedAt: input.completedAt
+        }
+    }
+}
+
+function triggerDevContextCompactionTestPrompt(
+    deps: AssistantServiceActionDeps,
+    sessionId: string,
+    thread: AssistantThread,
+    command: AssistantDevContextCompactionTestCommand,
+    occurredAt: string
+) {
+    const turnId = createAssistantId('assistant-turn')
+    const markerId = command.markerId || createAssistantId('context-compaction-test')
+    const activityCreatedAt = occurredAt
+
+    const appendActivity = (status: 'running' | 'completed', eventTime: string) => {
+        deps.appendEvent('thread.activity.appended', eventTime, {
+            threadId: thread.id,
+            activity: buildDevContextCompactionTestActivity({
+                command,
+                markerId,
+                status,
+                turnId,
+                createdAt: activityCreatedAt,
+                completedAt: status === 'completed' ? eventTime : undefined
+            })
+        }, sessionId, thread.id)
+    }
+
+    deps.appendEvent('thread.updated', occurredAt, {
+        threadId: thread.id,
+        patch: { updatedAt: occurredAt }
+    }, sessionId, thread.id)
+
+    if (command.mode === 'completed') {
+        appendActivity('completed', occurredAt)
+    } else {
+        appendActivity('running', occurredAt)
+    }
+
+    if (command.mode === 'cycle') {
+        setTimeout(() => appendActivity('completed', nowIso()), command.holdMs)
+    }
+
+    return { success: true as const, sessionId, threadId: thread.id, turnId }
+}
+
 export async function sendAssistantPromptAction(
     deps: AssistantServiceActionDeps,
     prompt: string,
@@ -306,6 +410,12 @@ export async function sendAssistantPromptAction(
     if (!session) throw new Error('Assistant session not found.')
     const thread = requireActiveThread(session)
     const occurredAt = nowIso()
+    const compactionTestCommand = parseDevContextCompactionTestCommand(input, { enabled: is.dev })
+    if (compactionTestCommand) {
+        return triggerDevContextCompactionTestPrompt(deps, session.id, thread, compactionTestCommand, occurredAt)
+    }
+
+    const shouldGenerateTitle = shouldGenerateSessionTitleForPrompt(session)
     const title = isDefaultSessionTitle(session.title) ? deriveSessionTitleFromPrompt(input) : session.title
     if (title !== session.title) {
         deps.appendEvent('session.updated', occurredAt, {
@@ -317,39 +427,24 @@ export async function sendAssistantPromptAction(
         }, session.id, thread.id)
     }
 
-    const userMessage = createAssistantUserMessage(input, occurredAt, createAssistantId('assistant-message'))
-    deps.appendEvent('thread.message.user', occurredAt, { threadId: thread.id, message: userMessage }, session.id, thread.id)
-
-    const labRequest = deps.maybeBuildPendingPlaygroundLabRequest(session, input)
-    if (labRequest) {
+    const pendingLabRequest = buildPendingPlaygroundLabRequest(session, input)
+    if (pendingLabRequest) {
         deps.appendEvent('session.updated', occurredAt, {
             sessionId: session.id,
             patch: {
-                pendingLabRequest: labRequest,
+                pendingLabRequest,
                 updatedAt: occurredAt
             }
         }, session.id, thread.id)
-        deps.appendEvent('thread.activity.appended', occurredAt, {
+        deps.appendEvent('thread.updated', occurredAt, {
             threadId: thread.id,
-            activity: {
-                id: createAssistantId('assistant-activity'),
-                kind: 'playground.lab-requested',
-                tone: 'info',
-                summary: labRequest.kind === 'clone-repo' ? 'Playground repo clone requested' : 'Playground lab requested',
-                detail: labRequest.kind === 'clone-repo'
-                    ? `Approve creating a Playground lab by cloning ${labRequest.repoUrl || 'the provided repository'}.`
-                    : 'Approve creating a Playground lab before filesystem work continues.',
-                turnId: null,
-                createdAt: occurredAt,
-                payload: {
-                    requestId: labRequest.id,
-                    kind: labRequest.kind,
-                    repoUrl: labRequest.repoUrl,
-                    suggestedLabName: labRequest.suggestedLabName
-                }
+            patch: {
+                state: 'ready',
+                lastError: null,
+                updatedAt: occurredAt
             }
         }, session.id, thread.id)
-        return { success: true as const, sessionId: session.id, threadId: thread.id, turnId: labRequest.id }
+        return { success: true as const, sessionId: session.id, threadId: thread.id, turnId: pendingLabRequest.id }
     }
 
     const runtimeCwd = deps.getSessionRuntimeCwd(session, thread)
@@ -368,10 +463,15 @@ export async function sendAssistantPromptAction(
     deps.appendEvent('thread.updated', occurredAt, { threadId: thread.id, patch: updatedThreadPatch }, session.id, thread.id)
 
     try {
+        const userMessage = createAssistantUserMessage(input, occurredAt, createAssistantId('assistant-message'))
+        deps.appendEvent('thread.message.user', occurredAt, { threadId: thread.id, message: userMessage }, session.id, thread.id)
         if (!hasLiveRuntimeSession) {
             await deps.runtime.connect({ ...thread, ...updatedThreadPatch }, runtimeCwd)
         }
-        const result = await deps.runtime.sendPrompt(runtimeThreadId, input, {
+        const runtimePrompt = isPlaygroundNoLabSession(session)
+            ? buildPlaygroundNoLabRuntimePrompt(input)
+            : input
+        const result = await deps.runtime.sendPrompt(runtimeThreadId, runtimePrompt, {
             model: options?.model,
             runtimeMode: options?.runtimeMode,
             interactionMode: options?.interactionMode,
@@ -380,6 +480,18 @@ export async function sendAssistantPromptAction(
         })
         const latestTurn = createRunningLatestTurn(result.turnId, occurredAt, options)
         deps.appendEvent('thread.latest-turn.updated', occurredAt, { threadId: thread.id, latestTurn }, session.id, thread.id)
+        if (shouldGenerateTitle) {
+            queueGeneratedSessionTitle({
+                sessionId: session.id,
+                threadId: thread.id,
+                messageText: input,
+                seedTitle: title,
+                cwd: runtimeCwd,
+                preferredModel: options?.model || thread.model || null,
+                getSnapshot: deps.getSnapshot,
+                appendEvent: deps.appendEvent
+            })
+        }
         return { success: true as const, sessionId: session.id, threadId: thread.id, turnId: result.turnId }
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to send prompt.'
@@ -441,7 +553,59 @@ export async function respondAssistantUserInputAction(
     await deps.ensureReady()
     const target = findThreadForUserInput(deps.getSnapshot(), input.requestId)
     if (!target) throw new Error(`Unknown user-input request ${input.requestId}.`)
-    await deps.runtime.respondUserInput(target.thread.providerThreadId || target.thread.id, input.requestId, input.answers)
+    const pendingInput = target.thread.pendingUserInputs.find((entry) => entry.requestId === input.requestId && entry.status === 'pending') || null
+    const forwardedAnswers: Record<string, string | string[]> = { ...input.answers }
+
+    if (
+        target.session.mode === 'playground'
+        && !target.session.playgroundLabId
+        && isPlaygroundLabUserInputRequest(pendingInput)
+    ) {
+        const resolved = resolvePlaygroundLabGuidedAnswers(input.answers)
+        if (resolved?.decision === 'continue-without-lab') {
+            forwardedAnswers[PLAYGROUND_LAB_DECISION_QUESTION_ID] = buildPlaygroundLabContinuationAnswer(
+                String(input.answers[PLAYGROUND_LAB_DECISION_QUESTION_ID] || '')
+            )
+        } else if (resolved) {
+            const result = await deps.createPlaygroundLab({
+                title: resolved.title,
+                source: resolved.decision === 'clone-repo' ? 'git-clone' : 'empty',
+                repoUrl: resolved.repoUrl,
+                openSession: false
+            })
+            const lab = deps.getSnapshot().playground.labs.find((entry) => entry.id === result.labId) || null
+            if (lab) {
+                const attachOccurredAt = nowIso()
+                deps.appendEvent('session.updated', attachOccurredAt, {
+                    sessionId: target.session.id,
+                    patch: {
+                        mode: 'playground',
+                        projectPath: lab.rootPath,
+                        playgroundLabId: lab.id,
+                        pendingLabRequest: null,
+                        updatedAt: attachOccurredAt
+                    }
+                }, target.session.id, target.thread.id)
+                deps.appendEvent('thread.updated', attachOccurredAt, {
+                    threadId: target.thread.id,
+                    patch: {
+                        cwd: lab.rootPath,
+                        updatedAt: attachOccurredAt
+                    }
+                }, target.session.id, target.thread.id)
+                forwardedAnswers[PLAYGROUND_LAB_DECISION_QUESTION_ID] = buildPlaygroundLabCreatedAnswer({
+                    decision: resolved.decision,
+                    rootPath: lab.rootPath,
+                    title: lab.title,
+                    repoUrl: resolved.repoUrl
+                })
+                if (lab.title) forwardedAnswers[PLAYGROUND_LAB_NAME_QUESTION_ID] = lab.title
+                if (resolved.repoUrl) forwardedAnswers[PLAYGROUND_REPO_URL_QUESTION_ID] = resolved.repoUrl
+            }
+        }
+    }
+
+    await deps.runtime.respondUserInput(target.thread.providerThreadId || target.thread.id, input.requestId, forwardedAnswers)
     return { success: true as const }
 }
 

@@ -38,6 +38,10 @@ import {
     toCodexUserInputAnswers
 } from './codex-app-server-runtime-helpers'
 
+function isToolRouterStderr(message: string): boolean {
+    return /codex_core::tools::router:\s*error=/i.test(message)
+}
+
 export class CodexAppServerRuntime extends EventEmitter {
     private static readonly AVAILABILITY_SUCCESS_TTL_MS = 60_000
 
@@ -464,6 +468,10 @@ export class CodexAppServerRuntime extends EventEmitter {
         context.child.stderr.on('data', (chunk) => {
             const message = String(chunk || '').trim()
             if (!message) return
+            if (isToolRouterStderr(message)) {
+                log.debug('[Assistant] suppressed codex tool-router stderr', message)
+                return
+            }
             this.emitRuntime({
                 eventId: randomUUID(),
                 type: 'activity',

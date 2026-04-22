@@ -57,6 +57,8 @@ export type AssistantConversationSelection = {
     loading: boolean
     modelsLoading: boolean
     commandPending: boolean
+    commandError: string | null
+    selectionHydrating: boolean
     selectedSession: ReturnType<typeof getSelectedAssistantSession>
     activeThread: ReturnType<typeof getActiveAssistantThread>
     timelineMessages: ReturnType<typeof getAssistantTimelineMessages>

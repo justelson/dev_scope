@@ -113,6 +113,18 @@ export function mapRuntimeMode(mode: AssistantRuntimeMode) {
     return mapRuntimeModeImpl(mode)
 }
 
+const CODEX_WINDOWS_SHELL_DEVELOPER_INSTRUCTIONS = `## Windows Shell Rules
+
+You are running on Windows. When you use shell commands, treat PowerShell as the default shell unless you intentionally invoke a different shell.
+
+- Do not use bash-style escaping such as \\" inside PowerShell command strings.
+- Prefer single-quoted PowerShell strings or PowerShell here-strings when the command contains quotes, braces, colons, or regex.
+- If a PowerShell command starts getting quote-heavy or nested, split it into smaller commands instead of forcing one fragile one-liner.
+- For formatted output in PowerShell, prefer format expressions like ('=== {0} @ {1} ===' -f $id, $line) instead of embedded escaped quotes.
+- Prefer PowerShell-native commands for Windows filesystem work. Do not compose bash pipelines unless you are explicitly running bash.
+- Before sending a shell command, sanity-check that the command is valid for PowerShell syntax on Windows.
+`
+
 const CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS = `<collaboration_mode># Plan Mode (Conversational)
 
 You work in 3 phases. Aim for a decision-complete final plan, but do not withhold a materially useful draft plan once enough information exists to produce one. When decisions remain open, keep them explicit and keep driving them to closure.
@@ -205,8 +217,20 @@ You are now in Default mode. Any previous instructions for other modes are no lo
 
 Your active mode changes only when new developer instructions with a different collaboration_mode change it. User requests do not change mode by themselves.
 
-The request_user_input tool is unavailable in Default mode. Prefer making reasonable assumptions and executing the request. If a question is absolutely necessary, ask directly and concisely.
+Do not call request_user_input in Default mode. Prefer making reasonable assumptions and executing the request. When a user decision is genuinely required, ask briefly in normal chat. If the runtime tells you a Playground chat has no attached lab and filesystem work is required, stop and state that a lab or workspace must be attached before filesystem work can continue.
 </collaboration_mode>`
+
+function buildDeveloperInstructions(interactionMode: AssistantInteractionMode): string {
+    const modeInstructions = interactionMode === 'plan'
+        ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
+        : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS
+
+    if (process.platform !== 'win32') {
+        return modeInstructions
+    }
+
+    return `${modeInstructions}\n\n${CODEX_WINDOWS_SHELL_DEVELOPER_INSTRUCTIONS}`
+}
 
 function buildCollaborationMode(
     interactionMode: AssistantInteractionMode,
@@ -218,9 +242,7 @@ function buildCollaborationMode(
         settings: {
             ...(model ? { model } : {}),
             reasoning_effort: effort || 'medium',
-            developer_instructions: interactionMode === 'plan'
-                ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
-                : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS
+            developer_instructions: buildDeveloperInstructions(interactionMode)
         }
     }
 }

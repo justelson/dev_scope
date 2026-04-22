@@ -7,6 +7,7 @@ export type AssistantStoreState = {
     hydrated: boolean
     modelsLoading: boolean
     commandPending: boolean
+    selectionHydrationKey: string | null
     error: string | null
 }
 

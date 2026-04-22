@@ -25,6 +25,7 @@ interface RuntimeEventHandlerDeps {
 }
 
 type ThreadStartedRuntimePayload = Extract<AssistantRuntimeEvent, { type: 'thread.started' }>['payload']
+type ActivityRuntimePayload = Extract<AssistantRuntimeEvent, { type: 'activity' }>['payload']
 
 function readPayloadThreadId(payload: Record<string, unknown>): string | undefined {
     return asString(asRecord(payload['thread'])?.['id'])
@@ -134,6 +135,46 @@ function buildCollabAgentActivity(item: Record<string, unknown>):
             model: asString(item['model']),
             reasoningEffort: asString(item['reasoningEffort']) || asString(item['reasoning_effort']),
             agentsStates
+        }
+    }
+}
+
+function isContextCompactionItemType(itemType: string): boolean {
+    return itemType === 'context compaction' || itemType.includes('context compaction')
+}
+
+function buildContextCompactionActivity(input: {
+    item: Record<string, unknown>
+    itemType: string
+    status: 'running' | 'completed'
+    threadId: string
+    providerThreadId?: string
+    turnId?: string
+    itemId?: string
+    sourceMethod: string
+}): ActivityRuntimePayload {
+    const rawItemId = input.turnId || asString(input.item['id']) || input.itemId || input.threadId
+    const status = input.status
+    const summary = status === 'running' ? 'AUTO-COMPACTING' : 'AUTO-COMPACTED'
+
+    return {
+        activityId: `context-compaction-${rawItemId}`,
+        kind: 'context.compaction',
+        summary,
+        detail: status === 'running'
+            ? 'Conversation context is being compacted.'
+            : 'Conversation context was compacted.',
+        tone: 'tool',
+        data: {
+            category: 'context-compaction',
+            itemType: input.itemType,
+            status,
+            sourceMethod: input.sourceMethod,
+            itemId: rawItemId,
+            turnId: input.turnId,
+            threadId: input.threadId,
+            providerThreadId: input.providerThreadId,
+            providerStatus: asString(input.item['status']) || asString(input.item['state'])
         }
     }
 }
@@ -383,6 +424,24 @@ function handleNotification(
         return
     }
 
+    if (method === 'thread/compacted') {
+        deps.emitRuntime({
+            ...eventBase,
+            type: 'activity',
+            payload: buildContextCompactionActivity({
+                item: payload,
+                itemType: 'context compaction',
+                status: 'completed',
+                threadId: runtimeThreadId,
+                providerThreadId: runtimeProviderThreadId,
+                turnId,
+                itemId,
+                sourceMethod: method
+            })
+        })
+        return
+    }
+
     if (method === 'item/agentMessage/delta' || method === 'item/reasoning/textDelta' || method === 'item/reasoning/summaryTextDelta' || method === 'item/plan/delta') {
         const delta = asString(payload['delta']) || asString(payload['text']) || asString(asRecord(payload['content'])?.['text'])
         if (!delta) return
@@ -402,6 +461,23 @@ function handleNotification(
     if (method === 'item/started' || method === 'item/completed') {
         const item = asRecord(payload['item']) || payload
         const itemType = normalizeItemType(item['type'] || item['kind'])
+        if (isContextCompactionItemType(itemType)) {
+            deps.emitRuntime({
+                ...eventBase,
+                type: 'activity',
+                payload: buildContextCompactionActivity({
+                    item,
+                    itemType,
+                    status: method === 'item/started' ? 'running' : 'completed',
+                    threadId: runtimeThreadId,
+                    providerThreadId: runtimeProviderThreadId,
+                    turnId,
+                    itemId,
+                    sourceMethod: method
+                })
+            })
+            return
+        }
         const collabActivity = itemType === 'collab agent tool call' ? buildCollabAgentActivity(item) : null
         if (collabActivity) {
             deps.emitRuntime({

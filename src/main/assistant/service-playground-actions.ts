@@ -7,10 +7,10 @@ import type {
 } from '../../shared/assistant/contracts'
 import {
     createPlaygroundLabRecord,
-    derivePlaygroundLabTitle,
     ensurePlaygroundLabExists
 } from './playground-service'
 import type { AssistantServiceActionDeps } from './service-action-deps'
+import { ensureAssistantSessionSelectionAfterDeletion } from './service-session-delete-fallback'
 import { getActiveThread, requireActiveThread, requireSession } from './service-state'
 import { sessionReferencesPlaygroundLab, threadUsesPlaygroundLabPath } from './session-mutation-utils'
 import { createAssistantId, nowIso, sanitizeOptionalPath } from './utils'
@@ -89,6 +89,7 @@ export async function deletePlaygroundLabAction(deps: AssistantServiceActionDeps
     const lab = ensurePlaygroundLabExists(deps.getSnapshot().playground.labs, input.labId)
     const occurredAt = nowIso()
     const affectedSessions = deps.getSnapshot().sessions.filter((session) => sessionReferencesPlaygroundLab(session, lab.rootPath, lab.id))
+    let deletedSessionForFallback = null as typeof affectedSessions[number] | null
 
     for (const session of affectedSessions) {
         const activeThread = getActiveThread(session)
@@ -99,6 +100,7 @@ export async function deletePlaygroundLabAction(deps: AssistantServiceActionDeps
         const hasMessages = session.threads.some((thread) => (thread.messageCount || thread.messages.length) > 0)
         if (!hasMessages) {
             deps.appendEvent('session.deleted', occurredAt, { sessionId: session.id }, session.id)
+            deletedSessionForFallback = session
             continue
         }
 
@@ -132,6 +134,14 @@ export async function deletePlaygroundLabAction(deps: AssistantServiceActionDeps
             labs: deps.getSnapshot().playground.labs.filter((entry) => entry.id !== lab.id)
         }
     })
+
+    if (deletedSessionForFallback) {
+        await ensureAssistantSessionSelectionAfterDeletion(deps, deletedSessionForFallback, {
+            replacementInput: {
+                mode: 'playground'
+            }
+        })
+    }
 
     return { success: true as const, playground: structuredClone(deps.getSnapshot().playground) }
 }
@@ -220,26 +230,4 @@ export async function declinePendingPlaygroundLabRequestAction(
         }
     }, session.id, thread.id)
     return { success: true as const }
-}
-
-export function buildPendingPlaygroundLabRequest(session: ReturnType<typeof requireSession>, prompt: string) {
-    if (session.mode !== 'playground') return null
-    if (session.playgroundLabId || sanitizeOptionalPath(session.projectPath)) return null
-    if (session.pendingLabRequest) return null
-
-    const repoUrlMatch = prompt.match(/https?:\/\/[^\s]+(?:\.git)?/i)
-    const repoUrl = repoUrlMatch ? repoUrlMatch[0] : null
-    const needsWorkspace = repoUrl
-        || /\b(create|build|make|scaffold|generate|implement|code|repo|repository|project|app|workspace|files?)\b/i.test(prompt)
-
-    if (!needsWorkspace) return null
-
-    return {
-        id: createAssistantId('assistant-playground-lab-request'),
-        kind: repoUrl ? 'clone-repo' as const : 'create-empty' as const,
-        prompt,
-        suggestedLabName: derivePlaygroundLabTitle(undefined, repoUrl, undefined),
-        repoUrl,
-        createdAt: nowIso()
-    }
 }

@@ -210,6 +210,9 @@ export function useAssistantConversationStore() {
         const selectedSession = getSelectedAssistantSession(state.snapshot)
         const activeThread = getActiveAssistantThread(selectedSession)
         const phase = getAssistantThreadPhase(activeThread)
+        const activeSelectionHydrationKey = selectedSession && activeThread
+            ? `${selectedSession.id}:${activeThread.id}`
+            : null
 
         return {
             knownModels: state.snapshot.knownModels,
@@ -218,6 +221,8 @@ export function useAssistantConversationStore() {
             loading: state.hydrating,
             modelsLoading: state.modelsLoading,
             commandPending: state.commandPending,
+            commandError: state.error,
+            selectionHydrating: Boolean(activeSelectionHydrationKey && state.selectionHydrationKey === activeSelectionHydrationKey),
             selectedSession,
             activeThread,
             timelineMessages: getAssistantTimelineMessages(activeThread),

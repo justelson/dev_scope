@@ -94,6 +94,11 @@ export function handleAssistantSelectThread(_event: Electron.IpcMainInvokeEvent,
     return withAssistantResult(() => getAssistantService().selectThread(input.sessionId, input.threadId))
 }
 
+export function handleAssistantHydrateSession(_event: Electron.IpcMainInvokeEvent, sessionId: string) {
+    log.info('IPC: assistant:hydrateSession', { sessionId })
+    return withAssistantResult(() => getAssistantService().hydrateSession(sessionId))
+}
+
 export function handleAssistantRenameSession(_event: Electron.IpcMainInvokeEvent, sessionId: string, title: string) {
     log.info('IPC: assistant:renameSession', { sessionId })
     return withAssistantResult(() => getAssistantService().renameSession(sessionId, title))
