@@ -60,11 +60,11 @@ The assistant is part of the active app, not a removed feature.
 
 Current assistant capabilities include session lifecycle, model listing, connect/disconnect, prompt send, interrupt, approval responses, user-input responses, project-path association, Playground root and lab setup, explicit session hydration, session title generation, connection recovery, selected-session deletion fallback, attachment persistence, and event subscription.
 
-Assistant timeline tool-call cards also support path-aware file navigation: edited-file rows and plain file-path lines in tool results can open directly into the shared file-preview renderer.
+Assistant timeline tool-call cards also support path-aware file navigation: edited-file rows and plain file-path lines in tool results can open directly into the shared file-preview renderer. Warning/error activities are retained in the assistant logs surface instead of being duplicated as chat timeline rows, and warning-only assistant status messages are filtered from the visible conversation.
 
-Assistant conversation status labels are phase-driven from the active thread state; generic pending UI actions should not be treated as thread connection state.
+Assistant conversation status labels are phase-driven from the active thread state; generic pending UI actions should not be treated as thread connection state. The recovery banner is reserved for repeated reconnect attempts or exhausted reconnects, not the normal first connecting pass.
 
-Playground chats can now exist without an attached lab. In that state the runtime still has a detached safety cwd, but the model is explicitly instructed to treat the chat as non-filesystem by default and to use guided user-input escalation when it truly needs a real lab/workspace before continuing.
+Playground chats can now exist without an attached lab. In that state the runtime still has a detached safety cwd, but the model is explicitly instructed to treat the chat as non-filesystem by default. Prompts that clearly need local files, folders, repos, or workspace access are preflighted into the app-owned pending lab request UI instead of being sent into Codex as filesystem work.
 
 When the selected assistant session is deleted, the runtime now routes through a replacement-input fallback so the rail stays on a live session instead of dropping selection.
 
