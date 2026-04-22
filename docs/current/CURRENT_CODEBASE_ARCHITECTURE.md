@@ -1,6 +1,6 @@
 # Current Codebase Architecture
 
-Last validated against code on April 21, 2026.
+Last validated against code on April 22, 2026.
 
 ## Runtime Layers
 
@@ -58,7 +58,7 @@ The assistant is part of the active app, not a removed feature.
 - Shared contract: `src/shared/assistant/contracts/*`
 - Renderer route entry: `src/renderer/src/pages/Assistant.tsx`
 
-Current assistant capabilities include session lifecycle, model listing, connect/disconnect, prompt send, interrupt, approval responses, user-input responses, project-path association, Playground root and lab setup, explicit session hydration, session title generation, attachment persistence, and event subscription.
+Current assistant capabilities include session lifecycle, model listing, connect/disconnect, prompt send, interrupt, approval responses, user-input responses, project-path association, Playground root and lab setup, explicit session hydration, session title generation, connection recovery, selected-session deletion fallback, attachment persistence, and event subscription.
 
 Assistant timeline tool-call cards also support path-aware file navigation: edited-file rows and plain file-path lines in tool results can open directly into the shared file-preview renderer.
 

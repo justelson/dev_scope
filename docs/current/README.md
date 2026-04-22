@@ -4,7 +4,7 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
-Snapshot alignment: April 21, 2026 current-state pass.
+Snapshot alignment: April 22, 2026 current-state pass.
 
 ## Core References
 

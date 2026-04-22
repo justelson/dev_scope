@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on April 21, 2026.
+Last validated against code on April 22, 2026.
 
 ## Status Legend
 
@@ -70,7 +70,7 @@ Last validated against code on April 21, 2026.
 - Assistant markdown file links and edited-file entries opening in-app preview, including exact-line opens for file references such as `path/to/file.ts:42` or `#L42`: `Implemented`
 - Assistant text inputs expose native right-click spelling suggestions and edit actions: `Implemented`
 - Assistant composer exposes optional voice input with mic start/stop control: browser speech streams live on supported runtimes, local Vosk MVP records locally with rolling draft updates plus a final pass on stop, and browser-speech network failures can route directly into highlighted transcription settings: `Implemented`
-- Assistant composer supports busy-turn queueing and force-send controls, clears queued items as soon as a resend is accepted, pauses failed re-dispatches instead of endlessly re-looping them, and exposes per-message force-send on queued cards that preserves earlier queued prompts instead of skipping them: `Implemented`
+- Assistant composer supports busy-turn queueing and force-send controls, clears queued items as soon as a resend is accepted, pauses failed re-dispatches instead of endlessly re-looping them, exposes per-message force-send/edit/delete actions, supports grip-handle queue reordering, and keeps queued attachments attached to their prompt through reorder/edit/send; dev builds also support `/queue-test` and `/queue-preview` prompt flags with optional `--count=N` and `--force` to create local preview-only queued items without dispatching to the assistant runtime: `Implemented`
 - Assistant composer derives a shared capability state for typing, attachments, send/stop, and control locking, and surfaces contextual composer status/explanations for disconnected, unavailable, busy, and guided-input states: `Implemented`
 - Force-pushed assistant turns keep the conversation in a working state when the runtime session is still live, and assistant turn footers show per-turn elapsed time on the last assistant message when timing data is available: `Implemented`
 - Assistant composer image attachments open the file preview renderer directly from the shelf while non-image attachments keep the local attachment preview flow: `Implemented`
