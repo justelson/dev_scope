@@ -70,6 +70,51 @@ function createContext(cwd: string, model?: string): { context: SessionContext; 
     return { context, child, output }
 }
 
+async function pingCodexAppServer(cwd?: string, model?: string): Promise<{ success: boolean; error?: string }> {
+    const availability = await checkCodexAvailability(CODEX_BINARY)
+    if (!availability.available) {
+        return { success: false, error: availability.reason || 'Codex CLI is unavailable.' }
+    }
+
+    const normalizedCwd = String(cwd || process.cwd()).trim() || process.cwd()
+    const { context, child, output } = createContext(normalizedCwd, model)
+
+    output.on('line', (line) => {
+        handleStdoutLine(context, line, {
+            emitRuntime: () => undefined,
+            writeMessage: (targetContext, message) => writeMessage(targetContext, message),
+            registerThreadAlias: () => undefined
+        })
+    })
+
+    try {
+        await sendRequest(context, 'initialize', {
+            clientInfo: {
+                name: 'devscope_air',
+                title: 'DevScope Air',
+                version: '0.1.0'
+            },
+            capabilities: {
+                experimentalApi: true
+            }
+        }, CODEX_CONNECT_TIMEOUT_MS)
+        writeMessage(context, { method: 'initialized' })
+        return { success: true }
+    } catch (err: any) {
+        return { success: false, error: err?.message || 'Codex app-server ping failed.' }
+    } finally {
+        context.stopping = true
+        for (const pending of context.pending.values()) {
+            clearTimeout(pending.timer)
+        }
+        context.pending.clear()
+        output.close()
+        if (!child.killed) {
+            killChildTree(child)
+        }
+    }
+}
+
 function writeMessage(context: SessionContext, message: Record<string, unknown>): void {
     if (!context.child.stdin.writable) {
         throw new Error('Cannot write to codex app-server stdin.')
@@ -157,6 +202,8 @@ export async function generateCodexText(prompt: string, options?: {
     cwd?: string
     model?: string
     timeoutMs?: number
+    effort?: 'low' | 'medium' | 'high' | 'xhigh'
+    serviceTier?: 'fast'
 }): Promise<{ success: boolean; text?: string; model?: string; error?: string }> {
     const normalizedPrompt = String(prompt || '').trim()
     if (!normalizedPrompt) {
@@ -221,7 +268,15 @@ export async function generateCodexText(prompt: string, options?: {
                 const response = await sendRequest<Record<string, unknown>>(
                     context,
                     'turn/start',
-                    buildTurnParams(context.thread, normalizedPrompt, effectiveModel, 'full-access', 'default', 'medium'),
+                    buildTurnParams(
+                        context.thread,
+                        normalizedPrompt,
+                        effectiveModel,
+                        'full-access',
+                        'default',
+                        options?.effort || 'medium',
+                        options?.serviceTier
+                    ),
                     options?.timeoutMs || CODEX_TIMEOUT_MS
                 )
                 activeTurnId = asString(asRecord(response?.['turn'])?.['id']) || asString(response?.['turnId']) || null
@@ -250,28 +305,25 @@ export async function generateCodexText(prompt: string, options?: {
 }
 
 export async function testCodexConnection(model?: string): Promise<{ success: boolean; error?: string }> {
-    const result = await generateCodexText('Reply with exactly: Connection successful', {
-        model,
-        timeoutMs: CODEX_CONNECT_TIMEOUT_MS
-    })
+    const result = await pingCodexAppServer(process.cwd(), model)
 
     if (!result.success) {
         recordAiDebugLog({
             provider: 'codex',
             action: 'testConnection',
             status: 'error',
-            model: model || result.model,
-            error: result.error || 'Codex connection failed.'
+            model,
+            error: result.error || 'Codex app-server ping failed.'
         })
-        return { success: false, error: result.error || 'Codex connection failed.' }
+        return { success: false, error: result.error || 'Codex app-server ping failed.' }
     }
 
     recordAiDebugLog({
         provider: 'codex',
         action: 'testConnection',
         status: 'success',
-        model: model || result.model,
-        finalMessage: result.text
+        model,
+        finalMessage: 'Codex app-server ping succeeded.'
     })
     return { success: true }
 }
@@ -313,25 +365,10 @@ ${truncatedDiff}
 
 Commit message:`
 
-    const strictRetryPrompt = `Regenerate the commit message from this diff.
-The previous draft was too vague or incomplete.
-
-Rules:
-1. Use conventional commit format: type(scope): description
-2. Keep title imperative and max 72 chars
-3. Add exactly 3-5 bullet points, each starting with "- "
-4. Each bullet must be specific and complete (no vague bullets like "Update")
-5. Include concrete details present in the diff (tools, dependencies, behavior)
-6. Output only the commit message
-
-Diff:
-\`\`\`diff
-${truncatedDiff}
-\`\`\`
-`
-
     try {
-        const initial = await generateCodexText(prompt, { model })
+        const initial = await generateCodexText(prompt, {
+            model
+        })
         if (!initial.success || !initial.text) {
             recordAiDebugLog({
                 provider: 'codex',
@@ -348,19 +385,6 @@ ${truncatedDiff}
 
         let message = sanitizeCommitMessage(initial.text)
         const initialCandidate = message
-        let usedRetryPrompt = false
-        let retriedCandidate: string | undefined
-
-        if (isLowQualityCommitMessage(message)) {
-            usedRetryPrompt = true
-            const retry = await generateCodexText(strictRetryPrompt, { model })
-            if (retry.success && retry.text) {
-                retriedCandidate = sanitizeCommitMessage(retry.text)
-                if (!isLowQualityCommitMessage(retriedCandidate)) {
-                    message = retriedCandidate
-                }
-            }
-        }
 
         if (isLowQualityCommitMessage(message)) {
             const failureMessage = 'Codex returned an incomplete or low-quality commit message. Please retry.'
@@ -370,15 +394,14 @@ ${truncatedDiff}
                 status: 'error',
                 model,
                 error: failureMessage,
-                promptPreview: usedRetryPrompt ? strictRetryPrompt : prompt,
+                promptPreview: prompt,
                 requestPayload: serializeForAiLog({ model, diffLength: diff.length }),
-                rawResponse: serializeForAiLog({ initialText: initial.text, retriedCandidate }),
-                candidateMessage: retriedCandidate || initialCandidate,
+                rawResponse: serializeForAiLog({ initialText: initial.text }),
+                candidateMessage: initialCandidate,
                 finalMessage: message,
                 metadata: {
                     diffLength: diff.length,
                     truncatedDiffLength: truncatedDiff.length,
-                    usedRetryPrompt,
                     lowQualityInitialCandidate: isLowQualityCommitMessage(initialCandidate)
                 }
             })
@@ -390,15 +413,14 @@ ${truncatedDiff}
             action: 'generateCommitMessage',
             status: 'success',
             model,
-            promptPreview: usedRetryPrompt ? strictRetryPrompt : prompt,
+            promptPreview: prompt,
             requestPayload: serializeForAiLog({ model, diffLength: diff.length }),
-            rawResponse: serializeForAiLog({ initialText: initial.text, retriedCandidate }),
-            candidateMessage: retriedCandidate || initialCandidate,
+            rawResponse: serializeForAiLog({ initialText: initial.text }),
+            candidateMessage: initialCandidate,
             finalMessage: message,
             metadata: {
                 diffLength: diff.length,
                 truncatedDiffLength: truncatedDiff.length,
-                usedRetryPrompt,
                 lowQualityInitialCandidate: isLowQualityCommitMessage(initialCandidate)
             }
         })

@@ -251,8 +251,7 @@ export async function generateCodexPullRequestDraft(
         const prompt = buildPrompt(input)
         const result = await generateCodexText(prompt, {
             cwd: process.cwd(),
-            model,
-            timeoutMs: 45_000
+            model
         })
 
         if (!result.success || !result.text) {

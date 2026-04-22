@@ -1,5 +1,7 @@
 import type { CommitAIProvider, Settings } from './settings'
 
+export type GitTextPurpose = 'commit' | 'pull-request'
+
 export type ResolvedGitTextProvider = {
     provider: CommitAIProvider
     apiKey?: string
@@ -12,9 +14,20 @@ function readProviderApiKey(settings: Settings, provider: Exclude<CommitAIProvid
         : String(settings.geminiApiKey || '').trim()
 }
 
-function buildResolvedProvider(settings: Settings, provider: CommitAIProvider): ResolvedGitTextProvider | null {
+function resolveCodexModel(settings: Settings, purpose: GitTextPurpose): string {
+    const preferred = purpose === 'pull-request'
+        ? settings.gitPullRequestCodexModel
+        : settings.gitCommitCodexModel
+    const fallback = purpose === 'pull-request'
+        ? settings.gitCommitCodexModel
+        : settings.gitPullRequestCodexModel
+
+    return String(preferred || fallback || settings.assistantDefaultModel || '').trim()
+}
+
+function buildResolvedProvider(settings: Settings, provider: CommitAIProvider, purpose: GitTextPurpose): ResolvedGitTextProvider | null {
     if (provider === 'codex') {
-        const model = String(settings.codexModel || settings.assistantDefaultModel || '').trim()
+        const model = resolveCodexModel(settings, purpose)
         return {
             provider,
             ...(model ? { model } : {})
@@ -26,13 +39,16 @@ function buildResolvedProvider(settings: Settings, provider: CommitAIProvider): 
     return { provider, apiKey }
 }
 
-export function resolvePreferredGitTextProvider(settings: Settings): ResolvedGitTextProvider | null {
-    const preferred = buildResolvedProvider(settings, settings.commitAIProvider)
+export function resolvePreferredGitTextProvider(
+    settings: Settings,
+    purpose: GitTextPurpose = 'commit'
+): ResolvedGitTextProvider | null {
+    const preferred = buildResolvedProvider(settings, settings.commitAIProvider, purpose)
     if (preferred) return preferred
 
     for (const provider of ['groq', 'gemini'] as Exclude<CommitAIProvider, 'codex'>[]) {
         if (provider === settings.commitAIProvider) continue
-        const candidate = buildResolvedProvider(settings, provider)
+        const candidate = buildResolvedProvider(settings, provider, purpose)
         if (candidate) return candidate
     }
 
