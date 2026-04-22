@@ -151,8 +151,10 @@ export function usePreviewFolderTree({
         try {
             const result = await window.devscope.getFileTree(treeRootPath, {
                 showHidden: false,
-                maxDepth: 1,
-                rootPath: resolvedTargetPath
+                maxDepth: 0,
+                rootPath: resolvedTargetPath,
+                includeGitStatus: false,
+                includeFileSize: false
             })
 
             if (isStaleRequest()) return

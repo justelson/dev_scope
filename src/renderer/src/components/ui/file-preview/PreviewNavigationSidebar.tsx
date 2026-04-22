@@ -177,8 +177,8 @@ export function PreviewNavigationSidebar({
     }, [activeFolderPath])
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col bg-[#0c121b]">
-            <div className="border-b border-white/[0.06] bg-[#0b1118]/96">
+        <div className="flex min-h-0 flex-1 flex-col bg-sparkle-card">
+            <div className="border-b border-white/[0.06] bg-white/[0.02]">
                 <div className="relative grid h-9 min-h-9 grid-cols-2">
                     <div
                         className={cn(
@@ -190,13 +190,13 @@ export function PreviewNavigationSidebar({
                     <div
                         className={cn(
                             'relative z-[1] flex min-w-0 items-stretch border-b transition-colors duration-200',
-                            activeTab === 'folder' ? 'border-white/55 text-white' : 'border-transparent text-white/34 hover:text-white/72'
+                            activeTab === 'folder' ? 'border-white/55 text-sparkle-text' : 'border-transparent text-sparkle-text-muted hover:text-sparkle-text-secondary'
                         )}
                     >
                         <button
                             type="button"
                             onClick={onMinimizePanel}
-                            className="inline-flex h-full shrink-0 items-center justify-center pl-1.5 pr-2 text-inherit opacity-70 transition-[opacity,color,background-color] duration-200 hover:bg-white/[0.04] hover:opacity-100 hover:text-white"
+                            className="inline-flex h-full shrink-0 items-center justify-center pl-1.5 pr-2 text-inherit opacity-70 transition-[opacity,color,background-color] duration-200 hover:bg-white/[0.04] hover:opacity-100 hover:text-sparkle-text"
                             title="Minimize left panel"
                         >
                             <PanelLeft className="size-3.5" />
@@ -207,7 +207,7 @@ export function PreviewNavigationSidebar({
                             onClick={() => setActiveTab('folder')}
                             className={cn(
                                 'inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 px-2 text-[11px] font-medium transition-[opacity,color,background-color] duration-200',
-                                activeTab === 'folder' ? 'text-white opacity-100' : 'text-white/36 opacity-70 hover:bg-white/[0.04] hover:text-white/78 hover:opacity-100'
+                                activeTab === 'folder' ? 'text-sparkle-text opacity-100' : 'text-sparkle-text-muted opacity-70 hover:bg-white/[0.04] hover:text-sparkle-text-secondary hover:opacity-100'
                             )}
                         >
                             <FolderOpen className="size-3.5" />
@@ -220,8 +220,8 @@ export function PreviewNavigationSidebar({
                         className={cn(
                             'relative z-[1] inline-flex min-w-0 items-center justify-center gap-1.5 border-b px-2 text-[11px] font-medium transition-[opacity,color,background-color,border-color] duration-200',
                             activeTab === 'outline'
-                                ? 'border-white/55 text-white opacity-100'
-                                : 'border-transparent text-white/36 opacity-70 hover:bg-white/[0.04] hover:text-white/78 hover:opacity-100'
+                                ? 'border-white/55 text-sparkle-text opacity-100'
+                                : 'border-transparent text-sparkle-text-muted opacity-70 hover:bg-white/[0.04] hover:text-sparkle-text-secondary hover:opacity-100'
                         )}
                     >
                         <ListTree className="size-3.5" />
@@ -262,8 +262,8 @@ export function PreviewNavigationSidebar({
                                                     handleOutlineToggle(item)
                                                 }}
                                                 className={cn(
-                                                    'inline-flex size-4 shrink-0 items-center justify-center rounded text-white/45',
-                                                    canExpand ? 'hover:bg-white/[0.06] hover:text-white/80' : 'pointer-events-none opacity-0'
+                                                    'inline-flex size-4 shrink-0 items-center justify-center rounded text-sparkle-text-muted',
+                                                    canExpand ? 'hover:bg-white/[0.06] hover:text-sparkle-text-secondary' : 'pointer-events-none opacity-0'
                                                 )}
                                             >
                                                 {canExpand ? (
@@ -273,14 +273,14 @@ export function PreviewNavigationSidebar({
                                                 )}
                                             </span>
                                             <span className={cn('size-2.5 shrink-0 rounded-full', kindStyle.dot, kindStyle.glow)} />
-                                            <span className="min-w-0 flex-1 truncate text-white/82">{item.label}</span>
-                                            <span className="shrink-0 text-[10px] text-white/35">:{item.line}</span>
+                                            <span className="min-w-0 flex-1 truncate text-sparkle-text">{item.label}</span>
+                                            <span className="shrink-0 text-[10px] text-sparkle-text-muted">:{item.line}</span>
                                         </button>
                                     )
                                 })}
                             </div>
                         ) : (
-                            <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.03] px-3 py-4 text-[11px] text-white/45">
+                            <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.03] px-3 py-4 text-[11px] text-sparkle-text-secondary">
                                 No structure.
                             </div>
                         )}
@@ -302,7 +302,7 @@ export function PreviewNavigationSidebar({
                             title={activeFolderPath ? `${activeFolderPath}\nDouble-click to refresh` : 'No folder context'}
                         >
                             <div
-                                className="min-w-0 flex-1 truncate text-[11px] text-white/55"
+                                className="min-w-0 flex-1 truncate text-[11px] text-sparkle-text-secondary"
                                 style={{ direction: 'rtl', textAlign: 'left' }}
                             >
                                 {activeFolderPath || 'No folder context'}
@@ -314,7 +314,7 @@ export function PreviewNavigationSidebar({
                                     void handleCopyFolderPath()
                                 }}
                                 className={cn(
-                                    'inline-flex size-6 shrink-0 items-center justify-center rounded-md text-white/35 opacity-0 transition-all group-hover:opacity-100 hover:bg-white/[0.06] hover:text-white',
+                                    'inline-flex size-6 shrink-0 items-center justify-center rounded-md text-sparkle-text-muted opacity-0 transition-all group-hover:opacity-100 hover:bg-white/[0.06] hover:text-sparkle-text',
                                     copiedPath && 'opacity-100 text-emerald-300'
                                 )}
                                 title={copiedPath ? 'Copied' : 'Copy path'}
@@ -333,7 +333,7 @@ export function PreviewNavigationSidebar({
                                 </div>
                             </div>
                         ) : folderLoading && visibleFolderNodes.length === 0 ? (
-                            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-4 text-[11px] text-white/45">
+                            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-4 text-[11px] text-sparkle-text-secondary">
                                 Loading current folder...
                             </div>
                         ) : visibleFolderNodes.length > 0 ? (
@@ -375,15 +375,15 @@ export function PreviewNavigationSidebar({
                                                 'flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition-colors',
                                                 isActiveFile
                                                     ? 'border-sky-400/30 bg-sky-500/10 text-sky-100'
-                                                    : 'border-transparent text-white/78 hover:border-white/[0.08] hover:bg-white/[0.05]',
-                                                !isDirectory && !isPreviewable && 'text-white/45'
+                                                    : 'border-transparent text-sparkle-text-secondary hover:border-white/[0.08] hover:bg-white/[0.05] hover:text-sparkle-text',
+                                                !isDirectory && !isPreviewable && 'text-sparkle-text-muted'
                                             )}
                                             style={{ paddingLeft: `${8 + depth * 16}px` }}
                                             title={node.path}
                                         >
                                             <span className={cn(
-                                                'inline-flex size-4 shrink-0 items-center justify-center rounded text-white/45',
-                                                isDirectory ? 'hover:bg-white/[0.06] hover:text-white/80' : 'opacity-0'
+                                                'inline-flex size-4 shrink-0 items-center justify-center rounded text-sparkle-text-muted',
+                                                isDirectory ? 'hover:bg-white/[0.06] hover:text-sparkle-text-secondary' : 'opacity-0'
                                             )}>
                                                 {isDirectory
                                                     ? (expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />)
@@ -406,12 +406,12 @@ export function PreviewNavigationSidebar({
                                 })}
                             </div>
                         ) : (
-                            <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.03] px-3 py-4 text-[11px] text-white/45">
+                            <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.03] px-3 py-4 text-[11px] text-sparkle-text-secondary">
                                 No sibling files found in this folder.
                             </div>
                         )}
                     </div>
-                    <div className="border-t border-white/[0.06] bg-[#0b1118]/92">
+                    <div className="border-t border-white/[0.06] bg-white/[0.02]">
                         <div className="grid grid-cols-3">
                             <button
                                 type="button"
@@ -420,8 +420,8 @@ export function PreviewNavigationSidebar({
                                 className={cn(
                                     'inline-flex items-center justify-center gap-1.5 border-r border-white/[0.08] px-2 py-2.5 text-[11px] font-medium transition-colors',
                                     canNavigateUpFolder
-                                        ? 'text-white/70 hover:bg-white/[0.05] hover:text-white'
-                                        : 'cursor-not-allowed text-white/25'
+                                        ? 'text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
+                                        : 'cursor-not-allowed text-sparkle-text-muted'
                                 )}
                                 title="Go up one folder"
                             >
@@ -435,8 +435,8 @@ export function PreviewNavigationSidebar({
                                 className={cn(
                                     'inline-flex items-center justify-center gap-1.5 border-r border-white/[0.08] px-2 py-2.5 text-[11px] font-medium transition-colors',
                                     canGoToPreviousFile
-                                        ? 'text-white/70 hover:bg-white/[0.05] hover:text-white'
-                                        : 'cursor-not-allowed text-white/25'
+                                        ? 'text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
+                                        : 'cursor-not-allowed text-sparkle-text-muted'
                                 )}
                                 title="Previous file in preview history"
                             >
@@ -450,8 +450,8 @@ export function PreviewNavigationSidebar({
                                 className={cn(
                                     'inline-flex items-center justify-center gap-1.5 px-2 py-2.5 text-[11px] font-medium transition-colors',
                                     canGoToNextFile
-                                        ? 'text-white/70 hover:bg-white/[0.05] hover:text-white'
-                                        : 'cursor-not-allowed text-white/25'
+                                        ? 'text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
+                                        : 'cursor-not-allowed text-sparkle-text-muted'
                                 )}
                                 title="Next file in preview history"
                             >

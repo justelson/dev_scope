@@ -31,8 +31,8 @@ function InspectorCard({
 }) {
     return (
         <section className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
-            <div className="text-[11px] font-medium text-white/88">{title}</div>
-            <div className="mt-1.5 space-y-1 text-[11px] text-white/55">{children}</div>
+            <div className="text-[11px] font-medium text-sparkle-text">{title}</div>
+            <div className="mt-1.5 space-y-1 text-[11px] text-sparkle-text-secondary">{children}</div>
         </section>
     )
 }
@@ -58,10 +58,10 @@ export function PreviewInspectorSidebar({
 }: PreviewInspectorSidebarProps) {
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <div className="px-1 text-[10px] uppercase tracking-[0.18em] text-white/28">Inspector</div>
+            <div className="px-1 text-[10px] uppercase tracking-[0.18em] text-sparkle-text-muted">Inspector</div>
 
             <InspectorCard title="File">
-                <div className="break-all text-white/58">{filePath}</div>
+                <div className="break-all text-sparkle-text-secondary">{filePath}</div>
             </InspectorCard>
 
             <InspectorCard title="Git Snapshot">
@@ -126,7 +126,7 @@ export function PreviewInspectorSidebar({
                         >
                             -
                         </button>
-                        <span className="min-w-[2rem] text-center text-white/68">{editorFontSize}</span>
+                        <span className="min-w-[2rem] text-center text-sparkle-text-secondary">{editorFontSize}</span>
                         <button
                             type="button"
                             onClick={() => setEditorFontSize((current) => Math.min(22, current + 1))}

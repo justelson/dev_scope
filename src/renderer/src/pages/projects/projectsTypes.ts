@@ -36,6 +36,7 @@ export interface IndexAllFoldersResult {
     projects?: IndexedProject[]
     indexedCount?: number
     indexedFolders?: number
+    indexedFiles?: number
     scannedFolderPaths?: string[]
     errors?: Array<{ folder: string; error: string }>
     error?: string

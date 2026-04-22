@@ -27,13 +27,13 @@ export function PreviewExpandedWorkspace({
     rightInspector
 }: PreviewExpandedWorkspaceProps) {
     return (
-        <div className="flex min-h-0 flex-1 bg-[#0a1018]">
+        <div className="flex min-h-0 flex-1 bg-sparkle-bg">
             <aside
                 className={cn(
                     'relative flex shrink-0 flex-col overflow-hidden transition-[width,opacity,transform,padding,border-color] ease-out',
                     isResizingPanels ? 'duration-0' : 'duration-250',
                     leftPanelOpen
-                        ? 'translate-x-0 border-r border-white/[0.06] bg-[#0c121b] p-0 opacity-100'
+                        ? 'translate-x-0 border-r border-white/[0.06] bg-sparkle-card p-0 opacity-100'
                         : 'pointer-events-none -translate-x-2 border-r border-transparent bg-transparent p-0 opacity-0'
                 )}
                 style={{ width: leftPanelOpen ? `${leftPanelWidth}px` : '0px' }}
@@ -59,7 +59,7 @@ export function PreviewExpandedWorkspace({
                 </div>
             </aside>
 
-            <div className="flex min-w-0 flex-1 flex-col bg-[#0a1018]">
+            <div className="flex min-w-0 flex-1 flex-col bg-sparkle-bg">
                 {header}
                 {saveError ? <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-200">{saveError}</div> : null}
 
@@ -75,7 +75,7 @@ export function PreviewExpandedWorkspace({
                             'relative flex shrink-0 flex-col overflow-hidden transition-[width,opacity,transform,background-color,border-color] ease-[cubic-bezier(0.16,1,0.3,1)]',
                             isResizingPanels ? 'duration-0' : 'duration-250',
                             rightPanelOpen
-                                ? 'translate-x-0 border-l border-white/[0.06] bg-[#0c121b] opacity-100'
+                                ? 'translate-x-0 border-l border-white/[0.06] bg-sparkle-card opacity-100'
                                 : 'pointer-events-none translate-x-2 border-l border-transparent bg-transparent opacity-0'
                         )}
                         style={{ width: rightPanelOpen ? `${rightPanelWidth}px` : '0px' }}

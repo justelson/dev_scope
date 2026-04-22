@@ -2,6 +2,7 @@ import { shell } from 'electron'
 import { access, cp, lstat, mkdir, open as fsOpen, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join, parse, resolve, sep } from 'path'
 import log from 'electron-log'
+import { scheduleFileIndexRefresh } from '../../services/file-index-service'
 import { invalidateScanProjectsCache } from '../../services/project-discovery-service'
 
 const BINARY_DETECTION_BYTES = 4096
@@ -101,6 +102,7 @@ export async function handleWriteTextFile(
         const nextStats = await stat(normalizedFilePath)
         invalidateScanProjectsCache(dirname(normalizedFilePath))
         invalidateScanProjectsCache(normalizedFilePath, { includeParents: false })
+        scheduleFileIndexRefresh(dirname(normalizedFilePath))
 
         return {
             success: true,
@@ -148,6 +150,8 @@ export async function handleRenameFileSystemItem(
         invalidateScanProjectsCache(dirname(destinationPath))
         invalidateScanProjectsCache(normalizedTargetPath, { includeParents: false })
         invalidateScanProjectsCache(destinationPath, { includeParents: false })
+        scheduleFileIndexRefresh(dirname(normalizedTargetPath))
+        scheduleFileIndexRefresh(dirname(destinationPath))
         return { success: true, path: destinationPath, name: normalizedNextName }
     } catch (err: any) {
         log.error('Failed to rename file system item:', err)
@@ -198,6 +202,7 @@ export async function handleCreateFileSystemItem(
 
         invalidateScanProjectsCache(normalizedDestinationDirectory)
         invalidateScanProjectsCache(targetPath, { includeParents: false })
+        scheduleFileIndexRefresh(normalizedDestinationDirectory)
 
         return { success: true, path: targetPath, name: normalizedName, type: normalizedType }
     } catch (err: any) {
@@ -223,6 +228,7 @@ export async function handleDeleteFileSystemItem(_event: Electron.IpcMainInvokeE
 
         invalidateScanProjectsCache(dirname(normalizedTargetPath))
         invalidateScanProjectsCache(normalizedTargetPath, { includeParents: false })
+        scheduleFileIndexRefresh(dirname(normalizedTargetPath))
 
         return { success: true }
     } catch (err: any) {
@@ -272,6 +278,7 @@ export async function handlePasteFileSystemItem(
 
         invalidateScanProjectsCache(normalizedDestinationDirectory)
         invalidateScanProjectsCache(destinationPath, { includeParents: false })
+        scheduleFileIndexRefresh(normalizedDestinationDirectory)
 
         return { success: true, path: destinationPath, name: basename(destinationPath) }
     } catch (err: any) {
@@ -342,6 +349,8 @@ export async function handleMoveFileSystemItem(
         invalidateScanProjectsCache(dirname(destinationPath))
         invalidateScanProjectsCache(normalizedSourcePath, { includeParents: false })
         invalidateScanProjectsCache(destinationPath, { includeParents: false })
+        scheduleFileIndexRefresh(dirname(normalizedSourcePath))
+        scheduleFileIndexRefresh(dirname(destinationPath))
 
         return { success: true, path: destinationPath, name: sourceName }
     } catch (err: any) {

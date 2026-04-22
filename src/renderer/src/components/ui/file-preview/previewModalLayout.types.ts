@@ -17,6 +17,7 @@ export type PreviewModalLayoutProps = {
     onInternalLinkClick: (href: string) => Promise<void>
     mode: 'preview' | 'edit'
     isExpanded: boolean
+    allowExpanded?: boolean
     canEdit: boolean
     isDirty: boolean
     isSaving: boolean
@@ -101,7 +102,8 @@ export type PreviewModalLayoutProps = {
     isEditorToolsEnabled: boolean
     getEditorToolButtonClass: (isActive?: boolean) => string
     pythonPanel: ReactNode
-    terminalPanel: ReactNode
+    previewBottomOverlay?: ReactNode
+    previewBottomOverlayPadding?: number
     previewModeEnabled: boolean
     showUnsavedModal: boolean
     conflictModifiedAt: number | null

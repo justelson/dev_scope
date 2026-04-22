@@ -121,8 +121,8 @@ export function DraggablePreviewFileRow({
                 'flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition-colors',
                 isActiveFile
                     ? 'border-sky-400/30 bg-sky-500/10 text-sky-100'
-                    : 'border-transparent text-white/78 hover:border-white/[0.08] hover:bg-white/[0.05]',
-                !isPreviewable && 'text-white/45',
+                    : 'border-transparent text-sparkle-text-secondary hover:border-white/[0.08] hover:bg-white/[0.05] hover:text-sparkle-text',
+                !isPreviewable && 'text-sparkle-text-muted',
                 isDragging && 'z-20 cursor-grabbing opacity-80 shadow-[0_12px_28px_rgba(0,0,0,0.28)]'
             )}
             style={{
@@ -133,7 +133,7 @@ export function DraggablePreviewFileRow({
             {...attributes}
             {...listeners}
         >
-            <span className="inline-flex size-4 shrink-0 items-center justify-center rounded text-white/45 opacity-0">
+            <span className="inline-flex size-4 shrink-0 items-center justify-center rounded text-sparkle-text-muted opacity-0">
                 <ChevronRight className="size-3.5" />
             </span>
             <VscodeEntryIcon

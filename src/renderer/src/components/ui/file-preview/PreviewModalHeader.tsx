@@ -19,6 +19,7 @@ interface PreviewModalHeaderProps {
     isDirty: boolean
     isSaving: boolean
     isExpanded: boolean
+    allowExpanded?: boolean
     leftPanelOpen: boolean
     rightPanelOpen: boolean
     loadingEditableContent?: boolean
@@ -128,6 +129,7 @@ function PreviewWindowedHeader({
     isDirty,
     isSaving,
     isExpanded,
+    allowExpanded = true,
     loadingEditableContent,
     onModeChange,
     onSave,
@@ -372,7 +374,7 @@ function PreviewWindowedHeader({
                     </div>
                 ) : null}
 
-                {!isMediaFile ? (
+                {!isMediaFile && allowExpanded ? (
                     <div className={controlGroupClass}>
                         <button
                             onClick={onToggleExpanded}

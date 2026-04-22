@@ -5,7 +5,6 @@ import { useCommandPalette } from '@/lib/commandPalette'
 import { primeProjectDetailsCache } from '@/lib/projectViewCache'
 import { useSettings } from '@/lib/settings'
 import { cn, parseFileSearchQuery } from '@/lib/utils'
-import { buildFileSearchIndex, searchFileIndex, type FileSearchIndex, type SearchTreeNode } from '@/lib/fileSearchIndex'
 import { CommandPaletteIntro } from './CommandPaletteIntro'
 import { CommandPaletteResults } from './CommandPaletteResults'
 import type { CommandPaletteDomain as Domain, CommandPaletteResult as Result } from './command-palette-types'
@@ -18,6 +17,12 @@ function getParentPath(filePath: string): string {
     return normalized.slice(0, sep)
 }
 
+function resolveProjectName(filePath: string): string {
+    const parentPath = getParentPath(filePath)
+    const segments = parentPath.split(/[\\/]/).filter(Boolean)
+    return segments[segments.length - 1] || parentPath || 'Folder'
+}
+
 const MAX_PER_GROUP = 8
 const RECENT_KEY = 'devscope:palette:recent'
 
@@ -26,14 +31,12 @@ export function CommandPalette() {
     const { settings } = useSettings()
     const navigate = useNavigate()
     const inputRef = useRef<HTMLInputElement>(null)
-    const fileIndexCacheRef = useRef<Map<string, FileSearchIndex>>(new Map())
-    const fileIndexLoadingRef = useRef<Set<string>>(new Set())
     const loadedProjectsRootsKeyRef = useRef<string>('')
 
     const [query, setQuery] = useState('')
     const [projects, setProjects] = useState<any[]>([])
+    const [files, setFiles] = useState<Array<{ name: string; path: string; project: string }>>([])
     const [loadingFiles, setLoadingFiles] = useState(false)
-    const [fileIndexVersion, setFileIndexVersion] = useState(0)
     const [selectedIndex, setSelectedIndex] = useState(0)
     const [recent, setRecent] = useState<string[]>([])
     const [isClosing, setIsClosing] = useState(false)
@@ -132,9 +135,8 @@ export function CommandPalette() {
     }, [paletteRootsKey])
 
     useEffect(() => {
-        fileIndexCacheRef.current.clear()
-        fileIndexLoadingRef.current.clear()
-        setFileIndexVersion((prev) => prev + 1)
+        setFiles([])
+        setLoadingFiles(false)
     }, [paletteRoots])
 
     const parsed = useMemo(() => {
@@ -147,56 +149,14 @@ export function CommandPalette() {
     const deferredSearchTerm = useDeferredValue(parsed.term)
     const parsedFileQuery = useMemo(() => parseFileSearchQuery(deferredSearchTerm), [deferredSearchTerm])
 
-    const ensureFileIndex = useCallback(async (project: any) => {
-        if (!project?.path) return
-        if (fileIndexCacheRef.current.has(project.path)) return
-        if (fileIndexLoadingRef.current.has(project.path)) return
-
-        fileIndexLoadingRef.current.add(project.path)
-        try {
-            const treeRes = await window.devscope.getFileTree(project.path, { maxDepth: -1, showHidden: false })
-            const tree = (treeRes as { tree?: unknown } | null | undefined)?.tree
-            if (treeRes?.success === false || !Array.isArray(tree)) return
-            fileIndexCacheRef.current.set(project.path, buildFileSearchIndex(tree as SearchTreeNode[]))
-            setFileIndexVersion((prev) => prev + 1)
-        } catch (err) {
-            console.error('file index load failed', err)
-        } finally {
-            fileIndexLoadingRef.current.delete(project.path)
-        }
-    }, [])
-
     useEffect(() => {
-        if (!isOpen || projects.length === 0) return
-        let cancelled = false
-
-        const warmup = async () => {
-            const batchSize = 2
-            for (let index = 0; index < projects.length; index += batchSize) {
-                if (cancelled) break
-                const batch = projects.slice(index, index + batchSize)
-                await Promise.all(batch.map((project) => ensureFileIndex(project)))
-            }
-            if (!cancelled) {
-                setLoadingFiles(false)
-            }
-        }
-
-        void warmup()
-        return () => {
-            cancelled = true
-        }
-    }, [isOpen, projects, ensureFileIndex])
-
-    useEffect(() => {
-        if (parsed.domain !== 'files') {
+        if (!isOpen || parsed.domain !== 'files') {
+            setFiles([])
             setLoadingFiles(false)
             return
         }
-
-        const targetProjects = projects.slice(0, 8)
-        const missing = targetProjects.filter((project) => !fileIndexCacheRef.current.has(project.path))
-        if (missing.length === 0) {
+        if (!parsedFileQuery.term && !parsedFileQuery.hasExtensionFilter) {
+            setFiles([])
             setLoadingFiles(false)
             return
         }
@@ -204,53 +164,41 @@ export function CommandPalette() {
         let cancelled = false
         setLoadingFiles(true)
 
-        const loadMissing = async () => {
-            await Promise.all(missing.map((project) => ensureFileIndex(project)))
+        void window.devscope.searchIndexedPaths({
+            roots: paletteRoots,
+            term: parsedFileQuery.term,
+            extensionFilters: parsedFileQuery.extension ? [parsedFileQuery.extension] : [],
+            limit: MAX_PER_GROUP,
+            includeFiles: true,
+            includeDirectories: false,
+            showHidden: false
+        }).then((result) => {
+            if (cancelled) return
+            if (!result?.success) {
+                setFiles([])
+                return
+            }
+            const nextFiles = (result.entries || []).map((entry) => ({
+                name: entry.name,
+                path: entry.path,
+                project: projects.find((project) => entry.path.startsWith(project.path))?.name || resolveProjectName(entry.path)
+            }))
+            setFiles(nextFiles)
+        }).catch((err) => {
+            if (!cancelled) {
+                console.error('indexed file search failed', err)
+                setFiles([])
+            }
+        }).finally(() => {
             if (!cancelled) {
                 setLoadingFiles(false)
             }
-        }
+        })
 
-        void loadMissing()
         return () => {
             cancelled = true
         }
-    }, [parsed.domain, projects, ensureFileIndex, fileIndexVersion])
-
-    const files = useMemo(() => {
-        if (parsed.domain !== 'files') return []
-        if (!parsedFileQuery.term && !parsedFileQuery.hasExtensionFilter) return []
-
-        const matches: { name: string; path: string; project: string }[] = []
-        const seenPaths = new Set<string>()
-        const targetProjects = projects.slice(0, 8)
-
-        for (const project of targetProjects) {
-            const index = fileIndexCacheRef.current.get(project.path)
-            if (!index) continue
-
-            const searchResult = searchFileIndex(index, parsedFileQuery, {
-                showHidden: false,
-                includeDirectories: false,
-                limit: MAX_PER_GROUP
-            })
-
-            for (const match of searchResult.matches) {
-                if (match.type !== 'file' || seenPaths.has(match.path)) continue
-                seenPaths.add(match.path)
-                matches.push({
-                    name: match.name,
-                    path: match.path,
-                    project: project.name
-                })
-                if (matches.length >= MAX_PER_GROUP) {
-                    return matches
-                }
-            }
-        }
-
-        return matches
-    }, [parsed.domain, parsedFileQuery, projects, fileIndexVersion])
+    }, [isOpen, paletteRoots, parsed.domain, parsedFileQuery.extension, parsedFileQuery.hasExtensionFilter, parsedFileQuery.term, projects])
 
     const results = useMemo<Result[]>(() => {
         const term = deferredSearchTerm.toLowerCase()

@@ -48,6 +48,7 @@ export function PreviewHeaderEditMenu({
         : isDirty
             ? 'text-amber-200/80'
             : 'text-emerald-200/80'
+    const menuSurfaceClassName = 'bg-sparkle-card'
 
     const openMenu = () => {
         if (closeTimerRef.current !== null) {
@@ -117,7 +118,7 @@ export function PreviewHeaderEditMenu({
         <div className="relative inline-flex" ref={controlRef}>
             <div
                 className={cn(
-                    'inline-flex overflow-hidden rounded-md border border-white/[0.07] bg-[#111927] transition-[border-color,background-color,box-shadow,border-radius] duration-200',
+                    `inline-flex overflow-hidden rounded-md border border-white/[0.07] ${menuSurfaceClassName} transition-[border-color,background-color,box-shadow,border-radius] duration-200`,
                     menuVisible && 'rounded-b-none border-b-transparent border-white/20 shadow-[0_10px_24px_rgba(0,0,0,0.16)]'
                 )}
             >
@@ -128,8 +129,8 @@ export function PreviewHeaderEditMenu({
                     className={cn(
                         'inline-flex h-6 min-w-[112px] items-center gap-1.5 px-2.5 text-[11px] transition-colors',
                         canToggleMode || canOpenMenuFromPrimary
-                            ? 'text-white/84 hover:bg-white/[0.03] hover:text-white'
-                            : 'cursor-not-allowed text-white/32'
+                            ? 'text-sparkle-text hover:bg-white/[0.03] hover:text-sparkle-text'
+                            : 'cursor-not-allowed text-sparkle-text-muted'
                     )}
                     title={previewModeEnabled ? `Switch to ${isEditMode ? 'preview' : 'edit'} mode` : 'Edit actions'}
                 >
@@ -146,7 +147,7 @@ export function PreviewHeaderEditMenu({
                         }
                         openMenu()
                     }}
-                    className="inline-flex h-6 w-7 items-center justify-center border-l border-white/[0.08] text-white/48 transition-colors hover:bg-white/[0.03] hover:text-white"
+                    className="inline-flex h-6 w-7 items-center justify-center border-l border-white/[0.08] text-sparkle-text-muted transition-colors hover:bg-white/[0.03] hover:text-sparkle-text"
                     title="Edit menu"
                     aria-label="Edit menu"
                     aria-haspopup="menu"
@@ -163,9 +164,9 @@ export function PreviewHeaderEditMenu({
                         'absolute left-0 top-full z-[160] -mt-px w-full overflow-hidden',
                         menuVisible ? 'pointer-events-auto' : 'pointer-events-none'
                     )}
-                >
-                    <AnimatedHeight isOpen={menuOpen} duration={MENU_ANIMATION_MS}>
-                        <div className="relative rounded-b-lg border border-white/[0.08] border-t-transparent bg-[#111927] p-1 shadow-2xl shadow-black/60">
+                    >
+                        <AnimatedHeight isOpen={menuOpen} duration={MENU_ANIMATION_MS}>
+                        <div className={cn('relative rounded-b-lg border border-white/[0.08] border-t-transparent p-1 shadow-2xl shadow-black/60', menuSurfaceClassName)}>
                             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/[0.08]" />
                             {previewModeEnabled ? (
                                 <>
@@ -179,7 +180,7 @@ export function PreviewHeaderEditMenu({
                                             'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors',
                                             !isEditMode
                                                 ? 'bg-sky-500/14 text-sky-100'
-                                                : 'text-white/72 hover:bg-white/[0.05] hover:text-white'
+                                                : 'text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
                                         )}
                                     >
                                         <Eye size={12} />
@@ -198,8 +199,8 @@ export function PreviewHeaderEditMenu({
                                             'mt-0.5 flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors',
                                             isEditMode
                                                 ? 'bg-sky-500/14 text-sky-100'
-                                                : 'text-white/72 hover:bg-white/[0.05] hover:text-white',
-                                            !canSwitchToEdit && 'cursor-not-allowed text-white/28 hover:bg-transparent hover:text-white/28'
+                                                : 'text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text',
+                                            !canSwitchToEdit && 'cursor-not-allowed text-sparkle-text-muted hover:bg-transparent hover:text-sparkle-text-muted'
                                         )}
                                     >
                                         <Edit3 size={12} />
@@ -221,8 +222,8 @@ export function PreviewHeaderEditMenu({
                                 className={cn(
                                     'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors',
                                     canSave
-                                        ? 'text-white/78 hover:bg-white/[0.05] hover:text-white'
-                                        : 'cursor-not-allowed text-white/28 hover:bg-transparent hover:text-white/28'
+                                        ? 'text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
+                                        : 'cursor-not-allowed text-sparkle-text-muted hover:bg-transparent hover:text-sparkle-text-muted'
                                 )}
                             >
                                 <Save size={12} />
@@ -242,8 +243,8 @@ export function PreviewHeaderEditMenu({
                                 className={cn(
                                     'mt-0.5 flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors',
                                     canRevert
-                                        ? 'text-white/78 hover:bg-white/[0.05] hover:text-white'
-                                        : 'cursor-not-allowed text-white/28 hover:bg-transparent hover:text-white/28'
+                                        ? 'text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
+                                        : 'cursor-not-allowed text-sparkle-text-muted hover:bg-transparent hover:text-sparkle-text-muted'
                                 )}
                             >
                                 <Undo2 size={12} />

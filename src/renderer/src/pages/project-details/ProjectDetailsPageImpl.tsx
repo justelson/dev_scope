@@ -156,6 +156,7 @@ export default function ProjectDetailsPage() {
     }, [derived.currentBranch, state.setTargetBranch])
 
     const fileView = useProjectFileView({
+        projectRootPath: derived.projectRootPath,
         fileTree: state.fileTree,
         gitStatusMap: state.gitStatusMap,
         showHidden: state.showHidden,

@@ -8,6 +8,7 @@ export interface FilePreviewModalProps extends PreviewMeta {
     loading?: boolean
     projectPath?: string
     shellMode?: 'modal' | 'window'
+    disableFullscreen?: boolean
     onOpenLinkedPreview?: (file: { name: string; path: string }, ext: string, options?: PreviewOpenOptions) => Promise<void>
     onOpenLinkedPreviewInNewTab?: (file: { name: string; path: string }, ext: string, options?: PreviewOpenOptions) => Promise<void>
     onSelectPreviewTab?: (tabId: string) => void

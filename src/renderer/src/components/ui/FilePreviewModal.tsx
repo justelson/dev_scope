@@ -33,6 +33,7 @@ export function FilePreviewModal({
     modifiedAt,
     projectPath,
     shellMode = 'modal',
+    disableFullscreen = false,
     onOpenLinkedPreview,
     onOpenLinkedPreviewInNewTab,
     onSelectPreviewTab,
@@ -51,7 +52,7 @@ export function FilePreviewModal({
         ? 'edit'
         : canEdit ? settings.filePreviewDefaultMode : 'preview'
     const initialMode: 'preview' | 'edit' = (file.startInEditMode && canEdit) || (!previewModeEnabled && canEdit) ? 'edit' : defaultMode
-    const defaultStartExpanded = settings.filePreviewOpenInFullscreen
+    const defaultStartExpanded = disableFullscreen ? false : settings.filePreviewOpenInFullscreen
     const defaultLeftPanelOpen = settings.filePreviewFullscreenShowLeftPanel
     const defaultRightPanelOpen = settings.filePreviewFullscreenShowRightPanel
     const canRunPython = file.type === 'code'
@@ -145,6 +146,12 @@ export function FilePreviewModal({
         defaultRightPanelOpen,
         initialFocusLine: file.focusLine ?? null
     })
+    const effectiveIsExpanded = disableFullscreen ? false : isExpanded
+
+    useEffect(() => {
+        if (!disableFullscreen || !isExpanded) return
+        setIsExpanded(false)
+    }, [disableFullscreen, isExpanded, setIsExpanded])
 
     const {
         setTerminalVisible,
@@ -152,11 +159,11 @@ export function FilePreviewModal({
         terminalState,
         terminalPanelPhase,
         terminalGroupKey,
-        terminalGroupCwd,
         terminalHeight,
         terminalError,
         terminalShellLabel,
-        terminalSessionCwd,
+        terminalNewShell,
+        setTerminalNewShell,
         currentTerminalSession,
         terminalTheme,
         terminalHostRef,
@@ -166,7 +173,6 @@ export function FilePreviewModal({
         clearTerminalOutput,
         focusTerminal,
         createPreviewTerminalSession,
-        restartPreviewTerminal,
         stopPreviewTerminalSession,
         selectPreviewTerminalSession,
         startTerminalResize
@@ -318,9 +324,9 @@ export function FilePreviewModal({
         setFocusLine
     })
     const showPythonOutputPanel = canRunPython && (pythonOutputVisible || pythonRunState !== 'idle')
-    const hasBottomPanel = showPythonOutputPanel || renderTerminalPanel
+    const hasBottomPanel = showPythonOutputPanel
     const centerHtmlRenderedPreview = isHtmlRenderedPreview && !hasBottomPanel
-    const flushResponsiveHtmlPreview = isHtmlRenderedPreview && viewport === 'responsive' && !isExpanded
+    const flushResponsiveHtmlPreview = isHtmlRenderedPreview && viewport === 'responsive' && !effectiveIsExpanded
 
     const pythonOutputPanel = showPythonOutputPanel ? (
         <PreviewPythonOutputPanel fileName={file.name} visible={showPythonOutputPanel} runState={pythonRunState} interpreter={pythonInterpreter} command={pythonCommand} entries={pythonOutputEntries} height={pythonOutputHeight} showTimestamps={pythonShowTimestamps} scrollRef={pythonOutputScrollRef} onResizeStart={startPythonOutputResize} onToggleTimestamps={() => setPythonShowTimestamps((current) => !current)} onClear={clearPythonOutput} />
@@ -335,24 +341,22 @@ export function FilePreviewModal({
             shellLabel={terminalShellLabel}
             sessions={terminalSessions}
             groupKey={terminalGroupKey}
-            groupCwd={terminalGroupCwd}
-            sessionCwd={terminalSessionCwd}
-            projectPath={projectPath}
-            filePath={file.path}
             currentSession={currentTerminalSession}
             themeBackground={terminalTheme.background}
             hostRef={terminalHostRef}
             onHostInteract={focusTerminal}
             error={terminalError}
             onResizeStart={startTerminalResize}
-            onNew={() => { void createPreviewTerminalSession() }}
+            newShell={terminalNewShell}
+            onNewShellChange={setTerminalNewShell}
+            onNew={(shell) => { void createPreviewTerminalSession(shell) }}
             onClear={clearTerminalOutput}
-            onRestart={() => { void restartPreviewTerminal() }}
             onStop={(sessionId) => { void stopPreviewTerminalSession(sessionId) }}
             onMinimize={() => setTerminalVisible(false)}
             onSelect={selectPreviewTerminalSession}
         />
     ) : null
+    const previewBottomOverlayPadding = 0
 
     const modalContent = (
         <PreviewModalLayout
@@ -367,7 +371,8 @@ export function FilePreviewModal({
             openMediaItem={openMediaItem}
             onInternalLinkClick={handleInternalMarkdownLink}
             mode={mode}
-            isExpanded={isExpanded}
+            isExpanded={effectiveIsExpanded}
+            allowExpanded={!disableFullscreen}
             canEdit={canEdit}
             isDirty={isDirty}
             isSaving={isSaving}
@@ -452,7 +457,8 @@ export function FilePreviewModal({
             isEditorToolsEnabled={isEditorToolsEnabled}
             getEditorToolButtonClass={getEditorToolButtonClass}
             pythonPanel={pythonOutputPanel}
-            terminalPanel={terminalPanel}
+            previewBottomOverlay={terminalPanel}
+            previewBottomOverlayPadding={previewBottomOverlayPadding}
             showUnsavedModal={showUnsavedModal}
             conflictModifiedAt={conflictModifiedAt}
             previewModeEnabled={previewModeEnabled}

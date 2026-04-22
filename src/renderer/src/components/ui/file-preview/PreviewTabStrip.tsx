@@ -55,7 +55,7 @@ function SortablePreviewTab({
             }}
             className={cn(
                 'group/tab relative inline-flex h-full min-w-0 max-w-[220px] items-center gap-1.5 border-r border-white/[0.08] px-2 text-[11px] font-normal transition-[background-color,color,opacity] duration-150',
-                active ? 'bg-sparkle-card text-white/94' : 'bg-[#0a1018] text-white/58 hover:bg-white/[0.03] hover:text-white/82',
+                active ? 'bg-sparkle-card text-sparkle-text' : 'bg-sparkle-bg text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text',
                 isDragging && 'z-20 opacity-80'
             )}
             style={{
@@ -85,8 +85,8 @@ function SortablePreviewTab({
                     onClose()
                 }}
                 className={cn(
-                    'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-white/28 transition-colors',
-                    active ? 'hover:bg-black/[0.12] hover:text-white/78' : 'hover:bg-white/[0.06] hover:text-white/70'
+                    'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-sparkle-text-muted transition-colors',
+                    active ? 'hover:bg-black/[0.12] hover:text-sparkle-text-secondary' : 'hover:bg-white/[0.06] hover:text-sparkle-text-secondary'
                 )}
                 title={`Close ${tab.file.name}`}
             >
@@ -153,6 +153,10 @@ export function PreviewTabStrip({
                     setStripDropRef(node)
                     viewportRef.current = node
                 }}
+                onDoubleClick={(event) => {
+                    if (event.target !== event.currentTarget) return
+                    onCreateSiblingFile?.()
+                }}
                 className={cn(
                     'h-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar',
                     isStripDropOver && 'bg-white/[0.02]'
@@ -179,10 +183,10 @@ export function PreviewTabStrip({
                             type="button"
                             onClick={onCreateSiblingFile}
                             className={cn(
-                                'inline-flex h-full w-7 shrink-0 items-center justify-center border-r border-white/[0.08] bg-[#0a1018] text-white/32 transition-colors duration-150',
+                                'inline-flex h-full w-7 shrink-0 items-center justify-center border-r border-white/[0.08] bg-sparkle-bg text-sparkle-text-muted transition-colors duration-150',
                                 isNewTabDropOver
-                                    ? 'bg-white/[0.08] text-white/88'
-                                    : 'hover:bg-white/[0.03] hover:text-white/82 focus-visible:bg-white/[0.03] focus-visible:text-white/82'
+                                    ? 'bg-white/[0.08] text-sparkle-text'
+                                    : 'hover:bg-white/[0.03] hover:text-sparkle-text focus-visible:bg-white/[0.03] focus-visible:text-sparkle-text'
                             )}
                             title="New file in current directory"
                         >

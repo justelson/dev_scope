@@ -9,7 +9,6 @@ import { WorkingChangesSection } from './WorkingChangesSection'
 import type { DiffMode, WorkingChangeItem } from './workingChangesTypes'
 import { getDiffCounts, getDiffKey } from './workingChangesUtils'
 import { BranchGuardModal, buildProposedBranchName } from './workingChangesBranchGuard'
-import { useStackedTaskStatus } from './useStackedTaskStatus'
 
 export function WorkingChangesView({
     stagedFiles,
@@ -89,7 +88,6 @@ export function WorkingChangesView({
     const hasProviderForAutoCommit = Boolean(resolvedProvider)
     const hasOnlyStagedChanges = stagedFiles.length > 0 && unstagedFiles.length === 0
     const hasAnyChanges = stagedFiles.length > 0 || unstagedFiles.length > 0
-    const stackedTaskStatusText = useStackedTaskStatus(projectPath, isStackedActionRunning)
 
     const runStackedActionByMode = async (mode: 'safe' | 'danger') => {
         if (mode === 'danger') {
@@ -261,9 +259,9 @@ export function WorkingChangesView({
     )
     const stackedActionLabel = useMemo(() => {
         if (isCreatingBranchForStackedFlow) return 'Creating branch...'
-        if (isStackedActionRunning) return stackedTaskStatusText || 'Starting...'
+        if (isStackedActionRunning) return 'Running PR flow...'
         return 'Commit, Push & Create PR'
-    }, [isCreatingBranchForStackedFlow, isStackedActionRunning, stackedTaskStatusText])
+    }, [isCreatingBranchForStackedFlow, isStackedActionRunning])
     const isPrimaryStackedActionDisabled = !hasGitHubRemote || !hasOnlyStagedChanges || isCommitting || isStackedActionRunning || isCreatingBranchForStackedFlow || (!commitMessage.trim() && !hasProviderForAutoCommit)
     const isDangerousStackedActionDisabled = !hasGitHubRemote || !hasAnyChanges || isCommitting || isStackedActionRunning || isCreatingBranchForStackedFlow || (!commitMessage.trim() && !hasProviderForAutoCommit)
 

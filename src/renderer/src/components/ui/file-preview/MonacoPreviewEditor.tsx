@@ -117,6 +117,11 @@ function applyMonacoTheme(theme: string) {
     const bg = readThemeVariable('--color-bg', isLightTheme ? '#f9fafb' : '#0c121f')
     const border = readThemeVariable('--color-border', isLightTheme ? '#e2e8f0' : '#1f2a3d')
     const accent = readThemeVariable('--accent-primary', isLightTheme ? '#2563eb' : '#60a5fa')
+    const selectionHighlightBackground = isLightTheme ? `${accent}1f` : `${accent}26`
+    const selectionHighlightBorder = isLightTheme ? `${accent}55` : `${accent}66`
+    const wordHighlightBackground = isLightTheme ? `${accent}18` : `${accent}1c`
+    const wordHighlightStrongBackground = isLightTheme ? `${accent}24` : `${accent}24`
+    const wordHighlightBorder = isLightTheme ? `${accent}3d` : `${accent}4a`
 
     const themeData: monaco.editor.IStandaloneThemeData = {
         base: isLightTheme ? 'vs' : 'vs-dark',
@@ -132,7 +137,14 @@ function applyMonacoTheme(theme: string) {
             'editorLineNumber.activeForeground': textDark,
             'editor.selectionBackground': isLightTheme ? '#47556933' : '#94a3b833',
             'editor.inactiveSelectionBackground': isLightTheme ? '#64748b26' : '#94a3b826',
-            'editor.selectionHighlightBackground': 'transparent',
+            'editor.selectionHighlightBackground': selectionHighlightBackground,
+            'editor.selectionHighlightBorder': selectionHighlightBorder,
+            'editor.wordHighlightBackground': wordHighlightBackground,
+            'editor.wordHighlightStrongBackground': wordHighlightStrongBackground,
+            'editor.wordHighlightBorder': wordHighlightBorder,
+            'editor.wordHighlightStrongBorder': selectionHighlightBorder,
+            'editor.findMatchHighlightBackground': wordHighlightStrongBackground,
+            'editor.findMatchHighlightBorder': selectionHighlightBorder,
             'editorIndentGuide.background1': `${border}99`,
             'editorIndentGuide.activeBackground1': `${textSecondary}aa`,
             'editorRuler.foreground': `${border}99`,

@@ -23,6 +23,7 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
         onInternalLinkClick,
         mode,
         isExpanded,
+        allowExpanded = true,
         canEdit,
         isDirty,
         isSaving,
@@ -102,7 +103,8 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
         isEditorToolsEnabled,
         getEditorToolButtonClass,
         pythonPanel,
-        terminalPanel,
+        previewBottomOverlay,
+        previewBottomOverlayPadding = 0,
         previewModeEnabled,
         showUnsavedModal,
         conflictModifiedAt,
@@ -172,6 +174,7 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
             isDirty={isDirty}
             isSaving={isSaving}
             isExpanded={isExpanded}
+            allowExpanded={allowExpanded}
             leftPanelOpen={leftPanelOpen}
             rightPanelOpen={rightPanelOpen}
             loadingEditableContent={loadingEditableContent}
@@ -182,7 +185,10 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
             pythonRunMode={pythonRunMode}
             terminalVisible={terminalVisible}
             onClose={handleCloseRequest}
-            onToggleExpanded={() => setIsExpanded((current) => !current)}
+            onToggleExpanded={() => {
+                if (!allowExpanded) return
+                setIsExpanded((current) => !current)
+            }}
             onToggleLeftPanel={() => setLeftPanelOpen((current) => !current)}
             onToggleRightPanel={() => setRightPanelOpen((current) => !current)}
             onModeChange={handleModeChange}
@@ -218,6 +224,8 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
             hasBottomPanel={hasBottomPanel}
             mode={mode}
             previewContent={renderPreviewBody(true)}
+            bottomOverlay={previewBottomOverlay}
+            bottomOverlayPadding={previewBottomOverlayPadding}
         />
     )
 
@@ -303,9 +311,8 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
                         rightInspector={expandedRightInspector}
                     />
                 ) : (
-                    <div className="group/preview relative flex-1 min-h-0">
+                    <div ref={previewSurfaceRef} className="group/preview relative flex-1 min-h-0">
                         <div
-                            ref={previewSurfaceRef}
                             className={cn(
                                 'h-full w-full custom-scrollbar flex items-stretch justify-center',
                                 previewSurfaceBackgroundClass,
@@ -320,12 +327,25 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
                             )}
                             style={{ overscrollBehavior: 'contain' }}
                     >
-                            <div className={cn('w-full flex flex-col', shouldStretchPreviewBody ? 'h-full min-h-0' : 'min-h-full')}><div className={cn(shouldStretchPreviewBody && 'min-h-0', hasBottomPanel ? 'flex-1' : (shouldStretchPreviewBody ? 'h-full' : ''), hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : '', centerHtmlRenderedPreview ? 'flex items-center justify-center' : '')}>{renderPreviewBody(false)}</div></div>
+                            <div
+                                className={cn('w-full flex flex-col', shouldStretchPreviewBody ? 'h-full min-h-0' : 'min-h-full')}
+                                style={{ paddingBottom: previewBottomOverlay && previewBottomOverlayPadding > 0 ? `${previewBottomOverlayPadding}px` : undefined }}
+                            >
+                                <div className={cn(shouldStretchPreviewBody && 'min-h-0', hasBottomPanel ? 'flex-1' : (shouldStretchPreviewBody ? 'h-full' : ''), hasBottomPanel && mode !== 'edit' ? 'overflow-auto custom-scrollbar' : '', centerHtmlRenderedPreview ? 'flex items-center justify-center' : '')}>
+                                    {renderPreviewBody(false)}
+                                </div>
+                            </div>
                         </div>
+                        {previewBottomOverlay ? (
+                            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 m-0 flex items-end p-0">
+                                <div className="pointer-events-auto m-0 w-full p-0">
+                                    {previewBottomOverlay}
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
                 )}
                 {pythonPanel}
-                {terminalPanel}
             </div>
             <PreviewModalDialogs
                 fileName={file.name}

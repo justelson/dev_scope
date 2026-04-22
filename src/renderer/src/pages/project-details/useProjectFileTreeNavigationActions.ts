@@ -3,7 +3,6 @@ import { getAllFolderPaths } from './fileTreeUtils'
 import type { FileTreeNode } from './types'
 
 type UseProjectFileTreeNavigationActionsParams = {
-    fileSearch: string
     fileTreeFullyLoaded: boolean
     projectRootPath: string
     refreshFileTree: (options?: { deep?: boolean; targetPath?: string }) => Promise<FileTreeNode[] | undefined>
@@ -16,7 +15,6 @@ type UseProjectFileTreeNavigationActionsParams = {
 }
 
 export function useProjectFileTreeNavigationActions({
-    fileSearch,
     fileTreeFullyLoaded,
     projectRootPath,
     refreshFileTree,
@@ -29,7 +27,7 @@ export function useProjectFileTreeNavigationActions({
 }: UseProjectFileTreeNavigationActionsParams) {
     const refreshVisibleFileTree = useCallback(async (targetPath?: string) => {
         const normalizedTargetPath = String(targetPath || '').trim()
-        const shouldDeepRefresh = fileTreeFullyLoaded || fileSearch.trim().length > 0
+        const shouldDeepRefresh = fileTreeFullyLoaded
 
         if (!projectRootPath || !normalizedTargetPath || normalizedTargetPath === projectRootPath) {
             return refreshFileTree({ deep: shouldDeepRefresh })
@@ -40,7 +38,7 @@ export function useProjectFileTreeNavigationActions({
         }
 
         return refreshFileTree({ targetPath: normalizedTargetPath })
-    }, [fileSearch, fileTreeFullyLoaded, projectRootPath, refreshFileTree])
+    }, [fileTreeFullyLoaded, projectRootPath, refreshFileTree])
 
     const handleToggleFolder = useCallback(async (node: FileTreeNode) => {
         if (node.type !== 'directory') return
