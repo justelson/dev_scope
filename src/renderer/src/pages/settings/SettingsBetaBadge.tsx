@@ -15,7 +15,7 @@ export function SettingsBetaBadge({
                 className
             )}
         >
-            βeta
+            Beta
         </span>
     )
 }

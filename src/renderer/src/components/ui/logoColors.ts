@@ -1,30 +1,4 @@
-import type { Theme } from '@/lib/settings'
-
-const THEME_SURFACE_HEX: Record<Theme, string> = {
-    dark: '#131c2c',
-    light: '#ffffff',
-    purple: '#1e1830',
-    green: '#122c1d',
-    midnight: '#0f1420',
-    ocean: '#0f1d2a',
-    forest: '#122c1d',
-    slate: '#22252c',
-    charcoal: '#1e2025',
-    navy: '#12161c'
-}
-
-const THEME_TEXT_HEX: Record<Theme, string> = {
-    dark: '#f0f4f8',
-    light: '#0f172a',
-    purple: '#dac9f5',
-    green: '#cceccc',
-    midnight: '#d4dff7',
-    ocean: '#c8e6f5',
-    forest: '#cceccc',
-    slate: '#e2e8f0',
-    charcoal: '#e8e6e3',
-    navy: '#eef2f7'
-}
+import { getThemeDefinition, type Theme } from '@/lib/settings-theme-catalog'
 
 const MIN_ICON_CONTRAST_RATIO = 2.8
 
@@ -109,16 +83,17 @@ export function withAlpha(hexColor: string, alpha: number) {
 }
 
 export function resolveReadableLogoColor(color: string | undefined, theme: Theme) {
-    const fallbackHex = THEME_TEXT_HEX[theme]
+    const themeDefinition = getThemeDefinition(theme)
+    const fallbackHex = themeDefinition.tokens.text
     const normalizedColor = normalizeHexColor(color)
     if (!normalizedColor) return fallbackHex
 
-    const surfaceHex = THEME_SURFACE_HEX[theme]
+    const surfaceHex = themeDefinition.tokens.card
     if (getContrastRatio(normalizedColor, surfaceHex) >= MIN_ICON_CONTRAST_RATIO) {
         return normalizedColor
     }
 
-    const preferredTone = THEME_TEXT_HEX[theme]
+    const preferredTone = themeDefinition.tokens.text
     const adjustedColor = mixHexColors(
         normalizedColor,
         preferredTone,

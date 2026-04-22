@@ -21,6 +21,7 @@ interface FileActionsMenuProps {
     title?: string
     triggerIcon?: React.ReactNode
     presentation?: 'portal' | 'inline'
+    preferredDirection?: 'up' | 'down'
 }
 
 export function FileActionsMenu({
@@ -30,7 +31,8 @@ export function FileActionsMenu({
     menuClassName,
     title = 'Actions',
     triggerIcon,
-    presentation = 'portal'
+    presentation = 'portal',
+    preferredDirection
 }: FileActionsMenuProps) {
     const [open, setOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement | null>(null)
@@ -48,7 +50,9 @@ export function FileActionsMenu({
         const rect = button.getBoundingClientRect()
         const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
         const spaceAbove = rect.top - viewportPadding
-        const shouldOpenUpward = spaceBelow < menuHeight && spaceAbove > spaceBelow
+        const shouldOpenUpward = preferredDirection
+            ? preferredDirection === 'up'
+            : (spaceBelow < menuHeight && spaceAbove > spaceBelow)
         const originClassName = shouldOpenUpward ? 'origin-bottom-right animate-scaleIn' : 'origin-top-right animate-scaleIn'
 
         if (presentation === 'inline') {
@@ -87,7 +91,7 @@ export function FileActionsMenu({
             window.cancelAnimationFrame(rafId)
             window.removeEventListener('resize', handleResize)
         }
-    }, [open, presentation])
+    }, [open, preferredDirection, presentation])
 
     useEffect(() => {
         if (!open || presentation !== 'portal') return

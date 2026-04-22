@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ModelOption } from './aiSettingsConfig'
 
-export function useCodexModelOptions(effectiveCodexModel: string) {
+export function useCodexModelOptions(effectiveCodexModels: string[]) {
     const [codexModelOptions, setCodexModelOptions] = useState<ModelOption[]>([])
     const [codexModelsError, setCodexModelsError] = useState('')
 
@@ -33,9 +33,16 @@ export function useCodexModelOptions(effectiveCodexModel: string) {
 
     const resolvedCodexModelOptions = useMemo(() => {
         const options = [...codexModelOptions]
-        const currentValue = String(effectiveCodexModel || '').trim()
-        if (currentValue && !options.some((option) => option.id === currentValue)) {
-            options.unshift({ id: currentValue, label: currentValue, description: 'Currently selected model' })
+        const currentValues = Array.from(new Set(
+            (effectiveCodexModels || [])
+                .map((value) => String(value || '').trim())
+                .filter(Boolean)
+        ))
+
+        for (const currentValue of currentValues.reverse()) {
+            if (!options.some((option) => option.id === currentValue)) {
+                options.unshift({ id: currentValue, label: currentValue, description: 'Currently selected model' })
+            }
         }
         if (options.length === 0) {
             options.push({ id: '', label: 'Default Codex model' })
@@ -43,7 +50,7 @@ export function useCodexModelOptions(effectiveCodexModel: string) {
             options.unshift({ id: '', label: 'Default Codex model' })
         }
         return options
-    }, [codexModelOptions, effectiveCodexModel])
+    }, [codexModelOptions, effectiveCodexModels])
 
     return {
         codexModelsError,

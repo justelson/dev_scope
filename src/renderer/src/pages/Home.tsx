@@ -1,8 +1,7 @@
-import { ArrowUpRight, Blocks, Code2, MessageSquare, Rocket, Users } from 'lucide-react'
+import { ArrowUpRight, Blocks, Code2, MessageSquare, SquareTerminal } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { useSettings } from '@/lib/settings'
 
 const LIGHT_FLICKER_STOPPED_KEY = 'devscope:home:light-flicker-stopped:v1'
 
@@ -14,9 +13,6 @@ export default function Home() {
             return false
         }
     })
-    const { settings } = useSettings()
-    const tasksFeaturePath = settings.tasksPageEnabled ? '/tasks' : '/projects'
-
     const cards = [
         {
             title: 'Cross-Root Project Memory',
@@ -41,17 +37,15 @@ export default function Home() {
             novelty: 'Novel feature: write + read git workflow'
         },
         {
-            title: 'Operational Task Loop',
-            description: 'Move between focused tasks and execution context fast, keeping momentum inside the app shell.',
-            icon: settings.tasksPageEnabled ? Rocket : Users,
+            title: 'Terminal Control',
+            description: 'Manage live shell sessions inside the app instead of bouncing out to a separate terminal window.',
+            icon: SquareTerminal,
             tone: 'from-blue-400/15 via-blue-400/0 to-transparent',
             accent: 'text-blue-300',
             border: 'group-hover:border-blue-400/55',
             glow: 'bg-blue-400/20',
-            path: tasksFeaturePath,
-            novelty: settings.tasksPageEnabled
-                ? 'Novel feature: dedicated tasks surface'
-                : 'Novel feature: project workflow fallback'
+            path: '/terminals',
+            novelty: 'Novel feature: dedicated terminals surface'
         },
         {
             title: 'Assistant Workspace',

@@ -118,19 +118,11 @@
 /* ============================================================================
    Framework badges
    ============================================================================ */
-.light .framework-badge {
+body.light .framework-badge {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-:root .framework-badge,
-.purple .framework-badge,
-.green .framework-badge,
-.midnight .framework-badge,
-.ocean .framework-badge,
-.forest .framework-badge,
-.slate .framework-badge,
-.charcoal .framework-badge,
-.navy .framework-badge {
+body:not(.light) .framework-badge {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 

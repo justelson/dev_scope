@@ -10,7 +10,9 @@ import {
     sanitizeAssistantDefaultInteractionMode,
     sanitizeAssistantDefaultRuntimeMode
 } from './settings-assistant-defaults'
+import { getThemeDefinition, isDarkThemeId, isThemeId, THEME_CLASS_IDS, THEMES, type DarkTheme, type Theme } from './settings-theme-catalog'
 
+export { THEMES, type DarkTheme, type Theme } from './settings-theme-catalog'
 export {
     getAssistantBusyMessageModeLabel,
     getAssistantDefaultEffortLabel,
@@ -21,8 +23,6 @@ export {
 } from './settings-assistant-defaults'
 
 // Settings Types
-export type Theme = 'dark' | 'light' | 'purple' | 'green' | 'midnight' | 'ocean' | 'forest' | 'slate' | 'charcoal' | 'navy'
-export type DarkTheme = Exclude<Theme, 'light'>
 export type Shell = 'powershell' | 'cmd'
 export type CommitAIProvider = 'groq' | 'gemini' | 'codex'
 export type ScrollMode = 'smooth' | 'native'
@@ -81,17 +81,6 @@ export const ACCENT_COLORS: AccentColor[] = [
     { name: 'Sky', primary: '#0ea5e9', secondary: '#38bdf8' }
 ]
 
-export const THEMES = [
-    { id: 'dark' as Theme, name: 'Dark', color: '#0c121f', description: 'Classic dark theme', accentColor: 'Blue' },
-    { id: 'midnight' as Theme, name: 'Midnight', color: '#0a0e1a', description: 'Deep blue darkness', accentColor: 'Indigo' },
-    { id: 'purple' as Theme, name: 'Purple Haze', color: '#151122', description: 'Purple-tinted darkness', accentColor: 'Purple' },
-    { id: 'ocean' as Theme, name: 'Ocean Deep', color: '#0a1520', description: 'Deep ocean blue', accentColor: 'Cyan' },
-    { id: 'forest' as Theme, name: 'Forest Night', color: '#0a1a11', description: 'Dark forest green', accentColor: 'Emerald' },
-    { id: 'slate' as Theme, name: 'Slate', color: '#1a1d23', description: 'Cool gray slate', accentColor: 'Sky' },
-    { id: 'charcoal' as Theme, name: 'Charcoal', color: '#16181d', description: 'Warm charcoal gray', accentColor: 'Amber' },
-    { id: 'navy' as Theme, name: 'Cursor Dark', color: '#0b0d10', description: 'Near-black Cursor-inspired theme', accentColor: 'Blue' }
-]
-
 export interface Settings {
     theme: Theme
     lastDarkTheme: DarkTheme
@@ -113,13 +102,8 @@ export interface Settings {
     filePreviewDefaultMode: FilePreviewDefaultMode
     filePreviewPythonRunMode: FilePreviewPythonRunMode
     filePreviewTerminalPanelHeight: number
-    projectDetailsShowTaskManagerTab: boolean
-    tasksPageEnabled: boolean
-    tasksRunningAppsEnabled: boolean
     projectsFolder: string
     additionalFolders: string[]
-    enableFolderIndexing: boolean
-    autoIndexOnStartup: boolean
     gitAutoRefreshOnProjectOpen: boolean
     gitInitDefaultBranch: string
     gitInitCreateGitignore: boolean
@@ -136,7 +120,8 @@ export interface Settings {
     gitAutoCreateBranchWhenTargetMatches: boolean
     groqApiKey: string
     geminiApiKey: string
-    codexModel: string
+    gitCommitCodexModel: string
+    gitPullRequestCodexModel: string
     commitAIProvider: CommitAIProvider
     assistantUsageDisplayMode: AssistantUsageDisplayMode
     assistantTextStreamingMode: AssistantTextStreamingMode
@@ -172,13 +157,8 @@ const DEFAULT_SETTINGS: Settings = {
     filePreviewDefaultMode: 'preview',
     filePreviewPythonRunMode: 'terminal',
     filePreviewTerminalPanelHeight: 220,
-    projectDetailsShowTaskManagerTab: true,
-    tasksPageEnabled: true,
-    tasksRunningAppsEnabled: false,
     projectsFolder: '',
     additionalFolders: [],
-    enableFolderIndexing: true,
-    autoIndexOnStartup: false,
     gitAutoRefreshOnProjectOpen: true,
     gitInitDefaultBranch: 'main',
     gitInitCreateGitignore: true,
@@ -199,7 +179,8 @@ const DEFAULT_SETTINGS: Settings = {
     gitAutoCreateBranchWhenTargetMatches: false,
     groqApiKey: '',
     geminiApiKey: '',
-    codexModel: '',
+    gitCommitCodexModel: '',
+    gitPullRequestCodexModel: '',
     commitAIProvider: 'groq',
     assistantUsageDisplayMode: 'remaining',
     assistantTextStreamingMode: 'stream',
@@ -216,14 +197,6 @@ const DEFAULT_SETTINGS: Settings = {
 
 const STORAGE_KEY = 'devscope-settings'
 const LEGACY_ASSISTANT_COMPOSER_PREFERENCES_STORAGE_KEY = 'devscope:assistant-composer-preferences'
-
-function isTheme(value: unknown): value is Theme {
-    return typeof value === 'string' && ['dark', 'light', 'purple', 'green', 'midnight', 'ocean', 'forest', 'slate', 'charcoal', 'navy'].includes(value)
-}
-
-function isDarkTheme(value: unknown): value is DarkTheme {
-    return isTheme(value) && value !== 'light'
-}
 
 function sanitizePullRequestGuideConfig(value: unknown): PullRequestGuideConfig {
     const candidate = typeof value === 'object' && value !== null ? value as Partial<PullRequestGuideConfig> : {}
@@ -272,12 +245,19 @@ function loadSettings(): Settings {
         if (stored) {
             const parsed = JSON.parse(stored)
             const candidate = { ...DEFAULT_SETTINGS, ...legacyAssistantDefaults, ...parsed }
-            const theme = isTheme(candidate.theme) ? candidate.theme : DEFAULT_SETTINGS.theme
-            const lastDarkTheme = isDarkTheme(candidate.lastDarkTheme)
+            const legacyCodexModel = typeof candidate.codexModel === 'string' ? candidate.codexModel.trim() : ''
+            const theme = isThemeId(candidate.theme) ? candidate.theme : DEFAULT_SETTINGS.theme
+            const lastDarkTheme = isDarkThemeId(candidate.lastDarkTheme)
                 ? candidate.lastDarkTheme
-                : isDarkTheme(theme)
+                : isDarkThemeId(theme)
                     ? theme
                     : DEFAULT_SETTINGS.lastDarkTheme
+            const gitCommitCodexModel = typeof candidate.gitCommitCodexModel === 'string'
+                ? candidate.gitCommitCodexModel.trim()
+                : legacyCodexModel
+            const gitPullRequestCodexModel = typeof candidate.gitPullRequestCodexModel === 'string'
+                ? candidate.gitPullRequestCodexModel.trim()
+                : legacyCodexModel
 
             return {
                 theme,
@@ -302,13 +282,8 @@ function loadSettings(): Settings {
                 filePreviewTerminalPanelHeight: Number.isFinite(Number(candidate.filePreviewTerminalPanelHeight))
                     ? Math.max(140, Math.min(720, Math.round(Number(candidate.filePreviewTerminalPanelHeight))))
                     : 220,
-                projectDetailsShowTaskManagerTab: candidate.projectDetailsShowTaskManagerTab !== false,
-                tasksPageEnabled: candidate.tasksPageEnabled !== false,
-                tasksRunningAppsEnabled: candidate.tasksRunningAppsEnabled !== false,
                 projectsFolder: candidate.projectsFolder,
                 additionalFolders: candidate.additionalFolders,
-                enableFolderIndexing: candidate.enableFolderIndexing,
-                autoIndexOnStartup: candidate.autoIndexOnStartup,
                 gitAutoRefreshOnProjectOpen: candidate.gitAutoRefreshOnProjectOpen !== false,
                 gitInitDefaultBranch: typeof candidate.gitInitDefaultBranch === 'string' && candidate.gitInitDefaultBranch.trim()
                     ? candidate.gitInitDefaultBranch.trim()
@@ -346,7 +321,8 @@ function loadSettings(): Settings {
                 gitAutoCreateBranchWhenTargetMatches: candidate.gitAutoCreateBranchWhenTargetMatches === true,
                 groqApiKey: candidate.groqApiKey,
                 geminiApiKey: candidate.geminiApiKey,
-                codexModel: typeof candidate.codexModel === 'string' ? candidate.codexModel.trim() : '',
+                gitCommitCodexModel,
+                gitPullRequestCodexModel,
                 commitAIProvider: candidate.commitAIProvider === 'gemini' || candidate.commitAIProvider === 'codex' ? candidate.commitAIProvider : 'groq',
                 assistantUsageDisplayMode: candidate.assistantUsageDisplayMode === 'used' ? 'used' : 'remaining',
                 assistantTextStreamingMode: candidate.assistantTextStreamingMode === 'chunks' ? 'chunks' : 'stream',
@@ -415,9 +391,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const updateSettings = (partial: Partial<Settings>) => {
         setSettings((prev) => {
             const nextTheme = partial.theme ?? prev.theme
-            const nextLastDarkTheme = isDarkTheme(partial.lastDarkTheme)
+            const nextLastDarkTheme = isDarkThemeId(partial.lastDarkTheme)
                 ? partial.lastDarkTheme
-                : isDarkTheme(nextTheme)
+                : isDarkThemeId(nextTheme)
                     ? nextTheme
                     : prev.lastDarkTheme
 
@@ -463,10 +439,25 @@ export function useSettings() {
 }
 
 function applyTheme(theme: Theme) {
-    document.body.classList.remove('dark', 'light', 'purple', 'green', 'midnight', 'ocean', 'forest', 'slate', 'charcoal', 'navy')
+    const themeDefinition = getThemeDefinition(theme)
+    document.body.classList.remove(...THEME_CLASS_IDS)
     if (theme !== 'dark') {
         document.body.classList.add(theme)
     }
+
+    const root = document.documentElement
+    root.style.setProperty('--color-bg', themeDefinition.tokens.bg)
+    root.style.setProperty('--color-text', themeDefinition.tokens.text)
+    root.style.setProperty('--color-text-dark', themeDefinition.tokens.textDark)
+    root.style.setProperty('--color-text-darker', themeDefinition.tokens.textDarker)
+    root.style.setProperty('--color-text-secondary', themeDefinition.tokens.textSecondary)
+    root.style.setProperty('--color-text-muted', themeDefinition.tokens.textMuted)
+    root.style.setProperty('--color-card', themeDefinition.tokens.card)
+    root.style.setProperty('--color-border', themeDefinition.tokens.border)
+    root.style.setProperty('--color-border-secondary', themeDefinition.tokens.borderSecondary)
+    root.style.setProperty('--color-primary', themeDefinition.tokens.primary)
+    root.style.setProperty('--color-secondary', themeDefinition.tokens.secondary)
+    root.style.setProperty('--color-accent', themeDefinition.tokens.accent)
 }
 
 function applyAccentColor(accent: AccentColor) {

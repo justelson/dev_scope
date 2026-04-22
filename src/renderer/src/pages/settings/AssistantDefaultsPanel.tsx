@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bot } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { AssistantComposer, type AssistantComposerSendOptions, type ComposerContextFile } from '../assistant/AssistantComposer'
+import { ConnectedDropdownButton } from '@/components/ui/ConnectedDropdownButton'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings'
 import type { AssistantTranscriptionModelState } from '@shared/assistant/contracts'
 
 type ModelOption = { id: string; label: string; description?: string }
+
+const TRANSCRIPTION_ENGINE_META = {
+    browser: {
+        title: 'Browser speech service',
+        summary: 'Ready immediately. No download.'
+    },
+    vosk: {
+        title: 'Local Vosk model',
+        summary: 'Local model with rolling updates.'
+    }
+} as const
 
 export function AssistantDefaultsPanel() {
     const [searchParams, setSearchParams] = useSearchParams()
@@ -156,133 +167,117 @@ export function AssistantDefaultsPanel() {
             : transcriptionModelState?.status === 'error'
                 ? 'Error'
                 : 'Not installed'
+    const transcriptionModelReady = transcriptionModelState?.status === 'ready'
+    const transcriptionModelDownloading = transcriptionModelState?.status === 'downloading'
+    const showVoskDownloadAction = settings.assistantTranscriptionEngine === 'vosk' && !transcriptionModelReady
+    const transcriptionEngineMeta = TRANSCRIPTION_ENGINE_META[settings.assistantTranscriptionEngine]
+    const lastAppliedLabel = lastAppliedAt
+        ? new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric',
+            minute: '2-digit'
+        }).format(new Date(lastAppliedAt))
+        : null
 
     return (
-        <div className="w-full">
-            <div className="grid w-full gap-4 xl:grid-cols-[minmax(280px,0.78fr)_minmax(0,1.22fr)]">
-                <section className="rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
-                    <div className="flex items-start gap-3">
-                        <div className="rounded-xl border border-violet-400/20 bg-violet-500/10 p-2.5 text-violet-200">
-                            <Bot size={18} />
-                        </div>
-                        <div className="min-w-0">
-                            <h1 className="text-xl font-semibold text-sparkle-text">Use the real composer to set your defaults</h1>
-                            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-sparkle-text-secondary">
-                                <li>Write the starter prompt template you want new composers to begin with.</li>
-                                <li>Choose the model and controls you want.</li>
-                                <li>Send it to save the prompt and controls as the starting defaults for new assistant threads.</li>
-                            </ul>
-                        </div>
-                    </div>
-                </section>
-
+        <div className="w-full space-y-4">
+            <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.04fr)_minmax(360px,0.96fr)]">
                 <section className={cn('rounded-2xl border border-white/10 bg-sparkle-card p-3 sm:p-4', modelsLoading && 'opacity-100')}>
-                    <AssistantComposer
-                        key={`settings-assistant-defaults-${composerResetVersion}`}
-                        sessionId={null}
-                        disabled={false}
-                        allowEmptySubmit
-                        isSending={false}
-                        isThinking={false}
-                        thinkingLabel="Previewing..."
-                        isConnected={true}
-                        activeModel={settings.assistantDefaultModel.trim() || modelOptions[0]?.id || undefined}
-                        modelOptions={modelOptions}
-                        modelsLoading={modelsLoading}
-                        modelsError={modelsError}
-                        onRefreshModels={() => void loadModels(true)}
-                        activeProfile={activeProfileLabel}
-                        runtimeMode={settings.assistantDefaultRuntimeMode}
-                        interactionMode={settings.assistantDefaultInteractionMode}
-                        projectPath={null}
-                        compact={settings.compactMode}
-                        submitLabel="Save"
-                        dirtySubmitLabel="Unsaved"
-                        cancelLabel="Cancel"
-                        showCancelWhenDirty
-                        onSend={handleSandboxSend}
-                    />
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3 px-1">
+                        <div className="min-w-0">
+                            <h2 className="text-sm font-semibold text-sparkle-text">Composer Defaults</h2>
+                            <p className="mt-1 text-sm text-sparkle-text-secondary">
+                                Set the prompt, model, and runtime defaults for new threads.
+                            </p>
+                        </div>
+                        {lastAppliedLabel ? (
+                            <span className="inline-flex rounded-full bg-white/[0.03] px-2.5 py-1 text-[10px] font-medium text-sparkle-text-muted">
+                                Saved {lastAppliedLabel}
+                            </span>
+                        ) : null}
+                    </div>
+
+                    <div className="rounded-2xl bg-black/[0.14] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] sm:p-2.5">
+                        <AssistantComposer
+                            key={`settings-assistant-defaults-${composerResetVersion}`}
+                            sessionId={null}
+                            disabled={false}
+                            allowEmptySubmit
+                            isSending={false}
+                            isThinking={false}
+                            thinkingLabel="Previewing..."
+                            isConnected={true}
+                            activeModel={settings.assistantDefaultModel.trim() || modelOptions[0]?.id || undefined}
+                            modelOptions={modelOptions}
+                            modelsLoading={modelsLoading}
+                            modelsError={modelsError}
+                            onRefreshModels={() => void loadModels(true)}
+                            activeProfile={activeProfileLabel}
+                            runtimeMode={settings.assistantDefaultRuntimeMode}
+                            interactionMode={settings.assistantDefaultInteractionMode}
+                            projectPath={null}
+                            compact={settings.compactMode}
+                            submitLabel="Save"
+                            dirtySubmitLabel="Unsaved"
+                            cancelLabel="Cancel"
+                            showCancelWhenDirty
+                            onSend={handleSandboxSend}
+                        />
+                    </div>
 
                     {lastAppliedPrompt ? (
-                        <p className="mt-2 truncate text-[11px] text-sparkle-text-muted">
-                            Last prompt: {lastAppliedPrompt}
-                        </p>
+                        <div className="mt-3 rounded-xl bg-white/[0.03] px-3 py-2 text-[11px] text-sparkle-text-muted">
+                            <span className="mr-1 text-sparkle-text-secondary">Last prompt:</span>
+                            <span className="truncate">{lastAppliedPrompt}</span>
+                        </div>
                     ) : null}
 
                     {modelsError ? <p className="mt-2 text-xs text-rose-300">{modelsError}</p> : null}
                 </section>
+
+                <div className="grid gap-4 xl:h-full xl:grid-rows-2">
+                    <section className="flex h-full flex-col rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
+                        <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                            <div>
+                                <h2 className="text-sm font-semibold text-sparkle-text">Streaming</h2>
+                                <p className="mt-1 text-sm text-sparkle-text-secondary">
+                                    Choose live or chunked output.
+                                </p>
+                            </div>
+                            <ConnectedDropdownButton
+                                className="justify-self-end self-center"
+                                value={settings.assistantTextStreamingMode}
+                                options={[
+                                    { id: 'stream', label: 'Live stream', tone: 'sky' },
+                                    { id: 'chunks', label: 'Chunked output', tone: 'amber' }
+                                ]}
+                                menuLabel="Choose streaming mode"
+                                onChange={(value) => updateSettings({ assistantTextStreamingMode: value as 'stream' | 'chunks' })}
+                            />
+                        </div>
+                    </section>
+
+                    <section className="flex h-full flex-col rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
+                        <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                            <div>
+                                <h2 className="text-sm font-semibold text-sparkle-text">Busy Send</h2>
+                                <p className="mt-1 text-sm text-sparkle-text-secondary">
+                                    Set the default send action during an active turn.
+                                </p>
+                            </div>
+                            <ConnectedDropdownButton
+                                className="justify-self-end self-center"
+                                value={settings.assistantBusyMessageMode}
+                                options={[
+                                    { id: 'queue', label: 'Queue next', tone: 'emerald' },
+                                    { id: 'force', label: 'Interrupt turn', tone: 'rose' }
+                                ]}
+                                menuLabel="Choose busy send mode"
+                                onChange={(value) => updateSettings({ assistantBusyMessageMode: value as 'queue' | 'force' })}
+                            />
+                        </div>
+                    </section>
+                </div>
             </div>
-
-            <section className="mt-4 w-full rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-                    <div>
-                        <h2 className="text-sm font-semibold text-sparkle-text">Text Streaming</h2>
-                        <p className="mt-1 text-sm text-sparkle-text-secondary">
-                            Stream text live for immediacy, or batch into chunks for steadier rendering.
-                        </p>
-                    </div>
-                    <div className="inline-flex w-full max-w-[260px] justify-self-end rounded-lg border border-white/10 bg-black/10 p-1">
-                        {([
-                            { id: 'stream', label: 'Live stream' },
-                            { id: 'chunks', label: 'Chunked' }
-                        ] as const).map((mode) => {
-                            const selected = settings.assistantTextStreamingMode === mode.id
-                            return (
-                                <button
-                                    key={mode.id}
-                                    type="button"
-                                    onClick={() => updateSettings({ assistantTextStreamingMode: mode.id })}
-                                    className={cn(
-                                        'flex-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-all',
-                                        selected
-                                            ? 'bg-white/10 text-sparkle-text shadow-sm'
-                                            : 'text-sparkle-text-secondary hover:text-sparkle-text'
-                                    )}
-                                >
-                                    {mode.label}
-                                </button>
-                            )
-                        })}
-                    </div>
-                </div>
-            </section>
-
-            <section className="mt-4 w-full rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-                    <div>
-                        <h2 className="text-sm font-semibold text-sparkle-text">While Assistant Is Busy</h2>
-                        <p className="mt-1 text-sm text-sparkle-text-secondary">
-                            Choose what the default send action does when a turn is already running.
-                        </p>
-                    </div>
-                    <div className="inline-flex w-full max-w-[280px] justify-self-end rounded-lg border border-white/10 bg-black/10 p-1">
-                        {([
-                            { id: 'queue', label: 'Queue' },
-                            { id: 'force', label: 'Force' }
-                        ] as const).map((mode) => {
-                            const selected = settings.assistantBusyMessageMode === mode.id
-                            return (
-                                <button
-                                    key={mode.id}
-                                    type="button"
-                                    onClick={() => updateSettings({ assistantBusyMessageMode: mode.id })}
-                                    className={cn(
-                                        'flex-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-all',
-                                        selected
-                                            ? 'bg-white/10 text-sparkle-text shadow-sm'
-                                            : 'text-sparkle-text-secondary hover:text-sparkle-text'
-                                    )}
-                                >
-                                    {mode.label}
-                                </button>
-                            )
-                        })}
-                    </div>
-                </div>
-                <p className="mt-3 text-xs text-sparkle-text-muted">
-                    Queue waits for the current turn to finish. Force interrupts the current turn and runs the new message first.
-                </p>
-            </section>
 
             <section
                 ref={transcriptionSectionRef}
@@ -296,109 +291,104 @@ export function AssistantDefaultsPanel() {
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                     <div>
                         <h2 className="text-sm font-semibold text-sparkle-text">Voice Transcription</h2>
-                        <p className="mt-1 text-sm text-sparkle-text-secondary">Optional. Off by default.</p>
+                        <p className="mt-1 text-sm text-sparkle-text-secondary">Voice input for new threads.</p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => updateSettings({ assistantTranscriptionEnabled: !settings.assistantTranscriptionEnabled })}
-                        className={cn(
-                            'inline-flex min-w-[140px] items-center justify-center rounded-lg px-3 py-2 text-xs font-medium transition-colors',
-                            settings.assistantTranscriptionEnabled
-                                ? 'bg-emerald-500/14 text-emerald-100 hover:bg-emerald-500/18'
-                                : 'bg-white/[0.03] text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
-                        )}
-                    >
-                        {settings.assistantTranscriptionEnabled ? 'Transcription on' : 'Transcription off'}
-                    </button>
+                    <div className="flex items-start justify-end">
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={settings.assistantTranscriptionEnabled}
+                            aria-label={settings.assistantTranscriptionEnabled ? 'Disable voice transcription' : 'Enable voice transcription'}
+                            onClick={() => updateSettings({ assistantTranscriptionEnabled: !settings.assistantTranscriptionEnabled })}
+                            className={cn(
+                                'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-[border-color,background-color,box-shadow] duration-200',
+                                settings.assistantTranscriptionEnabled
+                                    ? 'border-emerald-400/55 bg-emerald-500/30 shadow-[0_0_0_1px_rgba(16,185,129,0.08)]'
+                                    : 'border-white/10 bg-white/5 hover:border-white/20'
+                            )}
+                        >
+                            <span
+                                className={cn(
+                                    'inline-block h-4 w-4 translate-x-1 rounded-full bg-white shadow-[0_1px_6px_rgba(0,0,0,0.28)] transition-transform',
+                                    settings.assistantTranscriptionEnabled ? 'translate-x-6' : 'translate-x-1'
+                                )}
+                            />
+                        </button>
+                    </div>
                 </div>
 
                 {settings.assistantTranscriptionEnabled ? (
-                    <>
-                        <div className="mt-4 inline-flex w-full max-w-[280px] rounded-lg border border-white/10 bg-black/10 p-1">
-                            {([
-                                { id: 'browser', label: 'Browser' },
-                                { id: 'vosk', label: 'Vosk' }
-                            ] as const).map((engine) => {
-                                const selected = settings.assistantTranscriptionEngine === engine.id
-                                return (
-                                    <button
-                                        key={engine.id}
-                                        type="button"
-                                        onClick={() => updateSettings({ assistantTranscriptionEngine: engine.id })}
-                                        className={cn(
-                                            'flex-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-all',
-                                            selected
-                                                ? 'bg-white/10 text-sparkle-text shadow-sm'
-                                                : 'text-sparkle-text-secondary hover:text-sparkle-text'
-                                        )}
-                                    >
-                                        {engine.label}
-                                    </button>
-                                )
-                            })}
-                        </div>
-
-                        {settings.assistantTranscriptionEngine === 'browser' ? (
-                            <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-sparkle-text-secondary">
-                                Uses the runtime speech service.
-                            </div>
-                        ) : (
-                            <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="text-sm font-semibold text-sparkle-text">{transcriptionModelState?.modelName || 'Vosk Small English (US)'}</h3>
-                                            <span className={cn(
-                                                'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                                                transcriptionModelState?.status === 'ready'
+                    <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                        <div className="flex flex-col gap-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-sm font-semibold text-sparkle-text">
+                                            {settings.assistantTranscriptionEngine === 'browser'
+                                                ? transcriptionEngineMeta.title
+                                                : (transcriptionModelState?.modelName || 'Vosk Small English (US)')}
+                                        </h3>
+                                        <span className={cn(
+                                            'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                                            settings.assistantTranscriptionEngine === 'browser'
+                                                ? 'bg-sky-500/12 text-sky-200'
+                                                : transcriptionModelState?.status === 'ready'
                                                     ? 'bg-emerald-500/12 text-emerald-200'
                                                     : transcriptionModelState?.status === 'downloading'
                                                         ? 'bg-sky-500/12 text-sky-200'
                                                         : transcriptionModelState?.status === 'error'
                                                             ? 'bg-rose-500/12 text-rose-200'
                                                             : 'bg-white/[0.04] text-sparkle-text-secondary'
-                                            )}>
-                                                {transcriptionStatusLabel}
-                                            </span>
-                                        </div>
-                                        <p className="mt-1 text-xs text-sparkle-text-secondary">
-                                            Local model. Rolling updates while recording.
-                                        </p>
+                                        )}>
+                                            {settings.assistantTranscriptionEngine === 'browser' ? 'Ready' : transcriptionStatusLabel}
+                                        </span>
                                     </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => void handleDownloadTranscriptionModel()}
-                                        disabled={transcriptionModelLoading || transcriptionModelState?.status === 'downloading' || transcriptionModelState?.status === 'ready'}
-                                        className={cn(
-                                            'inline-flex min-w-[160px] items-center justify-center rounded-lg px-3 py-2 text-xs font-medium transition-colors',
-                                            transcriptionModelState?.status === 'ready'
-                                                ? 'bg-emerald-500/12 text-emerald-200'
-                                                : 'bg-white/[0.04] text-sparkle-text hover:bg-white/[0.06]',
-                                            (transcriptionModelLoading || transcriptionModelState?.status === 'downloading') && 'cursor-wait opacity-80',
-                                            (transcriptionModelState?.status === 'ready') && 'cursor-default'
-                                        )}
-                                    >
-                                        {transcriptionModelState?.status === 'ready'
-                                            ? 'Installed'
-                                            : transcriptionModelState?.status === 'downloading'
-                                                ? 'Downloading...'
-                                                : 'Download model'}
-                                    </button>
+                                    <p className="mt-2 text-xs text-sparkle-text-secondary">
+                                        {transcriptionEngineMeta.summary}
+                                    </p>
                                 </div>
+                                <div className="flex flex-col items-start gap-2 sm:items-end">
+                                    <ConnectedDropdownButton
+                                        value={settings.assistantTranscriptionEngine}
+                                        options={[
+                                            { id: 'browser', label: 'Browser', tone: 'sky' },
+                                            { id: 'vosk', label: 'Vosk', tone: 'emerald' }
+                                        ]}
+                                        className="self-start sm:ml-auto"
+                                        menuLabel="Choose transcription engine"
+                                        onChange={(value) => updateSettings({ assistantTranscriptionEngine: value as 'browser' | 'vosk' })}
+                                    />
+                                    {showVoskDownloadAction ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleDownloadTranscriptionModel()}
+                                            disabled={transcriptionModelLoading || transcriptionModelDownloading}
+                                            className={cn(
+                                                'inline-flex min-w-[148px] items-center justify-center rounded-lg px-3 py-2 text-xs font-medium transition-colors',
+                                                'bg-white/[0.04] text-sparkle-text hover:bg-white/[0.06]',
+                                                (transcriptionModelLoading || transcriptionModelDownloading) && 'cursor-wait opacity-80'
+                                            )}
+                                        >
+                                            {transcriptionModelDownloading ? 'Downloading...' : 'Download model'}
+                                        </button>
+                                    ) : null}
+                                </div>
+                            </div>
 
-                                {transcriptionModelState?.installPath ? (
-                                    <p className="mt-3 truncate text-[11px] text-sparkle-text-muted">
+                            {settings.assistantTranscriptionEngine === 'vosk' && transcriptionModelState?.installPath ? (
+                                <div className="rounded-lg bg-white/[0.03] px-3 py-2">
+                                    <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-sparkle-text-muted">Install Path</p>
+                                    <p className="mt-1 truncate text-[11px] text-sparkle-text-muted">
                                         {transcriptionModelState.installPath}
                                     </p>
-                                ) : null}
+                                </div>
+                            ) : null}
 
-                                {transcriptionModelState?.error || transcriptionModelError ? (
-                                    <p className="mt-2 text-xs text-rose-300">{transcriptionModelState?.error || transcriptionModelError}</p>
-                                ) : null}
-                            </div>
-                        )}
-                    </>
+                            {transcriptionModelState?.error || transcriptionModelError ? (
+                                <p className="text-xs text-rose-300">{transcriptionModelState?.error || transcriptionModelError}</p>
+                            ) : null}
+                        </div>
+                    </div>
                 ) : null}
             </section>
         </div>

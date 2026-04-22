@@ -2,15 +2,23 @@
  * DevScope - Appearance Settings Page
  */
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronUp, Palette } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, ChevronLeft, ChevronRight, Palette } from 'lucide-react'
 import { useSettings, THEMES, ACCENT_COLORS } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 
+const THEME_PAGE_SIZE = 6
+
 export default function AppearanceSettings() {
     const { settings, updateSettings } = useSettings()
-    const [advancedOpen, setAdvancedOpen] = useState(false)
+    const darkThemes = useMemo(() => THEMES.filter((theme) => theme.id !== 'light'), [])
+    const activeDarkThemeId = settings.theme === 'light' ? settings.lastDarkTheme : settings.theme
+    const resolveThemePage = (themeId: string) => {
+        const selectedIndex = darkThemes.findIndex((theme) => theme.id === themeId)
+        return selectedIndex >= 0 ? Math.floor(selectedIndex / THEME_PAGE_SIZE) : 0
+    }
+    const [themePage, setThemePage] = useState(() => resolveThemePage(activeDarkThemeId))
 
     const handleThemeChange = (themeId: string) => {
         const selectedTheme = THEMES.find((theme) => theme.id === themeId)
@@ -40,6 +48,17 @@ export default function AppearanceSettings() {
         }
     }
 
+    useEffect(() => {
+        setThemePage((current) => {
+            const next = resolveThemePage(activeDarkThemeId)
+            return current === next ? current : next
+        })
+    }, [activeDarkThemeId])
+
+    const totalThemePages = Math.max(1, Math.ceil(darkThemes.length / THEME_PAGE_SIZE))
+    const themePageStart = themePage * THEME_PAGE_SIZE
+    const visibleThemes = darkThemes.slice(themePageStart, themePageStart + THEME_PAGE_SIZE)
+
     return (
         <div className="animate-fadeIn">
             <div className="mb-6">
@@ -64,10 +83,39 @@ export default function AppearanceSettings() {
             </div>
 
             <div className="space-y-6">
-                <SettingsSection title="Theme" description="Choose your preferred color scheme.">
-                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                        {THEMES.map((theme) => {
-                            const active = settings.theme === theme.id
+                <SettingsSection
+                    title="Themes"
+                    description="Browse the dark-theme library a page at a time. Light mode stays available below."
+                    headerActions={(
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setThemePage((current) => Math.max(0, current - 1))}
+                                disabled={themePage === 0}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-white/[0.03] px-3 py-1.5 text-xs text-sparkle-text-secondary transition-colors hover:bg-white/[0.05] hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                <ChevronLeft size={14} />
+                                Prev
+                            </button>
+                            <span className="min-w-[72px] text-center text-xs text-sparkle-text-secondary">
+                                Page <span className="text-sparkle-text">{themePage + 1}</span> / {totalThemePages}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setThemePage((current) => Math.min(totalThemePages - 1, current + 1))}
+                                disabled={themePage >= totalThemePages - 1}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-white/[0.03] px-3 py-1.5 text-xs text-sparkle-text-secondary transition-colors hover:bg-white/[0.05] hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                Next
+                                <ChevronRight size={14} />
+                            </button>
+                        </div>
+                    )}
+                >
+
+                    <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                        {visibleThemes.map((theme) => {
+                            const active = settings.theme !== 'light' && settings.theme === theme.id
                             return (
                                 <button
                                     key={theme.id}
@@ -89,6 +137,9 @@ export default function AppearanceSettings() {
                                         <div className="min-w-0 flex-1">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <p className="text-sm font-medium text-sparkle-text">{theme.name}</p>
+                                                <span className="inline-flex rounded-full border border-transparent bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-sparkle-text-secondary">
+                                                    {theme.accentColor}
+                                                </span>
                                                 {active && (
                                                     <span className="inline-flex rounded-full border border-white/10 bg-[var(--accent-primary)]/12 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[var(--accent-primary)]">
                                                         Active
@@ -101,6 +152,12 @@ export default function AppearanceSettings() {
                                 </button>
                             )
                         })}
+                    </div>
+
+                    <div className="mt-4 flex justify-end text-xs text-sparkle-text-secondary">
+                        <span>
+                            Showing <span className="text-sparkle-text">{themePageStart + 1}-{Math.min(themePageStart + THEME_PAGE_SIZE, darkThemes.length)}</span> of <span className="text-sparkle-text">{darkThemes.length}</span> dark themes
+                        </span>
                     </div>
                 </SettingsSection>
 
@@ -139,42 +196,30 @@ export default function AppearanceSettings() {
                         />
                     </SettingsSection>
 
-                    <div className="self-start">
-                        <button
-                            onClick={() => setAdvancedOpen((prev) => !prev)}
-                            className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/10 px-2.5 py-1 text-[11px] text-sparkle-text-secondary transition-colors hover:border-white/20 hover:text-sparkle-text"
-                        >
-                            <span>Advanced</span>
-                            {advancedOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        </button>
-
-                        {advancedOpen && (
-                            <div className="mt-2 rounded-xl border border-red-400/20 bg-red-500/8 p-4 text-left">
-                                <div className="flex items-start gap-3">
-                                    <div className="mt-0.5 rounded-lg border border-red-400/20 bg-red-500/10 p-2 text-red-200">
-                                        <AlertTriangle size={15} />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-200">
-                                            Danger Zone
-                                        </p>
-                                        <p className="mt-2 text-sm font-medium text-sparkle-text">
-                                            Light mode
-                                        </p>
-                                        <p className="mt-1 text-xs text-sparkle-text-secondary">
-                                            Built by people who live in dark mode. Light mode exists, but some screens may still come out a little cursed because that path gets far less real use.
-                                        </p>
-                                        <div className="mt-4 rounded-lg border border-white/10 bg-black/10 p-3">
-                                            <ToggleOption
-                                                checked={isLightModeEnabled}
-                                                onChange={handleLightModeToggle}
-                                                label={isLightModeEnabled ? 'Enabled' : 'Disabled'}
-                                            />
-                                        </div>
-                                    </div>
+                    <div className="self-start rounded-xl border border-red-400/20 bg-red-500/8 p-4 text-left">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 rounded-lg border border-red-400/20 bg-red-500/10 p-2 text-red-200">
+                                <AlertTriangle size={15} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-200">
+                                    Danger Zone
+                                </p>
+                                <p className="mt-2 text-sm font-medium text-sparkle-text">
+                                    Light mode
+                                </p>
+                                <p className="mt-1 text-xs text-sparkle-text-secondary">
+                                    Built by people who live in dark mode. Light mode exists, but some screens may still come out a little cursed because that path gets far less real use.
+                                </p>
+                                <div className="mt-4 rounded-lg border border-white/10 bg-black/10 p-3">
+                                    <ToggleOption
+                                        checked={isLightModeEnabled}
+                                        onChange={handleLightModeToggle}
+                                        label={isLightModeEnabled ? 'Enabled' : 'Disabled'}
+                                    />
                                 </div>
                             </div>
-                        )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -205,16 +250,23 @@ function ThemeRadio({ active }: { active: boolean }) {
 function SettingsSection({
     title,
     description,
-    children
+    children,
+    headerActions
 }: {
     title: string
     description: string
     children: ReactNode
+    headerActions?: ReactNode
 }) {
     return (
         <div className="rounded-xl border border-white/10 bg-sparkle-card p-5">
-            <h2 className="mb-1 font-semibold text-sparkle-text">{title}</h2>
-            <p className="mb-4 text-sm text-sparkle-text-secondary">{description}</p>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <h2 className="mb-1 font-semibold text-sparkle-text">{title}</h2>
+                    <p className="text-sm text-sparkle-text-secondary">{description}</p>
+                </div>
+                {headerActions ? <div className="shrink-0">{headerActions}</div> : null}
+            </div>
             {children}
         </div>
     )

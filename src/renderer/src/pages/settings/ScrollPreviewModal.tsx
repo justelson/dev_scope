@@ -1,6 +1,34 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+type ScrollPreviewSampleItem = {
+    id: number
+    title: string
+    status: string
+    description: string
+    timestamp: string
+}
+
+function createScrollPreviewSampleContent(): ScrollPreviewSampleItem[] {
+    const categories = ['Project', 'Task', 'File', 'Component', 'Module', 'Service']
+    const statuses = ['Active', 'Pending', 'Completed', 'In Progress', 'Review', 'Draft']
+
+    return Array.from({ length: 30 }, (_, index) => {
+        const category = categories[index % categories.length]
+        const status = statuses[index % statuses.length]
+
+        return {
+            id: index + 1,
+            title: `${category} #${index + 1}`,
+            status,
+            description: `${status} ${category.toLowerCase()} with various properties and metadata. Scroll through this list to compare how each scroll mode behaves.`,
+            timestamp: `${Math.floor(Math.random() * 24)}h ago`
+        }
+    })
+}
+
+const SCROLL_PREVIEW_SAMPLE_CONTENT = createScrollPreviewSampleContent()
 
 export function ScrollPreviewModal({
     currentMode,
@@ -48,21 +76,6 @@ export function ScrollPreviewModal({
             cancelAnimationFrame(animationFrameId)
         }
     }, [])
-
-    const sampleContent = Array.from({ length: 30 }, (_, index) => {
-        const categories = ['Project', 'Task', 'File', 'Component', 'Module', 'Service']
-        const statuses = ['Active', 'Pending', 'Completed', 'In Progress', 'Review', 'Draft']
-        const category = categories[index % categories.length]
-        const status = statuses[index % statuses.length]
-
-        return {
-            id: index + 1,
-            title: `${category} #${index + 1}`,
-            status,
-            description: `${status} ${category.toLowerCase()} with various properties and metadata. Scroll through this list to experience the ${previewMode} scroll behavior in action.`,
-            timestamp: `${Math.floor(Math.random() * 24)}h ago`
-        }
-    })
 
     return (
         <div className="fixed inset-0 z-50 flex animate-fadeIn items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -144,7 +157,7 @@ export function ScrollPreviewModal({
                                         className={cn('h-[400px] space-y-3 overflow-y-auto p-4 transition-colors', active ? accentBody : 'bg-sparkle-card')}
                                         style={panel.key === 'smooth' ? { scrollBehavior: 'auto' } : undefined}
                                     >
-                                        {sampleContent.map((item) => (
+                                        {SCROLL_PREVIEW_SAMPLE_CONTENT.map((item) => (
                                             <div
                                                 key={`${panel.key}-${item.id}`}
                                                 className={cn(

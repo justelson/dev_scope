@@ -55,11 +55,11 @@ function SettingsCard({ to, icon, iconBg, title, description, preview, badge }: 
             <p className="flex-1 text-sm text-sparkle-text-secondary">
                 {description}
             </p>
-            {preview && (
+            {preview ? (
                 <p className="mt-3 truncate font-mono text-xs text-sparkle-text-muted">
                     {preview}
                 </p>
-            )}
+            ) : null}
         </Link>
     )
 }
@@ -99,12 +99,12 @@ export default function Settings() {
                                     : 'border-white/10 bg-black/20 text-sparkle-text-muted'
                             )}
                         >
-                            β
+                            B
                         </span>
                         <span className="text-left">
-                            <span className="block font-medium leading-none">Beta</span>
+                            <span className="block font-medium leading-none">Beta Settings</span>
                             <span className="mt-1 block text-[11px] leading-none opacity-80">
-                                {settings.betaSettingsEnabled ? 'Explorer and Git controls visible' : 'Explorer and Git controls hidden'}
+                                {settings.betaSettingsEnabled ? 'Git + Explorer visible' : 'Git + Explorer hidden'}
                             </span>
                         </span>
                     </button>
@@ -122,7 +122,7 @@ export default function Settings() {
                     iconBg="bg-purple-500/10"
                     title="Appearance"
                     description="Theme, accent colors, and display options"
-                    preview={`${settings.theme} \u2022 ${settings.accentColor.name}${settings.compactMode ? ' \u2022 Compact' : ''}`}
+                    preview={`${settings.theme} - ${settings.accentColor.name}${settings.compactMode ? ' - Compact' : ''}`}
                 />
 
                 <SettingsCard
@@ -130,8 +130,8 @@ export default function Settings() {
                     icon={<RefreshCw className="text-blue-400" size={24} />}
                     iconBg="bg-blue-500/10"
                     title="Behavior"
-                    description="Startup, preview, tasks, and terminal defaults"
-                    preview={`${settings.startWithWindows ? 'Startup enabled' : 'Startup disabled'} \u2022 ${settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell'} \u2022 ${settings.scrollMode === 'smooth' ? 'Buttery scroll' : 'Native scroll'}`}
+                    description="Startup, preview, and terminal defaults"
+                    preview={`${settings.startWithWindows ? 'Startup enabled' : 'Startup disabled'} - ${settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell'} - ${settings.scrollMode === 'smooth' ? 'Buttery scroll' : 'Native scroll'}`}
                 />
 
                 <SettingsCard
@@ -143,44 +143,46 @@ export default function Settings() {
                     preview={settings.projectsFolder ? 'Configured' : 'Not set'}
                 />
 
-                {settings.betaSettingsEnabled && (
-                    <>
-                        <SettingsCard
-                            to="/settings/explorer"
-                            icon={<FolderTree className="text-amber-300" size={24} />}
-                            iconBg="bg-amber-500/10"
-                            title="Explorer"
-                            description="Optional file-browser tab for browsing any folder"
-                            preview={
-                                settings.explorerTabEnabled
-                                    ? `Enabled${settings.explorerHomePath ? ` \u2022 ${getPathTail(settings.explorerHomePath)}` : ' \u2022 Home (~)'}`
-                                    : 'Disabled'
-                            }
-                            badge={<SettingsBetaBadge compact />}
-                        />
-
-                        <SettingsCard
-                            to="/settings/git"
-                            icon={<GitBranch className="text-orange-300" size={24} />}
-                            iconBg="bg-orange-500/10"
-                            title="Git"
-                            description="PR defaults, branch behavior, and Git identity"
-                            preview={`${settings.gitPullRequestDefaultDraft ? 'Draft by default' : 'Ready for review'} \u2022 ${settings.gitPullRequestDefaultTargetBranch}`}
-                            badge={<SettingsBetaBadge compact />}
-                        />
-                    </>
-                )}
+                {settings.betaSettingsEnabled ? (
+                    <SettingsCard
+                        to="/settings/git"
+                        icon={<GitBranch className="text-orange-300" size={24} />}
+                        iconBg="bg-orange-500/10"
+                        title="Git"
+                        description="PR defaults, branch behavior, and Git identity"
+                        preview={`${settings.gitPullRequestDefaultDraft ? 'Draft by default' : 'Ready for review'} - ${settings.gitPullRequestDefaultTargetBranch}`}
+                        badge={<SettingsBetaBadge compact />}
+                    />
+                ) : null}
 
                 <SettingsCard
                     to="/settings/ai"
                     icon={<Sparkles className="text-violet-400" size={24} />}
                     iconBg="bg-violet-500/10"
-                    title="AI Features"
-                    description="Git AI providers, Codex model, and API keys"
-                    preview={settings.commitAIProvider === 'codex'
-                        ? `CODEX • ${settings.codexModel || settings.assistantDefaultModel || 'default model'}`
-                        : settings.commitAIProvider.toUpperCase() + (settings.groqApiKey || settings.geminiApiKey ? ' • Key set' : ' • No key')}
+                    title="Git AI"
+                    description="Provider routing, visible connection status, and dedicated Codex model roles"
+                    preview={
+                        settings.commitAIProvider === 'codex'
+                            ? `CODEX - ${settings.gitCommitCodexModel || settings.gitPullRequestCodexModel || settings.assistantDefaultModel || 'default model'}`
+                            : `${settings.commitAIProvider.toUpperCase()}${settings.groqApiKey || settings.geminiApiKey ? ' - Key set' : ' - No key'}`
+                    }
                 />
+
+                {settings.betaSettingsEnabled ? (
+                    <SettingsCard
+                        to="/settings/explorer"
+                        icon={<FolderTree className="text-amber-300" size={24} />}
+                        iconBg="bg-amber-500/10"
+                        title="Explorer"
+                        description="Optional file-browser tab for browsing any folder"
+                        preview={
+                            settings.explorerTabEnabled
+                                ? `Enabled${settings.explorerHomePath ? ` - ${getPathTail(settings.explorerHomePath)}` : ' - Home (~)'}`
+                                : 'Disabled'
+                        }
+                        badge={<SettingsBetaBadge compact />}
+                    />
+                ) : null}
 
                 <SettingsCard
                     to="/settings/account"

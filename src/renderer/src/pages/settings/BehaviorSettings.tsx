@@ -5,13 +5,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-    Activity,
     ArrowLeft,
     Edit3,
     Expand,
     Eye,
     EyeOff,
-    Gauge,
     ListChecks,
     Mouse,
     PanelLeft,
@@ -25,7 +23,7 @@ import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { ScrollPreviewModal } from './ScrollPreviewModal'
 
-type BehaviorTab = 'startup' | 'preview' | 'tasks' | 'terminal'
+type BehaviorTab = 'startup' | 'preview' | 'terminal'
 
 export default function BehaviorSettings() {
     const { settings, updateSettings } = useSettings()
@@ -34,7 +32,7 @@ export default function BehaviorSettings() {
     const [searchParams, setSearchParams] = useSearchParams()
     const activeTab = useMemo<BehaviorTab>(() => {
         const tab = String(searchParams.get('tab') || '').trim()
-        return tab === 'preview' || tab === 'tasks' || tab === 'terminal' ? tab : 'startup'
+        return tab === 'preview' || tab === 'terminal' ? tab : 'startup'
     }, [searchParams])
 
     useEffect(() => {
@@ -103,7 +101,7 @@ export default function BehaviorSettings() {
                         </div>
                         <div>
                             <h1 className="text-xl font-semibold text-sparkle-text">Behavior</h1>
-                            <p className="text-sm text-sparkle-text-secondary">Startup, preview, tasks, and terminal controls</p>
+                            <p className="text-sm text-sparkle-text-secondary">Startup, preview, and terminal controls</p>
                         </div>
                     </div>
                     <Link
@@ -119,7 +117,6 @@ export default function BehaviorSettings() {
             <div className="mb-6 inline-flex items-center rounded-lg border border-white/10 bg-sparkle-card p-1">
                 <BehaviorTabButton active={activeTab === 'startup'} onClick={() => setActiveTab('startup')} label="Startup & Scroll" />
                 <BehaviorTabButton active={activeTab === 'preview'} onClick={() => setActiveTab('preview')} label="File Preview" />
-                <BehaviorTabButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} label="Tasks" />
                 <BehaviorTabButton active={activeTab === 'terminal'} onClick={() => setActiveTab('terminal')} label="Terminal" />
             </div>
 
@@ -242,28 +239,6 @@ export default function BehaviorSettings() {
                     </div>
                 )}
 
-                {activeTab === 'tasks' && (
-                    <div className="grid gap-6 xl:grid-cols-2">
-                        <SettingsSection title="Tasks Tab Availability" description="Enable or disable the entire Tasks page from app navigation.">
-                            <SettingRow
-                                icon={<Activity size={20} className="text-sparkle-text-secondary" />}
-                                title={settings.tasksPageEnabled ? 'Tasks tab enabled' : 'Tasks tab disabled'}
-                                description="When disabled, the Tasks tab is hidden and task-manager data is not fetched."
-                                control={<ToggleSwitch checked={settings.tasksPageEnabled} onChange={(next) => updateSettings({ tasksPageEnabled: next })} />}
-                            />
-                        </SettingsSection>
-
-                        <SettingsSection title="Running Apps Monitor" description="Enable or disable the Running Apps section inside the Tasks page.">
-                            <SettingRow
-                                icon={<Gauge size={20} className="text-sparkle-text-secondary" />}
-                                title={settings.tasksRunningAppsEnabled ? 'Running Apps enabled' : 'Running Apps disabled'}
-                                description="Disabled state stops running-app and process-resource queries entirely."
-                                control={<ToggleSwitch checked={settings.tasksRunningAppsEnabled} onChange={(next) => updateSettings({ tasksRunningAppsEnabled: next })} disabled={!settings.tasksPageEnabled} />}
-                            />
-                        </SettingsSection>
-                    </div>
-                )}
-
                 {activeTab === 'terminal' && (
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.82fr)]">
                         <SettingsSection title="Default Shell" description="Choose which shell DevScope launches for terminal actions.">
@@ -296,7 +271,7 @@ export default function BehaviorSettings() {
                                 <SettingRow
                                     icon={<SquareTerminal size={20} className="text-sparkle-text-secondary" />}
                                     title={`Current default: ${settings.defaultShell === 'cmd' ? 'Command Prompt' : 'PowerShell'}`}
-                                    description="Used whenever DevScope opens a terminal from projects, tasks, previews, or assistant actions."
+                                    description="Used whenever DevScope opens a terminal from projects, terminals, previews, or assistant actions."
                                     control={(
                                         <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-sparkle-text">
                                             {settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell'}
