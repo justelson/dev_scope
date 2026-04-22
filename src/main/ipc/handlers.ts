@@ -4,15 +4,8 @@
 
 import { BrowserWindow, ipcMain } from 'electron'
 import log from 'electron-log'
-import { systemMetricsBridge } from '../system-metrics/manager'
 import {
-    handleGetDetailedSystemStats,
     handleGetFileSystemRoots,
-    handleGetSystemOverview,
-    handleSystemMetricsBootstrap,
-    handleSystemMetricsRead,
-    handleSystemMetricsSubscribe,
-    handleSystemMetricsUnsubscribe
 } from './handlers/system-handlers'
 import {
     handleClearAiDebugLogs,
@@ -44,6 +37,7 @@ import {
     handleAssistantGetTranscriptionModelState,
     handleAssistantGetSnapshot,
     handleAssistantGetStatus,
+    handleAssistantHydrateSession,
     handleAssistantInterruptTurn,
     handleAssistantListModels,
     handleAssistantNewThread,
@@ -73,14 +67,13 @@ import {
     handleOpenWith,
     handleListInstalledIdes,
     handleScanProjects,
+    handleSearchIndexedPaths,
     handleSelectFolder,
     handleSelectMarkdownFile
 } from './handlers/project-discovery-handlers'
 import {
-    handleGetActivePorts,
     handleGetProjectDetails,
     handleInstallProjectDependencies,
-    handleGetRunningApps,
     handleGetProjectProcesses,
     handleGetProjectSessions
 } from './handlers/project-details-handlers'
@@ -102,10 +95,10 @@ import {
     handleCreatePreviewTerminal,
     handleListPreviewTerminalSessions,
     handleResizePreviewTerminal,
+    handleSetPreviewTerminalTitle,
     handleWritePreviewTerminal
 } from './handlers/preview-terminal-handlers'
 import { handleRunPythonPreview, handleStopPythonPreview } from './handlers/python-preview-handlers'
-import { handleListActiveTasks } from './handlers/task-manager-handlers'
 import {
     handleCheckForUpdates,
     handleDownloadUpdate,
@@ -179,13 +172,6 @@ import {
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     log.info('Registering IPC handlers...')
 
-    ipcMain.handle('devscope:system:bootstrap', handleSystemMetricsBootstrap)
-    ipcMain.handle('devscope:system:subscribe', handleSystemMetricsSubscribe)
-    ipcMain.handle('devscope:system:unsubscribe', handleSystemMetricsUnsubscribe)
-    ipcMain.handle('devscope:system:readMetrics', handleSystemMetricsRead)
-
-    ipcMain.handle('devscope:getSystemOverview', handleGetSystemOverview)
-    ipcMain.handle('devscope:getDetailedSystemStats', handleGetDetailedSystemStats)
     ipcMain.handle('devscope:getFileSystemRoots', handleGetFileSystemRoots)
     ipcMain.handle(UPDATE_GET_STATE_CHANNEL, handleGetUpdateState)
     ipcMain.handle(UPDATE_CHECK_CHANNEL, handleCheckForUpdates)
@@ -213,6 +199,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle(ASSISTANT_IPC.createSession, handleAssistantCreateSession)
     ipcMain.handle(ASSISTANT_IPC.selectSession, handleAssistantSelectSession)
     ipcMain.handle(ASSISTANT_IPC.selectThread, handleAssistantSelectThread)
+    ipcMain.handle(ASSISTANT_IPC.hydrateSession, handleAssistantHydrateSession)
     ipcMain.handle(ASSISTANT_IPC.renameSession, handleAssistantRenameSession)
     ipcMain.handle(ASSISTANT_IPC.archiveSession, handleAssistantArchiveSession)
     ipcMain.handle(ASSISTANT_IPC.deleteSession, handleAssistantDeleteSession)
@@ -241,14 +228,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:getUserHomePath', handleGetUserHomePath)
     ipcMain.handle('devscope:scanProjects', handleScanProjects)
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
+    ipcMain.handle('devscope:searchIndexedPaths', handleSearchIndexedPaths)
     ipcMain.handle('devscope:openInExplorer', handleOpenInExplorer)
     ipcMain.handle('devscope:openInTerminal', handleOpenInTerminal)
     ipcMain.handle('devscope:listInstalledIdes', handleListInstalledIdes)
     ipcMain.handle('devscope:openProjectInIde', handleOpenProjectInIde)
-    ipcMain.handle('devscope:tasks:listActive', handleListActiveTasks)
     ipcMain.handle('devscope:previewTerminal:create', handleCreatePreviewTerminal)
     ipcMain.handle('devscope:previewTerminal:list', handleListPreviewTerminalSessions)
     ipcMain.handle('devscope:previewTerminal:write', handleWritePreviewTerminal)
+    ipcMain.handle('devscope:previewTerminal:setTitle', handleSetPreviewTerminalTitle)
     ipcMain.handle('devscope:previewTerminal:resize', handleResizePreviewTerminal)
     ipcMain.handle('devscope:previewTerminal:close', handleClosePreviewTerminal)
     ipcMain.handle('devscope:pythonPreview:run', handleRunPythonPreview)
@@ -270,8 +258,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:moveFileSystemItem', handleMoveFileSystemItem)
     ipcMain.handle('devscope:getProjectSessions', handleGetProjectSessions)
     ipcMain.handle('devscope:getProjectProcesses', handleGetProjectProcesses)
-    ipcMain.handle('devscope:getRunningApps', handleGetRunningApps)
-    ipcMain.handle('devscope:getActivePorts', handleGetActivePorts)
 
     ipcMain.handle('devscope:getGitHistory', handleGetGitHistory)
     ipcMain.handle('devscope:getGitHistoryCount', handleGetGitHistoryCount)
@@ -356,7 +342,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     })
 
     mainWindow.webContents.once('destroyed', () => {
-        systemMetricsBridge.unsubscribe(mainWindow.webContents.id)
         peekAssistantService()?.unsubscribe(mainWindow.webContents.id)
     })
 }

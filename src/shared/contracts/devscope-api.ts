@@ -1,5 +1,3 @@
-import type { SharedSystemMetrics } from '../system-metrics'
-import type { SystemHealth } from '../../main/inspectors/types'
 import type {
     AssistantApprovalResponseInput,
     AssistantAccountOverviewPayload,
@@ -52,14 +50,15 @@ import type {
     DevScopeFileItem,
     DevScopeFileTreeNode,
     DevScopeFolderItem,
+    DevScopeIndexedPathSearchInput,
+    DevScopeIndexedPathSearchResult,
     DevScopeIndexedProject,
     DevScopeInstalledIde,
     DevScopePathInfo,
     DevScopeProcessInfo,
     DevScopeProject,
     DevScopeProjectDetails,
-    DevScopePythonPreviewEvent,
-    DevScopeRunningApp
+    DevScopePythonPreviewEvent
 } from './devscope-project-contracts'
 
 export * from './devscope-git-contracts'
@@ -71,7 +70,7 @@ export type DevScopeResult<T = Record<string, unknown>> = DevScopeOk<T> | DevSco
 
 export type DevScopePreviewTerminalEvent = {
     sessionId: string
-    type: 'started' | 'output' | 'exit' | 'error'
+    type: 'started' | 'output' | 'exit' | 'error' | 'title'
     data?: string
     message?: string
     shell?: string
@@ -93,46 +92,6 @@ export type DevScopePreviewTerminalSessionSummary = {
     lastActivityAt: number
     exitCode?: number | null
     recentOutput?: string
-}
-
-export type DevScopeTaskType =
-    | 'git.commit'
-    | 'git.push'
-    | 'git.pr'
-    | 'git.fetch'
-    | 'git.pull'
-    | 'git.checkout'
-    | 'git.init'
-    | 'git.remote'
-    | 'git.tag'
-    | 'git.stash'
-    | 'project.dependencies.install'
-
-export type DevScopeTaskStatus = 'running' | 'success' | 'failed'
-
-export type DevScopeTaskLogEntry = {
-    at: number
-    level: 'info' | 'error'
-    message: string
-}
-
-export type DevScopeTask = {
-    id: string
-    type: DevScopeTaskType
-    title: string
-    status: DevScopeTaskStatus
-    projectPath?: string
-    startedAt: number
-    updatedAt: number
-    endedAt?: number
-    metadata?: Record<string, string | number | boolean>
-    logs: DevScopeTaskLogEntry[]
-}
-
-export type DevScopeTaskEvent = {
-    type: 'upsert' | 'remove'
-    task?: DevScopeTask
-    taskId?: string
 }
 
 export type DevScopeReleaseChannel = 'alpha' | 'beta' | 'stable'
@@ -174,14 +133,6 @@ export type DevScopeUpdateActionResult = {
     state: DevScopeUpdateState
 }
 
-export interface DevScopeSystemApi {
-    bootstrap: () => Promise<DevScopeResult<{ controlBuffer?: ArrayBuffer; metricsBuffer?: ArrayBuffer }>>
-    subscribe: (options?: { intervalMs?: number }) => Promise<DevScopeResult>
-    unsubscribe: () => Promise<DevScopeResult>
-    readSharedMetrics: () => SharedSystemMetrics | null
-    readMetrics: () => Promise<DevScopeResult>
-}
-
 export interface DevScopeWindowApi {
     minimize: () => void
     maximize: () => void
@@ -217,8 +168,9 @@ export interface DevScopeAssistantApi {
     connect: (options?: AssistantConnectOptions) => Promise<DevScopeResult<{ threadId: string }>>
     disconnect: (sessionId?: string) => Promise<DevScopeResult>
     createSession: (input?: AssistantCreateSessionInput) => Promise<DevScopeResult<{ sessionId: string }>>
-    selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot: AssistantSnapshot }>>
-    selectThread: (input: AssistantSelectThreadInput) => Promise<DevScopeResult<{ sessionId: string; threadId: string; snapshot: AssistantSnapshot }>>
+    selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot?: AssistantSnapshot }>>
+    selectThread: (input: AssistantSelectThreadInput) => Promise<DevScopeResult<{ sessionId: string; threadId: string; snapshot?: AssistantSnapshot }>>
+    hydrateSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot: AssistantSnapshot }>>
     renameSession: (sessionId: string, title: string) => Promise<DevScopeResult>
     archiveSession: (sessionId: string, archived?: boolean) => Promise<DevScopeResult>
     deleteSession: (sessionId: string) => Promise<DevScopeResult>
@@ -246,11 +198,6 @@ export interface DevScopeAssistantApi {
 }
 
 export interface DevScopeApi {
-    // System
-    getSystemOverview: () => Promise<SystemHealth>
-    getDetailedSystemStats: () => Promise<Record<string, unknown>>
-    system: DevScopeSystemApi
-
     // Settings + AI
     setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) => Promise<DevScopeResult>
     getStartupSettings: () => Promise<DevScopeResult>
@@ -293,7 +240,13 @@ export interface DevScopeApi {
     getProjectDetails: (projectPath: string) => Promise<DevScopeResult<{ project: DevScopeProjectDetails }>>
     getFileTree: (
         projectPath: string,
-        options?: { showHidden?: boolean; maxDepth?: number; rootPath?: string }
+        options?: {
+            showHidden?: boolean
+            maxDepth?: number
+            rootPath?: string
+            includeGitStatus?: boolean
+            includeFileSize?: boolean
+        }
     ) => Promise<DevScopeResult<{ tree: DevScopeFileTreeNode[] }>>
     getGitHistory: (
         projectPath: string,
@@ -439,11 +392,10 @@ export interface DevScopeApi {
     listPreviewTerminalSessions: (input?: { targetPath?: string }) =>
         Promise<DevScopeResult<{ groupKey?: string; cwd?: string; sessions: DevScopePreviewTerminalSessionSummary[] }>>
     writePreviewTerminal: (input: { sessionId: string; data: string }) => Promise<DevScopeResult>
+    setPreviewTerminalTitle: (input: { sessionId: string; title: string }) => Promise<DevScopeResult<{ title: string }>>
     resizePreviewTerminal: (input: { sessionId: string; cols: number; rows: number }) => Promise<DevScopeResult>
     closePreviewTerminal: (sessionId: string) => Promise<DevScopeResult<{ closed: boolean }>>
     onPreviewTerminalEvent: (callback: (event: DevScopePreviewTerminalEvent) => void) => () => void
-    listActiveTasks: (projectPath?: string) => Promise<DevScopeResult<{ tasks: DevScopeTask[] }>>
-    onTaskEvent: (callback: (event: DevScopeTaskEvent) => void) => () => void
     openFile: (filePath: string) => Promise<DevScopeResult>
     openWith: (filePath: string) => Promise<DevScopeResult>
     createFileSystemItem: (
@@ -457,9 +409,13 @@ export interface DevScopeApi {
     moveFileSystemItem: (sourcePath: string, destinationDirectory: string) => Promise<DevScopeResult<{ path: string; name: string }>>
     getProjectSessions: (projectPath: string) => Promise<DevScopeResult>
     getProjectProcesses: (projectPath: string) => Promise<DevScopeResult<{ isLive: boolean; processes: DevScopeProcessInfo[]; activePorts: number[] }>>
-    getRunningApps: (limit?: number) => Promise<DevScopeResult<{ apps: DevScopeRunningApp[] }>>
-    getActivePorts: () => Promise<DevScopeResult<{ ports: number[] }>>
-    indexAllFolders: (folders: string[]) => Promise<DevScopeResult<{ projects: DevScopeIndexedProject[]; indexedCount: number; indexedFolders: number; scannedFolderPaths: string[]; errors?: Array<{ folder: string; error: string }> }>>
+    indexAllFolders: (
+        folders: string[],
+        options?: { forceRefresh?: boolean }
+    ) => Promise<DevScopeResult<{ projects: DevScopeIndexedProject[]; indexedCount: number; indexedFolders: number; indexedFiles: number; scannedFolderPaths: string[]; errors?: Array<{ folder: string; error: string }> }>>
+    searchIndexedPaths: (
+        input: DevScopeIndexedPathSearchInput
+    ) => Promise<DevScopeResult<DevScopeIndexedPathSearchResult>>
     getFileSystemRoots: () => Promise<DevScopeResult<{ roots: string[] }>>
 
     terminal: DevScopeTerminalApi

@@ -15,8 +15,7 @@ export default defineConfig({
         build: {
             rollupOptions: {
                 input: {
-                    index: resolve(__dirname, 'src/main/index.ts'),
-                    'system-metrics-collector': resolve(__dirname, 'src/main/system-metrics/collector.ts')
+                    index: resolve(__dirname, 'src/main/index.ts')
                 }
             }
         }

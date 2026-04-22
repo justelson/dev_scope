@@ -1,5 +1,5 @@
 /**
- * DevScope - Developer Machine Status System
+ * DevScope
  * Main Process Entry Point
  */
 
@@ -10,7 +10,6 @@ import { electronApp, is } from './utils'
 import log from 'electron-log'
 import { registerIpcHandlers } from './ipc'
 import { disposeAssistantService } from './assistant'
-import { disposeSystemMetricsBridge } from './system-metrics/manager'
 import { disposeUpdater, initializeUpdater, registerUpdateWindow } from './update/manager'
 import { registerFileProtocol } from './file-protocol'
 
@@ -429,7 +428,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
     disposeAssistantService()
-    disposeSystemMetricsBridge()
     disposeUpdater()
     if (process.platform !== 'darwin') {
         app.quit()

@@ -1,45 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { AlertTriangle, Clock3, Play, RefreshCw, SquareTerminal } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import type { DevScopePreviewTerminalSessionSummary } from '@shared/contracts/devscope-api'
-import { readCssVariable } from './tasks/tasks-formatters'
-import { RUNNING_APPS_FETCH_LIMIT, type DeviceStats, type RunningApp } from './tasks/tasks-types'
-import { TasksHeader } from './tasks/TasksHeader'
-import { OperationsPanel } from './tasks/OperationsPanel'
+import { formatRelativeShort, readCssVariable } from './tasks/tasks-formatters'
 import { TerminalSessionsPanel } from './tasks/TerminalSessionsPanel'
-import { RunningAppsPanel } from './tasks/RunningAppsPanel'
-import { useRunningAppsPreferences } from './tasks/useRunningAppsPreferences'
-import { useRunningAppsModel } from './tasks/useRunningAppsModel'
 import { useTasksTerminal } from './tasks/useTasksTerminal'
 
 export default function Tasks() {
     const { settings } = useSettings()
-    const location = useLocation()
-    const [activeView, setActiveView] = useState<'operations' | 'terminals' | 'runningApps'>('operations')
     const [terminalSessions, setTerminalSessions] = useState<DevScopePreviewTerminalSessionSummary[]>([])
-    const [runningApps, setRunningApps] = useState<RunningApp[]>([])
-    const [deviceStats, setDeviceStats] = useState<DeviceStats | null>(null)
     const [initialLoading, setInitialLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
     const hasLoadedOnceRef = useRef(false)
     const refreshSequenceRef = useRef(0)
-    const runningAppsEnabled = settings.tasksRunningAppsEnabled !== false
-    const {
-        appScope,
-        setAppScope,
-        appsFilter,
-        setAppsFilter,
-        memoryUnit,
-        setMemoryUnit,
-        sortBy,
-        setSortBy,
-        sortDirection,
-        setSortDirection,
-        appsPage,
-        setAppsPage
-    } = useRunningAppsPreferences()
 
     const tasksTerminalTheme = useMemo(() => {
         const accent = readCssVariable('--accent-primary', settings.accentColor.primary || '#38bdf8')
@@ -77,82 +52,28 @@ export default function Tasks() {
     const refresh = useCallback(async (options?: { quiet?: boolean }) => {
         const quiet = Boolean(options?.quiet)
         const requestSequence = ++refreshSequenceRef.current
-        const shouldFetchRunningAppsData = runningAppsEnabled && activeView === 'runningApps'
 
         if (!quiet && hasLoadedOnceRef.current) {
             setRefreshing(true)
         }
 
         try {
-            const [terminalsResult, appsResult, systemOverviewResult, systemDetailedResult] = await Promise.allSettled([
-                window.devscope.listPreviewTerminalSessions(),
-                shouldFetchRunningAppsData ? window.devscope.getRunningApps(RUNNING_APPS_FETCH_LIMIT) : Promise.resolve(null),
-                shouldFetchRunningAppsData ? window.devscope.getSystemOverview() : Promise.resolve(null),
-                shouldFetchRunningAppsData ? window.devscope.getDetailedSystemStats() : Promise.resolve(null)
-            ])
-
+            const result = await window.devscope.listPreviewTerminalSessions()
             if (requestSequence !== refreshSequenceRef.current) return
 
-            const nextErrors: string[] = []
-            let nextTerminalSessions: DevScopePreviewTerminalSessionSummary[] | null = null
-            let nextApps: RunningApp[] | null = null
-            let nextDeviceStats: DeviceStats | null = null
-
-            if (terminalsResult.status === 'fulfilled') {
-                if (terminalsResult.value.success) {
-                    nextTerminalSessions = [...(terminalsResult.value.sessions || [])] as DevScopePreviewTerminalSessionSummary[]
-                } else {
-                    nextErrors.push(terminalsResult.value.error || 'Failed to load terminal sessions')
-                }
-            } else {
-                nextErrors.push(terminalsResult.reason?.message || 'Failed to load terminal sessions')
+            if (!result.success) {
+                setError(result.error || 'Failed to load terminal sessions')
+                return
             }
 
-            if (shouldFetchRunningAppsData) {
-                if (appsResult.status === 'fulfilled') {
-                    const appsPayload = appsResult.value as any
-                    if (appsPayload?.success) {
-                        nextApps = (appsPayload.apps || []) as RunningApp[]
-                    } else {
-                        nextErrors.push(appsPayload?.error || 'Failed to load running apps')
-                    }
-                } else {
-                    nextErrors.push(appsResult.reason?.message || 'Failed to load running apps')
-                }
-            }
-
-            if (shouldFetchRunningAppsData) {
-                const overview = systemOverviewResult.status === 'fulfilled' ? systemOverviewResult.value as any : null
-                const detailed = systemDetailedResult.status === 'fulfilled' ? systemDetailedResult.value as any : null
-                if (overview && typeof overview === 'object') {
-                    const overviewTotalBytes = Number(overview.memory?.total) || 0
-                    const overviewUsedBytes = Number(overview.memory?.used) || 0
-                    const detailedTotalBytes = Number(detailed?.memory?.total) || 0
-                    const detailedUsedBytes = Number(detailed?.memory?.used) || 0
-                    const cpuUsage = [Number(detailed?.cpu?.load), Number(overview.cpu?.usage)].find((value) => Number.isFinite(value))
-
-                    nextDeviceStats = {
-                        cpuModel: String(detailed?.cpu?.model || overview.cpu?.model || 'Unknown CPU'),
-                        cpuCores: Number(detailed?.cpu?.cores) || Number(overview.cpu?.cores) || 0,
-                        cpuThreads: Number(overview.cpu?.threads) || Number(detailed?.cpu?.physicalCores) || Number(detailed?.cpu?.cores) || 0,
-                        cpuUsagePercent: Number.isFinite(cpuUsage as number) ? Number(cpuUsage) : null,
-                        memoryTotalGb: (detailedTotalBytes > 0 ? detailedTotalBytes : overviewTotalBytes) / (1024 ** 3),
-                        memoryUsedGb: (detailedUsedBytes > 0 ? detailedUsedBytes : overviewUsedBytes) / (1024 ** 3)
-                    }
-                }
-            }
-
-            if (nextTerminalSessions !== null) setTerminalSessions(nextTerminalSessions)
-            if (nextApps !== null) setRunningApps(nextApps)
-            if (nextDeviceStats !== null) setDeviceStats(nextDeviceStats)
-
-            setError(nextErrors.length > 0 ? nextErrors.join(' | ') : null)
+            setTerminalSessions([...(result.sessions || [])] as DevScopePreviewTerminalSessionSummary[])
+            setError(null)
             setLastRefreshAt(Date.now())
             hasLoadedOnceRef.current = true
             setInitialLoading(false)
         } catch (err: any) {
             if (requestSequence !== refreshSequenceRef.current) return
-            setError(err?.message || 'Failed to refresh task manager data')
+            setError(err?.message || 'Failed to refresh terminals')
             hasLoadedOnceRef.current = true
             setInitialLoading(false)
         } finally {
@@ -160,7 +81,7 @@ export default function Tasks() {
                 setRefreshing(false)
             }
         }
-    }, [activeView, runningAppsEnabled])
+    }, [])
 
     const {
         tasksTerminalHostRef,
@@ -169,13 +90,9 @@ export default function Tasks() {
         selectedTerminalSession,
         terminalSessionGroups,
         runningTerminalCount,
-        sortedTerminalSessions,
         handleStopPreviewTerminal,
-        handleCreateTerminalForPath,
-        handleOpenTerminalSession
+        handleCreateTerminalForPath
     } = useTasksTerminal({
-        activeView,
-        setActiveView,
         terminalSessions,
         setTerminalSessions,
         defaultShell: settings.defaultShell,
@@ -184,41 +101,15 @@ export default function Tasks() {
         refresh
     })
 
-    const {
-        runningAppTotals,
-        sortedRunningApps,
-        totalAppsPages,
-        normalizedAppsPage,
-        pagedAppsSection,
-        pagedBackgroundSection,
-        deviceMemoryPercent
-    } = useRunningAppsModel({
-        runningApps,
-        deviceStats,
-        appScope,
-        appsFilter,
-        sortBy,
-        sortDirection,
-        appsPage,
-        setAppsPage,
-        memoryUnit
-    })
-
-    useEffect(() => {
-        if (runningAppsEnabled) return
-        if (activeView === 'runningApps') {
-            setActiveView('operations')
+    const handleCreateTerminal = useCallback(async () => {
+        try {
+            const result = await window.devscope.selectFolder()
+            if (!result.success || !result.folderPath) return
+            await handleCreateTerminalForPath(result.folderPath)
+        } catch (err: any) {
+            setError(err?.message || 'Failed to select folder for terminal')
         }
-        setRunningApps((current) => (current.length > 0 ? [] : current))
-        setDeviceStats((current) => (current ? null : current))
-    }, [activeView, runningAppsEnabled])
-
-    useEffect(() => {
-        const requestedView = (location.state as { initialView?: string } | null)?.initialView
-        if (requestedView === 'terminals') {
-            setActiveView('terminals')
-        }
-    }, [location.state])
+    }, [handleCreateTerminalForPath])
 
     useEffect(() => {
         void refresh()
@@ -234,73 +125,87 @@ export default function Tasks() {
     }, [refresh])
 
     return (
-        <div className="mx-auto max-w-[1400px] animate-fadeIn pb-14">
-            <TasksHeader
-                activeView={activeView}
-                runningAppsEnabled={runningAppsEnabled}
-                lastRefreshAt={lastRefreshAt}
-                refreshing={refreshing}
-                initialLoading={initialLoading}
-                hasLoadedOnce={hasLoadedOnceRef.current}
-                onRefresh={() => { void refresh() }}
-                onSelectView={setActiveView}
-            />
-
-            {error && (
-                <div className="mb-5 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-                    {error}
+        <div className="mx-auto max-w-[1500px] animate-fadeIn pb-10">
+            <div className="mb-4 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-2.5">
+                        <div className="rounded-lg bg-sky-500/10 p-1.5">
+                            <SquareTerminal size={18} className="text-sky-300" />
+                        </div>
+                        <h1 className="text-xl font-semibold text-sparkle-text">Terminals</h1>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <HeaderPill
+                            icon={<SquareTerminal size={12} className="text-sky-300" />}
+                            label={String(terminalSessions.length)}
+                            title={`${terminalSessions.length} terminal session${terminalSessions.length === 1 ? '' : 's'}`}
+                        />
+                        <HeaderPill
+                            icon={<Play size={12} className="text-emerald-300" />}
+                            label={String(runningTerminalCount)}
+                            title={`${runningTerminalCount} running terminal${runningTerminalCount === 1 ? '' : 's'}`}
+                        />
+                        <HeaderPill
+                            icon={<Clock3 size={12} className="text-sparkle-text-muted" />}
+                            label={lastRefreshAt ? formatRelativeShort(lastRefreshAt).replace(/\s+ago$/i, '') : '--'}
+                            title={lastRefreshAt ? `Last refresh ${formatRelativeShort(lastRefreshAt)}` : 'Refresh pending'}
+                        />
+                    </div>
                 </div>
-            )}
 
-            {activeView === 'operations' ? (
-                <OperationsPanel
-                    initialLoading={initialLoading}
-                    terminalSessions={terminalSessions}
-                    sortedTerminalSessions={sortedTerminalSessions}
-                    terminalSessionGroupsCount={terminalSessionGroups.length}
-                    runningTerminalCount={runningTerminalCount}
-                    onOpenTerminalTab={() => setActiveView('terminals')}
-                    onOpenTerminalSession={handleOpenTerminalSession}
-                    onStopPreviewTerminal={(sessionId) => { void handleStopPreviewTerminal(sessionId) }}
-                />
-            ) : activeView === 'terminals' ? (
-                <TerminalSessionsPanel
-                    terminalSessions={terminalSessions}
-                    terminalSessionGroups={terminalSessionGroups}
-                    selectedTerminalSessionId={selectedTerminalSessionId}
-                    selectedTerminalSession={selectedTerminalSession}
-                    tasksTerminalHostRef={tasksTerminalHostRef}
-                    terminalBackgroundColor={tasksTerminalTheme.background}
-                    onCreateTerminalForPath={(path) => { void handleCreateTerminalForPath(path) }}
-                    onSelectTerminalSession={setSelectedTerminalSessionId}
-                    onStopPreviewTerminal={(sessionId) => { void handleStopPreviewTerminal(sessionId) }}
-                    onRefresh={() => { void refresh() }}
-                />
-            ) : (
-                <RunningAppsPanel
-                    runningAppsCount={runningApps.length}
-                    runningAppTotals={runningAppTotals}
-                    deviceStats={deviceStats}
-                    memoryUnit={memoryUnit}
-                    deviceMemoryPercent={deviceMemoryPercent}
-                    appScope={appScope}
-                    setAppScope={setAppScope}
-                    appsFilter={appsFilter}
-                    setAppsFilter={setAppsFilter}
-                    setMemoryUnit={setMemoryUnit}
-                    sortBy={sortBy}
-                    setSortBy={setSortBy}
-                    sortDirection={sortDirection}
-                    setSortDirection={setSortDirection}
-                    initialLoading={initialLoading}
-                    sortedRunningApps={sortedRunningApps}
-                    pagedAppsSection={pagedAppsSection}
-                    pagedBackgroundSection={pagedBackgroundSection}
-                    normalizedAppsPage={normalizedAppsPage}
-                    totalAppsPages={totalAppsPages}
-                    setAppsPage={setAppsPage}
-                />
-            )}
+                <button
+                    type="button"
+                    onClick={() => { void refresh() }}
+                    disabled={refreshing}
+                    title="Refresh terminals"
+                    aria-label="Refresh terminals"
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-sparkle-text-secondary transition-colors hover:border-white/20 hover:bg-white/[0.05] hover:text-sparkle-text disabled:opacity-50"
+                >
+                    <RefreshCw size={15} className={refreshing || initialLoading ? 'animate-spin' : ''} />
+                </button>
+            </div>
+
+            {error ? (
+                <div className="mb-5 inline-flex max-w-full items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+                    <AlertTriangle size={14} className="shrink-0" />
+                    <span className="truncate">{error}</span>
+                </div>
+            ) : null}
+
+            <TerminalSessionsPanel
+                terminalSessions={terminalSessions}
+                terminalSessionGroups={terminalSessionGroups}
+                selectedTerminalSessionId={selectedTerminalSessionId}
+                selectedTerminalSession={selectedTerminalSession}
+                tasksTerminalHostRef={tasksTerminalHostRef}
+                terminalBackgroundColor={tasksTerminalTheme.background}
+                refreshing={refreshing || initialLoading}
+                onCreateTerminal={() => { void handleCreateTerminal() }}
+                onCreateTerminalForPath={(path) => { void handleCreateTerminalForPath(path) }}
+                onSelectTerminalSession={setSelectedTerminalSessionId}
+                onStopPreviewTerminal={(sessionId) => { void handleStopPreviewTerminal(sessionId) }}
+                onRefresh={() => { void refresh() }}
+            />
         </div>
+    )
+}
+
+function HeaderPill({
+    icon,
+    label,
+    title
+}: {
+    icon: React.ReactNode
+    label: string
+    title: string
+}) {
+    return (
+        <span
+            title={title}
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-sparkle-text-secondary"
+        >
+            {icon}
+            <span className="font-medium text-sparkle-text">{label}</span>
+        </span>
     )
 }
