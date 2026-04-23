@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on April 22, 2026.
+Last validated against code on April 23, 2026.
 
 ## Status Legend
 
@@ -73,6 +73,7 @@ Last validated against code on April 22, 2026.
 - Assistant composer supports busy-turn queueing and force-send controls, clears queued items as soon as a resend is accepted, pauses failed re-dispatches instead of endlessly re-looping them, exposes per-message force-send/edit/delete actions, supports grip-handle queue reordering, and keeps queued attachments attached to their prompt through reorder/edit/send; dev builds also support `/queue-test` and `/queue-preview` prompt flags with optional `--count=N` and `--force` to create local preview-only queued items, plus `/compact-test` for local context-compaction marker testing, without dispatching to the assistant runtime: `Implemented`
 - Assistant composer derives a shared capability state for typing, attachments, send/stop, and control locking, and surfaces contextual composer status/explanations for disconnected, unavailable, busy, and guided-input states: `Implemented`
 - Force-pushed assistant turns keep the conversation in a working state when the runtime session is still live, and assistant turn footers show per-turn elapsed time on the last assistant message when timing data is available: `Implemented`
+- Assistant timeline tool-call cards keep live command and file-change output deltas in sync, show status-aware summaries for running/failed/declined tool work, and auto-collapse completed command runs after the stream settles: `Implemented`
 - Assistant composer image attachments open the file preview renderer directly from the shelf while non-image attachments keep the local attachment preview flow: `Implemented`
 - Assistant composer pasted text attachments render as compact paper-card previews and open a dedicated text preview modal: `Implemented`
 - Sent clipboard attachments in assistant history now hide generated paste filenames behind generic pasted labels, reuse the composer-style attachment cards inside user bubbles, switch to a sideways attachment rail when many files are attached, open pasted text in a read-only preview modal from chat history, and derive auto-titled chats from the typed body or generic attachment labels instead of serialized attachment metadata: `Implemented`
