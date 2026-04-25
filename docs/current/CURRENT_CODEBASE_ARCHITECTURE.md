@@ -1,6 +1,6 @@
 # Current Codebase Architecture
 
-Last validated against code on April 24, 2026.
+Last validated against code on April 25, 2026.
 
 ## Runtime Layers
 
@@ -62,9 +62,11 @@ Current assistant capabilities include session lifecycle, model listing, connect
 
 Assistant timeline tool-call cards also support path-aware file navigation: edited-file rows and plain file-path lines in tool results can open directly into the shared file-preview renderer. Warning/error activities are retained in the assistant logs surface instead of being duplicated as chat timeline rows, warning-only assistant status messages are filtered from the visible conversation, and live command/file-change output now stays attached to the active tool card while the main process merges repeated activity updates by stable activity ID.
 
+The renderer also keeps the assistant thread-details panel and connected-session rails in sync with selected-session deletion fallback, cached hydration, and the current runtime state for long-lived conversations.
+
 Assistant conversation status labels are phase-driven from the active thread state; generic pending UI actions should not be treated as thread connection state. The recovery banner is reserved for repeated reconnect attempts or exhausted reconnects, not the normal first connecting pass.
 
-Playground chats can now exist without an attached lab. In that state the runtime still has a detached safety cwd, but the model is explicitly instructed to treat the chat as non-filesystem by default. Prompts that need local files, folders, repos, or workspace access are routed through a tool-enabled setup turn so Codex can request lab setup with a reason and suggested lab title; after approval DevScope attaches the lab and reruns the original prompt in normal execution mode, while a decline reruns the prompt as normal no-filesystem chat without retrying the same lab request.
+Playground chats can now exist without an attached lab. In that state the runtime still has a detached safety cwd, but the model is explicitly instructed to treat the chat as non-filesystem by default. The current chat header has a per-session terminal-access toggle for chat-only Playground sessions, and assistant defaults provide the initial no-lab terminal-access preference for sessions without an override. When terminal access is enabled, no-lab prompts run from a neutral home-directory cwd and do not route through automatic lab setup. When terminal access is disabled, terminal-shaped prompts route through a tool-enabled setup turn where Codex can request terminal access; DevScope renders that request as a dedicated terminal-access modal with a "don't ask again" option. Prompts that need local files, folders, repos, or workspace access are otherwise routed through a tool-enabled setup turn so Codex can request lab setup with a reason and suggested lab title; after approval DevScope attaches the lab and reruns the original prompt in normal execution mode, while a decline reruns the prompt as normal no-filesystem chat without retrying the same lab request.
 
 When the selected assistant session is deleted, the runtime now routes through a replacement-input fallback so the rail stays on a live session instead of dropping selection.
 
@@ -86,6 +88,8 @@ The intended architecture direction remains contract-first: define shared contra
 - File preview and project details flows use narrower read operations to avoid unnecessary full reloads; the fullscreen preview sidebar now caches per-directory listings and expands folders one level at a time instead of pulling full subtrees on every toggle, and the project file tree now opens shallow by default while indexed search supplies filtered deep results without forcing a full recursive tree load on each search.
 - Update state is tracked in a dedicated main-process update subsystem instead of being ad hoc renderer state.
 - Assistant streaming batches text deltas before projection and broadcast, coalesces renderer event application behind a short delta-flush window plus animation-frame delivery for non-delta events, batches main-to-renderer assistant event IPC, merges command/file-change output deltas into stable tool activities, keeps hot persistence writes off the immediate UI interaction path, applies session and thread selection locally in the renderer before requesting uncached thread hydration as a background refresh, preserves hydrated renderer thread bodies when focused snapshots summarize inactive chats for warm switching, avoids deep-cloning hydrated thread history on every renderer store update, splits renderer subscriptions so the assistant page shell, conversation pane, and right-side panels do not all rerender on live timeline churn, relies on a sliding tail history window plus bounded source-window entry construction and per-row deferred rendering to keep long conversations responsive while still allowing explicit older-history expansion, uses a Pretext-backed text measurement pipeline for assistant row-height estimation and user-message collapse decisions, virtualizes large markdown file previews by parsed block instead of mounting the entire document body at once, conditionally skips raw-HTML markdown parsing unless a message actually contains HTML-like tags, persists per-turn usage in a dedicated `assistant_turns` ledger that the thread-details panel fetches on demand instead of inflating the hot assistant snapshot, rehydrates the selected thread plus hot running and waiting threads on restore, and in the dev runtime resets incompatible assistant persistence versions instead of carrying stale schema forward.
+
+The current assistant event path also now recognizes turn-diff updates, live command/file-change output deltas, fuzzy file-search result activity, and stable item IDs for long-running tool cards so the renderer can keep those streams pinned to the correct history row.
 
 ## Current Boundary Rules
 

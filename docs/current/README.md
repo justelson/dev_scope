@@ -4,7 +4,7 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
-Snapshot alignment: April 24, 2026 current-state pass.
+Snapshot alignment: April 25, 2026 current-state pass.
 
 ## Core References
 
@@ -13,7 +13,7 @@ Snapshot alignment: April 24, 2026 current-state pass.
 - [`REPO_BOUNDARIES.md`](C:\Users\elson\my_coding_play\devscope\docs\current\REPO_BOUNDARIES.md)
   Focused runtime ownership and layering rules for refactors and cross-process changes.
 - [`CURRENT_CAPABILITIES_MATRIX.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CAPABILITIES_MATRIX.md)
-  What the app exposes today, including assistant, Git, project, file, and update flows.
+  What the app exposes today, including assistant hydration/recovery, Playground lab setup, file preview, Git, project, and update flows.
 - [`ENGINEERING_QUALITY_STANDARDS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\ENGINEERING_QUALITY_STANDARDS.md)
   Quality expectations by layer.
 - [`CHANGE_SCOPE_GUIDELINES.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CHANGE_SCOPE_GUIDELINES.md)
@@ -36,6 +36,13 @@ Snapshot alignment: April 24, 2026 current-state pass.
   Updater validation workflow.
 - [`BRANDING_ASSETS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\BRANDING_ASSETS.md)
   Branding asset roles and generation flow.
+
+## Current App State
+
+- Assistant session hydration, deletion fallback, connection recovery, and streaming tool cards are part of the live runtime.
+- Playground chats can start detached from a lab, then escalate into guided setup only when workspace access is needed.
+- File preview now includes the IDE-style full-screen shell, HTML preview loading through the app file protocol, and the tighter preview header/terminal chrome.
+- Settings include package runtime selection for project scripts and the current assistant defaults/behavior surfaces.
 
 ## Task-Specific Skills
 
