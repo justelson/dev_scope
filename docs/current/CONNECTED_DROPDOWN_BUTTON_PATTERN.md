@@ -1,6 +1,6 @@
 # Connected Dropdown Button Pattern
 
-Last updated: April 19, 2026
+Last updated: April 26, 2026
 
 Use this pattern for compact two-state or small-option controls that should behave like an attached action button plus dropdown, instead of a segmented control or a full-width select.
 
@@ -18,6 +18,8 @@ Use it together with:
   - `src/renderer/src/components/ui/OpenWithProjectButton.tsx`
 - Current settings usage:
   - `src/renderer/src/pages/settings/AssistantDefaultsPanel.tsx`
+  - assistant text streaming mode
+  - assistant live command/tool output default mode
 
 ## When To Use It
 
@@ -99,6 +101,20 @@ import { ConnectedDropdownButton } from '@/components/ui/ConnectedDropdownButton
     ]}
     menuLabel="Choose streaming mode"
     onChange={(value) => updateSettings({ assistantTextStreamingMode: value as 'stream' | 'chunks' })}
+/>
+```
+
+Assistant command-output defaults use the same pattern:
+
+```tsx
+<ConnectedDropdownButton
+    value={settings.assistantToolOutputDefaultMode}
+    options={[
+        { id: 'expanded', label: 'Expand live', tone: 'sky' },
+        { id: 'minimized', label: 'Keep minimized', tone: 'amber' }
+    ]}
+    menuLabel="Choose command output mode"
+    onChange={(value) => updateSettings({ assistantToolOutputDefaultMode: value as 'expanded' | 'minimized' })}
 />
 ```
 

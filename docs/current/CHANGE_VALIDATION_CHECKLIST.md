@@ -1,6 +1,6 @@
 # Change Validation Checklist
 
-Last updated: April 19, 2026
+Last updated: April 26, 2026
 
 Use this checklist for PRs/patches in the current DevScope desktop codebase.
 
@@ -30,6 +30,7 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
   - `/explorer`
 - Verify buttons/controls are aligned and responsive after UI changes.
 - Verify copy/open/refresh actions continue working for path-based flows.
+- Verify markdown/file-reference links still resolve Windows absolute paths, `file://` links, relative links, and line anchors into the shared preview flow.
 - Verify compatibility redirects still resolve cleanly instead of throwing renderer errors.
 
 ## 4) Data + Indexing Check
@@ -37,6 +38,7 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 - Ensure indexing runs in background when expected.
 - Ensure search uses index data rather than repeated full scans.
 - Ensure repeated user actions do not trigger unnecessary re-indexing.
+- Ensure assistant streaming updates with repeated activity IDs collapse instead of causing timeline churn.
 
 ## 5) Validation Execution
 

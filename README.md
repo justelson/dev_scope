@@ -53,10 +53,10 @@ Current package version:
 | **Project Discovery** | Scan a main projects root plus additional folders, detect project types, and keep an indexed search cache for fast project/file lookup. |
 | **Project Browsing** | Browse folders, inspect project details, and preview files or project tree changes without leaving the app shell. |
 | **Git Productivity** | View status, diffs, history, branches, remotes, stashes, tags, commits, push state, and repository setup actions. |
-| **Assistant Workflows** | Run assistant sessions with approvals, user input, attachments, Playground labs, auto-generated chat titles, and project-aware context. |
+| **Assistant Workflows** | Run assistant sessions with approvals, user input, attachments, Playground labs, no-lab terminal access, auto-generated chat titles, and project-aware context. |
 | **Terminal Workspace** | Manage live terminal sessions and preview-terminal runs from the dedicated terminals surface; the legacy `/tasks` route now redirects there. |
 | **Desktop Updates** | Check, download, and install release updates through the built-in updater flow. |
-| **Settings Surface** | Configure appearance, behavior, projects, assistant, Git, terminal preferences, logs, and app metadata. |
+| **Settings Surface** | Configure appearance, behavior, package runtimes, projects, assistant defaults, Git, terminal preferences, logs, and app metadata. |
 
 ## Capability Map
 
@@ -79,7 +79,7 @@ graph TD
     D --> D3[Branches Remotes Tags Stashes]
 
     E --> E1[Approvals and User Input]
-    E --> E2[Playground Labs]
+    E --> E2[Playground Labs and Terminal Access]
     E --> E3[Attachments and Context]
 ```
 
@@ -120,36 +120,36 @@ DevScope Air is built with a Windows-first desktop stack:
 
 2. Install dependencies:
    ```bash
-   npm install
+   bun install
    ```
 
 ### Running in Development
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ### Type Checking
 
 ```bash
-npm run typecheck
+bun run typecheck
 ```
 
 ### Building for Production
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### Packaging for Windows
 
 ```bash
-npm run build:win
+bun run build:win
 ```
 
 Packaged installers and update metadata are written to `dist/releases/v<package-version>/`.
 Unpacked desktop bundles are written to `dist/unpacked/v<package-version>/win-unpacked/`.
-Use `npm run dist:organize` to move older flat `dist` artifacts into that versioned layout.
+Use `bun run dist:organize` to move older flat `dist` artifacts into that versioned layout.
 
 ## Project Structure
 

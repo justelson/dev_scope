@@ -4,7 +4,7 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
-Snapshot alignment: April 25, 2026 current-state pass.
+Snapshot alignment: April 26, 2026 current-state pass.
 
 ## Core References
 
@@ -39,10 +39,10 @@ Snapshot alignment: April 25, 2026 current-state pass.
 
 ## Current App State
 
-- Assistant session hydration, deletion fallback, connection recovery, and streaming tool cards are part of the live runtime.
-- Playground chats can start detached from a lab, then escalate into guided setup only when workspace access is needed.
-- File preview now includes the IDE-style full-screen shell, HTML preview loading through the app file protocol, and the tighter preview header/terminal chrome.
-- Settings include package runtime selection for project scripts and the current assistant defaults/behavior surfaces.
+- Assistant session hydration, deletion fallback, connection recovery, streaming tool cards, stable tool activity IDs, turn-diff updates, and live command/file-change output deltas are part of the live runtime.
+- Playground chats can start detached from a lab, then use per-chat terminal access or escalate into guided lab setup only when workspace access is needed.
+- File preview now includes the IDE-style full-screen shell, HTML preview loading through the app file protocol, compact file-link chips, and the tighter preview header/action chrome.
+- Settings include installed package-runtime detection for project scripts, imported dark theme presets, live tool-output defaults, no-lab Playground terminal defaults, and the current assistant defaults/behavior surfaces.
 
 ## Task-Specific Skills
 
