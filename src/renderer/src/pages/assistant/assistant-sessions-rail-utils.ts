@@ -33,6 +33,7 @@ export type AssistantSessionsRailProps = {
     backgroundActivitySessions: AssistantSession[]
     activeSessionId: string | null
     activeThreadId: string | null
+    assistantConnected: boolean
     commandPending: boolean
     onWidthChange?: (width: number) => void
     onCreateSession: (projectPath?: string) => Promise<void>
@@ -75,6 +76,10 @@ export interface SessionStatusPill {
     showLabel?: boolean
 }
 
+export type AssistantSidebarStatusContext = {
+    connecting?: boolean
+}
+
 const RECENCY_TIER_STYLES: Array<Pick<SessionStatusPill, 'label' | 'colorClass' | 'dotClass'>> = [
     { label: 'Most recent', colorClass: 'text-cyan-300', dotClass: 'bg-cyan-300' },
     { label: 'Very recent', colorClass: 'text-sky-300', dotClass: 'bg-sky-300' },
@@ -90,7 +95,7 @@ export function buildAssistantThreadRecencyTierMap(sessions: AssistantSession[])
     if (threads.length === 0) return new Map()
 
     const sortedThreads = [...threads].sort((left, right) => {
-        const updatedDelta = getSortableTimestamp(right.updatedAt) - getSortableTimestamp(left.updatedAt)
+        const updatedDelta = getSortableTimestamp(getAssistantThreadLastMessageAt(right)) - getSortableTimestamp(getAssistantThreadLastMessageAt(left))
         if (updatedDelta !== 0) return updatedDelta
         const createdDelta = getSortableTimestamp(right.createdAt) - getSortableTimestamp(left.createdAt)
         if (createdDelta !== 0) return createdDelta
@@ -133,19 +138,32 @@ export type AssistantSessionThreadTreeNode = {
 export function resolveSessionStatusPill(
     session: AssistantSession,
     activeSessionId: string | null,
-    recencyTierByThreadId?: ReadonlyMap<string, number>
+    recencyTierByThreadId?: ReadonlyMap<string, number>,
+    context?: AssistantSidebarStatusContext
 ): SessionStatusPill | null {
     const activeThread: AssistantThread | null = session.threads.find((t) => t.id === session.activeThreadId) || null
     if (!activeThread) return null
-    return resolveAssistantThreadStatusPill(activeThread, session.id === activeSessionId, recencyTierByThreadId)
+    return resolveAssistantThreadStatusPill(activeThread, session.id === activeSessionId, recencyTierByThreadId, context)
 }
 
 export function resolveAssistantThreadStatusPill(
     thread: AssistantThread | null,
     isActiveThread: boolean,
-    recencyTierByThreadId?: ReadonlyMap<string, number>
+    recencyTierByThreadId?: ReadonlyMap<string, number>,
+    context?: AssistantSidebarStatusContext
 ): SessionStatusPill | null {
     if (!thread) return null
+    if (context?.connecting) {
+        return {
+            label: 'Connecting',
+            colorClass: 'text-sky-400',
+            dotClass: 'bg-sky-400',
+            badgeClass: 'bg-sky-500/[0.12] text-sky-100',
+            pulse: true,
+            showLabel: true
+        }
+    }
+
     const phase = getAssistantThreadPhase(thread)
     const latestTurn = thread.latestTurn
 
@@ -157,7 +175,7 @@ export function resolveAssistantThreadStatusPill(
                 dotClass: 'bg-sky-400',
                 badgeClass: 'bg-sky-500/[0.12] text-sky-100',
                 pulse: true,
-                showLabel: !isActiveThread
+                showLabel: true
             }
         case 'running':
         case 'waiting':
@@ -167,7 +185,7 @@ export function resolveAssistantThreadStatusPill(
                 dotClass: 'bg-sky-400',
                 badgeClass: 'bg-sky-500/[0.12] text-sky-100',
                 pulse: true,
-                showLabel: !isActiveThread
+                showLabel: true
             }
         case 'waiting-approval':
             return {
@@ -216,12 +234,27 @@ export function resolveAssistantThreadStatusPill(
     }
 }
 
-export function getSessionLastActivityAt(session: AssistantSession): string {
-    const threadUpdatedAt = session.threads.reduce<string | null>((latest, thread) => {
-        if (!latest) return thread.updatedAt
-        return getSortableTimestamp(thread.updatedAt) > getSortableTimestamp(latest) ? thread.updatedAt : latest
+export function getAssistantThreadLastMessageAt(thread: AssistantThread | null): string {
+    if (!thread) return ''
+
+    const latestMessageAt = (thread.messages || []).reduce<string | null>((latest, message) => {
+        if (message.role === 'system') return latest
+        const messageAt = message.createdAt || message.updatedAt
+        if (!messageAt) return latest
+        if (!latest) return messageAt
+        return getSortableTimestamp(messageAt) > getSortableTimestamp(latest) ? messageAt : latest
     }, null)
-    return threadUpdatedAt || session.updatedAt || session.createdAt
+
+    return latestMessageAt || thread.createdAt
+}
+
+export function getSessionLastActivityAt(session: AssistantSession): string {
+    const threadMessageAt = session.threads.reduce<string | null>((latest, thread) => {
+        const messageAt = getAssistantThreadLastMessageAt(thread)
+        if (!latest) return messageAt
+        return getSortableTimestamp(messageAt) > getSortableTimestamp(latest) ? messageAt : latest
+    }, null)
+    return threadMessageAt || session.createdAt
 }
 
 const RELEVANT_RECENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
@@ -354,7 +387,7 @@ export function buildSessionSubagentTree(session: AssistantSession): AssistantSe
 
     const sortNodes = (nodes: AssistantSessionThreadTreeNode[]): AssistantSessionThreadTreeNode[] => (
         nodes
-            .sort((left, right) => getSortableTimestamp(right.thread.updatedAt) - getSortableTimestamp(left.thread.updatedAt))
+            .sort((left, right) => getSortableTimestamp(getAssistantThreadLastMessageAt(right.thread)) - getSortableTimestamp(getAssistantThreadLastMessageAt(left.thread)))
             .map((node) => ({
                 ...node,
                 children: sortNodes(node.children)

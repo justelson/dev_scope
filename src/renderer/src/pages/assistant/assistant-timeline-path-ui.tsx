@@ -16,7 +16,7 @@ export function normalizeComparablePath(value: string): string {
     return String(value || '').trim().replace(/\\/g, '/').toLowerCase()
 }
 
-export const TimelineCopyButton = memo(({ value }: { value: string }) => {
+export const TimelineCopyButton = memo(({ value, compact = false }: { value: string; compact?: boolean }) => {
     const [copied, setCopied] = useState(false)
     const [copyError, setCopyError] = useState<string | null>(null)
 
@@ -37,7 +37,8 @@ export const TimelineCopyButton = memo(({ value }: { value: string }) => {
             type="button"
             onClick={() => void handleCopy()}
             className={cn(
-                'inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors',
+                'inline-flex items-center justify-center border transition-colors',
+                compact ? 'h-6 w-6 rounded' : 'h-7 w-7 rounded-md',
                 copied ? 'border-emerald-400/20 bg-emerald-500/[0.08] text-emerald-300'
                     : copyError ? 'border-red-400/20 bg-red-500/[0.08] text-red-100'
                         : 'border-white/10 bg-white/[0.03] text-sparkle-text-muted hover:border-white/20 hover:text-sparkle-text'
@@ -70,7 +71,6 @@ export const TimelineFilePathRow = memo(({
                         type="button"
                         onClick={() => void onOpen(fullPath)}
                         className="min-w-0 flex-1 text-left font-mono text-[12px] leading-6 text-[var(--accent-primary)] transition-colors hover:text-white"
-                        title={fullPath}
                     >
                         <span className="flex items-center gap-2">
                             {isNew ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.75)]" /> : null}
@@ -78,7 +78,7 @@ export const TimelineFilePathRow = memo(({
                         </span>
                     </button>
                 ) : (
-                    <div className="min-w-0 flex-1 font-mono text-[12px] leading-6 text-[var(--accent-primary)]" title={fullPath}>
+                    <div className="min-w-0 flex-1 font-mono text-[12px] leading-6 text-[var(--accent-primary)]">
                         <span className="flex items-center gap-2">
                             {isNew ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.75)]" /> : null}
                             <span className="block min-w-0 whitespace-pre-wrap break-all">{displayPath}</span>

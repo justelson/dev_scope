@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { AssistantMessage } from '@shared/assistant/contracts'
 import { FilePreviewModal } from '@/components/ui/FilePreviewModal'
@@ -7,6 +7,7 @@ import { useFilePreview } from '@/components/ui/file-preview/useFilePreview'
 import { ASSISTANT_MAIN_SIDEBAR_COLLAPSED_STORAGE_KEY, useSidebar } from '@/components/layout/Sidebar'
 import { useAssistantStoreActions, useAssistantStoreSelector } from '@/lib/assistant/store'
 import { getActiveAssistantThread, getSelectedAssistantSession } from '@/lib/assistant/selectors'
+import { useSettings } from '@/lib/settings'
 import { ConnectedAssistantSessionsRail } from './AssistantConnectedSessionsRail'
 import { AssistantConversationPane } from './AssistantConversationPane'
 import { AssistantDiffPanel } from './AssistantDiffPanel'
@@ -52,9 +53,34 @@ function readAssistantMainSidebarCollapsedPreference(): boolean {
     }
 }
 
+const PLAYGROUND_TERMINAL_ACCESS_BY_SESSION_STORAGE_KEY = 'assistant-playground-terminal-access-by-session'
+const PLAYGROUND_TERMINAL_ACCESS_REQUESTS_MUTED_BY_SESSION_STORAGE_KEY = 'assistant-playground-terminal-access-requests-muted-by-session'
+
+function readBooleanSessionPreferenceMap(key: string): Record<string, boolean> {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(key) || '{}') as unknown
+        if (!parsed || typeof parsed !== 'object') return {}
+        return Object.fromEntries(
+            Object.entries(parsed).filter((entry): entry is [string, boolean] => (
+                typeof entry[0] === 'string' && typeof entry[1] === 'boolean'
+            ))
+        )
+    } catch {
+        return {}
+    }
+}
+
+function writeBooleanSessionPreferenceMap(key: string, value: Record<string, boolean>): void {
+    try {
+        localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+    }
+}
+
 export default function AssistantPage() {
     const navigate = useNavigate()
     const actions = useAssistantStoreActions()
+    const { settings } = useSettings()
     const shell = useAssistantStoreSelector<AssistantPageShellSelection>((state) => {
         const selectedSession = getSelectedAssistantSession(state.snapshot)
         const activeThread = getActiveAssistantThread(selectedSession)
@@ -97,7 +123,33 @@ export default function AssistantPage() {
     const [selectedDiffTarget, setSelectedDiffTarget] = useState<AssistantDiffTarget | null>(null)
     const [pendingMessageDelete, setPendingMessageDelete] = useState<AssistantMessage | null>(null)
     const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null)
+    const [playgroundTerminalAccessBySession, setPlaygroundTerminalAccessBySession] = useState(() => (
+        readBooleanSessionPreferenceMap(PLAYGROUND_TERMINAL_ACCESS_BY_SESSION_STORAGE_KEY)
+    ))
+    const [playgroundTerminalAccessRequestMutedBySession, setPlaygroundTerminalAccessRequestMutedBySession] = useState(() => (
+        readBooleanSessionPreferenceMap(PLAYGROUND_TERMINAL_ACCESS_REQUESTS_MUTED_BY_SESSION_STORAGE_KEY)
+    ))
     const { toast, showToast } = useAssistantTransientToast()
+
+    useEffect(() => {
+        writeBooleanSessionPreferenceMap(PLAYGROUND_TERMINAL_ACCESS_BY_SESSION_STORAGE_KEY, playgroundTerminalAccessBySession)
+    }, [playgroundTerminalAccessBySession])
+
+    useEffect(() => {
+        writeBooleanSessionPreferenceMap(PLAYGROUND_TERMINAL_ACCESS_REQUESTS_MUTED_BY_SESSION_STORAGE_KEY, playgroundTerminalAccessRequestMutedBySession)
+    }, [playgroundTerminalAccessRequestMutedBySession])
+
+    const selectedPlaygroundTerminalAccess = useMemo(() => {
+        const sessionId = shell.selectedSessionId
+        if (!sessionId) return settings.assistantPlaygroundTerminalAccessDefault
+        return playgroundTerminalAccessBySession[sessionId] ?? settings.assistantPlaygroundTerminalAccessDefault
+    }, [playgroundTerminalAccessBySession, settings.assistantPlaygroundTerminalAccessDefault, shell.selectedSessionId])
+
+    const selectedPlaygroundTerminalAccessRequestMuted = useMemo(() => {
+        const sessionId = shell.selectedSessionId
+        if (!sessionId || selectedPlaygroundTerminalAccess) return false
+        return playgroundTerminalAccessRequestMutedBySession[sessionId] === true
+    }, [playgroundTerminalAccessRequestMutedBySession, selectedPlaygroundTerminalAccess, shell.selectedSessionId])
 
     useEffect(() => {
         mainSidebarBeforeAssistantRef.current = mainSidebarCollapsed
@@ -198,6 +250,30 @@ export default function AssistantPage() {
         setRailMode('playground')
         await actions.createSession({ mode: 'playground' })
     }, [actions, setRailMode])
+
+    const handlePlaygroundTerminalAccessChange = useCallback((enabled: boolean) => {
+        const sessionId = shell.selectedSessionId
+        if (!sessionId) return
+        setPlaygroundTerminalAccessBySession((current) => ({
+            ...current,
+            [sessionId]: enabled
+        }))
+        if (enabled) {
+            setPlaygroundTerminalAccessRequestMutedBySession((current) => ({
+                ...current,
+                [sessionId]: false
+            }))
+        }
+    }, [shell.selectedSessionId])
+
+    const handlePlaygroundTerminalAccessRequestMutedChange = useCallback((muted: boolean) => {
+        const sessionId = shell.selectedSessionId
+        if (!sessionId) return
+        setPlaygroundTerminalAccessRequestMutedBySession((current) => ({
+            ...current,
+            [sessionId]: muted
+        }))
+    }, [shell.selectedSessionId])
 
     const handleChoosePlaygroundRoot = useCallback(async () => {
         const folderResult = await window.devscope.selectFolder()
@@ -316,7 +392,11 @@ export default function AssistantPage() {
                             leftSidebarCollapsed={leftSidebarCollapsed}
                             fallbackSessionMode={railMode}
                             playgroundRootMissing={railMode === 'playground' && !shell.playgroundRootPath}
+                            playgroundTerminalAccess={selectedPlaygroundTerminalAccess}
+                            playgroundTerminalAccessRequestMuted={selectedPlaygroundTerminalAccessRequestMuted}
                             autoStartDetachedPlaygroundChat={railMode === 'playground' && Boolean(shell.playgroundRootPath)}
+                            onPlaygroundTerminalAccessChange={handlePlaygroundTerminalAccessChange}
+                            onPlaygroundTerminalAccessRequestMutedChange={handlePlaygroundTerminalAccessRequestMutedChange}
                             onToggleLeftSidebar={handleToggleAssistantLeftSidebar}
                             onChoosePlaygroundRoot={handleChoosePlaygroundRoot}
                             onStartDetachedPlaygroundChat={handleStartDetachedPlaygroundChat}

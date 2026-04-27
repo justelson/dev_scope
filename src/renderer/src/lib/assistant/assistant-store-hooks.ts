@@ -125,6 +125,7 @@ export function useAssistantSessionsRailStore() {
         playground: state.snapshot.playground,
         activeSessionId: state.snapshot.selectedSessionId,
         activeThreadId: state.status.activeThreadId,
+        connected: state.status.connected,
         commandPending: state.commandPending
     }), areAssistantSessionsRailSelectionsEqual)
 

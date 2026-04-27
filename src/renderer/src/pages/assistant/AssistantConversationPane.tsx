@@ -16,13 +16,34 @@ import { getAssistantLinkBaseFilePath } from './assistant-file-navigation'
 import { getAssistantActivePlanProgress, hasAssistantPlanPanelContent } from './assistant-plan-utils'
 import { getAssistantThreadDisplayTitle, getSessionDisplayTitle, resolveSessionProjectPath } from './assistant-sessions-rail-utils'
 import { useAssistantConnectionRecovery } from './useAssistantConnectionRecovery'
-import { useAssistantQueuedComposer } from './useAssistantQueuedComposer'
+import { useAssistantQueuedComposer, type AssistantQueuedComposerSessionState } from './useAssistantQueuedComposer'
 import { useAssistantSessionTurnUsage } from './useAssistantSessionTurnUsage'
 import { useAssistantPageTimelineScroll } from './useAssistantPageTimelineScroll'
 
 const TIMELINE_SHOW_SCROLL_BUTTON_THRESHOLD_PX = 420
 const TIMELINE_HIDE_SCROLL_BUTTON_THRESHOLD_PX = 180
 const IMPLEMENT_MODE_TOAST_MS = 2600
+
+function areQueuedComposerSessionStatesEqual(
+    left: AssistantQueuedComposerSessionState[],
+    right: AssistantQueuedComposerSessionState[]
+): boolean {
+    if (left === right) return true
+    if (left.length !== right.length) return false
+    for (let index = 0; index < left.length; index += 1) {
+        const leftState = left[index]
+        const rightState = right[index]
+        if (
+            leftState.sessionId !== rightState.sessionId
+            || leftState.threadState !== rightState.threadState
+            || leftState.pendingApprovalCount !== rightState.pendingApprovalCount
+            || leftState.pendingUserInputCount !== rightState.pendingUserInputCount
+        ) {
+            return false
+        }
+    }
+    return true
+}
 
 export function AssistantConversationPane(props: AssistantConversationPaneProps) {
     const controller = useAssistantConversationStore()
@@ -38,6 +59,17 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
 
     const isThreadWorking = isAssistantThreadActivelyWorking(controller.activeThread)
     const selectedSessionId = controller.selectedSession?.id || null
+    const queueSessionStates = useAssistantStoreSelector((state) => (
+        state.snapshot.sessions.map((session) => {
+            const activeThread = session.threads.find((thread) => thread.id === session.activeThreadId) || null
+            return {
+                sessionId: session.id,
+                threadState: activeThread?.state || 'idle',
+                pendingApprovalCount: activeThread?.pendingApprovals.filter((approval) => approval.status === 'pending').length || 0,
+                pendingUserInputCount: activeThread?.pendingUserInputs.filter((input) => input.status === 'pending').length || 0
+            }
+        })
+    ), areQueuedComposerSessionStatesEqual)
     const selectedPlaygroundLabId = controller.selectedSession?.playgroundLabId || null
     const selectedPlaygroundLabTitle = useAssistantStoreSelector((state) => {
         if (!selectedPlaygroundLabId) return null
@@ -324,10 +356,12 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
             runtimeMode: options.runtimeMode,
             interactionMode: options.interactionMode,
             effort: options.effort,
-            serviceTier: options.serviceTier
+            serviceTier: options.serviceTier,
+            playgroundTerminalAccess: props.playgroundTerminalAccess,
+            playgroundTerminalAccessRequestSuppressed: props.playgroundTerminalAccessRequestMuted
         })
         return result.success
-    }, [actions])
+    }, [actions, props.playgroundTerminalAccess, props.playgroundTerminalAccessRequestMuted])
     const isAssistantBusy = controller.commandPending || isThreadWorking
     const {
         sendingComposerPrompt,
@@ -339,6 +373,7 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
         handleMoveQueuedMessage
     } = useAssistantQueuedComposer({
         selectedSessionId,
+        sessionStates: queueSessionStates,
         isAssistantBusy,
         commandPending: controller.commandPending,
         isThreadWorking,
@@ -419,7 +454,10 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
                     selectedProjectPath={displayProjectPath || null}
                     preferredShell={settings.defaultShell}
                     gitRefreshToken={gitRefreshToken}
+                    showPlaygroundTerminalAccessControl={Boolean(selectedSessionId) && selectedSessionMode === 'playground' && !displayProjectPath}
+                    playgroundTerminalAccess={props.playgroundTerminalAccess}
                     onToggleLeftSidebar={props.onToggleLeftSidebar}
+                    onPlaygroundTerminalAccessChange={props.onPlaygroundTerminalAccessChange}
                     onTogglePlanPanel={props.onTogglePlanPanel}
                     onCreateThread={handleCreateThread}
                     onToggleRightSidebar={handleToggleDetailsPanel}
@@ -457,6 +495,7 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
                         deletingMessageId={props.deletingMessageId}
                         loadingChats={isLoadingSelectedChat}
                         assistantTextStreamingMode={settings.assistantTextStreamingMode}
+                        assistantToolOutputDefaultMode={settings.assistantToolOutputDefaultMode}
                         showScrollToBottom={showScrollToBottom}
                         onScrollTimeline={handleTimelineScrollEvent}
                         onScrollToBottom={handleScrollToBottomClick}
@@ -502,6 +541,8 @@ export function AssistantConversationPane(props: AssistantConversationPaneProps)
                         sendPrompt={handleSendPrompt}
                         refreshModels={handleRefreshModels}
                         respondUserInput={handleRespondUserInput}
+                        setPlaygroundTerminalAccess={props.onPlaygroundTerminalAccessChange}
+                        setPlaygroundTerminalAccessRequestMuted={props.onPlaygroundTerminalAccessRequestMutedChange}
                         approvePendingPlaygroundLabRequest={handleApprovePendingPlaygroundLabRequest}
                         declinePendingPlaygroundLabRequest={handleDeclinePendingPlaygroundLabRequest}
                     />

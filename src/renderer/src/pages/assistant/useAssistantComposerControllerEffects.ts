@@ -162,7 +162,7 @@ export function useAssistantComposerControllerEffects(input: {
         setLoadedSessionId(null)
         setText(nextState.draft || '')
         setInlineMentionTags([])
-        setContextFiles([])
+        setContextFiles(nextState.contextFiles || [])
         setSentPromptHistory([])
         setHistoryCursor(null)
         setDraftBeforeHistory('')

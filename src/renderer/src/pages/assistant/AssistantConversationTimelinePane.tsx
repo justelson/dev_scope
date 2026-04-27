@@ -2,7 +2,7 @@ import { memo, useLayoutEffect, useRef, type RefObject } from 'react'
 import { ArrowDown } from 'lucide-react'
 import type { AssistantActivity, AssistantMessage, AssistantProposedPlan, AssistantSessionTurnUsageEntry } from '@shared/assistant/contracts'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
-import type { AssistantTextStreamingMode } from '@/lib/settings'
+import type { AssistantTextStreamingMode, AssistantToolOutputDefaultMode } from '@/lib/settings'
 import { LoadingSpinner } from '@/components/ui/LoadingState'
 import { cn } from '@/lib/utils'
 import { AssistantTimeline } from './AssistantTimeline'
@@ -31,6 +31,7 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
     deletingMessageId: string | null
     loadingChats: boolean
     assistantTextStreamingMode: AssistantTextStreamingMode
+    assistantToolOutputDefaultMode: AssistantToolOutputDefaultMode
     showScrollToBottom: boolean
     elevateScrollToBottom?: boolean
     onScrollButtonBoundsChange?: (bounds: AssistantElementBounds | null) => void
@@ -98,7 +99,7 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
                         onScroll={(event) => props.onScrollTimeline(event.currentTarget)}
                         className="custom-scrollbar relative h-full overflow-y-auto overflow-x-hidden"
                     >
-                        <div ref={props.timelineContentRef} className="mx-auto w-full max-w-3xl px-4 pb-4 pt-0">
+                        <div ref={props.timelineContentRef} className="mx-auto w-full max-w-3xl px-4 pb-4 pt-0 md:translate-x-[2px]">
                             <AssistantTimeline
                                 messages={props.messages}
                                 activities={props.activities}
@@ -120,6 +121,7 @@ export const AssistantConversationTimelinePane = memo(function AssistantConversa
                                 deletingMessageId={props.deletingMessageId}
                                 loadingChats={props.loadingChats}
                                 assistantTextStreamingMode={props.assistantTextStreamingMode}
+                                assistantToolOutputDefaultMode={props.assistantToolOutputDefaultMode}
                                 isConnecting={props.isConnecting}
                                 onRequestDeleteUserMessage={props.onRequestDeleteUserMessage}
                                 onImplementProposedPlan={props.onImplementProposedPlan}

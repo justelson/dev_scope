@@ -2,8 +2,7 @@ import type { ReactNode, RefObject } from 'react'
 import { memo, useMemo } from 'react'
 import type { AssistantActivity, AssistantMessage, AssistantProposedPlan, AssistantSessionTurnUsageEntry } from '@shared/assistant/contracts'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
-import type { AssistantTextStreamingMode } from '@/lib/settings'
-import { LoadingSpinner } from '@/components/ui/LoadingState'
+import type { AssistantTextStreamingMode, AssistantToolOutputDefaultMode } from '@/lib/settings'
 import type { AssistantDiffTarget } from './assistant-diff-types'
 import {
     TimelineContextCompactionMarker,
@@ -39,6 +38,7 @@ type AssistantTimelineProps = {
     deletingMessageId?: string | null
     loadingChats?: boolean
     assistantTextStreamingMode?: AssistantTextStreamingMode
+    assistantToolOutputDefaultMode?: AssistantToolOutputDefaultMode
     isConnecting?: boolean
     onRequestDeleteUserMessage?: (message: AssistantMessage) => void
     onImplementProposedPlan?: (plan: AssistantProposedPlan) => Promise<void> | void
@@ -74,6 +74,7 @@ function AssistantTimelineImpl({
     deletingMessageId = null,
     loadingChats = false,
     assistantTextStreamingMode = 'stream',
+    assistantToolOutputDefaultMode = 'expanded',
     isConnecting = false,
     onRequestDeleteUserMessage,
     onImplementProposedPlan,
@@ -83,16 +84,19 @@ function AssistantTimelineImpl({
     onOpenFilePath,
     onViewDiff
 }: AssistantTimelineProps) {
-    const entries = useAssistantTimelineEntries(messages, activities, proposedPlans)
+    const timelineEntryCount = messages.length + activities.length + proposedPlans.length
     const timelineWindow = useAssistantTimelineWindow({
-        entryCount: entries.length,
+        entryCount: timelineEntryCount,
         resetKey: windowKey,
         scrollContainerRef
     })
-    const visibleEntries = useMemo(
-        () => entries.slice(timelineWindow.startIndex),
-        [entries, timelineWindow.startIndex]
+    const entries = useAssistantTimelineEntries(
+        messages,
+        activities,
+        proposedPlans,
+        timelineWindow.loadedEntryCount
     )
+    const visibleEntries = entries
     const rows = useMemo(
         () => buildTimelineRows(visibleEntries, isWorking, activeWorkStartedAt),
         [activeWorkStartedAt, isWorking, visibleEntries]
@@ -107,13 +111,7 @@ function AssistantTimelineImpl({
     }, [messages])
 
     if (loadingChats) {
-        return (
-            <LoadingSpinner
-                message="Loading chat..."
-                className="py-0"
-                minHeightClassName="min-h-[220px]"
-            />
-        )
+        return <div className="min-h-[220px]" aria-busy="true" />
     }
 
     if (rows.length === 0) {
@@ -143,6 +141,7 @@ function AssistantTimelineImpl({
                     key={row.id}
                     activities={row.activities}
                     projectRootPath={projectRootPath}
+                    toolOutputDefaultMode={assistantToolOutputDefaultMode}
                     onOpenFilePath={onOpenFilePath}
                     onViewDiff={onViewDiff}
                 />
@@ -170,6 +169,7 @@ function AssistantTimelineImpl({
                     key={row.id}
                     activities={[row.activity]}
                     projectRootPath={projectRootPath}
+                    toolOutputDefaultMode={assistantToolOutputDefaultMode}
                     onOpenFilePath={onOpenFilePath}
                     onViewDiff={onViewDiff}
                 />

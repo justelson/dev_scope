@@ -183,6 +183,8 @@ export function areActivitiesEquivalent(left: AssistantActivity, right: Assistan
         && getActivityCommand(left) === getActivityCommand(right)
         && getActivityOutput(left) === getActivityOutput(right)
         && getActivityPatch(left) === getActivityPatch(right)
+        && getActivityStatus(left) === getActivityStatus(right)
+        && getActivityElapsed(left) === getActivityElapsed(right)
 }
 
 export function areActivityListsEqual(left: AssistantActivity[], right: AssistantActivity[]): boolean {
@@ -457,9 +459,10 @@ export function getActivityTitle(activity: AssistantActivity): string {
 export function getActivityStatus(activity: AssistantActivity): 'success' | 'running' | 'failed' {
     const payload = activity.payload || {}
     const rawStatus = readActivityString(payload.status) || readActivityString(payload.state) || readActivityString(payload.phase)
+    const normalizedStatus = rawStatus.toLowerCase().replace(/[-_\s]/g, '')
     if (activity.tone === 'error') return 'failed'
-    if (rawStatus === 'running' || rawStatus === 'in_progress' || rawStatus === 'pending' || rawStatus === 'started') return 'running'
-    if (rawStatus === 'error' || rawStatus === 'failed' || rawStatus === 'cancelled') return 'failed'
+    if (normalizedStatus === 'running' || normalizedStatus === 'inprogress' || normalizedStatus === 'pending' || normalizedStatus === 'started') return 'running'
+    if (normalizedStatus === 'error' || normalizedStatus === 'failed' || normalizedStatus === 'cancelled' || normalizedStatus === 'declined') return 'failed'
     return 'success'
 }
 

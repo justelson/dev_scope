@@ -61,6 +61,7 @@ export const ConnectedAssistantSessionsRail = memo(function ConnectedAssistantSe
             backgroundActivitySessions={backgroundActivitySessions}
             activeSessionId={railController.activeSessionId}
             activeThreadId={railController.activeThreadId}
+            assistantConnected={railController.connected}
             commandPending={railController.commandPending}
             onWidthChange={onWidthChange}
             onCreateSession={(projectPath) => railController.createSession({ projectPath })}

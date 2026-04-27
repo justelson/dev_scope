@@ -111,7 +111,7 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
                                         >
                                             {displayProjectPath}
                                         </button>
-                                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center bg-gradient-to-l from-sparkle-bg via-sparkle-bg/95 to-transparent pl-4 opacity-0 transition-opacity duration-150 group-hover/path:opacity-100 group-focus-within/path:opacity-100">
+                                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center bg-gradient-to-l from-sparkle-bg via-sparkle-bg/95 to-transparent pl-4">
                                             <button
                                                 type="button"
                                                 onClick={onCopyProjectPath}
@@ -188,11 +188,11 @@ export const AssistantThreadDetailsPanel = memo(function AssistantThreadDetailsP
                             <button type="button" onClick={onClearLogs} disabled={!selectedSessionId || !latestIssueGroup || clearingLogs} className={cn('rounded-md border p-1 transition-colors', !selectedSessionId || !latestIssueGroup || clearingLogs ? 'border-white/10 bg-white/[0.03] text-sparkle-text-secondary opacity-50 cursor-not-allowed' : 'border-white/10 bg-white/[0.03] text-sparkle-text-secondary hover:border-white/20 hover:bg-white/[0.05] hover:text-sparkle-text')} title={clearingLogs ? 'Clearing logs...' : latestIssueGroup ? 'Clear logs' : 'No logs to clear'}>{clearingLogs ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}</button>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto px-4 py-3 custom-scrollbar">
-                        {latestIssueGroup ? <div className="space-y-2">
+                    <div className="scrollbar-hide flex-1 overflow-y-auto py-2">
+                        {latestIssueGroup ? <div className="w-full overflow-hidden">
                             <IssueLogRow key={latestIssueGroup.activity.id} activity={latestIssueGroup.activity} activities={latestIssueGroup.activities} count={latestIssueGroup.count} copied={copiedLogId === latestIssueGroup.activity.id} copyError={copyErrorByLogId[latestIssueGroup.activity.id] || null} onCopy={onCopyLog} onShowMore={onShowLogDetails} />
                             <AnimatedHeight isOpen={logsExpanded && olderIssueGroups.length > 0} duration={260}>
-                                <div className="space-y-2 pt-2">{olderIssueGroups.map((group) => <IssueLogRow key={group.activity.id} activity={group.activity} activities={group.activities} count={group.count} copied={copiedLogId === group.activity.id} copyError={copyErrorByLogId[group.activity.id] || null} onCopy={onCopyLog} onShowMore={onShowLogDetails} />)}</div>
+                                <div>{olderIssueGroups.map((group) => <IssueLogRow key={group.activity.id} activity={group.activity} activities={group.activities} count={group.count} copied={copiedLogId === group.activity.id} copyError={copyErrorByLogId[group.activity.id] || null} onCopy={onCopyLog} onShowMore={onShowLogDetails} />)}</div>
                             </AnimatedHeight>
                         </div> : <div className="text-center text-xs text-sparkle-text-muted">No logs</div>}
                     </div>

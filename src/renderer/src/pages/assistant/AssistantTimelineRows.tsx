@@ -31,16 +31,39 @@ export { TimelineToolCallList } from './AssistantTimelineToolCalls'
 export { TimelineIssueList } from './AssistantTimelineIssueList'
 export { TimelineProposedPlan } from './AssistantTimelineProposedPlan'
 
+function getCompactionLabelStyle(isRunning: boolean): React.CSSProperties | undefined {
+    if (!isRunning) return undefined
+
+    return {
+        backgroundImage: 'linear-gradient(90deg, rgba(186,230,253,0.58), rgba(125,211,252,1), rgba(186,230,253,0.58))',
+        backgroundSize: '240% 100%',
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        color: 'transparent',
+        animation: 'shimmer 1.45s linear infinite'
+    }
+}
+
 function getAttachmentPreviewTarget(attachmentName: string, attachmentPath: string): { name: string; ext: string } {
     const sourceName = String(attachmentName || '').trim() || String(attachmentPath || '').split(/[\\/]/).pop() || 'attachment'
-    const dotIndex = sourceName.lastIndexOf('.')
-    if (dotIndex <= 0 || dotIndex === sourceName.length - 1) {
-        return { name: sourceName, ext: '' }
+    const pathName = String(attachmentPath || '').split(/[\\/]/).pop() || ''
+    const sourceDotIndex = sourceName.lastIndexOf('.')
+    if (sourceDotIndex > 0 && sourceDotIndex < sourceName.length - 1) {
+        return {
+            name: sourceName,
+            ext: sourceName.slice(sourceDotIndex + 1).toLowerCase()
+        }
     }
-    return {
-        name: sourceName,
-        ext: sourceName.slice(dotIndex + 1).toLowerCase()
+
+    const pathDotIndex = pathName.lastIndexOf('.')
+    if (pathDotIndex > 0 && pathDotIndex < pathName.length - 1) {
+        return {
+            name: sourceName,
+            ext: pathName.slice(pathDotIndex + 1).toLowerCase()
+        }
     }
+
+    return { name: sourceName, ext: '' }
 }
 
 export const TimelineMessage = memo(({
@@ -334,6 +357,7 @@ export function TimelineContextCompactionMarker({ activity }: { activity: Assist
     const status = getContextCompactionStatus(activity)
     const isRunning = status === 'running'
     const label = isRunning ? 'AUTO-COMPACTING' : 'AUTO-COMPACTED'
+    const labelStyle = getCompactionLabelStyle(isRunning)
 
     return (
         <div className="max-w-4xl py-2" aria-live={isRunning ? 'polite' : undefined}>
@@ -346,8 +370,7 @@ export function TimelineContextCompactionMarker({ activity }: { activity: Assist
                     'relative isolate overflow-hidden rounded-full border border-transparent bg-white/[0.03] px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-sparkle-text-secondary shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]',
                     isRunning && 'bg-sky-500/[0.08] text-sky-100'
                 )}>
-                    {isRunning ? <span className="absolute inset-0 animate-shimmer opacity-80" aria-hidden="true" /> : null}
-                    <span className="relative z-10">{label}</span>
+                    <span className="relative z-10" style={labelStyle}>{label}</span>
                 </span>
                 <span className={cn(
                     'h-px flex-1 bg-gradient-to-r from-white/10 via-white/8 to-transparent',

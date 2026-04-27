@@ -6,6 +6,8 @@ import type {
     AssistantWorkspaceSelection
 } from './assistant-store-selection-types'
 
+const ACTIVITY_SIGNATURE_WINDOW_SIZE = 96
+
 function areAssistantModelsEqual(left: AssistantModelInfo[], right: AssistantModelInfo[]): boolean {
     if (left === right) return true
     if (left.length !== right.length) return false
@@ -94,9 +96,44 @@ function getMessageListSignature(messages: AssistantWorkspaceSelection['timeline
 
 function getActivityListSignature(activities: AssistantWorkspaceSelection['activityFeed']): string {
     if (activities.length === 0) return '0'
-    const newest = activities[0]
+    const visibleActivities = activities.length > ACTIVITY_SIGNATURE_WINDOW_SIZE
+        ? activities.slice(0, ACTIVITY_SIGNATURE_WINDOW_SIZE)
+        : activities
+    const signature = visibleActivities.map((activity) => {
+        const payload = activity.payload || {}
+        const output = typeof payload.output === 'string' ? payload.output : ''
+        const patch = typeof payload.patch === 'string' ? payload.patch : ''
+        const status = typeof payload.status === 'string'
+            ? payload.status
+            : typeof payload.state === 'string'
+                ? payload.state
+                : typeof payload.phase === 'string'
+                    ? payload.phase
+                    : ''
+        return [
+            activity.id,
+            activity.kind,
+            activity.tone,
+            activity.summary,
+            activity.detail || '',
+            activity.createdAt,
+            status,
+            output.length,
+            patch.length,
+            payload.exitCode ?? '',
+            payload.durationMs ?? ''
+        ].join(':')
+    }).join('|')
+
+    if (visibleActivities.length === activities.length) return signature
+
     const oldest = activities[activities.length - 1]
-    return [activities.length, newest?.id || '', newest?.createdAt || '', oldest?.id || '', oldest?.createdAt || ''].join('|')
+    return [
+        activities.length,
+        signature,
+        oldest?.id || '',
+        oldest?.createdAt || ''
+    ].join('|')
 }
 
 function getPendingApprovalSignature(items: AssistantWorkspaceSelection['pendingApprovals']): string {
@@ -210,7 +247,7 @@ function getRailSessionSignature(session: AssistantSnapshot['sessions'][number])
 }
 
 export function areAssistantSessionsRailSelectionsEqual(left: AssistantSessionsRailSelection, right: AssistantSessionsRailSelection): boolean {
-    if (left.activeSessionId !== right.activeSessionId || left.activeThreadId !== right.activeThreadId || left.commandPending !== right.commandPending) return false
+    if (left.activeSessionId !== right.activeSessionId || left.activeThreadId !== right.activeThreadId || left.connected !== right.connected || left.commandPending !== right.commandPending) return false
     if (left.playground.rootPath !== right.playground.rootPath || left.playground.labs.length !== right.playground.labs.length) return false
     for (let index = 0; index < left.playground.labs.length; index += 1) {
         const leftLab = left.playground.labs[index]

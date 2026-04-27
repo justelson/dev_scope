@@ -72,7 +72,12 @@ function compareByOrderAndSortMode<T extends { id: string; createdAt: string; up
 ): number {
     const leftIndex = orderIndex.get(left.id)
     const rightIndex = orderIndex.get(right.id)
-    const resolveUpdatedAt = (value: T) => value.updatedAt || value.createdAt
+    const resolveUpdatedAt = (value: T) => {
+        if ('threads' in value && Array.isArray(value.threads)) {
+            return getSessionLastActivityAt(value as T & Parameters<typeof getSessionLastActivityAt>[0])
+        }
+        return value.updatedAt || value.createdAt
+    }
 
     if (leftIndex == null && rightIndex == null) {
         if (sortMode === 'updated') {

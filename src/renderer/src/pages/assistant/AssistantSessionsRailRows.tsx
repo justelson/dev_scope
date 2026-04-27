@@ -26,11 +26,14 @@ import { cn } from '@/lib/utils'
 import {
     buildSessionSubagentTree,
     formatAssistantSidebarRelativeTime,
+    getAssistantThreadLastMessageAt,
     getAssistantThreadDisplayTitle,
     getPrimarySessionThread,
+    getSessionLastActivityAt,
     getSessionDisplayTitle,
     resolveAssistantThreadStatusPill,
     type AssistantSessionThreadTreeNode,
+    type AssistantSidebarStatusContext,
     type SessionProjectGroup
 } from './assistant-sessions-rail-utils'
 
@@ -151,6 +154,7 @@ export function SessionRow({
     session,
     thread,
     isActive,
+    statusContext,
     recencyTierByThreadId,
     archived = false,
     compact = false,
@@ -165,6 +169,7 @@ export function SessionRow({
     session: AssistantSession
     thread: AssistantThread | null
     isActive: boolean
+    statusContext?: AssistantSidebarStatusContext
     recencyTierByThreadId: ReadonlyMap<string, number>
     archived?: boolean
     compact?: boolean
@@ -176,8 +181,8 @@ export function SessionRow({
     onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void
     menuItems?: FileActionsMenuItem[]
 }) {
-    const timeLabel = formatAssistantSidebarRelativeTime(thread?.updatedAt || session.updatedAt)
-    const statusPill = resolveAssistantThreadStatusPill(thread, isActive, recencyTierByThreadId)
+    const timeLabel = formatAssistantSidebarRelativeTime(thread ? getAssistantThreadLastMessageAt(thread) : getSessionLastActivityAt(session))
+    const statusPill = resolveAssistantThreadStatusPill(thread, isActive, recencyTierByThreadId, statusContext)
 
     const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
         if (event.key !== 'Enter' && event.key !== ' ') return
@@ -262,6 +267,7 @@ function SubagentThreadNode({
     sessionId,
     activeSessionId,
     activeThreadId,
+    activeConnectionPending,
     recencyTierByThreadId,
     compact,
     expandedThreadKeys,
@@ -273,6 +279,7 @@ function SubagentThreadNode({
     sessionId: string
     activeSessionId: string | null
     activeThreadId: string | null
+    activeConnectionPending: boolean
     recencyTierByThreadId: ReadonlyMap<string, number>
     compact: boolean
     expandedThreadKeys: Set<string>
@@ -283,8 +290,8 @@ function SubagentThreadNode({
     const hasChildren = node.children.length > 0
     const isExpanded = hasChildren ? expandedThreadKeys.has(node.thread.id) : false
     const isActive = sessionId === activeSessionId && node.thread.id === activeThreadId
-    const statusPill = resolveAssistantThreadStatusPill(node.thread, isActive, recencyTierByThreadId)
-    const timeLabel = formatAssistantSidebarRelativeTime(node.thread.updatedAt)
+    const statusPill = resolveAssistantThreadStatusPill(node.thread, isActive, recencyTierByThreadId, { connecting: isActive && activeConnectionPending })
+    const timeLabel = formatAssistantSidebarRelativeTime(getAssistantThreadLastMessageAt(node.thread))
 
     return (
         <div className="space-y-1">
@@ -346,6 +353,7 @@ function SubagentThreadNode({
                             sessionId={sessionId}
                             activeSessionId={activeSessionId}
                             activeThreadId={activeThreadId}
+                            activeConnectionPending={activeConnectionPending}
                             recencyTierByThreadId={recencyTierByThreadId}
                             compact={compact}
                             expandedThreadKeys={expandedThreadKeys}
@@ -365,6 +373,7 @@ export function SortableSessionList({
     sessions,
     activeSessionId,
     activeThreadId,
+    activeConnectionPending,
     recencyTierByThreadId,
     compact,
     expandedThreadKeys,
@@ -380,6 +389,7 @@ export function SortableSessionList({
     sessions: AssistantSession[]
     activeSessionId: string | null
     activeThreadId: string | null
+    activeConnectionPending: boolean
     recencyTierByThreadId: ReadonlyMap<string, number>
     compact: boolean
     expandedThreadKeys: Set<string>
@@ -457,6 +467,7 @@ export function SortableSessionList({
                                         session={session}
                                         thread={primaryThread}
                                         isActive={isRootActive}
+                                        statusContext={{ connecting: isRootActive && activeConnectionPending }}
                                         recencyTierByThreadId={recencyTierByThreadId}
                                         compact={compact}
                                         dragHandleProps={handleProps}
@@ -476,6 +487,7 @@ export function SortableSessionList({
                                                     sessionId={session.id}
                                                     activeSessionId={activeSessionId}
                                                     activeThreadId={activeThreadId}
+                                                    activeConnectionPending={activeConnectionPending}
                                                     recencyTierByThreadId={recencyTierByThreadId}
                                                     compact={compact}
                                                     expandedThreadKeys={expandedThreadKeys}

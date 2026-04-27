@@ -2,6 +2,7 @@ import type { RefObject } from 'react'
 import type { AssistantInteractionMode, AssistantRuntimeMode } from '@shared/assistant/contracts'
 import type { AssistantComposerPreferenceEffort } from './assistant-composer-preferences'
 import type { AssistantComposerSessionState } from './assistant-composer-session-state'
+import type { ComposerContextFile } from './assistant-composer-types'
 
 export function resetAssistantComposerDirtyState(input: {
     onCancelDirty?: () => void
@@ -14,7 +15,7 @@ export function resetAssistantComposerDirtyState(input: {
     textareaRef: RefObject<HTMLTextAreaElement | null>
     setText: (value: string) => void
     setInlineMentionTags: (value: []) => void
-    setContextFiles: (value: []) => void
+    setContextFiles: (value: ComposerContextFile[]) => void
     setSentPromptHistory: (value: []) => void
     setHistoryCursor: (value: number | null) => void
     setDraftBeforeHistory: (value: string) => void
@@ -57,7 +58,7 @@ export function resetAssistantComposerDirtyState(input: {
     onCancelDirty?.()
     setText(nextState.draft || '')
     setInlineMentionTags([])
-    setContextFiles([])
+    setContextFiles(nextState.contextFiles || [])
     setSentPromptHistory([])
     setHistoryCursor(null)
     setDraftBeforeHistory('')

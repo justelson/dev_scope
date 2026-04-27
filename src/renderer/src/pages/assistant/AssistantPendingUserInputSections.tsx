@@ -1,16 +1,16 @@
 import type { KeyboardEvent as ReactKeyboardEvent, MutableRefObject, RefObject } from 'react'
-import { ArrowLeft, CircleHelp, GitBranch, Plus, SquarePen } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronUp, CircleHelp, Plus, SquarePen } from 'lucide-react'
 import type { AssistantPendingUserInput, AssistantUserInputQuestion } from '@shared/assistant/contracts'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { cn } from '@/lib/utils'
 import { ComposerFooterControls, ComposerSendButton } from './AssistantComposerSections'
 import type { AssistantComposerController } from './useAssistantComposerController'
-import type { AssistantComposerUxTone } from './assistant-composer-capabilities'
 
 const CUSTOM_ANSWER_LABEL = 'Write your own answer'
 
 export function AssistantPendingUserInputStage(props: {
     questionShellOpen: boolean
+    questionShellMinimized: boolean
     animatedStepRef: RefObject<HTMLDivElement | null>
     isReviewStep: boolean
     activeQuestion: AssistantUserInputQuestion | null
@@ -35,6 +35,7 @@ export function AssistantPendingUserInputStage(props: {
     setQuestionIndex: (value: number | ((current: number) => number)) => void
     setReturnToReview: (value: boolean) => void
     setExpandedOptionKey: (value: string | null | ((current: string | null) => string | null)) => void
+    onToggleQuestionShellMinimized: () => void
     handleSelectOption: (questionId: string, optionLabel: string) => void
     handleSelectCustom: (questionId: string) => void
     handleCustomAnswerChange: (questionId: string, value: string) => void
@@ -42,6 +43,7 @@ export function AssistantPendingUserInputStage(props: {
 }) {
     const {
         questionShellOpen,
+        questionShellMinimized,
         animatedStepRef,
         isReviewStep,
         activeQuestion,
@@ -59,6 +61,7 @@ export function AssistantPendingUserInputStage(props: {
         setQuestionIndex,
         setReturnToReview,
         setExpandedOptionKey,
+        onToggleQuestionShellMinimized,
         handleSelectOption,
         handleSelectCustom,
         handleCustomAnswerChange,
@@ -68,7 +71,7 @@ export function AssistantPendingUserInputStage(props: {
     return (
         <AnimatedHeight isOpen={questionShellOpen} duration={240}>
             <div ref={animatedStepRef} className="mb-3 overflow-hidden rounded-[18px] border border-white/5 bg-sparkle-bg/85">
-                <div data-guided-animate className="border-b border-white/5 px-4 pb-2.5 pt-3">
+                <div data-guided-animate className={cn('px-4 pt-3 transition-[padding] duration-200', questionShellMinimized ? 'pb-3' : 'border-b border-white/5 pb-2.5')}>
                     <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sparkle-text-muted">
@@ -87,14 +90,26 @@ export function AssistantPendingUserInputStage(props: {
                                     1/{pendingUserInputsLength}
                                 </span>
                             ) : null}
+                            <button
+                                type="button"
+                                onClick={onToggleQuestionShellMinimized}
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/[0.04] text-sparkle-text-secondary transition-colors hover:bg-white/[0.07] hover:text-sparkle-text"
+                                title={questionShellMinimized ? 'Expand question' : 'Minimize question'}
+                                aria-label={questionShellMinimized ? 'Expand guided question' : 'Minimize guided question'}
+                                aria-expanded={!questionShellMinimized}
+                            >
+                                {questionShellMinimized ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                            </button>
                         </div>
                     </div>
-                    <p className="mt-1.5 text-[13px] leading-5 text-sparkle-text">
-                        {isReviewStep ? 'Review every choice before sending it back.' : activeQuestion?.question}
-                    </p>
+                    {!questionShellMinimized ? (
+                        <p className="mt-1.5 text-[13px] leading-5 text-sparkle-text">
+                            {isReviewStep ? 'Review every choice before sending it back.' : activeQuestion?.question}
+                        </p>
+                    ) : null}
                 </div>
 
-                {isReviewStep ? (
+                {!questionShellMinimized && isReviewStep ? (
                     <div className="space-y-1.5 px-3 py-2.5">
                         {reviewAnswers.map(({ question, index, answer }) => (
                             <button
@@ -132,7 +147,7 @@ export function AssistantPendingUserInputStage(props: {
                             </button>
                         ))}
                     </div>
-                ) : activeQuestion ? (
+                ) : !questionShellMinimized && activeQuestion ? (
                     <div className="space-y-1.5 px-3 py-2.5">
                         {activeQuestion.options.map((option, index) => {
                             const selected = progress.selectedAnswer === option.label
@@ -306,18 +321,13 @@ export function AssistantPendingUserInputFooter(props: {
     composerCapabilities: {
         controlsLocked: boolean
         sendDisabled: boolean
-        statusLabel: string
-        tone: AssistantComposerUxTone
     }
     responding: boolean
-    activePrompt: AssistantPendingUserInput
     progressQuestionIndex: number
     isReviewStep: boolean
     returnToReview: boolean
     canAdvance: boolean
     actionLabel: string
-    onReconnect?: () => Promise<void> | void
-    reconnectPending?: boolean
     onBack: () => void
     onAdvance: () => void
 }) {
@@ -325,125 +335,78 @@ export function AssistantPendingUserInputFooter(props: {
         composerController,
         composerCapabilities,
         responding,
-        activePrompt,
         progressQuestionIndex,
         isReviewStep,
         returnToReview,
         canAdvance,
         actionLabel,
-        onReconnect,
-        reconnectPending = false,
         onBack,
         onAdvance
     } = props
 
-    const showReconnectAction = composerCapabilities.statusLabel === 'Disconnected' && !composerController.isConnected && Boolean(onReconnect)
-
-    const composerStatusToneClass = composerCapabilities.tone === 'warning'
-        ? 'text-amber-200'
-        : composerCapabilities.tone === 'info'
-            ? 'text-sky-200'
-            : 'text-sparkle-text-secondary'
-    const composerStatusDotClass = composerCapabilities.tone === 'warning'
-        ? 'bg-amber-300/80'
-        : composerCapabilities.tone === 'info'
-            ? 'bg-sky-300/80'
-            : 'bg-white/35'
-
     return (
-        <>
-            <div className={cn('flex items-center justify-between px-1.5 pb-1.5 sm:px-2 sm:pb-2', composerController.isCompactFooter ? 'gap-0.5' : 'flex-wrap gap-1 sm:flex-nowrap sm:gap-0')}>
-                <ComposerFooterControls
-                    isCompactFooter={composerController.isCompactFooter}
-                    controlsLocked={composerCapabilities.controlsLocked}
-                    modelDropdownRef={composerController.modelDropdownRef}
-                    showModelDropdown={composerController.showModelDropdown}
-                    setShowModelDropdown={composerController.setShowModelDropdown}
-                    modelsLoading={composerController.modelsLoading}
-                    modelsError={composerController.modelsError}
-                    modelQuery={composerController.modelQuery}
-                    setModelQuery={composerController.setModelQuery}
-                    setActiveModelIndex={composerController.setActiveModelIndex}
-                    modelCanScrollUp={composerController.modelCanScrollUp}
-                    modelCanScrollDown={composerController.modelCanScrollDown}
-                    setModelCanScrollUp={composerController.setModelCanScrollUp}
-                    setModelCanScrollDown={composerController.setModelCanScrollDown}
-                    modelListRef={composerController.modelListRef}
-                    filteredModelOptions={composerController.filteredModelOptions}
-                    activeModelIndex={composerController.activeModelIndex}
-                    selectedModel={composerController.selectedModel}
-                    selectedModelLabel={composerController.selectedModelLabel}
-                    latestModelId={composerController.latestModelId}
-                    setSelectedModel={composerController.setSelectedModel}
-                    onRefreshModels={composerController.onRefreshModels}
-                    traitsDropdownRef={composerController.traitsDropdownRef}
-                    showTraitsDropdown={composerController.showTraitsDropdown}
-                    setShowTraitsDropdown={composerController.setShowTraitsDropdown}
-                    EFFORT_OPTIONS={composerController.EFFORT_OPTIONS}
-                    selectedEffort={composerController.selectedEffort}
-                    setSelectedEffort={composerController.setSelectedEffort}
-                    EFFORT_LABELS={composerController.EFFORT_LABELS}
-                    fastModeEnabled={composerController.fastModeEnabled}
-                    setFastModeEnabled={composerController.setFastModeEnabled}
-                    selectedInteractionMode={composerController.selectedInteractionMode}
-                    setSelectedInteractionMode={composerController.setSelectedInteractionMode}
-                    selectedRuntimeMode={composerController.selectedRuntimeMode}
-                    setSelectedRuntimeMode={composerController.setSelectedRuntimeMode}
-                    displayedProfile={composerController.displayedProfile}
-                    setShowFullAccessConfirm={composerController.setShowFullAccessConfirm}
+        <div className={cn('flex items-center justify-between px-1.5 pb-1.5 sm:px-2 sm:pb-2', composerController.isCompactFooter ? 'gap-0.5' : 'flex-wrap gap-1 sm:flex-nowrap sm:gap-0')}>
+            <ComposerFooterControls
+                isCompactFooter={composerController.isCompactFooter}
+                controlsLocked={composerCapabilities.controlsLocked}
+                modelDropdownRef={composerController.modelDropdownRef}
+                showModelDropdown={composerController.showModelDropdown}
+                setShowModelDropdown={composerController.setShowModelDropdown}
+                modelsLoading={composerController.modelsLoading}
+                modelsError={composerController.modelsError}
+                modelQuery={composerController.modelQuery}
+                setModelQuery={composerController.setModelQuery}
+                setActiveModelIndex={composerController.setActiveModelIndex}
+                modelCanScrollUp={composerController.modelCanScrollUp}
+                modelCanScrollDown={composerController.modelCanScrollDown}
+                setModelCanScrollUp={composerController.setModelCanScrollUp}
+                setModelCanScrollDown={composerController.setModelCanScrollDown}
+                modelListRef={composerController.modelListRef}
+                filteredModelOptions={composerController.filteredModelOptions}
+                activeModelIndex={composerController.activeModelIndex}
+                selectedModel={composerController.selectedModel}
+                selectedModelLabel={composerController.selectedModelLabel}
+                latestModelId={composerController.latestModelId}
+                setSelectedModel={composerController.setSelectedModel}
+                onRefreshModels={composerController.onRefreshModels}
+                traitsDropdownRef={composerController.traitsDropdownRef}
+                showTraitsDropdown={composerController.showTraitsDropdown}
+                setShowTraitsDropdown={composerController.setShowTraitsDropdown}
+                EFFORT_OPTIONS={composerController.EFFORT_OPTIONS}
+                selectedEffort={composerController.selectedEffort}
+                setSelectedEffort={composerController.setSelectedEffort}
+                EFFORT_LABELS={composerController.EFFORT_LABELS}
+                fastModeEnabled={composerController.fastModeEnabled}
+                setFastModeEnabled={composerController.setFastModeEnabled}
+                selectedInteractionMode={composerController.selectedInteractionMode}
+                setSelectedInteractionMode={composerController.setSelectedInteractionMode}
+                selectedRuntimeMode={composerController.selectedRuntimeMode}
+                setSelectedRuntimeMode={composerController.setSelectedRuntimeMode}
+                displayedProfile={composerController.displayedProfile}
+                setShowFullAccessConfirm={composerController.setShowFullAccessConfirm}
+            />
+
+            <div className="flex shrink-0 items-center gap-2">
+                {(progressQuestionIndex > 0 || isReviewStep) ? (
+                    <button
+                        type="button"
+                        disabled={responding}
+                        onClick={onBack}
+                        className="inline-flex min-w-[104px] items-center justify-center gap-1 rounded-full bg-white/[0.04] px-3.5 py-2 text-[12px] font-medium text-sparkle-text-secondary transition-colors hover:bg-white/[0.06] hover:text-sparkle-text disabled:opacity-50"
+                    >
+                        <ArrowLeft size={12} />
+                        {returnToReview ? 'Review' : 'Back'}
+                    </button>
+                ) : null}
+                <ComposerSendButton
+                    disabled={composerCapabilities.sendDisabled}
+                    isConnected={composerController.isConnected}
+                    isThinking={false}
+                    canSend={canAdvance}
+                    label={actionLabel}
+                    onSend={() => void onAdvance()}
                 />
-
-                <div className="flex shrink-0 items-center gap-2">
-                    {(progressQuestionIndex > 0 || isReviewStep) ? (
-                        <button
-                            type="button"
-                            disabled={responding}
-                            onClick={onBack}
-                            className="inline-flex min-w-[104px] items-center justify-center gap-1 rounded-full bg-white/[0.04] px-3.5 py-2 text-[12px] font-medium text-sparkle-text-secondary transition-colors hover:bg-white/[0.06] hover:text-sparkle-text disabled:opacity-50"
-                        >
-                            <ArrowLeft size={12} />
-                            {returnToReview ? 'Review' : 'Back'}
-                        </button>
-                    ) : null}
-                    <ComposerSendButton
-                        disabled={composerCapabilities.sendDisabled}
-                        isConnected={composerController.isConnected}
-                        isThinking={false}
-                        canSend={canAdvance}
-                        label={actionLabel}
-                        onSend={() => void onAdvance()}
-                    />
-                </div>
             </div>
-
-            <div className="pointer-events-auto flex items-center justify-between px-1 pt-2 text-[11px] font-medium text-sparkle-text-secondary">
-                <div className="flex items-center gap-2">
-                    <span className={cn('inline-flex items-center gap-1.5', composerStatusToneClass)}>
-                        <span className={cn('h-1.5 w-1.5 rounded-full', composerStatusDotClass)} />
-                        <span>{composerCapabilities.statusLabel}</span>
-                    </span>
-                    {showReconnectAction ? (
-                        <button
-                            type="button"
-                            onClick={() => void onReconnect?.()}
-                            disabled={reconnectPending}
-                            className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold text-sparkle-text-secondary transition-colors hover:border-white/15 hover:bg-white/[0.05] hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {reconnectPending ? 'Reconnecting' : 'Reconnect'}
-                        </button>
-                    ) : null}
-                </div>
-
-                <button
-                    type="button"
-                    disabled
-                    className="inline-flex max-w-[220px] items-center gap-1.5 px-1 py-0.5 text-sparkle-text-secondary opacity-45"
-                    title={composerController.isGitRepo ? (composerController.currentBranch || 'Current branch') : 'No git repository detected'}
-                >
-                    {composerController.isGitRepo ? <GitBranch size={12} /> : null}
-                    <span className="truncate">{composerController.branchButtonLabel}</span>
-                </button>
-            </div>
-        </>
+        </div>
     )
 }

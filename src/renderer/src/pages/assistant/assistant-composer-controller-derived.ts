@@ -5,7 +5,7 @@ import type { Settings } from '@/lib/settings'
 import { searchMentionIndex, type MentionCandidate } from './assistant-composer-mentions'
 import { getProfileLabel, readLegacyComposerSessionState } from './assistant-composer-controller-constants'
 import { deriveAssistantComposerCapabilities } from './assistant-composer-capabilities'
-import type { AssistantComposerDisabledReason } from './assistant-composer-types'
+import type { AssistantComposerDisabledReason, ComposerContextFile } from './assistant-composer-types'
 import { getMentionQuery, normalizeMentionLookupPath, type InlineMentionTag } from './assistant-composer-inline-mentions'
 import type { AssistantComposerPreferenceEffort } from './assistant-composer-preferences'
 import {
@@ -244,7 +244,7 @@ export function useAssistantComposerDirtyState(input: {
     selectedInteractionMode: AssistantInteractionMode
     selectedEffort: AssistantComposerPreferenceEffort
     fastModeEnabled: boolean
-    contextFilesLength: number
+    contextFiles: ComposerContextFile[]
     persistedComposerState: AssistantComposerSessionState
 }) {
     const {
@@ -254,22 +254,23 @@ export function useAssistantComposerDirtyState(input: {
         selectedInteractionMode,
         selectedEffort,
         fastModeEnabled,
-        contextFilesLength,
+        contextFiles,
         persistedComposerState
     } = input
 
     const currentComposerState = useMemo<AssistantComposerSessionState>(() => ({
         draft: text.trim() ? text : undefined,
+        contextFiles: contextFiles.length > 0 ? contextFiles : undefined,
         model: selectedModel || undefined,
         runtimeMode: selectedRuntimeMode,
         interactionMode: selectedInteractionMode,
         effort: selectedEffort,
         fastModeEnabled
-    }), [fastModeEnabled, selectedEffort, selectedInteractionMode, selectedModel, selectedRuntimeMode, text])
+    }), [contextFiles, fastModeEnabled, selectedEffort, selectedInteractionMode, selectedModel, selectedRuntimeMode, text])
 
     const isDirty = useMemo(
-        () => !areAssistantComposerSessionStatesEqual(persistedComposerState, currentComposerState) || contextFilesLength > 0,
-        [contextFilesLength, currentComposerState, persistedComposerState]
+        () => !areAssistantComposerSessionStatesEqual(persistedComposerState, currentComposerState),
+        [currentComposerState, persistedComposerState]
     )
 
     return {

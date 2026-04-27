@@ -76,5 +76,6 @@ export type AssistantSessionsRailSelection = {
     playground: AssistantSnapshot['playground']
     activeSessionId: string | null
     activeThreadId: string | null
+    connected: boolean
     commandPending: boolean
 }

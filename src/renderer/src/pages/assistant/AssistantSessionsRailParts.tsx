@@ -62,6 +62,7 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
         railFilterMode,
         playground,
         backgroundActivitySessions,
+        assistantConnected,
         commandPending,
         groupedSessions,
         groupedArchivedSessions,
@@ -498,6 +499,7 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
         : railMode === 'playground'
         ? groupedSessions.filter((group) => Boolean(group.path))
         : groupedSessions
+    const activeConnectionPending = commandPending && !assistantConnected && Boolean(activeSessionId)
 
     return (
         <div className={cn('relative z-10 flex h-full flex-col', compact ? 'pl-2.5 pr-1' : 'pl-3 pr-1.5')}>
@@ -523,6 +525,7 @@ export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentPr
                 labGroups={labGroups}
                 activeSessionId={activeSessionId}
                 activeThreadId={activeThreadId}
+                activeConnectionPending={activeConnectionPending}
                 expandedGroupKeys={expandedGroupKeys}
                 expandedThreadKeys={expandedThreadKeys}
                 visibleSessionCountByGroup={visibleSessionCountByGroup}

@@ -17,6 +17,13 @@ type PendingComposerDispatch = {
     previewOnly?: boolean
 }
 
+export type AssistantQueuedComposerSessionState = {
+    sessionId: string
+    threadState: string
+    pendingApprovalCount: number
+    pendingUserInputCount: number
+}
+
 function removeQueuedDispatchById(
     entries: PendingComposerDispatch[],
     messageId: string
@@ -51,8 +58,17 @@ function cloneContextFiles(contextFiles: ComposerContextFile[]): ComposerContext
     return contextFiles.map((file) => ({ ...file }))
 }
 
+function isQueueSessionBusy(sessionState: AssistantQueuedComposerSessionState | null | undefined): boolean {
+    if (!sessionState) return false
+    if (sessionState.pendingApprovalCount > 0 || sessionState.pendingUserInputCount > 0) return true
+    return sessionState.threadState === 'starting'
+        || sessionState.threadState === 'running'
+        || sessionState.threadState === 'waiting'
+}
+
 export function useAssistantQueuedComposer(args: {
     selectedSessionId: string | null
+    sessionStates: AssistantQueuedComposerSessionState[]
     isAssistantBusy: boolean
     commandPending: boolean
     isThreadWorking: boolean
@@ -68,6 +84,7 @@ export function useAssistantQueuedComposer(args: {
 }) {
     const {
         selectedSessionId,
+        sessionStates,
         isAssistantBusy,
         commandPending,
         isThreadWorking,
@@ -80,7 +97,7 @@ export function useAssistantQueuedComposer(args: {
     const [queuedComposerMessagesBySessionId, setQueuedComposerMessagesBySessionId] = useState<Record<string, PendingComposerDispatch[]>>({})
     const [pausedQueueMessageIdBySessionId, setPausedQueueMessageIdBySessionId] = useState<Record<string, string | null>>({})
     const [sendingComposerPrompt, setSendingComposerPrompt] = useState(false)
-    const queueDrainSessionIdRef = useRef<string | null>(null)
+    const queueDrainSessionIdsRef = useRef<Set<string>>(new Set())
 
     const queuedComposerMessages = selectedSessionId ? (queuedComposerMessagesBySessionId[selectedSessionId] || []) : []
     const queuedComposerMessageCount = queuedComposerMessages.length
@@ -342,36 +359,30 @@ export function useAssistantQueuedComposer(args: {
     }, [selectedSessionId])
 
     useEffect(() => {
-        if (!selectedSessionId) return
-        if (isAssistantBusy) return
-        if (queueDrainSessionIdRef.current === selectedSessionId) return
+        const sessionStateById = new Map(sessionStates.map((sessionState) => [sessionState.sessionId, sessionState]))
 
-        const nextQueuedMessage = queuedComposerMessagesBySessionId[selectedSessionId]?.find((entry) => !entry.previewOnly)
-        if (!nextQueuedMessage) return
-        if (pausedQueueMessageIdBySessionId[selectedSessionId] === nextQueuedMessage.id) return
+        for (const [sessionId, queuedMessages] of Object.entries(queuedComposerMessagesBySessionId)) {
+            if (queueDrainSessionIdsRef.current.has(sessionId)) continue
+            if (isQueueSessionBusy(sessionStateById.get(sessionId))) continue
 
-        let cancelled = false
-        queueDrainSessionIdRef.current = selectedSessionId
+            const nextQueuedMessage = queuedMessages.find((entry) => !entry.previewOnly)
+            if (!nextQueuedMessage) continue
+            if (pausedQueueMessageIdBySessionId[sessionId] === nextQueuedMessage.id) continue
 
-        void (async () => {
-            await dispatchQueuedMessage(selectedSessionId, nextQueuedMessage, 'immediate')
-            if (cancelled) return
-
-            queueDrainSessionIdRef.current = null
-        })()
-
-        return () => {
-            cancelled = true
-            if (queueDrainSessionIdRef.current === selectedSessionId) {
-                queueDrainSessionIdRef.current = null
-            }
+            queueDrainSessionIdsRef.current.add(sessionId)
+            void (async () => {
+                try {
+                    await dispatchQueuedMessage(sessionId, nextQueuedMessage, 'immediate')
+                } finally {
+                    queueDrainSessionIdsRef.current.delete(sessionId)
+                }
+            })()
         }
     }, [
         dispatchQueuedMessage,
-        isAssistantBusy,
         pausedQueueMessageIdBySessionId,
         queuedComposerMessagesBySessionId,
-        selectedSessionId
+        sessionStates
     ])
 
     return {

@@ -164,7 +164,7 @@ export function useAssistantComposerController(props: AssistantComposerProps) {
     })
     const { currentComposerState, isDirty } = useAssistantComposerDirtyState({
         text, selectedModel, selectedRuntimeMode, selectedInteractionMode, selectedEffort, fastModeEnabled,
-        contextFilesLength: contextFiles.length, persistedComposerState: persistedSessionStateRef.current
+        contextFiles, persistedComposerState: persistedSessionStateRef.current
     })
     latestTextRef.current = text
     latestInlineMentionTagsRef.current = inlineMentionTags

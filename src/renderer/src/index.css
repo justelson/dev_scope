@@ -149,6 +149,53 @@ body:not(.light) .framework-badge {
   animation: shimmer 2s infinite linear;
 }
 
+@keyframes terminalOutputText {
+  0% {
+    opacity: 0.62;
+    transform: translateY(3px);
+    text-shadow: 0 0 10px rgba(110, 231, 183, 0.22);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    text-shadow: none;
+  }
+}
+
+.animate-terminal-output-text {
+  animation: terminalOutputText 180ms ease-out both;
+}
+
+@keyframes terminalOutputPulse {
+  0% {
+    opacity: 0.8;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
+
+.animate-terminal-output-pulse {
+  animation: terminalOutputPulse 520ms ease-out both;
+}
+
+@keyframes terminalCaret {
+  0%,
+  48% {
+    opacity: 1;
+  }
+  49%,
+  100% {
+    opacity: 0.2;
+  }
+}
+
+.animate-terminal-caret {
+  animation: terminalCaret 950ms steps(1, end) infinite;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -442,6 +489,14 @@ body:not(.light) .framework-badge {
 .monaco-editor .margin-view-overlays .current-line-margin {
   border: none !important;
   outline: none !important;
+}
+
+.devscope-monaco-preview .monaco-editor .find-widget {
+  top: 20px !important;
+}
+
+.devscope-monaco-preview .monaco-editor .find-widget.visible {
+  top: 20px !important;
 }
 
 @keyframes slideInFromTop {

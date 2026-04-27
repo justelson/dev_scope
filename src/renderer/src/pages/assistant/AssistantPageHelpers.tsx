@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, Check, Copy, EyeOff, Loader2, Trash2, X } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, Copy, EyeOff, Loader2, Trash2, X } from 'lucide-react'
 import type { AssistantActivity } from '@shared/assistant/contracts'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FileActionsMenu, type FileActionsMenuItem } from '@/components/ui/FileActionsMenu'
@@ -255,17 +255,38 @@ function getIssueToneLabel(tone: AssistantActivity['tone']): 'Error' | 'Warning'
 }
 
 function getIssueToneSurface(tone: AssistantActivity['tone']) {
+    if (tone === 'error') {
+        return {
+            card: 'bg-red-500/[0.055]',
+            hover: 'hover:bg-red-500/[0.085]',
+            subtleRow: 'hover:bg-red-500/[0.05]',
+            focus: 'focus-visible:ring-red-300/35',
+            subtleFocus: 'focus-visible:ring-red-300/30',
+            button: 'bg-red-500/[0.12] text-red-100/90 hover:bg-red-500/[0.18] hover:text-red-50',
+            countButton: 'bg-red-500/[0.12] text-red-100/80 hover:bg-red-500/[0.18] hover:text-red-50',
+            badge: 'border-transparent bg-red-500/[0.14] text-red-100',
+            detail: 'text-red-100/75',
+            menuButton: 'text-red-100/45 hover:bg-red-500/[0.08] hover:text-red-50',
+            menuOpenButton: 'bg-red-500/[0.12] text-red-50',
+            dismissed: 'text-red-100/62 hover:bg-red-500/[0.05] hover:text-red-100/82',
+            dismissedCount: 'text-red-100/42'
+        }
+    }
+
     return {
-        card: 'bg-red-500/[0.055]',
-        hover: 'hover:bg-red-500/[0.085]',
-        divider: '',
-        subtleRow: 'hover:bg-red-500/[0.05]',
-        button: 'bg-red-500/[0.12] text-red-100/90 hover:bg-red-500/[0.18] hover:text-red-50',
-        countButton: 'border-red-500/14 bg-red-500/[0.08] text-red-100/75 hover:border-red-400/24 hover:bg-red-500/[0.12] hover:text-red-50',
-        badge: tone === 'error'
-            ? 'border-red-400/20 bg-red-500/[0.14] text-red-100'
-            : 'border-amber-400/20 bg-amber-500/[0.12] text-amber-100',
-        detail: 'text-red-100/75'
+        card: 'bg-amber-500/[0.035]',
+        hover: 'hover:bg-amber-500/[0.06]',
+        subtleRow: 'hover:bg-amber-500/[0.045]',
+        focus: 'focus-visible:ring-amber-300/30',
+        subtleFocus: 'focus-visible:ring-amber-300/25',
+        button: 'bg-amber-500/[0.09] text-amber-100/82 hover:bg-amber-500/[0.14] hover:text-amber-50',
+        countButton: 'bg-amber-500/[0.11] text-amber-100/78 hover:bg-amber-500/[0.16] hover:text-amber-50',
+        badge: 'border-transparent bg-amber-500/[0.11] text-amber-100',
+        detail: 'text-amber-100/68',
+        menuButton: 'text-amber-100/45 hover:bg-amber-500/[0.08] hover:text-amber-50',
+        menuOpenButton: 'bg-amber-500/[0.12] text-amber-50',
+        dismissed: 'text-amber-100/60 hover:bg-amber-500/[0.045] hover:text-amber-100/82',
+        dismissedCount: 'text-amber-100/42'
     }
 }
 
@@ -365,7 +386,7 @@ export function IssueLogRow({
     }, [activity, onDismiss, toneLabel])
 
     return (
-        <div className={cn('rounded-lg', toneSurface.card)}>
+        <div className={cn('w-full overflow-hidden border-b border-white/[0.04] last:border-b-0', toneSurface.card)}>
             <div
                 role="button"
                 tabIndex={0}
@@ -376,16 +397,15 @@ export function IssueLogRow({
                         openDetails()
                     }
                 }}
-                className={cn('group flex items-center justify-between gap-2 px-3 py-2 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-300/35', toneSurface.hover)}
+                className={cn('group flex items-center justify-between gap-2 px-3 py-2 transition-colors focus:outline-none focus-visible:ring-1', toneSurface.focus, toneSurface.hover)}
             >
                 <div className="min-w-0 flex-1">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                            <p className="truncate text-xs text-sparkle-text">{activity.summary}</p>
-                            <span className={cn('shrink-0 rounded-full border px-1.5 py-[1px] text-[8px] font-medium uppercase tracking-[0.14em]', toneSurface.badge)}>{activity.tone}</span>
-                            {hasMultiple && <button type="button" onClick={(event) => { event.stopPropagation(); setExpanded(!expanded) }} className={cn('shrink-0 rounded-full border px-1.5 py-[1px] text-[8px] font-medium transition-colors', toneSurface.countButton)} title={expanded ? 'Collapse' : 'Expand repeated logs'}>x{count}</button>}
+                            <p className="truncate font-mono text-[11px] text-sparkle-text">{activity.summary}</p>
+                            <span className={cn('shrink-0 rounded-sm border px-1.5 py-[1px] text-[8px] font-medium uppercase tracking-[0.14em]', toneSurface.badge)}>{activity.tone}</span>
                         </div>
-                        {brief ? <p className={cn('mt-1 line-clamp-2 text-[11px] leading-5', toneSurface.detail)}>{brief}</p> : null}
+                        {brief ? <p className={cn('mt-1 line-clamp-1 font-mono text-[10px] leading-4 tracking-[0.01em]', toneSurface.detail)}>{brief}</p> : null}
                     </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
@@ -395,11 +415,22 @@ export function IssueLogRow({
                             presentation="portal"
                             preferredDirection="up"
                             title={`Dismiss ${toneLabel.toLowerCase()} options`}
-                            buttonClassName="h-7 w-7 rounded-md border-transparent bg-transparent text-red-100/45 hover:border-transparent hover:bg-red-500/[0.08] hover:text-red-50"
-                            openButtonClassName="border-transparent bg-red-500/[0.12] text-red-50"
+                            buttonClassName={cn('h-7 w-7 rounded-md border-transparent bg-transparent hover:border-transparent', toneSurface.menuButton)}
+                            openButtonClassName={cn('border-transparent', toneSurface.menuOpenButton)}
                             menuClassName="min-w-[188px]"
                         />
                     ) : null}
+                    {hasMultiple && (
+                        <button
+                            type="button"
+                            onClick={(event) => { event.stopPropagation(); setExpanded(!expanded) }}
+                            className={cn('inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10px] font-medium transition-colors', toneSurface.countButton)}
+                            title={expanded ? 'Collapse repeated logs' : `Show ${count} repeated logs`}
+                        >
+                            <ChevronDown size={12} className={cn('transition-transform duration-150', expanded && 'rotate-180')} />
+                            <span>x{count}</span>
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={(event) => { event.stopPropagation(); void onCopy(activity) }}
@@ -418,7 +449,7 @@ export function IssueLogRow({
                     </button>
                 </div>
             </div>
-            {hasMultiple && expanded && <div className="px-3 pb-2 pt-1"><div className="space-y-1">{activities.map((act, index) => <div key={act.id} role="button" tabIndex={0} onClick={() => onShowMore(act)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onShowMore(act) } }} className={cn('flex items-center gap-2 rounded px-2 py-1 text-[10px] text-sparkle-text-muted focus:outline-none focus-visible:ring-1 focus-visible:ring-red-300/30', toneSurface.subtleRow)}><span className="shrink-0 text-white/35">#{index + 1}</span><span className="flex-1 truncate">{formatAssistantDateTime(act.createdAt)}</span></div>)}</div></div>}
+            {hasMultiple && expanded && <div className="px-3 pb-2 pt-1"><div className="space-y-1">{activities.map((act, index) => <div key={act.id} role="button" tabIndex={0} onClick={() => onShowMore(act)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onShowMore(act) } }} className={cn('flex items-center gap-2 rounded px-2 py-1 font-mono text-[10px] text-sparkle-text-muted focus:outline-none focus-visible:ring-1', toneSurface.subtleFocus, toneSurface.subtleRow)}><span className="shrink-0 text-white/35">#{index + 1}</span><span className="flex-1 truncate">{formatAssistantDateTime(act.createdAt)}</span></div>)}</div></div>}
         </div>
     )
 }
@@ -437,6 +468,7 @@ export function DismissedIssueRow({
     const toneLabel = getIssueToneLabel(activity.tone)
     const lineLabel = `${toneLabel} occurred`
     const hasMultiple = Boolean(count && count > 1)
+    const toneSurface = getIssueToneSurface(activity.tone)
 
     return (
         <div
@@ -450,13 +482,14 @@ export function DismissedIssueRow({
                 }
             }}
             className={cn(
-                'flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-red-300/25',
-                'text-[11px] text-red-100/62 hover:bg-red-500/[0.05] hover:text-red-100/82'
+                'flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors focus:outline-none focus-visible:ring-1',
+                toneSurface.subtleFocus,
+                toneSurface.dismissed
             )}
             title={activity.summary}
         >
             <span className="truncate font-medium">{lineLabel}</span>
-            {hasMultiple ? <span className="shrink-0 text-[10px] text-red-100/42">×{count}</span> : null}
+            {hasMultiple ? <span className={cn('shrink-0 text-[10px]', toneSurface.dismissedCount)}>x{count}</span> : null}
         </div>
     )
 }

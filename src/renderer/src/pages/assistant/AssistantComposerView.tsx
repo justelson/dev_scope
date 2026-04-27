@@ -6,7 +6,6 @@ import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
 import {
-    Check,
     ChevronDown,
     ChevronUp,
     Zap,
@@ -618,7 +617,7 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                                                         onClick={() => void controller.handleBranchSwitch(branch.name)}
                                                         disabled={controller.isSwitchingBranch || isCurrent}
                                                         className={cn(
-                                                            'flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left transition-colors',
+                                                            'flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md border px-2 text-left transition-colors',
                                                             isCurrent
                                                                 ? 'border-white/10 bg-white/[0.04] text-sparkle-text'
                                                                 : 'border-transparent text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text',
@@ -626,25 +625,14 @@ export function AssistantComposerView({ controller }: { controller: AssistantCom
                                                             (controller.isSwitchingBranch || isCurrent) && 'cursor-default'
                                                         )}
                                                     >
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className="flex flex-wrap items-center gap-1">
-                                                                <div
-                                                                    className="min-w-0 overflow-hidden break-words whitespace-normal text-[11px] font-medium leading-[1.05rem]"
-                                                                    style={{
-                                                                        display: '-webkit-box',
-                                                                        WebkitBoxOrient: 'vertical',
-                                                                        WebkitLineClamp: 2
-                                                                    }}
-                                                                >
-                                                                    {branch.name}
-                                                                </div>
-                                                                {isCurrent ? <span className="rounded border border-emerald-400/20 bg-emerald-500/10 px-1 py-0.5 text-[9px] text-emerald-200">Current</span> : null}
-                                                                {isDefault ? <span className="rounded border border-sky-400/20 bg-sky-500/10 px-1 py-0.5 text-[9px] text-sky-200">Default</span> : null}
-                                                                {branch.isLocal === false ? <span className="rounded border border-white/10 bg-white/[0.03] px-1 py-0.5 text-[9px] text-sparkle-text-secondary">Remote</span> : null}
-                                                                {!isCurrent && branch.label ? <span className="truncate text-[9px]">{branch.label}</span> : null}
-                                                            </div>
-                                                        </div>
-                                                        {!isCurrent ? <span className="ml-2 text-[9px] font-medium uppercase tracking-[0.08em] text-sparkle-text-secondary">Switch</span> : null}
+                                                        <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-none">
+                                                            {branch.name}
+                                                        </span>
+                                                        <span className="flex shrink-0 items-center gap-1">
+                                                            {isCurrent ? <span className="rounded border border-emerald-400/20 bg-emerald-500/10 px-1 py-0.5 text-[8px] font-medium leading-none text-emerald-200">Current</span> : null}
+                                                            {isDefault ? <span className="rounded border border-sky-400/20 bg-sky-500/10 px-1 py-0.5 text-[8px] font-medium leading-none text-sky-200">Main</span> : null}
+                                                            {branch.isLocal === false ? <span className="rounded border border-white/10 bg-white/[0.03] px-1 py-0.5 text-[8px] font-medium leading-none text-sparkle-text-secondary">Remote</span> : null}
+                                                        </span>
                                                     </button>
                                                 )})}
                                             </div>

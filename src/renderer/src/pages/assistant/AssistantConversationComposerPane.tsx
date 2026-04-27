@@ -1,8 +1,9 @@
-import { memo } from 'react'
+import { memo, useCallback, type WheelEvent as ReactWheelEvent } from 'react'
 import type { AssistantPendingUserInput, AssistantPlaygroundPendingLabRequest, AssistantTurnUsage } from '@shared/assistant/contracts'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import { AssistantComposer } from './AssistantComposer'
 import { AssistantPendingPlaygroundLabPanel } from './AssistantPendingPlaygroundLabPanel'
+import { AssistantPendingTerminalAccessModal, getPendingTerminalAccessRequest } from './AssistantPendingTerminalAccessModal'
 import { AssistantPendingUserInputPanel } from './AssistantPendingUserInputPanel'
 import { deriveAssistantComposerDisabledReason } from './assistant-composer-capabilities'
 import type { AssistantComposerSendOptions, AssistantElementBounds, AssistantQueuedComposerMessage, ComposerContextFile } from './assistant-composer-types'
@@ -50,11 +51,17 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
     ) => Promise<boolean>
     refreshModels: () => void
     respondUserInput: (requestId: string, answers: Record<string, string | string[]>) => Promise<void>
+    setPlaygroundTerminalAccess: (enabled: boolean) => void
+    setPlaygroundTerminalAccessRequestMuted: (muted: boolean) => void
     approvePendingPlaygroundLabRequest: (input: { title?: string; source: 'empty' | 'git-clone'; repoUrl?: string }) => Promise<void>
     declinePendingPlaygroundLabRequest: () => Promise<void>
 }) {
     const hasPendingPlaygroundLabRequest = Boolean(props.pendingPlaygroundLabRequest)
-    const isWaitingForUserInput = props.pendingUserInputs.length > 0
+    const pendingTerminalAccessRequest = getPendingTerminalAccessRequest(props.pendingUserInputs)
+    const visiblePendingUserInputs = pendingTerminalAccessRequest
+        ? props.pendingUserInputs.filter((request) => request.requestId !== pendingTerminalAccessRequest.requestId)
+        : props.pendingUserInputs
+    const isWaitingForUserInput = visiblePendingUserInputs.length > 0
     const isConnecting = props.isConnecting ?? (props.commandPending && !props.assistantConnected)
     const reconnectPending = props.reconnectPending ?? (props.commandPending && !props.assistantConnected)
     const composerDisabledReason = deriveAssistantComposerDisabledReason({
@@ -62,12 +69,22 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
         sessionMode: props.selectedSessionMode,
         projectPath: props.selectedProjectPath
     })
+    const handlePaneWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+        if (!props.onOverflowWheel || event.deltaY === 0 || isWaitingForUserInput || hasPendingPlaygroundLabRequest) return
+        if (event.target instanceof Element && event.target.closest('[data-assistant-composer-hitbox="true"]')) return
+
+        const lineHeight = Number.parseFloat(window.getComputedStyle(event.currentTarget).lineHeight || '0') || 20
+        const pageHeight = event.currentTarget.clientHeight || lineHeight * 3
+        const deltaFactor = event.deltaMode === 1 ? lineHeight : event.deltaMode === 2 ? pageHeight : 1
+        event.preventDefault()
+        props.onOverflowWheel(event.deltaY * deltaFactor)
+    }, [hasPendingPlaygroundLabRequest, isWaitingForUserInput, props.onOverflowWheel])
 
     return (
-        <div className="relative px-4 pb-3 pt-0.5">
+        <div className="relative px-4 pb-3 pt-0.5" onWheel={handlePaneWheel}>
             {isWaitingForUserInput ? (
                 <AssistantPendingUserInputPanel
-                    pendingUserInputs={props.pendingUserInputs}
+                    pendingUserInputs={visiblePendingUserInputs}
                     responding={props.commandPending}
                     onRespond={props.respondUserInput}
                     sessionId={props.selectedSessionId}
@@ -82,8 +99,15 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
                     activeProfile={props.activeProfile}
                     activeStatusLabel={props.activeStatusLabel}
                     isConnecting={isConnecting}
-                    onReconnect={props.onReconnect}
-                    reconnectPending={reconnectPending}
+                />
+            ) : null}
+            {pendingTerminalAccessRequest ? (
+                <AssistantPendingTerminalAccessModal
+                    request={pendingTerminalAccessRequest}
+                    responding={props.commandPending}
+                    onRespond={props.respondUserInput}
+                    onSetTerminalAccess={props.setPlaygroundTerminalAccess}
+                    onSetRequestMuted={props.setPlaygroundTerminalAccessRequestMuted}
                 />
             ) : null}
             {!isWaitingForUserInput && hasPendingPlaygroundLabRequest && props.pendingPlaygroundLabRequest ? (
@@ -94,8 +118,8 @@ export const AssistantConversationComposerPane = memo(function AssistantConversa
                     onDecline={props.declinePendingPlaygroundLabRequest}
                 />
             ) : null}
-            {!hasPendingPlaygroundLabRequest && !isWaitingForUserInput ? (
-                <div className="mx-auto w-full max-w-3xl">
+            {!hasPendingPlaygroundLabRequest && !isWaitingForUserInput && !pendingTerminalAccessRequest ? (
+                <div className="mx-auto w-full max-w-3xl" data-assistant-composer-hitbox="true">
                     <AssistantComposer
                         sessionId={props.selectedSessionId}
                         disabled={Boolean(composerDisabledReason)}

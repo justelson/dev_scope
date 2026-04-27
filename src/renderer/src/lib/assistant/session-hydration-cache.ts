@@ -35,13 +35,18 @@ export function cacheHydratedThreads(
     cache: Map<string, CachedHydratedThreadState>,
     snapshot: AssistantSnapshot
 ): void {
-    const activeThreadIds = new Set<string>()
+    const presentThreadIds = new Set<string>()
 
     for (const session of snapshot.sessions) {
         for (const thread of session.threads) {
-            activeThreadIds.add(thread.id)
+            presentThreadIds.add(thread.id)
             if (!hasHydratedThreadState(thread)) {
-                cache.delete(thread.id)
+                const cached = cache.get(thread.id)
+                if (cached?.sessionId && cached.sessionId !== session.id) {
+                    cache.delete(thread.id)
+                } else if ((thread.messageCount || 0) === 0 && !thread.latestTurn) {
+                    cache.delete(thread.id)
+                }
                 continue
             }
 
@@ -64,7 +69,7 @@ export function cacheHydratedThreads(
     }
 
     for (const threadId of [...cache.keys()]) {
-        if (!activeThreadIds.has(threadId)) {
+        if (!presentThreadIds.has(threadId)) {
             cache.delete(threadId)
         }
     }

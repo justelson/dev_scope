@@ -16,6 +16,7 @@ export type ExpandedSessionsRailContentProps = {
     railFilterMode: AssistantRailFilterMode
     playground: AssistantPlaygroundState
     backgroundActivitySessions: AssistantSession[]
+    assistantConnected: boolean
     commandPending: boolean
     groupedSessions: SessionProjectGroup[]
     groupedArchivedSessions: SessionProjectGroup[]

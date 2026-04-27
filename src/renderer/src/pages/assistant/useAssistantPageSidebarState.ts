@@ -96,6 +96,6 @@ export function useAssistantPageSidebarState() {
         railSortMode,
         setRailSortMode,
         railFilterMode,
-        setRailFilterMode
+        setRailFilterMode,
     }
 }

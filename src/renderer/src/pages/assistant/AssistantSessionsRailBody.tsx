@@ -26,6 +26,7 @@ export function AssistantSessionsRailBody(props: {
     labGroups: SessionProjectGroup[]
     activeSessionId: string | null
     activeThreadId: string | null
+    activeConnectionPending: boolean
     expandedGroupKeys: Set<string>
     expandedThreadKeys: Set<string>
     visibleSessionCountByGroup: Record<string, number>
@@ -66,6 +67,7 @@ export function AssistantSessionsRailBody(props: {
         labGroups,
         activeSessionId,
         activeThreadId,
+        activeConnectionPending,
         expandedGroupKeys,
         expandedThreadKeys,
         visibleSessionCountByGroup,
@@ -122,6 +124,7 @@ export function AssistantSessionsRailBody(props: {
                                 group={labGroups[0]}
                                 activeSessionId={activeSessionId}
                                 activeThreadId={activeThreadId}
+                                activeConnectionPending={activeConnectionPending}
                                 expandedThreadKeys={expandedThreadKeys}
                                 visibleSessionCountByGroup={visibleSessionCountByGroup}
                                 recencyTierByThreadId={recencyTierByThreadId}
@@ -146,6 +149,7 @@ export function AssistantSessionsRailBody(props: {
                             group={unassignedGroup}
                             activeSessionId={activeSessionId}
                             activeThreadId={activeThreadId}
+                            activeConnectionPending={activeConnectionPending}
                             expandedThreadKeys={expandedThreadKeys}
                             visibleSessionCountByGroup={visibleSessionCountByGroup}
                             recencyTierByThreadId={recencyTierByThreadId}
@@ -198,6 +202,7 @@ export function AssistantSessionsRailBody(props: {
                                             group={group}
                                             activeSessionId={activeSessionId}
                                             activeThreadId={activeThreadId}
+                                            activeConnectionPending={activeConnectionPending}
                                             expanded={expandedGroupKeys.has(group.key)}
                                             expandedThreadKeys={expandedThreadKeys}
                                             visibleSessionCountByGroup={visibleSessionCountByGroup}
@@ -238,6 +243,7 @@ function UnassignedSessionsSection(props: {
     group: SessionProjectGroup
     activeSessionId: string | null
     activeThreadId: string | null
+    activeConnectionPending: boolean
     expandedThreadKeys: Set<string>
     visibleSessionCountByGroup: Record<string, number>
     recencyTierByThreadId: ReadonlyMap<string, number>
@@ -256,6 +262,7 @@ function UnassignedSessionsSection(props: {
         group,
         activeSessionId,
         activeThreadId,
+        activeConnectionPending,
         expandedThreadKeys,
         visibleSessionCountByGroup,
         recencyTierByThreadId,
@@ -269,14 +276,17 @@ function UnassignedSessionsSection(props: {
         onShowMoreSessions,
         onShowLessSessions
     } = props
+    const chatSessions = group.sessions.filter(hasSessionChats)
+    if (chatSessions.length === 0) return null
+
     const configuredVisibleCount = Math.max(5, visibleSessionCountByGroup[group.key] ?? 5)
-    const activeSessionIndex = group.sessions.findIndex((session) => session.id === activeSessionId)
+    const activeSessionIndex = chatSessions.findIndex((session) => session.id === activeSessionId)
     const minimumVisibleCount = activeSessionIndex >= 0
         ? Math.max(5, Math.ceil((activeSessionIndex + 1) / 5) * 5)
         : 5
     const resolvedVisibleCount = Math.max(configuredVisibleCount, minimumVisibleCount)
-    const visibleSessions = group.sessions.slice(0, resolvedVisibleCount)
-    const hiddenChatsCount = Math.max(0, group.sessions.length - resolvedVisibleCount)
+    const visibleSessions = chatSessions.slice(0, resolvedVisibleCount)
+    const hiddenChatsCount = Math.max(0, chatSessions.length - resolvedVisibleCount)
     const nextShowMoreCount = Math.min(5, hiddenChatsCount)
     const hasMoreChats = hiddenChatsCount > 0
     const canShowLessChats = resolvedVisibleCount > minimumVisibleCount
@@ -288,6 +298,7 @@ function UnassignedSessionsSection(props: {
                 sessions={visibleSessions}
                 activeSessionId={activeSessionId}
                 activeThreadId={activeThreadId}
+                activeConnectionPending={activeConnectionPending}
                 recencyTierByThreadId={recencyTierByThreadId}
                 compact={compact}
                 expandedThreadKeys={expandedThreadKeys}
@@ -331,6 +342,7 @@ function ProjectSessionsSection(props: {
     group: SessionProjectGroup
     activeSessionId: string | null
     activeThreadId: string | null
+    activeConnectionPending: boolean
     expanded: boolean
     expandedThreadKeys: Set<string>
     visibleSessionCountByGroup: Record<string, number>
@@ -357,6 +369,7 @@ function ProjectSessionsSection(props: {
         group,
         activeSessionId,
         activeThreadId,
+        activeConnectionPending,
         expanded,
         expandedThreadKeys,
         visibleSessionCountByGroup,
@@ -462,6 +475,7 @@ function ProjectSessionsSection(props: {
                                         sessions={visibleChatSessions}
                                         activeSessionId={activeSessionId}
                                         activeThreadId={activeThreadId}
+                                        activeConnectionPending={activeConnectionPending}
                                         recencyTierByThreadId={recencyTierByThreadId}
                                         compact={compact}
                                         expandedThreadKeys={expandedThreadKeys}
@@ -501,11 +515,14 @@ function ProjectSessionsSection(props: {
                                     type="button"
                                     onClick={() => {
                                         const firstTarget = getGroupPrimaryThreadOrNull(group)
-                                        if (!firstTarget) return
-                                        onSelectThread(firstTarget)
+                                        if (firstTarget) {
+                                            onSelectThread(firstTarget)
+                                            return
+                                        }
+                                        onCreateProjectChat(group)
                                     }}
                                     className="flex w-full items-center gap-2 rounded-md px-2 py-[4px] text-left transition-colors hover:bg-white/[0.04]"
-                                    title="Open empty project session"
+                                    title="Start a new chat"
                                 >
                                     <span className="min-w-0 flex-1 truncate text-xs text-sparkle-text-muted/55">No chats yet</span>
                                     <span className="shrink-0 text-[9px] text-sparkle-text-muted/35">Start chatting</span>

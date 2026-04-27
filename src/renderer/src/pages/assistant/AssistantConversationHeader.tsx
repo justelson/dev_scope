@@ -1,6 +1,6 @@
 import { memo, type RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bot, ChevronLeft, ChevronRight, ListTodo, MoreHorizontal, PanelLeft, PanelRight, SquarePen } from 'lucide-react'
+import { Bot, ChevronLeft, ChevronRight, ListTodo, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AssistantHeaderOpenWithButton } from './AssistantHeaderOpenWithButton'
 import { AssistantProjectGitChip } from './AssistantProjectGitChip'
@@ -24,7 +24,10 @@ export const AssistantConversationHeader = memo(function AssistantConversationHe
     selectedProjectPath: string | null
     preferredShell: 'powershell' | 'cmd'
     gitRefreshToken: string
+    showPlaygroundTerminalAccessControl: boolean
+    playgroundTerminalAccess: boolean
     onToggleLeftSidebar: () => void
+    onPlaygroundTerminalAccessChange: (enabled: boolean) => void
     onTogglePlanPanel: () => void
     onCreateThread: () => void
     onToggleRightSidebar: () => void
@@ -48,12 +51,16 @@ export const AssistantConversationHeader = memo(function AssistantConversationHe
         selectedProjectPath,
         preferredShell,
         gitRefreshToken,
+        showPlaygroundTerminalAccessControl,
+        playgroundTerminalAccess,
         onToggleLeftSidebar,
+        onPlaygroundTerminalAccessChange,
         onTogglePlanPanel,
         onCreateThread,
         onToggleRightSidebar
     } = props
     const showHeaderMenu = activeHeaderMenu === 'more'
+    const showOpenWithButton = !(selectedSessionMode === 'playground' && !selectedProjectPath)
     const navigate = useNavigate()
 
     return (
@@ -100,20 +107,39 @@ export const AssistantConversationHeader = memo(function AssistantConversationHe
                 </div>
             </div>
             <div ref={headerMenuRef} className={cn('relative flex shrink-0 items-center gap-1.5', activeHeaderMenu !== 'none' ? 'z-[110]' : 'z-0')}>
-                <AssistantHeaderOpenWithButton
-                    projectPath={selectedProjectPath}
-                    preferredShell={preferredShell}
-                    menuWidthMode="trigger"
-                    menuPresentation="inline"
-                    contextActions={selectedProjectPath ? [{
-                        id: 'project',
-                        label: 'Project',
-                        icon: 'project',
-                        onSelect: () => navigate(`/projects/${encodeURIComponent(selectedProjectPath)}`)
-                    }] : []}
-                    menuOpen={activeHeaderMenu === 'open-with'}
-                    onMenuOpenChange={(open) => setActiveHeaderMenu(open ? 'open-with' : 'none')}
-                />
+                {showPlaygroundTerminalAccessControl ? (
+                    <button
+                        type="button"
+                        onClick={() => onPlaygroundTerminalAccessChange(!playgroundTerminalAccess)}
+                        aria-pressed={playgroundTerminalAccess}
+                        className={cn(
+                            'inline-flex h-8 items-center gap-1.5 rounded-lg border border-transparent px-2.5 text-[11px] font-medium transition-colors',
+                            playgroundTerminalAccess
+                                ? 'bg-emerald-500/[0.12] text-emerald-200 hover:bg-emerald-500/[0.18] hover:text-emerald-100'
+                                : 'bg-white/[0.03] text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text'
+                        )}
+                        title={playgroundTerminalAccess ? 'Terminal access enabled for this chat' : 'Terminal access disabled for this chat'}
+                    >
+                        <Terminal size={13} className="shrink-0" />
+                        <span>{playgroundTerminalAccess ? 'Term On' : 'Term Off'}</span>
+                    </button>
+                ) : null}
+                {showOpenWithButton ? (
+                    <AssistantHeaderOpenWithButton
+                        projectPath={selectedProjectPath}
+                        preferredShell={preferredShell}
+                        menuWidthMode="trigger"
+                        menuPresentation="inline"
+                        contextActions={selectedProjectPath ? [{
+                            id: 'project',
+                            label: 'Project',
+                            icon: 'project',
+                            onSelect: () => navigate(`/projects/${encodeURIComponent(selectedProjectPath)}`)
+                        }] : []}
+                        menuOpen={activeHeaderMenu === 'open-with'}
+                        onMenuOpenChange={(open) => setActiveHeaderMenu(open ? 'open-with' : 'none')}
+                    />
+                ) : null}
                 <button
                     type="button"
                     onClick={onTogglePlanPanel}

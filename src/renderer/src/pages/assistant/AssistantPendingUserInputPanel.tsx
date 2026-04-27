@@ -37,8 +37,6 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
     activeProfile: 'safe-dev' | 'yolo-fast'
     activeStatusLabel: string
     isConnecting?: boolean
-    onReconnect?: () => Promise<void> | void
-    reconnectPending?: boolean
 }) {
     const { pendingUserInputs, responding, onRespond } = props
     const activePrompt = pendingUserInputs[0] || null
@@ -49,6 +47,7 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
     const [questionIndex, setQuestionIndex] = useState(0)
     const [customQuestionIdByRequestId, setCustomQuestionIdByRequestId] = useState<Record<string, string | null>>({})
     const [questionShellOpen, setQuestionShellOpen] = useState(false)
+    const [questionShellMinimized, setQuestionShellMinimized] = useState(false)
     const [returnToReview, setReturnToReview] = useState(false)
     const [expandedOptionKey, setExpandedOptionKey] = useState<string | null>(null)
     const customTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -102,9 +101,11 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
             setQuestionIndex(0)
             setReturnToReview(false)
             setExpandedOptionKey(null)
+            setQuestionShellMinimized(false)
             return
         }
         setQuestionShellOpen(false)
+        setQuestionShellMinimized(false)
         setReturnToReview(false)
         setExpandedOptionKey(null)
         setQuestionIndex(findFirstUnansweredAssistantPendingUserInputQuestionIndex(activePrompt.questions, activeDraftAnswers))
@@ -337,6 +338,7 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
                     <div className="relative px-3 pb-2 pt-3 sm:px-4 sm:pt-4">
                         <AssistantPendingUserInputStage
                             questionShellOpen={questionShellOpen}
+                            questionShellMinimized={questionShellMinimized}
                             animatedStepRef={animatedStepRef}
                             isReviewStep={isReviewStep}
                             activeQuestion={activeQuestion}
@@ -361,6 +363,7 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
                             setQuestionIndex={setQuestionIndex}
                             setReturnToReview={setReturnToReview}
                             setExpandedOptionKey={setExpandedOptionKey}
+                            onToggleQuestionShellMinimized={() => setQuestionShellMinimized((current) => !current)}
                             handleSelectOption={handleSelectOption}
                             handleSelectCustom={handleSelectCustom}
                             handleCustomAnswerChange={handleCustomAnswerChange}
@@ -413,14 +416,11 @@ export const AssistantPendingUserInputPanel = memo(function AssistantPendingUser
                         composerController={composerController}
                         composerCapabilities={composerCapabilities}
                         responding={responding}
-                        activePrompt={activePrompt}
                         progressQuestionIndex={progress.questionIndex}
                         isReviewStep={isReviewStep}
                         returnToReview={returnToReview}
                         canAdvance={canAdvance}
                         actionLabel={actionLabel}
-                        onReconnect={props.onReconnect}
-                        reconnectPending={props.reconnectPending}
                         onBack={() => {
                             if (returnToReview) {
                                 setQuestionIndex(activePrompt.questions.length)

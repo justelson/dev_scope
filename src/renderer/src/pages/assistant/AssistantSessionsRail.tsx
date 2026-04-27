@@ -9,9 +9,11 @@ import {
 import {
     buildFlatSessionsGroup,
     filterAssistantSessions,
+    getProjectKey,
     getSessionDisplayTitle,
     groupSessionsByProject,
     hydrateProjectMetadataForPaths,
+    normalizeProjectPath,
     resolveSessionProjectPath,
     type SessionProjectGroup,
     type AssistantSessionsRailProps
@@ -32,13 +34,38 @@ type AssistantSessionsRailViewProps = AssistantSessionsRailProps & {
     onShowToast: (input: AssistantToastInput) => void
 }
 
+const RELATIVE_TIME_REFRESH_MS = 30_000
+
 function hasVisibleProjectPath(session: AssistantSession): boolean {
-    if (String(session.projectPath || '').trim()) return true
-    const hasThreadCwd = session.threads.some((thread) => String(thread.cwd || '').trim().length > 0)
+    if (resolveSessionProjectPath(session)) return true
     if (session.mode === 'playground') {
-        return hasThreadCwd || hasSessionChats(session)
+        return hasSessionChats(session)
     }
-    return hasThreadCwd
+    return false
+}
+
+function createPlaygroundLabGroup(lab: AssistantSessionsRailViewProps['playground']['labs'][number]): SessionProjectGroup {
+    const rootPath = normalizeProjectPath(lab.rootPath)
+    return {
+        key: getProjectKey(rootPath),
+        label: lab.title || getProjectKey(rootPath),
+        path: rootPath,
+        createdAt: lab.createdAt,
+        updatedAt: lab.updatedAt,
+        projectIconPath: null,
+        projectType: null,
+        framework: null,
+        sessions: []
+    }
+}
+
+function mergePlaygroundLabGroups(groups: SessionProjectGroup[], labs: AssistantSessionsRailViewProps['playground']['labs']): SessionProjectGroup[] {
+    if (labs.length === 0) return groups
+    const existingGroupKeys = new Set(groups.map((group) => group.key))
+    const missingLabGroups = labs
+        .map(createPlaygroundLabGroup)
+        .filter((group) => group.path && !existingGroupKeys.has(group.key))
+    return missingLabGroups.length > 0 ? [...groups, ...missingLabGroups] : groups
 }
 
 function moveItemToIndex(values: string[], itemId: string, targetId: string): string[] {
@@ -69,6 +96,7 @@ export function AssistantSessionsRail({
     backgroundActivitySessions,
     activeSessionId,
     activeThreadId,
+    assistantConnected,
     commandPending,
     onWidthChange,
     onCreateSession,
@@ -93,6 +121,7 @@ export function AssistantSessionsRail({
     const [railOrder, setRailOrder] = useState<AssistantSessionsRailOrder>(() => loadAssistantSessionsRailOrder())
     const [isResizing, setIsResizing] = useState(false)
     const [projectMetadataVersion, setProjectMetadataVersion] = useState(0)
+    const [, setRelativeTimeVersion] = useState(0)
     const railRef = useRef<HTMLButtonElement | null>(null)
     const rootRef = useRef<HTMLDivElement | null>(null)
     const widthHolderRef = useRef<HTMLDivElement | null>(null)
@@ -116,7 +145,12 @@ export function AssistantSessionsRail({
         () => filterAssistantSessions(activeSessions, railFilterMode, activeSessionId),
         [activeSessionId, activeSessions, railFilterMode]
     )
-    const groupedSessions = useMemo(() => groupSessionsByProject(filteredActiveSessions), [filteredActiveSessions, projectMetadataVersion])
+    const groupedSessions = useMemo(() => {
+        const groups = groupSessionsByProject(filteredActiveSessions)
+        return railMode === 'playground'
+            ? mergePlaygroundLabGroups(groups, playground.labs)
+            : groups
+    }, [filteredActiveSessions, playground.labs, projectMetadataVersion, railMode])
     const groupedArchivedSessions = useMemo(() => groupSessionsByProject(archivedSessions), [archivedSessions, projectMetadataVersion])
     const orderedProjectGroups = useMemo(
         () => orderAssistantSessionsGroups(groupedSessions, railOrder, railSortMode),
@@ -163,6 +197,14 @@ export function AssistantSessionsRail({
     useEffect(() => {
         orderedGroupedSessionsRef.current = orderedGroupedSessions
     }, [orderedGroupedSessions])
+
+    useEffect(() => {
+        const intervalId = window.setInterval(() => {
+            setRelativeTimeVersion((current) => (current + 1) % 1_000_000)
+        }, RELATIVE_TIME_REFRESH_MS)
+
+        return () => window.clearInterval(intervalId)
+    }, [])
 
     useEffect(() => {
         saveAssistantSessionsRailOrder(normalizeRailOrder(railOrder))
@@ -409,6 +451,7 @@ export function AssistantSessionsRail({
                             railFilterMode={railFilterMode}
                             playground={playground}
                             backgroundActivitySessions={backgroundActivitySessions}
+                            assistantConnected={assistantConnected}
                             commandPending={commandPending}
                             groupedSessions={orderedGroupedSessions}
                             groupedArchivedSessions={orderedArchivedSessions}
