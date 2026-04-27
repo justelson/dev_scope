@@ -60,9 +60,6 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
         onRunPython,
         onStopPython,
         onClearPythonOutput,
-        canUsePreviewTerminal,
-        terminalVisible,
-        onTogglePreviewTerminal,
         onOpenInBrowser,
         gitDiffText,
         gitDiffSummary,
@@ -183,7 +180,6 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
             pythonRunState={pythonRunState}
             pythonHasOutput={pythonHasOutput}
             pythonRunMode={pythonRunMode}
-            terminalVisible={terminalVisible}
             onClose={handleCloseRequest}
             onToggleExpanded={() => {
                 if (!allowExpanded) return
@@ -201,8 +197,6 @@ export function PreviewModalLayout(props: PreviewModalLayoutProps) {
             onRunPython={onRunPython}
             onStopPython={onStopPython}
             onClearPythonOutput={onClearPythonOutput}
-            canUseTerminal={canUsePreviewTerminal}
-            onToggleTerminal={onTogglePreviewTerminal}
             onOpenInBrowser={onOpenInBrowser}
             previewTabs={previewTabs}
             activePreviewTabId={activePreviewTabId}

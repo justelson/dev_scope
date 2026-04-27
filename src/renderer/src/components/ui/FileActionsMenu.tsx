@@ -172,9 +172,9 @@ export function FileActionsMenu({
                     setOpen((current) => !current)
                 }}
                 className={cn(
-                    'h-7 w-7 inline-flex items-center justify-center rounded-md border border-transparent text-white/40 transition-colors hover:border-white/10 hover:bg-white/10 hover:text-white',
+                    'h-7 w-7 inline-flex items-center justify-center rounded-[4px] border-0 text-white/45 transition-colors hover:bg-white/10 hover:text-white',
                     buttonClassName,
-                    open && (openButtonClassName || 'border-white/10 bg-white/10 text-white opacity-100')
+                    open && (openButtonClassName || 'border-0 bg-white/10 text-white opacity-100')
                 )}
                 title={title}
             >

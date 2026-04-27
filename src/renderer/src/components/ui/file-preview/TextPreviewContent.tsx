@@ -189,18 +189,29 @@ function TextPreviewContent({
     )
 }
 
-export default memo(TextPreviewContent, (previous, next) => (
-    previous.file.path === next.file.path
-    && previous.file.type === next.file.type
-    && previous.file.language === next.file.language
-    && previous.content === next.content
-    && previous.meta.previewBytes === next.meta.previewBytes
-    && previous.meta.size === next.meta.size
-    && previous.meta.truncated === next.meta.truncated
-    && previous.projectPath === next.projectPath
-    && previous.onInternalLinkClick === next.onInternalLinkClick
-    && previous.gitDiffText === next.gitDiffText
-    && previous.csvDistinctColorsEnabled === next.csvDistinctColorsEnabled
-    && previous.focusLine === next.focusLine
-    && previous.isExpanded === next.isExpanded
-))
+export default memo(TextPreviewContent, (previous, next) => {
+    const sameBasePreview = (
+        previous.file.path === next.file.path
+        && previous.file.type === next.file.type
+        && previous.file.language === next.file.language
+        && previous.content === next.content
+        && previous.meta.previewBytes === next.meta.previewBytes
+        && previous.meta.size === next.meta.size
+        && previous.meta.truncated === next.meta.truncated
+        && previous.isExpanded === next.isExpanded
+    )
+
+    if (!sameBasePreview) return false
+
+    if (previous.file.type === 'md' && next.file.type === 'md') {
+        return previous.onInternalLinkClick === next.onInternalLinkClick
+    }
+
+    return (
+        previous.projectPath === next.projectPath
+        && previous.onInternalLinkClick === next.onInternalLinkClick
+        && previous.gitDiffText === next.gitDiffText
+        && previous.csvDistinctColorsEnabled === next.csvDistinctColorsEnabled
+        && previous.focusLine === next.focusLine
+    )
+})

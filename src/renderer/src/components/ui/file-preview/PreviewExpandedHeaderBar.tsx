@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Minimize2, PanelBottom, PanelLeft, PanelRight, Play, Square, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, Minimize2, PanelLeft, PanelRight, Play, Square, Trash2, X } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/lib/settings'
@@ -40,9 +40,6 @@ type PreviewExpandedHeaderBarProps = {
     onStopPython?: () => void
     onClearPythonOutput?: () => void
     onPythonRunModeChange?: (mode: 'terminal' | 'output') => void
-    canUseTerminal?: boolean
-    terminalVisible?: boolean
-    onToggleTerminal?: () => void
     previewTabs: PreviewTab[]
     activePreviewTabId: string | null
     onSelectPreviewTab: (tabId: string) => void
@@ -131,9 +128,6 @@ export function PreviewExpandedHeaderBar({
     onStopPython,
     onClearPythonOutput,
     onPythonRunModeChange,
-    canUseTerminal = false,
-    terminalVisible = false,
-    onToggleTerminal,
     previewTabs,
     activePreviewTabId,
     onSelectPreviewTab,
@@ -222,22 +216,16 @@ export function PreviewExpandedHeaderBar({
                 ) : null}
 
                 <PreviewHeaderStatusActions
-                    isMediaFile={isMediaFile}
                     isEditMode={isEditMode}
-                    isDirty={isDirty}
-                    isSaving={isSaving}
                     isHtml={isHtml}
                     isCsv={isCsv}
                     csvDistinctColorsEnabled={csvDistinctColorsEnabled}
                     onCsvDistinctColorsEnabledChange={onCsvDistinctColorsEnabledChange}
                     onOpenInBrowser={onOpenInBrowser}
-                    onRevert={onRevert}
-                    onSave={onSave}
                     onClose={onClose}
                     showCloseButton={false}
                     isIdeChrome={true}
                     controlGroupClass=""
-                    iconButtonBaseClass=""
                 />
             </div>
 
@@ -317,16 +305,6 @@ export function PreviewExpandedHeaderBar({
                 >
                     <PanelLeft size={15} />
                 </HeaderIconButton>
-                {!isMediaFile && canUseTerminal ? (
-                    <HeaderIconButton
-                        active={terminalVisible}
-                        title={terminalVisible ? 'Hide bottom panel' : 'Show bottom panel'}
-                        onClick={onToggleTerminal}
-                        activeClassName="border-white/70 bg-white text-[#0a0f16] opacity-100"
-                    >
-                        <PanelBottom size={15} />
-                    </HeaderIconButton>
-                ) : null}
                 <HeaderIconButton
                     active={rightPanelOpen}
                     title={rightPanelOpen ? 'Hide right panel' : 'Show right panel'}

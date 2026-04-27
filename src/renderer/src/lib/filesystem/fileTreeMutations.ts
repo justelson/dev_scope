@@ -5,18 +5,23 @@ interface TreeNodeLike<TNode> {
     childrenLoaded?: boolean
 }
 
+function normalizeTreePath(pathValue: string): string {
+    return String(pathValue || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
 export function mergeDirectoryChildren<TNode extends TreeNodeLike<TNode>>(
     nodes: TNode[],
     targetPath: string,
     children: TNode[]
 ): TNode[] {
     let changed = false
+    const targetPathKey = normalizeTreePath(targetPath)
 
     const visit = (items: TNode[]): TNode[] => {
         let localChanged = false
 
         const nextItems = items.map((node) => {
-            if (node.type === 'directory' && node.path === targetPath) {
+            if (node.type === 'directory' && normalizeTreePath(node.path) === targetPathKey) {
                 localChanged = true
                 changed = true
                 return {

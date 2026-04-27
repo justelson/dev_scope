@@ -100,6 +100,7 @@ export function useFilePreview(): UseFilePreviewReturn {
     const [previewTabsState, setPreviewTabsState] = useState<PreviewTabState[]>([])
     const [activePreviewTabId, setActivePreviewTabId] = useState<string | null>(null)
     const activePreviewRequestIdRef = useRef(0)
+    const focusLineRequestIdRef = useRef(0)
     const activePreviewTab = useMemo(
         () => previewTabsState.find((tab) => tab.id === activePreviewTabId) || null,
         [activePreviewTabId, previewTabsState]
@@ -184,13 +185,24 @@ export function useFilePreview(): UseFilePreviewReturn {
             return
         }
 
+        const requestedFocusLine = typeof options?.focusLine === 'number' && options.focusLine > 0
+            ? Math.floor(options.focusLine)
+            : null
+        const focusLineRequestId = requestedFocusLine
+            ? focusLineRequestIdRef.current + 1
+            : null
+        if (focusLineRequestId) {
+            focusLineRequestIdRef.current = focusLineRequestId
+        }
+
         const nextFile: PreviewFile = {
             name: file.name,
             path: file.path,
             type: previewTarget.type,
             language: previewTarget.language,
             startInEditMode: options?.startInEditMode === true,
-            focusLine: options?.focusLine ?? null
+            focusLine: requestedFocusLine,
+            focusLineRequestId
         }
         const nextMediaItems = normalizeMediaItems(options?.mediaItems)
         const existingTab = previewTabsState.find((tab) => tab.file.path.toLowerCase() === file.path.toLowerCase()) || null

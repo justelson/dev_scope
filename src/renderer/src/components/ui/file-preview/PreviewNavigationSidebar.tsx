@@ -1,7 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, FolderOpen, ListTree, PanelLeft } from 'lucide-react'
+import {
+    AlertCircle,
+    AppWindow,
+    Check,
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    ChevronUp,
+    Copy,
+    ExternalLink,
+    FilePlus,
+    FolderPlus,
+    FolderOpen,
+    ListTree,
+    Pencil,
+    RefreshCw,
+    Trash2,
+    PanelLeft
+} from 'lucide-react'
 import type { DevScopeFileTreeNode } from '@shared/contracts/devscope-project-contracts'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { FileActionsMenu, type FileActionsMenuItem } from '@/components/ui/FileActionsMenu'
+import { PromptModal } from '@/components/ui/PromptModal'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
+import { getParentFolderPath, validateCreateName } from '@/lib/filesystem/fileSystemPaths'
 import { useSettings } from '@/lib/settings'
 import { cn, getFileExtension } from '@/lib/utils'
 import type { OutlineItem, OutlineItemKind } from './modalShared'
@@ -20,6 +42,20 @@ import {
 } from './previewNavigationSidebar.tree'
 
 type SidebarTab = 'outline' | 'folder'
+type TreePromptState =
+    | {
+        type: 'create-file' | 'create-folder'
+        destinationDirectory: string
+        value: string
+        error: string | null
+    }
+    | {
+        type: 'rename'
+        target: DevScopeFileTreeNode
+        value: string
+        error: string | null
+    }
+    | null
 
 type PreviewNavigationSidebarProps = {
     file: PreviewFile
@@ -46,7 +82,7 @@ export function PreviewNavigationSidebar({
     onOutlineSelect,
     onMinimizePanel,
     onOpenLinkedPreview,
-    onOpenLinkedPreviewInNewTab: _onOpenLinkedPreviewInNewTab,
+    onOpenLinkedPreviewInNewTab,
     refreshToken = 0,
     preserveContextRequest = null
 }: PreviewNavigationSidebarProps) {
@@ -55,8 +91,12 @@ export function PreviewNavigationSidebar({
     const [activeTab, setActiveTab] = useState<SidebarTab>('folder')
     const [expandedOutlineIds, setExpandedOutlineIds] = useState<Set<string>>(() => new Set())
     const [copiedPath, setCopiedPath] = useState(false)
+    const [toastMessage, setToastMessage] = useState<string | null>(null)
+    const [treePrompt, setTreePrompt] = useState<TreePromptState>(null)
+    const [deleteTarget, setDeleteTarget] = useState<DevScopeFileTreeNode | null>(null)
     const [fileHistory, setFileHistory] = useState<string[]>(() => file.path ? [file.path] : [])
     const [fileHistoryIndex, setFileHistoryIndex] = useState(file.path ? 0 : -1)
+    const toastTimerRef = useRef<number | null>(null)
     const pendingHistoryTargetRef = useRef<{ pathKey: string; index: number } | null>(null)
     const {
         activeFolderPath,
@@ -68,7 +108,8 @@ export function PreviewNavigationSidebar({
         reload,
         preserveContextForFile,
         canNavigateUpFolder,
-        navigateUpFolder
+        navigateUpFolder,
+        navigateToFolder
     } = usePreviewFolderTree({
         filePath: file.path,
         projectPath,
@@ -120,6 +161,14 @@ export function PreviewNavigationSidebar({
         preserveContextForFile(nextPath)
     }, [preserveContextForFile, preserveContextRequest?.nonce, preserveContextRequest?.path])
 
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current !== null) {
+                window.clearTimeout(toastTimerRef.current)
+            }
+        }
+    }, [])
+
     const visibleOutlineItems = useMemo(
         () => flattenOutlineItems(outlineItems, expandedOutlineIds),
         [expandedOutlineIds, outlineItems]
@@ -129,6 +178,9 @@ export function PreviewNavigationSidebar({
         [expandedPaths, tree]
     )
     const activeFileKey = useMemo(() => normalizePathKey(file.path), [file.path])
+    const activeFolderName = useMemo(() => (
+        activeFolderPath ? getPathName(activeFolderPath) || activeFolderPath : 'No folder context'
+    ), [activeFolderPath])
 
     const handleOutlineToggle = useCallback((item: OutlineItem) => {
         if (item.children.length === 0) return
@@ -171,12 +223,284 @@ export function PreviewNavigationSidebar({
 
     const handleCopyFolderPath = useCallback(async () => {
         if (!activeFolderPath) return
-        await navigator.clipboard.writeText(activeFolderPath)
+        if (window.devscope.copyToClipboard) {
+            const result = await window.devscope.copyToClipboard(activeFolderPath)
+            if (!result.success) {
+                setToastMessage(result.error || 'Failed to copy path')
+                return
+            }
+        } else {
+            await navigator.clipboard.writeText(activeFolderPath)
+        }
         setCopiedPath(true)
+        setToastMessage('Copied full path')
         window.setTimeout(() => setCopiedPath(false), 1200)
+        window.setTimeout(() => setToastMessage(null), 2200)
     }, [activeFolderPath])
 
+    const showToast = useCallback((message: string) => {
+        setToastMessage(message)
+        if (toastTimerRef.current !== null) {
+            window.clearTimeout(toastTimerRef.current)
+        }
+        toastTimerRef.current = window.setTimeout(() => {
+            setToastMessage(null)
+            toastTimerRef.current = null
+        }, 2200)
+    }, [])
+
+    const copyNodePath = useCallback(async (node: DevScopeFileTreeNode) => {
+        try {
+            if (window.devscope.copyToClipboard) {
+                const result = await window.devscope.copyToClipboard(node.path)
+                if (!result.success) {
+                    showToast(result.error || 'Failed to copy path')
+                    return
+                }
+            } else {
+                await navigator.clipboard.writeText(node.path)
+            }
+            showToast(`Copied path: ${node.name}`)
+        } catch (error: any) {
+            showToast(error?.message || 'Failed to copy path')
+        }
+    }, [showToast])
+
+    const openNativeFile = useCallback(async (node: DevScopeFileTreeNode) => {
+        const result = await window.devscope.openFile(node.path)
+        if (!result.success) {
+            showToast(result.error || `Failed to open "${node.name}"`)
+        }
+    }, [showToast])
+
+    const openNodeWith = useCallback(async (node: DevScopeFileTreeNode) => {
+        if (node.type !== 'file') return
+        const result = await window.devscope.openWith(node.path)
+        if (!result.success) {
+            showToast(result.error || `Failed to open "${node.name}" with...`)
+        }
+    }, [showToast])
+
+    const revealNode = useCallback(async (node: DevScopeFileTreeNode) => {
+        const result = await window.devscope.openInExplorer(node.path)
+        if (!result.success) {
+            showToast(result.error || `Failed to reveal "${node.name}"`)
+        }
+    }, [showToast])
+
+    const startCreate = useCallback((type: 'file' | 'directory', destinationDirectory: string) => {
+        setTreePrompt({
+            type: type === 'file' ? 'create-file' : 'create-folder',
+            destinationDirectory,
+            value: '',
+            error: null
+        })
+    }, [])
+
+    const startRename = useCallback((target: DevScopeFileTreeNode) => {
+        setTreePrompt({
+            type: 'rename',
+            target,
+            value: target.name,
+            error: null
+        })
+    }, [])
+
+    const updatePromptValue = useCallback((value: string) => {
+        setTreePrompt((currentPrompt) => currentPrompt ? { ...currentPrompt, value, error: null } : currentPrompt)
+    }, [])
+
+    const submitTreePrompt = useCallback(async () => {
+        if (!treePrompt) return
+
+        const nextName = treePrompt.value.trim()
+        const validationError = validateCreateName(nextName)
+        if (validationError) {
+            setTreePrompt({ ...treePrompt, error: validationError })
+            return
+        }
+
+        if (treePrompt.type === 'rename') {
+            if (nextName === treePrompt.target.name) {
+                setTreePrompt(null)
+                return
+            }
+
+            const result = await window.devscope.renameFileSystemItem(treePrompt.target.path, nextName)
+            if (!result.success) {
+                setTreePrompt({ ...treePrompt, error: result.error || `Failed to rename "${treePrompt.target.name}"` })
+                return
+            }
+
+            setTreePrompt(null)
+            showToast(`Renamed to ${result.name || nextName}`)
+            await reload()
+
+            if (normalizePathKey(treePrompt.target.path) === activeFileKey && treePrompt.target.type === 'file' && result.path && onOpenLinkedPreview) {
+                preserveContextForFile(result.path)
+                await onOpenLinkedPreview(
+                    { name: result.name || nextName, path: result.path },
+                    getFileExtension(result.name || nextName)
+                )
+            }
+            return
+        }
+
+        const createType = treePrompt.type === 'create-folder' ? 'directory' : 'file'
+        const result = await window.devscope.createFileSystemItem(treePrompt.destinationDirectory, nextName, createType)
+        if (!result.success) {
+            setTreePrompt({ ...treePrompt, error: result.error || `Failed to create ${createType}.` })
+            return
+        }
+
+        setTreePrompt(null)
+        showToast(`Created ${createType === 'file' ? 'file' : 'folder'}: ${result.name || nextName}`)
+        await reload()
+
+        if (result.type === 'directory') {
+            navigateToFolder(result.path)
+            return
+        }
+
+        if (result.path && result.name && onOpenLinkedPreview) {
+            preserveContextForFile(result.path)
+            await onOpenLinkedPreview(
+                { name: result.name, path: result.path },
+                getFileExtension(result.name) || 'txt',
+                { startInEditMode: true }
+            )
+        }
+    }, [activeFileKey, navigateToFolder, onOpenLinkedPreview, preserveContextForFile, reload, showToast, treePrompt])
+
+    const confirmDeleteTarget = useCallback(async () => {
+        if (!deleteTarget) return
+
+        const targetName = deleteTarget.name
+        const result = await window.devscope.deleteFileSystemItem(deleteTarget.path)
+        if (!result.success) {
+            showToast(result.error || `Failed to delete "${targetName}"`)
+            return
+        }
+
+        setDeleteTarget(null)
+        showToast(`Deleted ${targetName}`)
+        await reload()
+    }, [deleteTarget, reload, showToast])
+
+    const getNodeDestinationDirectory = useCallback((node: DevScopeFileTreeNode): string | null => {
+        if (node.type === 'directory') return node.path
+        return getParentFolderPath(node.path)
+    }, [])
+
+    const buildNodeActions = useCallback((node: DevScopeFileTreeNode): FileActionsMenuItem[] => {
+        const isDirectory = node.type === 'directory'
+        const extension = getFileExtension(node.name)
+        const previewTarget = !isDirectory ? resolvePreviewType(node.name, extension) : null
+        const destinationDirectory = getNodeDestinationDirectory(node)
+
+        const items: Array<FileActionsMenuItem | null> = [
+            !isDirectory && previewTarget ? {
+                id: 'preview',
+                label: 'Preview',
+                icon: <FolderOpen className="size-3.5" />,
+                onSelect: () => { void handleFolderFileOpen(node) }
+            } : null,
+            !isDirectory && previewTarget && onOpenLinkedPreviewInNewTab ? {
+                id: 'new-tab',
+                label: 'Open in new tab',
+                icon: <ExternalLink className="size-3.5" />,
+                onSelect: () => {
+                    preserveContextForFile(node.path)
+                    void onOpenLinkedPreviewInNewTab({ name: node.name, path: node.path }, extension)
+                }
+            } : null,
+            isDirectory ? {
+                id: 'browse',
+                label: 'Browse folder',
+                icon: <FolderOpen className="size-3.5" />,
+                onSelect: () => navigateToFolder(node.path)
+            } : null,
+            {
+                id: 'open',
+                label: isDirectory ? 'Open folder' : 'Open file',
+                icon: <ExternalLink className="size-3.5" />,
+                onSelect: () => { void openNativeFile(node) }
+            },
+            !isDirectory ? {
+                id: 'open-with',
+                label: 'Open with...',
+                icon: <AppWindow className="size-3.5" />,
+                onSelect: () => { void openNodeWith(node) }
+            } : null,
+            {
+                id: 'reveal',
+                label: 'Reveal in Explorer',
+                icon: <FolderOpen className="size-3.5" />,
+                onSelect: () => { void revealNode(node) }
+            },
+            {
+                id: 'copy-path',
+                label: 'Copy path',
+                icon: <Copy className="size-3.5" />,
+                onSelect: () => { void copyNodePath(node) }
+            },
+            destinationDirectory ? {
+                id: 'new-file',
+                label: isDirectory ? 'New file here' : 'New sibling file',
+                icon: <FilePlus className="size-3.5" />,
+                onSelect: () => startCreate('file', destinationDirectory)
+            } : null,
+            destinationDirectory ? {
+                id: 'new-folder',
+                label: isDirectory ? 'New folder here' : 'New sibling folder',
+                icon: <FolderPlus className="size-3.5" />,
+                onSelect: () => startCreate('directory', destinationDirectory)
+            } : null,
+            {
+                id: 'rename',
+                label: 'Rename',
+                icon: <Pencil className="size-3.5" />,
+                onSelect: () => startRename(node)
+            },
+            {
+                id: 'delete',
+                label: 'Delete',
+                icon: <Trash2 className="size-3.5" />,
+                danger: true,
+                onSelect: () => setDeleteTarget(node)
+            }
+        ]
+
+        return items.filter(Boolean) as FileActionsMenuItem[]
+    }, [
+        copyNodePath,
+        getNodeDestinationDirectory,
+        handleFolderFileOpen,
+        navigateToFolder,
+        onOpenLinkedPreviewInNewTab,
+        openNativeFile,
+        openNodeWith,
+        preserveContextForFile,
+        revealNode,
+        startCreate,
+        startRename
+    ])
+
+    const promptTitle = treePrompt?.type === 'rename'
+        ? `Rename ${treePrompt.target.type === 'directory' ? 'folder' : 'file'}`
+        : treePrompt?.type === 'create-folder'
+            ? 'New folder'
+            : 'New file'
+    const promptMessage = !treePrompt
+        ? undefined
+        : treePrompt.type === 'rename'
+            ? treePrompt.target.path
+            : treePrompt.destinationDirectory
+    const promptConfirmLabel = treePrompt?.type === 'rename' ? 'Rename' : 'Create'
+    const promptPlaceholder = treePrompt?.type === 'create-folder' ? 'Folder name' : 'File name'
+
     return (
+        <>
         <div className="flex min-h-0 flex-1 flex-col bg-sparkle-card">
             <div className="border-b border-white/[0.06] bg-white/[0.02]">
                 <div className="relative grid h-9 min-h-9 grid-cols-2">
@@ -295,18 +619,52 @@ export function PreviewNavigationSidebar({
                             : 'translate-x-2 pointer-events-none opacity-0'
                     )}
                 >
-                    <div className="border-b border-white/[0.05] px-3 py-2">
+                    <div className="border-b border-white/[0.05] px-2 py-1.5">
                         <div
-                            className="group flex min-w-0 items-center gap-2"
+                            className="group flex min-w-0 items-center gap-1.5"
                             onDoubleClick={() => { void reload() }}
                             title={activeFolderPath ? `${activeFolderPath}\nDouble-click to refresh` : 'No folder context'}
                         >
                             <div
-                                className="min-w-0 flex-1 truncate text-[11px] text-sparkle-text-secondary"
-                                style={{ direction: 'rtl', textAlign: 'left' }}
+                                className="min-w-0 flex-1 truncate rounded-md bg-white/[0.025] px-1.5 py-1 text-[11px] font-medium text-sparkle-text-secondary"
                             >
-                                {activeFolderPath || 'No folder context'}
+                                {activeFolderName}
                             </div>
+                            <button
+                                type="button"
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    void reload()
+                                }}
+                                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-sparkle-text-muted transition-colors hover:bg-white/[0.06] hover:text-sparkle-text"
+                                title="Refresh folder"
+                            >
+                                <RefreshCw className="size-3.5" />
+                            </button>
+                            <button
+                                type="button"
+                                disabled={!activeFolderPath}
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    startCreate('file', activeFolderPath)
+                                }}
+                                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-sparkle-text-muted transition-colors hover:bg-white/[0.06] hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-35"
+                                title="New file here"
+                            >
+                                <FilePlus className="size-3.5" />
+                            </button>
+                            <button
+                                type="button"
+                                disabled={!activeFolderPath}
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    startCreate('directory', activeFolderPath)
+                                }}
+                                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-sparkle-text-muted transition-colors hover:bg-white/[0.06] hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-35"
+                                title="New folder here"
+                            >
+                                <FolderPlus className="size-3.5" />
+                            </button>
                             <button
                                 type="button"
                                 onClick={(event) => {
@@ -314,7 +672,7 @@ export function PreviewNavigationSidebar({
                                     void handleCopyFolderPath()
                                 }}
                                 className={cn(
-                                    'inline-flex size-6 shrink-0 items-center justify-center rounded-md text-sparkle-text-muted opacity-0 transition-all group-hover:opacity-100 hover:bg-white/[0.06] hover:text-sparkle-text',
+                                    'inline-flex size-6 shrink-0 items-center justify-center rounded-md text-sparkle-text-muted transition-colors hover:bg-white/[0.06] hover:text-sparkle-text',
                                     copiedPath && 'opacity-100 text-emerald-300'
                                 )}
                                 title={copiedPath ? 'Copied' : 'Copy path'}
@@ -324,7 +682,7 @@ export function PreviewNavigationSidebar({
                         </div>
                     </div>
 
-                    <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 py-2">
+                    <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
                         {folderError ? (
                             <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3 text-[11px] text-red-200">
                                 <div className="flex items-center gap-2">
@@ -337,7 +695,7 @@ export function PreviewNavigationSidebar({
                                 Loading current folder...
                             </div>
                         ) : visibleFolderNodes.length > 0 ? (
-                            <div className="space-y-0.5">
+                            <div className="space-y-px">
                                 {visibleFolderNodes.map(({ node, depth, expanded }) => {
                                     const isDirectory = node.type === 'directory'
                                     const nodeKey = normalizePathKey(node.path)
@@ -356,52 +714,56 @@ export function PreviewNavigationSidebar({
                                                 isPreviewable={isPreviewable}
                                                 iconTheme={iconTheme}
                                                 onOpen={() => { void handleFolderFileOpen(node) }}
+                                                actionMenu={(
+                                                    <FileActionsMenu
+                                                        items={buildNodeActions(node)}
+                                                        buttonClassName="size-5.5 rounded-[4px] border-0 text-sparkle-text-muted hover:border-0 hover:bg-white/[0.06] hover:text-sparkle-text"
+                                                        openButtonClassName="border-0 bg-white/[0.08] text-sparkle-text opacity-100"
+                                                        title={`Actions for ${node.name}`}
+                                                    />
+                                                )}
                                             />
                                         )
                                     }
 
                                     return (
-                                        <button
+                                        <div
                                             key={node.path}
-                                            type="button"
-                                            onClick={() => {
-                                                if (isDirectory) {
-                                                    void toggleDirectory(node)
-                                                    return
-                                                }
-                                                void handleFolderFileOpen(node)
-                                            }}
                                             className={cn(
-                                                'flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition-colors',
+                                                'group/row flex w-full items-center rounded-[4px] border text-left text-[11px] transition-colors',
                                                 isActiveFile
-                                                    ? 'border-sky-400/30 bg-sky-500/10 text-sky-100'
-                                                    : 'border-transparent text-sparkle-text-secondary hover:border-white/[0.08] hover:bg-white/[0.05] hover:text-sparkle-text',
+                                                    ? 'border-transparent bg-sky-500/10 text-sky-100'
+                                                    : 'border-transparent text-sparkle-text-secondary hover:bg-white/[0.05] hover:text-sparkle-text',
                                                 !isDirectory && !isPreviewable && 'text-sparkle-text-muted'
                                             )}
-                                            style={{ paddingLeft: `${8 + depth * 16}px` }}
-                                            title={node.path}
                                         >
-                                            <span className={cn(
-                                                'inline-flex size-4 shrink-0 items-center justify-center rounded text-sparkle-text-muted',
-                                                isDirectory ? 'hover:bg-white/[0.06] hover:text-sparkle-text-secondary' : 'opacity-0'
-                                            )}>
-                                                {isDirectory
-                                                    ? (expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />)
-                                                    : <ChevronRight className="size-3.5" />}
-                                            </span>
-                                            <VscodeEntryIcon
-                                                pathValue={node.path}
-                                                kind={node.type}
-                                                theme={iconTheme}
-                                                className="size-3.5 shrink-0"
-                                            />
-                                            <span className="min-w-0 flex-1 truncate">{node.name}</span>
-                                            {isActiveFile ? (
-                                                <span className="shrink-0 rounded-full bg-sky-400/80 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-sky-950">
-                                                    Open
+                                            <button
+                                                type="button"
+                                                onClick={() => { void toggleDirectory(node) }}
+                                                onDoubleClick={() => navigateToFolder(node.path)}
+                                                className="flex min-w-0 flex-1 items-center gap-1.5 rounded-l-[4px] px-1.5 py-1 text-left"
+                                                style={{ paddingLeft: `${6 + depth * 14}px` }}
+                                            >
+                                                <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[3px] text-sparkle-text-muted hover:bg-white/[0.06] hover:text-sparkle-text-secondary">
+                                                    {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
                                                 </span>
-                                            ) : null}
-                                        </button>
+                                                <VscodeEntryIcon
+                                                    pathValue={node.path}
+                                                    kind={node.type}
+                                                    theme={iconTheme}
+                                                    className="size-3.5 shrink-0"
+                                                />
+                                                <span className="min-w-0 flex-1 truncate">{node.name}</span>
+                                            </button>
+                                            <div className="shrink-0 pr-0.5">
+                                                <FileActionsMenu
+                                                    items={buildNodeActions(node)}
+                                                    buttonClassName="size-5.5 rounded-[4px] border-0 text-sparkle-text-muted hover:border-0 hover:bg-white/[0.06] hover:text-sparkle-text"
+                                                    openButtonClassName="border-0 bg-white/[0.08] text-sparkle-text opacity-100"
+                                                    title={`Actions for ${node.name}`}
+                                                />
+                                            </div>
+                                        </div>
                                     )
                                 })}
                             </div>
@@ -411,6 +773,11 @@ export function PreviewNavigationSidebar({
                             </div>
                         )}
                     </div>
+                    {toastMessage ? (
+                        <div className="border-t border-white/[0.05] bg-white/[0.03] px-3 py-1.5 text-[11px] text-sparkle-text-secondary">
+                            {toastMessage}
+                        </div>
+                    ) : null}
                     <div className="border-t border-white/[0.06] bg-white/[0.02]">
                         <div className="grid grid-cols-3">
                             <button
@@ -463,5 +830,27 @@ export function PreviewNavigationSidebar({
                 </div>
             </div>
         </div>
+        <PromptModal
+            isOpen={Boolean(treePrompt)}
+            title={promptTitle}
+            message={promptMessage}
+            value={treePrompt?.value || ''}
+            onChange={updatePromptValue}
+            onConfirm={() => { void submitTreePrompt() }}
+            onCancel={() => setTreePrompt(null)}
+            confirmLabel={promptConfirmLabel}
+            placeholder={promptPlaceholder}
+            errorMessage={treePrompt?.error || null}
+        />
+        <ConfirmModal
+            isOpen={Boolean(deleteTarget)}
+            title={`Delete ${deleteTarget?.type === 'directory' ? 'folder' : 'file'}`}
+            message={deleteTarget ? `Delete "${deleteTarget.name}"? This cannot be undone.` : ''}
+            confirmLabel="Delete"
+            onConfirm={() => { void confirmDeleteTarget() }}
+            onCancel={() => setDeleteTarget(null)}
+            variant="danger"
+        />
+        </>
     )
 }

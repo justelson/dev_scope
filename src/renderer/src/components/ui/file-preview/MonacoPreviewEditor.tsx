@@ -18,6 +18,18 @@ function areLineMarkersEqual(left: GitLineMarker[], right: GitLineMarker[]): boo
     return true
 }
 
+function focusPreviewEditorLine(editor: MonacoEditor.IStandaloneCodeEditor | null, focusLine?: number | null): void {
+    if (!editor || !focusLine || focusLine < 1) return
+    const model = editor.getModel()
+    const lineNumber = model
+        ? Math.min(Math.max(1, Math.floor(focusLine)), model.getLineCount())
+        : Math.floor(focusLine)
+
+    editor.revealLineInCenter(lineNumber, monaco.editor.ScrollType.Immediate)
+    editor.setPosition({ lineNumber, column: 1 })
+    editor.focus()
+}
+
 const baseOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
     readOnly: true,
     domReadOnly: true,
@@ -61,7 +73,8 @@ const baseOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
     padding: { top: 14, bottom: 14 },
     stickyScroll: { enabled: false },
     unicodeHighlight: { ambiguousCharacters: false },
-    links: false
+    links: false,
+    fixedOverflowWidgets: true
 }
 
 const largeFileOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
@@ -391,12 +404,7 @@ export default function MonacoPreviewEditor({
     }, [replaceRequestToken])
 
     useEffect(() => {
-        if (!focusLine || focusLine < 1) return
-        const editor = editorRef.current
-        if (!editor) return
-        editor.revealLineInCenter(focusLine)
-        editor.setPosition({ lineNumber: focusLine, column: 1 })
-        editor.focus()
+        focusPreviewEditorLine(editorRef.current, focusLine)
     }, [focusLine])
 
     return (
@@ -414,6 +422,7 @@ export default function MonacoPreviewEditor({
             onMount={(editor) => {
                 editorRef.current = editor
                 decorationIdsRef.current = editor.deltaDecorations([], [])
+                focusPreviewEditorLine(editor, focusLine)
                 onEditorMount?.(editor)
             }}
         />

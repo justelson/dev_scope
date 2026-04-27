@@ -20,6 +20,7 @@ import { useFilePreviewChrome } from './file-preview/useFilePreviewChrome'
 import { useFilePreviewEditSession } from './file-preview/useFilePreviewEditSession'
 import { useFilePreviewPython } from './file-preview/useFilePreviewPython'
 import { useFilePreviewTerminal } from './file-preview/useFilePreviewTerminal'
+import { usePreviewSiblingMediaItems } from './file-preview/usePreviewSiblingMediaItems'
 
 export function FilePreviewModal({
     file,
@@ -68,6 +69,11 @@ export function FilePreviewModal({
         [file.path, projectPath]
     )
     const canCreateSiblingFile = Boolean(createDestinationDirectory && onOpenLinkedPreview)
+    const effectiveMediaItems = usePreviewSiblingMediaItems({
+        file,
+        projectPath,
+        mediaItems
+    })
     const terminalInitialHeight = Math.max(
         PREVIEW_TERMINAL_MIN_HEIGHT,
         Math.min(720, Math.round(settings.filePreviewTerminalPanelHeight || 220))
@@ -144,7 +150,8 @@ export function FilePreviewModal({
         defaultStartExpanded,
         defaultLeftPanelOpen,
         defaultRightPanelOpen,
-        initialFocusLine: file.focusLine ?? null
+        initialFocusLine: file.focusLine ?? null,
+        initialFocusLineRequestId: file.focusLineRequestId ?? null
     })
     const effectiveIsExpanded = disableFullscreen ? false : isExpanded
 
@@ -237,7 +244,7 @@ export function FilePreviewModal({
         createFileModal
     } = useFilePreviewModalInteractions({
         file,
-        mediaItems,
+        mediaItems: effectiveMediaItems,
         settingsTheme: settings.theme,
         resolvedActivePreviewTabId,
         createDestinationDirectory,
@@ -367,7 +374,7 @@ export function FilePreviewModal({
             size={size ?? undefined}
             previewBytes={previewBytes ?? undefined}
             projectPath={projectPath}
-            mediaItems={mediaItems}
+            mediaItems={effectiveMediaItems}
             openMediaItem={openMediaItem}
             onInternalLinkClick={handleInternalMarkdownLink}
             mode={mode}
@@ -412,9 +419,6 @@ export function FilePreviewModal({
             onRunPython={handleRunPython}
             onStopPython={stopPythonRun}
             onClearPythonOutput={clearPythonOutput}
-            canUsePreviewTerminal={canUsePreviewTerminal}
-            terminalVisible={shouldShowTerminalPanel}
-            onTogglePreviewTerminal={() => setTerminalVisible((current) => !current)}
             onOpenInBrowser={handleOpenInBrowser}
             gitDiffText={gitDiffText}
             gitDiffSummary={gitDiffSummary}

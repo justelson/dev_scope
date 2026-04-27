@@ -7,13 +7,15 @@ type UseFilePreviewChromeParams = {
     defaultLeftPanelOpen: boolean
     defaultRightPanelOpen: boolean
     initialFocusLine?: number | null
+    initialFocusLineRequestId?: number | null
 }
 
 export function useFilePreviewChrome({
     defaultStartExpanded,
     defaultLeftPanelOpen,
     defaultRightPanelOpen,
-    initialFocusLine = null
+    initialFocusLine = null,
+    initialFocusLineRequestId = null
 }: UseFilePreviewChromeParams) {
     const [viewport, setViewport] = useState<ViewportPreset>('responsive')
     const [isExpanded, setIsExpanded] = useState(defaultStartExpanded)
@@ -36,8 +38,34 @@ export function useFilePreviewChrome({
     const rightPanelWidthRef = useRef(rightPanelWidth)
 
     useEffect(() => {
-        setFocusLine(initialFocusLine)
-    }, [initialFocusLine])
+        if (!initialFocusLine) {
+            setFocusLine(null)
+            return
+        }
+
+        let disposed = false
+        setFocusLine(null)
+        let frameId: number | null = null
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            frameId = window.requestAnimationFrame(() => {
+                if (!disposed) setFocusLine(initialFocusLine)
+            })
+        } else {
+            timeoutId = setTimeout(() => {
+                if (!disposed) setFocusLine(initialFocusLine)
+            }, 0)
+        }
+
+        return () => {
+            disposed = true
+            if (frameId !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+                window.cancelAnimationFrame(frameId)
+                return
+            }
+            if (timeoutId !== null) clearTimeout(timeoutId)
+        }
+    }, [initialFocusLine, initialFocusLineRequestId])
 
     useEffect(() => {
         leftPanelWidthRef.current = leftPanelWidth

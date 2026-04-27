@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, Edit3, Expand, Eye, Play, Square, Terminal, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Copy, Expand, Play, Square, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
@@ -43,9 +43,6 @@ interface PreviewModalHeaderProps {
     onStopPython?: () => void
     onClearPythonOutput?: () => void
     onPythonRunModeChange?: (mode: 'terminal' | 'output') => void
-    canUseTerminal?: boolean
-    terminalVisible?: boolean
-    onToggleTerminal?: () => void
     previewTabs: PreviewTab[]
     activePreviewTabId: string | null
     onSelectPreviewTab: (tabId: string) => void
@@ -104,9 +101,6 @@ export default function PreviewModalHeader(props: PreviewModalHeaderProps) {
                 onStopPython={props.onStopPython}
                 onClearPythonOutput={props.onClearPythonOutput}
                 onPythonRunModeChange={props.onPythonRunModeChange}
-                canUseTerminal={props.canUseTerminal}
-                terminalVisible={props.terminalVisible}
-                onToggleTerminal={props.onToggleTerminal}
                 previewTabs={props.previewTabs}
                 activePreviewTabId={props.activePreviewTabId}
                 onSelectPreviewTab={props.onSelectPreviewTab}
@@ -148,10 +142,7 @@ function PreviewWindowedHeader({
     onRunPython,
     onStopPython,
     onClearPythonOutput,
-    onPythonRunModeChange,
-    canUseTerminal = false,
-    terminalVisible = false,
-    onToggleTerminal
+    onPythonRunModeChange
 }: PreviewModalHeaderProps) {
     const { settings } = useSettings()
     const iconTheme = settings.theme === 'light' ? 'light' : 'dark'
@@ -195,35 +186,35 @@ function PreviewWindowedHeader({
     const isCompactHtmlHeader = isHtml && headerWidth < 1024
     const isVeryCompactHtmlHeader = isHtml && headerWidth < 820
     const isUltraCompactHtmlHeader = isHtml && headerWidth < 680
-    const isCompactHeader = headerWidth < 1240
-    const visibleFileName = formatPreviewFileName(file.name, headerWidth < 820 ? 28 : headerWidth < 1080 ? 40 : 56)
+    const isCompactHeader = headerWidth < 980
+    const visibleFileName = formatPreviewFileName(file.name, headerWidth < 760 ? 26 : headerWidth < 980 ? 36 : 52)
 
-    const controlGroupClass = 'flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1 shrink-0'
-    const iconButtonBaseClass = 'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all'
+    const controlGroupClass = 'flex items-center gap-0.5 rounded-md border border-white/10 bg-white/[0.035] p-0.5 shrink-0'
+    const iconButtonBaseClass = 'inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors'
     const ghostIconButtonClass = `${iconButtonBaseClass} border-transparent text-white/55 hover:bg-white/10 hover:text-white`
     const activeIconButtonClass = `${iconButtonBaseClass} border-white/15 bg-white/10 text-white`
-    const modeToggleGroupClass = 'flex items-center gap-1 rounded-lg bg-white/5 p-1 shrink-0'
-    const modeToggleButtonClass = 'inline-flex h-8 w-8 items-center justify-center text-xs rounded-md transition-all'
-    const showWindowedEditMenu = !isMediaFile && !previewModeEnabled && isEditable
+    const showWindowedEditMenu = !isMediaFile && (previewModeEnabled || isEditable)
 
     return (
         <div
             ref={containerRef}
             className={cn(
-                'flex items-center justify-between gap-3 border-b border-white/5 bg-white/[0.02] shrink-0',
-                isCompactHeader ? 'flex-wrap px-3 py-2.5' : 'px-5 py-3',
+                'flex items-center justify-between gap-2 border-b border-white/5 bg-white/[0.02] shrink-0',
+                isCompactHeader
+                    ? cn('flex-wrap py-1', showCloseButton ? 'pl-2.5 pr-0' : 'px-2.5')
+                    : cn('py-1', showCloseButton ? 'pl-3.5 pr-0' : 'px-3.5'),
                 isUltraCompactHtmlHeader ? 'gap-2' : ''
             )}
         >
-            <div className={cn('flex items-center gap-3 min-w-0', isCompactHeader ? 'flex-1 flex-wrap w-full' : '', isUltraCompactHtmlHeader ? 'w-full' : '')}>
+            <div className={cn('flex items-center gap-2 min-w-0', isCompactHeader ? 'flex-1 flex-wrap w-full' : '', isUltraCompactHtmlHeader ? 'w-full' : '')}>
                 <VscodeEntryIcon
                     pathValue={file.path || file.name}
                     kind="file"
                     theme={iconTheme}
-                    className="size-[18px] shrink-0"
+                    className="size-4 shrink-0"
                 />
-                <div className="min-w-0 flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-white" title={file.name}>
+                <div className="min-w-0 flex items-center gap-1.5">
+                    <h3 className="truncate text-[13px] font-semibold text-white" title={file.name}>
                         {visibleFileName}
                     </h3>
                     <button
@@ -237,34 +228,6 @@ function PreviewWindowedHeader({
                         {copied ? <Check size={14} /> : <Copy size={14} />}
                     </button>
                 </div>
-
-                {!isMediaFile && previewModeEnabled ? (
-                    <div className={modeToggleGroupClass}>
-                        <button
-                            onClick={() => onModeChange('preview')}
-                            className={cn(modeToggleButtonClass, !isEditMode ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80 hover:bg-white/10')}
-                            title="Preview mode"
-                            aria-label="Preview mode"
-                        >
-                            <Eye size={13} />
-                            <span className="sr-only">Preview</span>
-                        </button>
-                        <button
-                            onClick={() => onModeChange('edit')}
-                            disabled={!isEditable || !!loadingEditableContent}
-                            className={cn(
-                                modeToggleButtonClass,
-                                isEditMode ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80 hover:bg-white/10',
-                                (!isEditable || !!loadingEditableContent) && 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-white/50'
-                            )}
-                            title={isEditable ? 'Edit mode' : 'This file type is preview-only'}
-                            aria-label={isEditable ? 'Edit mode' : 'This file type is preview-only'}
-                        >
-                            <Edit3 size={13} />
-                            <span className="sr-only">Edit</span>
-                        </button>
-                    </div>
-                ) : null}
 
                 {showWindowedEditMenu ? (
                     <PreviewHeaderEditMenu
@@ -280,97 +243,82 @@ function PreviewWindowedHeader({
                     />
                 ) : null}
 
-                {!isMediaFile && (canUseTerminal || canRunPython) ? (
+                {!isMediaFile && canRunPython ? (
                     <div className={controlGroupClass}>
-                        {canUseTerminal ? (
+                        <div ref={pythonRunModeMenuRef} className="relative inline-flex items-center rounded-lg border border-white/10 bg-black/10">
                             <button
                                 type="button"
-                                onClick={onToggleTerminal}
-                                className={cn(terminalVisible ? 'border-sky-400/35 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25' : ghostIconButtonClass)}
-                                title={terminalVisible ? 'Hide terminal panel' : 'Show terminal panel'}
+                                onClick={isPythonRunning ? onStopPython : onRunPython}
+                                className={cn(
+                                    'inline-flex h-6 w-6 items-center justify-center rounded-l-md transition-colors',
+                                    isPythonRunning ? 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25' : 'bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+                                )}
+                                title={isPythonRunning ? 'Stop Python run' : `Run Python (${pythonRunMode === 'terminal' ? 'terminal' : 'output'})`}
                             >
-                                <Terminal size={13} />
+                                {isPythonRunning ? <Square size={13} /> : <Play size={13} />}
                             </button>
-                        ) : null}
+                            <button
+                                type="button"
+                                onClick={() => setPythonRunModeMenuOpen((current) => !current)}
+                                className="inline-flex h-6 w-5 items-center justify-center rounded-r-md border-l border-white/10 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                                title="Choose run mode"
+                                aria-expanded={pythonRunModeMenuOpen}
+                            >
+                                <ChevronDown size={12} className={cn('transition-transform', pythonRunModeMenuOpen && 'rotate-180')} />
+                            </button>
 
-                        {canRunPython ? (
-                            <>
-                                <div ref={pythonRunModeMenuRef} className="relative inline-flex items-center rounded-lg border border-white/10 bg-black/10">
+                            {pythonRunModeMenuOpen ? (
+                                <div className="absolute right-0 top-7 z-40 w-44 rounded-lg border border-white/10 bg-sparkle-card p-1.5 shadow-2xl">
                                     <button
                                         type="button"
-                                        onClick={isPythonRunning ? onStopPython : onRunPython}
+                                        onClick={() => {
+                                            onPythonRunModeChange?.('terminal')
+                                            setPythonRunModeMenuOpen(false)
+                                        }}
                                         className={cn(
-                                            'inline-flex h-8 w-8 items-center justify-center rounded-l-lg transition-colors',
-                                            isPythonRunning ? 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25' : 'bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+                                            'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
+                                            pythonRunMode === 'terminal'
+                                                ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
+                                                : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
                                         )}
-                                        title={isPythonRunning ? 'Stop Python run' : `Run Python (${pythonRunMode === 'terminal' ? 'terminal' : 'output'})`}
                                     >
-                                        {isPythonRunning ? <Square size={13} /> : <Play size={13} />}
+                                        <span>Run in Terminal</span>
+                                        {pythonRunMode === 'terminal' ? <Check size={12} /> : null}
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setPythonRunModeMenuOpen((current) => !current)}
-                                        className="inline-flex h-8 w-6 items-center justify-center rounded-r-lg border-l border-white/10 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-                                        title="Choose run mode"
-                                        aria-expanded={pythonRunModeMenuOpen}
+                                        onClick={() => {
+                                            onPythonRunModeChange?.('output')
+                                            setPythonRunModeMenuOpen(false)
+                                        }}
+                                        className={cn(
+                                            'mt-0.5 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
+                                            pythonRunMode === 'output'
+                                                ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
+                                                : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
+                                        )}
                                     >
-                                        <ChevronDown size={12} className={cn('transition-transform', pythonRunModeMenuOpen && 'rotate-180')} />
+                                        <span>Run in Output</span>
+                                        {pythonRunMode === 'output' ? <Check size={12} /> : null}
                                     </button>
-
-                                    {pythonRunModeMenuOpen ? (
-                                        <div className="absolute right-0 top-9 z-40 w-44 rounded-lg border border-white/10 bg-sparkle-card p-1.5 shadow-2xl">
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    onPythonRunModeChange?.('terminal')
-                                                    setPythonRunModeMenuOpen(false)
-                                                }}
-                                                className={cn(
-                                                    'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
-                                                    pythonRunMode === 'terminal'
-                                                        ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
-                                                        : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
-                                                )}
-                                            >
-                                                <span>Run in Terminal</span>
-                                                {pythonRunMode === 'terminal' ? <Check size={12} /> : null}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    onPythonRunModeChange?.('output')
-                                                    setPythonRunModeMenuOpen(false)
-                                                }}
-                                                className={cn(
-                                                    'mt-0.5 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors',
-                                                    pythonRunMode === 'output'
-                                                        ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
-                                                        : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
-                                                )}
-                                            >
-                                                <span>Run in Output</span>
-                                                {pythonRunMode === 'output' ? <Check size={12} /> : null}
-                                            </button>
-                                        </div>
-                                    ) : null}
                                 </div>
+                            ) : null}
+                        </div>
 
-                                <button
-                                    type="button"
-                                    onClick={onClearPythonOutput}
-                                    disabled={!pythonHasOutput && !isPythonRunning}
-                                    className={cn(
-                                        ghostIconButtonClass,
-                                        (pythonHasOutput || isPythonRunning)
-                                            ? ''
-                                            : 'cursor-not-allowed border-transparent text-white/25 hover:bg-transparent hover:text-white/25'
-                                    )}
-                                    title="Clear run output"
-                                >
-                                    <Trash2 size={13} />
-                                </button>
-                            </>
-                        ) : null}
+                        <button
+                            type="button"
+                            onClick={onClearPythonOutput}
+                            disabled={!pythonHasOutput && !isPythonRunning}
+                            className={cn(
+                                ghostIconButtonClass,
+                                (pythonHasOutput || isPythonRunning)
+                                    ? ''
+                                    : 'cursor-not-allowed border-transparent text-white/25 hover:bg-transparent hover:text-white/25'
+                            )}
+                            title="Clear run output"
+                        >
+                            <Trash2 size={13} />
+                        </button>
                     </div>
                 ) : null}
 
@@ -406,21 +354,15 @@ function PreviewWindowedHeader({
             ) : null}
 
             <PreviewHeaderStatusActions
-                isMediaFile={isMediaFile}
                 isEditMode={isEditMode}
-                isDirty={isDirty}
-                isSaving={isSaving}
                 isHtml={isHtml}
                 isCsv={isCsv}
                 csvDistinctColorsEnabled={csvDistinctColorsEnabled}
                 onCsvDistinctColorsEnabledChange={onCsvDistinctColorsEnabledChange}
                 onOpenInBrowser={onOpenInBrowser}
-                onRevert={onRevert}
-                onSave={onSave}
                 onClose={onClose}
                 showCloseButton={showCloseButton}
                 controlGroupClass={controlGroupClass}
-                iconButtonBaseClass={iconButtonBaseClass}
             />
         </div>
     )

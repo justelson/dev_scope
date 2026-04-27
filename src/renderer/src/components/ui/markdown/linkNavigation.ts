@@ -21,6 +21,14 @@ function normalizePath(pathValue: string): string {
     return pathValue.replace(/\\/g, '/')
 }
 
+function safeDecode(value: string): string {
+    try {
+        return decodeURIComponent(value)
+    } catch {
+        return value
+    }
+}
+
 function denormalizePath(pathValue: string, sourcePath?: string): string {
     if (sourcePath?.includes('\\')) {
         return pathValue.replace(/\//g, '\\')
@@ -32,8 +40,11 @@ function isExternalHref(href: string): boolean {
     return /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(href)
 }
 
-function isWindowsAbsolutePath(pathValue: string): boolean {
-    return /^[a-zA-Z]:[\\/]/.test(pathValue) || pathValue.startsWith('\\\\')
+export function isWindowsPathHref(pathValue: string | undefined): boolean {
+    const rawValue = String(pathValue || '').trim()
+    if (!rawValue) return false
+    const decodedValue = safeDecode(rawValue)
+    return /^[a-zA-Z]:[\\/]/.test(decodedValue) || decodedValue.startsWith('\\\\')
 }
 
 function splitHrefAnchor(href: string): { pathname: string; anchor?: string } {
@@ -99,12 +110,27 @@ function toFileUrlPath(pathname: string): string | null {
     }
 }
 
+export function rewriteMarkdownFileUriHref(href: string | undefined): string | null {
+    const rawHref = String(href || '').trim()
+    if (!rawHref.toLowerCase().startsWith('file:')) return null
+
+    try {
+        const url = new URL(rawHref)
+        if (url.protocol.toLowerCase() !== 'file:') return null
+        const pathname = /^\/[a-zA-Z]:[\\/]/.test(url.pathname) ? url.pathname.slice(1) : url.pathname
+        if (!pathname) return null
+        return `${pathname}${url.hash || ''}`
+    } catch {
+        return null
+    }
+}
+
 export function resolveMarkdownLinkTarget(href: string, filePath?: string): MarkdownPathTarget | null {
     const rawHref = String(href || '').trim()
     if (
         !rawHref
         || rawHref.startsWith('#')
-        || (isExternalHref(rawHref) && !rawHref.startsWith('file://') && !isWindowsAbsolutePath(rawHref))
+        || (isExternalHref(rawHref) && !rawHref.toLowerCase().startsWith('file://') && !isWindowsPathHref(rawHref))
     ) {
         return null
     }
@@ -112,15 +138,11 @@ export function resolveMarkdownLinkTarget(href: string, filePath?: string): Mark
     const { pathname, anchor } = splitHrefAnchor(rawHref)
     const anchorReference = extractAnchorLineReference(anchor)
     let decodedPathname = pathname
-    try {
-        decodedPathname = pathname ? decodeURIComponent(pathname) : ''
-    } catch {
-        decodedPathname = pathname
-    }
+    decodedPathname = pathname ? safeDecode(pathname) : ''
     const pathReference = extractPathLineReference(decodedPathname)
     decodedPathname = pathReference.pathname
 
-    if (rawHref.startsWith('file://')) {
+    if (rawHref.toLowerCase().startsWith('file://')) {
         const resolvedFilePath = toFileUrlPath(decodedPathname)
         if (!resolvedFilePath) return null
         return {
@@ -135,7 +157,7 @@ export function resolveMarkdownLinkTarget(href: string, filePath?: string): Mark
     const sourceDirectory = lastSlashIndex >= 0 ? normalizedSourcePath.slice(0, lastSlashIndex) : normalizedSourcePath
 
     let normalizedTargetPath = ''
-    if (/^[a-zA-Z]:[\\/]/.test(decodedPathname) || decodedPathname.startsWith('\\\\')) {
+    if (isWindowsPathHref(decodedPathname)) {
         normalizedTargetPath = normalizePath(decodedPathname)
     } else if (!filePath) {
         return null

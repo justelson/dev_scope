@@ -8,6 +8,7 @@ export interface PreviewFile {
     language?: string
     startInEditMode?: boolean
     focusLine?: number | null
+    focusLineRequestId?: number | null
 }
 
 export interface PreviewTab {

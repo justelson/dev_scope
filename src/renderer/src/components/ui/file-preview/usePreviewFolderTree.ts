@@ -212,7 +212,8 @@ export function usePreviewFolderTree({
         if (node.type !== 'directory') return
 
         const nodeKey = normalizePathKey(node.path)
-        let shouldLoadChildren = false
+        const isExpanded = expandedPaths.has(nodeKey)
+        const shouldLoadChildren = !isExpanded && node.childrenLoaded !== true
 
         setExpandedPaths((currentExpandedPaths) => {
             const nextExpandedPaths = new Set(currentExpandedPaths)
@@ -220,7 +221,6 @@ export function usePreviewFolderTree({
                 nextExpandedPaths.delete(nodeKey)
             } else {
                 nextExpandedPaths.add(nodeKey)
-                shouldLoadChildren = node.childrenLoaded !== true
             }
             return nextExpandedPaths
         })
@@ -233,7 +233,7 @@ export function usePreviewFolderTree({
             }
             await loadTree(node.path, { preferCache: false })
         }
-    }, [loadTree, readCachedDirectory])
+    }, [expandedPaths, loadTree, readCachedDirectory])
 
     const reload = useCallback(async () => {
         await loadTree(undefined, { preferCache: false })
@@ -264,6 +264,13 @@ export function usePreviewFolderTree({
         setActiveFolderPath(nextFolderPath)
     }, [activeFolderPath, rootBoundaryPath])
 
+    const navigateToFolder = useCallback((folderPath: string) => {
+        const nextFolderPath = String(folderPath || '').trim()
+        if (!nextFolderPath) return
+        if (normalizePathKey(activeFolderPath) === normalizePathKey(nextFolderPath)) return
+        setActiveFolderPath(nextFolderPath)
+    }, [activeFolderPath])
+
     return {
         activeFolderPath,
         tree,
@@ -274,6 +281,7 @@ export function usePreviewFolderTree({
         reload,
         preserveContextForFile,
         canNavigateUpFolder,
-        navigateUpFolder
+        navigateUpFolder,
+        navigateToFolder
     }
 }

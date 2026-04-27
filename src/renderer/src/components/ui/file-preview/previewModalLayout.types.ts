@@ -54,9 +54,6 @@ export type PreviewModalLayoutProps = {
     onRunPython: () => Promise<void>
     onStopPython: () => Promise<boolean>
     onClearPythonOutput: () => void
-    canUsePreviewTerminal: boolean
-    terminalVisible: boolean
-    onTogglePreviewTerminal: () => void
     onOpenInBrowser: () => Promise<void>
     gitDiffText: string
     gitDiffSummary: GitDiffSummary | null

@@ -80,7 +80,7 @@ export default function SyntaxPreview({
     const modelPath = toMonacoModelPath(filePath)
 
     return (
-        <div className="w-full h-full min-h-0" style={{ height: height || '100%', background: 'var(--color-card)' }}>
+        <div className="devscope-monaco-preview w-full h-full min-h-0" style={{ height: height || '100%', background: 'var(--color-card)' }}>
             <Suspense
                 fallback={
                     <div className="h-full w-full grid place-items-center text-sm text-white/60 bg-sparkle-card">
