@@ -2,7 +2,7 @@ import { shell } from 'electron'
 import { access, cp, lstat, mkdir, open as fsOpen, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join, parse, relative, resolve, sep } from 'path'
 import log from 'electron-log'
-import { getGitStatus, type GitFileStatus } from '../../inspectors/git'
+import { checkIsGitRepo, getGitStatus, type GitFileStatus } from '../../inspectors/git'
 import { invalidateScanProjectsCache } from '../../services/project-discovery-service'
 import {
     handleCreateFileSystemItem,
@@ -59,12 +59,20 @@ function isLikelyBinaryBuffer(buffer: Buffer): boolean {
 export async function handleGetFileTree(
     _event: Electron.IpcMainInvokeEvent,
     projectPath: string,
-    options?: { showHidden?: boolean; maxDepth?: number; rootPath?: string }
+    options?: {
+        showHidden?: boolean
+        maxDepth?: number
+        rootPath?: string
+        includeGitStatus?: boolean
+        includeFileSize?: boolean
+    }
 ) {
     log.info('IPC: getFileTree', projectPath, options)
 
     const showHidden = options?.showHidden ?? false
     const maxDepth = options?.maxDepth ?? 20
+    const includeGitStatus = options?.includeGitStatus ?? true
+    const includeFileSize = options?.includeFileSize ?? true
     const resolvedProjectPath = resolve(projectPath)
     const resolvedRootPath = resolve(options?.rootPath || projectPath)
 
@@ -89,10 +97,14 @@ export async function handleGetFileTree(
         }
 
         let gitStatusMap: Record<string, GitFileStatus> = {}
-        try {
-            gitStatusMap = await getGitStatus(resolvedProjectPath)
-        } catch {
-            // Ignore git errors.
+        if (includeGitStatus) {
+            try {
+                if (await checkIsGitRepo(resolvedProjectPath)) {
+                    gitStatusMap = await getGitStatus(resolvedProjectPath)
+                }
+            } catch {
+                // Ignore git errors.
+            }
         }
 
         async function readDirRec(currentPath: string, depth: number): Promise<FileTreeNode[]> {
@@ -123,6 +135,16 @@ export async function handleGetFileTree(
                         gitStatus: status
                     } satisfies FileTreeNode
                 } else if (entry.isFile()) {
+                    if (!includeFileSize) {
+                        return {
+                            name: entry.name,
+                            path: fullPath,
+                            type: 'file',
+                            isHidden: isHiddenEntry,
+                            gitStatus: status
+                        } satisfies FileTreeNode
+                    }
+
                     try {
                         const stats = await stat(fullPath)
                         return {

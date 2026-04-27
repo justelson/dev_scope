@@ -1,14 +1,14 @@
 import type { NavigateFunction } from 'react-router-dom'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import type { UseFilePreviewReturn } from '@/components/ui/file-preview/useFilePreview'
-import { resolveMarkdownLinkTarget } from '@/components/ui/markdown/linkNavigation'
+import { isWindowsPathHref, resolveMarkdownLinkTarget } from '@/components/ui/markdown/linkNavigation'
 
 function normalizePath(pathValue: string): string {
     return pathValue.replace(/\\/g, '/')
 }
 
 function isAbsolutePath(pathValue: string): boolean {
-    return /^[a-zA-Z]:[\\/]/.test(pathValue) || pathValue.startsWith('\\\\')
+    return isWindowsPathHref(pathValue)
 }
 
 function splitFileNameAndExtension(targetPath: string): { name: string; extension: string } {
@@ -71,6 +71,9 @@ export async function openAssistantFileTarget(options: {
     }
 
     const { extension, name } = splitFileNameAndExtension(pathInfo.path)
-    await options.openPreview({ name, path: pathInfo.path }, extension, options.previewOptions)
+    await options.openPreview({ name, path: pathInfo.path }, extension, {
+        ...options.previewOptions,
+        focusLine: options.previewOptions?.focusLine ?? resolvedTarget?.focusLine
+    })
     return true
 }

@@ -1,19 +1,21 @@
 import { ipcRenderer } from 'electron'
 import type {
+    DevScopeGitCloneInput,
+    DevScopeGitCloneProgressEvent,
     DevScopePreviewTerminalEvent,
-    DevScopePythonPreviewEvent,
-    DevScopeTaskEvent
+    DevScopePythonPreviewEvent
 } from '../../shared/contracts/devscope-api'
+import { GIT_CLONE_PROGRESS_CHANNEL } from '../../shared/contracts/devscope-api'
 
 export function createProjectsAdapter() {
     const PYTHON_PREVIEW_EVENT_CHANNEL = 'devscope:pythonPreview:event'
     const PREVIEW_TERMINAL_EVENT_CHANNEL = 'devscope:previewTerminal:event'
-    const TASK_EVENT_CHANNEL = 'devscope:tasks:event'
 
     return {
         selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),
         selectMarkdownFile: () => ipcRenderer.invoke('devscope:selectMarkdownFile'),
         getUserHomePath: () => ipcRenderer.invoke('devscope:getUserHomePath'),
+        listInstalledPackageRuntimes: () => ipcRenderer.invoke('devscope:listInstalledPackageRuntimes'),
         scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) =>
             ipcRenderer.invoke('devscope:scanProjects', folderPath, options),
         openInExplorer: (path: string) => ipcRenderer.invoke('devscope:openInExplorer', path),
@@ -25,7 +27,16 @@ export function createProjectsAdapter() {
         installProjectDependencies: (projectPath: string, options?: { onlyMissing?: boolean }) =>
             ipcRenderer.invoke('devscope:installProjectDependencies', projectPath, options),
         getProjectDetails: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectDetails', projectPath),
-        getFileTree: (projectPath: string, options?: { showHidden?: boolean; maxDepth?: number; rootPath?: string }) =>
+        getFileTree: (
+            projectPath: string,
+            options?: {
+                showHidden?: boolean
+                maxDepth?: number
+                rootPath?: string
+                includeGitStatus?: boolean
+                includeFileSize?: boolean
+            }
+        ) =>
             ipcRenderer.invoke('devscope:getFileTree', projectPath, options),
         getGitHistory: (projectPath: string, limit?: number, options?: { all?: boolean; includeStats?: boolean }) =>
             ipcRenderer.invoke('devscope:getGitHistory', projectPath, limit, options),
@@ -144,6 +155,16 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:initGitRepo', projectPath, branchName, createGitignore, gitignoreTemplate),
         createInitialCommit: (projectPath: string, message: string) => ipcRenderer.invoke('devscope:createInitialCommit', projectPath, message),
         addRemoteOrigin: (projectPath: string, remoteUrl: string) => ipcRenderer.invoke('devscope:addRemoteOrigin', projectPath, remoteUrl),
+        cloneGitRepository: (input: DevScopeGitCloneInput) => ipcRenderer.invoke('devscope:cloneGitRepository', input),
+        onGitCloneProgress: (callback: (event: DevScopeGitCloneProgressEvent) => void) => {
+            const listener = (_event: Electron.IpcRendererEvent, payload: DevScopeGitCloneProgressEvent) => {
+                callback(payload)
+            }
+            ipcRenderer.on(GIT_CLONE_PROGRESS_CHANNEL, listener)
+            return () => {
+                ipcRenderer.removeListener(GIT_CLONE_PROGRESS_CHANNEL, listener)
+            }
+        },
         getGitignoreTemplates: () => ipcRenderer.invoke('devscope:getGitignoreTemplates'),
         generateGitignoreContent: (template: string) => ipcRenderer.invoke('devscope:generateGitignoreContent', template),
         getGitignorePatterns: () => ipcRenderer.invoke('devscope:getGitignorePatterns'),
@@ -179,6 +200,8 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:previewTerminal:list', input),
         writePreviewTerminal: (input: { sessionId: string; data: string }) =>
             ipcRenderer.invoke('devscope:previewTerminal:write', input),
+        setPreviewTerminalTitle: (input: { sessionId: string; title: string }) =>
+            ipcRenderer.invoke('devscope:previewTerminal:setTitle', input),
         resizePreviewTerminal: (input: { sessionId: string; cols: number; rows: number }) =>
             ipcRenderer.invoke('devscope:previewTerminal:resize', input),
         closePreviewTerminal: (sessionId: string) =>
@@ -190,17 +213,6 @@ export function createProjectsAdapter() {
             ipcRenderer.on(PREVIEW_TERMINAL_EVENT_CHANNEL, listener)
             return () => {
                 ipcRenderer.removeListener(PREVIEW_TERMINAL_EVENT_CHANNEL, listener)
-            }
-        },
-        listActiveTasks: (projectPath?: string) =>
-            ipcRenderer.invoke('devscope:tasks:listActive', projectPath),
-        onTaskEvent: (callback: (event: DevScopeTaskEvent) => void) => {
-            const listener = (_event: Electron.IpcRendererEvent, payload: DevScopeTaskEvent) => {
-                callback(payload)
-            }
-            ipcRenderer.on(TASK_EVENT_CHANNEL, listener)
-            return () => {
-                ipcRenderer.removeListener(TASK_EVENT_CHANNEL, listener)
             }
         },
         openFile: (filePath: string) => ipcRenderer.invoke('devscope:openFile', filePath),
@@ -216,9 +228,18 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:moveFileSystemItem', sourcePath, destinationDirectory),
         getProjectSessions: (_projectPath: string) => Promise.resolve({ success: true, sessions: [] }),
         getProjectProcesses: (projectPath: string) => ipcRenderer.invoke('devscope:getProjectProcesses', projectPath),
-        getRunningApps: (limit: number = 500) => ipcRenderer.invoke('devscope:getRunningApps', limit),
-        getActivePorts: () => ipcRenderer.invoke('devscope:getActivePorts'),
-        indexAllFolders: (folders: string[]) => ipcRenderer.invoke('devscope:indexAllFolders', folders),
+        indexAllFolders: (folders: string[], options?: { forceRefresh?: boolean }) =>
+            ipcRenderer.invoke('devscope:indexAllFolders', folders, options),
+        searchIndexedPaths: (input: {
+            scopePath?: string
+            roots?: string[]
+            term?: string
+            extensionFilters?: string[]
+            limit?: number
+            includeFiles?: boolean
+            includeDirectories?: boolean
+            showHidden?: boolean
+        }) => ipcRenderer.invoke('devscope:searchIndexedPaths', input),
         getFileSystemRoots: () => ipcRenderer.invoke('devscope:getFileSystemRoots')
     }
 }

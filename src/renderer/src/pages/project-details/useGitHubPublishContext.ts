@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { DevScopeGitHubPublishContext } from '@shared/contracts/devscope-api'
 
 export function useGitHubPublishContext(args: {
@@ -7,6 +7,14 @@ export function useGitHubPublishContext(args: {
     remoteUrls: string[]
 }) {
     const { projectPath, enabled = true, remoteUrls } = args
+    const remoteUrlsKey = useMemo(
+        () => remoteUrls
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+            .sort()
+            .join('|'),
+        [remoteUrls]
+    )
     const [context, setContext] = useState<DevScopeGitHubPublishContext | null>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string>('')
@@ -48,7 +56,7 @@ export function useGitHubPublishContext(args: {
         return () => {
             cancelled = true
         }
-    }, [enabled, projectPath, remoteUrls])
+    }, [enabled, projectPath, remoteUrlsKey])
 
     const refresh = async () => {
         if (!enabled || !projectPath.trim()) return null

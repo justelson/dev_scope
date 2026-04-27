@@ -1,31 +1,71 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AssistantSession } from '@shared/assistant/contracts'
+import type { AssistantToastInput } from './AssistantPageHelpers'
 import {
     ExpandedSessionsRailContent,
     RenameSessionModal,
     SessionDeleteModal
 } from './AssistantSessionsRailParts'
 import {
-    getDisplayTitle,
+    buildFlatSessionsGroup,
+    filterAssistantSessions,
+    getProjectKey,
+    getSessionDisplayTitle,
     groupSessionsByProject,
     hydrateProjectMetadataForPaths,
+    normalizeProjectPath,
     resolveSessionProjectPath,
     type SessionProjectGroup,
     type AssistantSessionsRailProps
 } from './assistant-sessions-rail-utils'
+import { hasSessionChats } from './AssistantSessionsRailRows'
 import {
     getGroupSessionIds,
     getProjectIds,
     loadAssistantSessionsRailOrder,
     normalizeRailOrder,
     orderAssistantSessionsGroups,
+    orderAssistantSessionsList,
     saveAssistantSessionsRailOrder,
     type AssistantSessionsRailOrder
 } from './assistant-sessions-rail-order'
 
+type AssistantSessionsRailViewProps = AssistantSessionsRailProps & {
+    onShowToast: (input: AssistantToastInput) => void
+}
+
+const RELATIVE_TIME_REFRESH_MS = 30_000
+
 function hasVisibleProjectPath(session: AssistantSession): boolean {
-    if (String(session.projectPath || '').trim()) return true
-    return session.threads.some((thread) => String(thread.cwd || '').trim().length > 0)
+    if (resolveSessionProjectPath(session)) return true
+    if (session.mode === 'playground') {
+        return hasSessionChats(session)
+    }
+    return false
+}
+
+function createPlaygroundLabGroup(lab: AssistantSessionsRailViewProps['playground']['labs'][number]): SessionProjectGroup {
+    const rootPath = normalizeProjectPath(lab.rootPath)
+    return {
+        key: getProjectKey(rootPath),
+        label: lab.title || getProjectKey(rootPath),
+        path: rootPath,
+        createdAt: lab.createdAt,
+        updatedAt: lab.updatedAt,
+        projectIconPath: null,
+        projectType: null,
+        framework: null,
+        sessions: []
+    }
+}
+
+function mergePlaygroundLabGroups(groups: SessionProjectGroup[], labs: AssistantSessionsRailViewProps['playground']['labs']): SessionProjectGroup[] {
+    if (labs.length === 0) return groups
+    const existingGroupKeys = new Set(groups.map((group) => group.key))
+    const missingLabGroups = labs
+        .map(createPlaygroundLabGroup)
+        .filter((group) => group.path && !existingGroupKeys.has(group.key))
+    return missingLabGroups.length > 0 ? [...groups, ...missingLabGroups] : groups
 }
 
 function moveItemToIndex(values: string[], itemId: string, targetId: string): string[] {
@@ -43,25 +83,45 @@ export function AssistantSessionsRail({
     collapsed,
     width,
     compact = false,
+    railMode,
+    railGroupMode,
+    railSortMode,
+    railFilterMode,
+    onRailModeChange,
+    onRailGroupModeChange,
+    onRailSortModeChange,
+    onRailFilterModeChange,
     sessions,
+    playground,
+    backgroundActivitySessions,
     activeSessionId,
+    activeThreadId,
+    assistantConnected,
     commandPending,
     onWidthChange,
     onCreateSession,
+    onCreatePlaygroundSession,
     onSelectSession,
+    onSelectThread,
     onRenameSession,
     onArchiveSession,
     onDeleteSession,
-    onChooseProjectPath
-}: AssistantSessionsRailProps) {
+    onChooseProjectPath,
+    onSetPlaygroundRoot,
+    onCreatePlaygroundLab,
+    onDeletePlaygroundLab,
+    onShowToast
+}: AssistantSessionsRailViewProps) {
     const [renameTarget, setRenameTarget] = useState<AssistantSession | null>(null)
     const [renameDraft, setRenameDraft] = useState('')
     const [sessionToDelete, setSessionToDelete] = useState<AssistantSession | null>(null)
+    const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
     const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(new Set())
     const [showArchivedSessions, setShowArchivedSessions] = useState(false)
     const [railOrder, setRailOrder] = useState<AssistantSessionsRailOrder>(() => loadAssistantSessionsRailOrder())
     const [isResizing, setIsResizing] = useState(false)
     const [projectMetadataVersion, setProjectMetadataVersion] = useState(0)
+    const [, setRelativeTimeVersion] = useState(0)
     const railRef = useRef<HTMLButtonElement | null>(null)
     const rootRef = useRef<HTMLDivElement | null>(null)
     const widthHolderRef = useRef<HTMLDivElement | null>(null)
@@ -81,25 +141,70 @@ export function AssistantSessionsRail({
 
     const activeSessions = useMemo(() => sessions.filter((session) => !session.archived && hasVisibleProjectPath(session)), [sessions])
     const archivedSessions = useMemo(() => sessions.filter((session) => session.archived && hasVisibleProjectPath(session)), [sessions])
-    const groupedSessions = useMemo(() => groupSessionsByProject(activeSessions), [activeSessions, projectMetadataVersion])
+    const filteredActiveSessions = useMemo(
+        () => filterAssistantSessions(activeSessions, railFilterMode, activeSessionId),
+        [activeSessionId, activeSessions, railFilterMode]
+    )
+    const groupedSessions = useMemo(() => {
+        const groups = groupSessionsByProject(filteredActiveSessions)
+        return railMode === 'playground'
+            ? mergePlaygroundLabGroups(groups, playground.labs)
+            : groups
+    }, [filteredActiveSessions, playground.labs, projectMetadataVersion, railMode])
     const groupedArchivedSessions = useMemo(() => groupSessionsByProject(archivedSessions), [archivedSessions, projectMetadataVersion])
-    const orderedGroupedSessions = useMemo(() => orderAssistantSessionsGroups(groupedSessions, railOrder), [groupedSessions, railOrder])
-    const orderedArchivedSessions = useMemo(() => orderAssistantSessionsGroups(groupedArchivedSessions, railOrder), [groupedArchivedSessions, railOrder])
+    const orderedProjectGroups = useMemo(
+        () => orderAssistantSessionsGroups(groupedSessions, railOrder, railSortMode),
+        [groupedSessions, railOrder, railSortMode]
+    )
+    const orderedFlatSessions = useMemo(
+        () => orderAssistantSessionsList(filteredActiveSessions, railOrder.sessionOrderByProject.__assistant_flat_list__ || [], railSortMode),
+        [filteredActiveSessions, railOrder.sessionOrderByProject, railSortMode]
+    )
+    const flatSessionsGroup = useMemo(() => buildFlatSessionsGroup(orderedFlatSessions), [orderedFlatSessions])
+    const orderedGroupedSessions = useMemo(
+        () => railGroupMode === 'flat'
+            ? (flatSessionsGroup ? [flatSessionsGroup] : [])
+            : orderedProjectGroups,
+        [flatSessionsGroup, orderedProjectGroups, railGroupMode]
+    )
+    const orderedArchivedSessions = useMemo(
+        () => orderAssistantSessionsGroups(groupedArchivedSessions, railOrder, railSortMode),
+        [groupedArchivedSessions, railOrder, railSortMode]
+    )
+    const projectPathSignature = useMemo(
+        () => sessions
+            .map(resolveSessionProjectPath)
+            .filter(Boolean)
+            .sort()
+            .join('|'),
+        [sessions]
+    )
 
     useEffect(() => {
         let active = true
-        void hydrateProjectMetadataForPaths(sessions.map(resolveSessionProjectPath)).then((hydratedCount) => {
+        if (!projectPathSignature) return () => {
+            active = false
+        }
+        void hydrateProjectMetadataForPaths(projectPathSignature.split('|')).then((hydratedCount) => {
             if (!active || hydratedCount === 0) return
             setProjectMetadataVersion((current) => current + 1)
         })
         return () => {
             active = false
         }
-    }, [sessions])
+    }, [projectPathSignature])
 
     useEffect(() => {
         orderedGroupedSessionsRef.current = orderedGroupedSessions
     }, [orderedGroupedSessions])
+
+    useEffect(() => {
+        const intervalId = window.setInterval(() => {
+            setRelativeTimeVersion((current) => (current + 1) % 1_000_000)
+        }, RELATIVE_TIME_REFRESH_MS)
+
+        return () => window.clearInterval(intervalId)
+    }, [])
 
     useEffect(() => {
         saveAssistantSessionsRailOrder(normalizeRailOrder(railOrder))
@@ -128,7 +233,7 @@ export function AssistantSessionsRail({
 
     const openRenameModal = (session: AssistantSession) => {
         setRenameTarget(session)
-        setRenameDraft(getDisplayTitle(session.title))
+        setRenameDraft(getSessionDisplayTitle(session))
     }
 
     const closeRenameModal = () => {
@@ -143,6 +248,24 @@ export function AssistantSessionsRail({
         await onRenameSession(renameTarget.id, normalized)
         closeRenameModal()
     }
+
+    const handleConfirmDeleteSession = useCallback(async () => {
+        if (!sessionToDelete || deletingSessionId) return
+
+        const targetTitle = getSessionDisplayTitle(sessionToDelete)
+        try {
+            setDeletingSessionId(sessionToDelete.id)
+            const result = await onDeleteSession(sessionToDelete.id)
+            if (!result.success) {
+                onShowToast({ message: `Failed to delete "${targetTitle}": ${result.error}`, tone: 'error' })
+                return
+            }
+            setSessionToDelete(null)
+            onShowToast({ message: `Deleted "${targetTitle}"` })
+        } finally {
+            setDeletingSessionId(null)
+        }
+    }, [deletingSessionId, onDeleteSession, onShowToast, sessionToDelete])
 
     const minSidebarWidth = 180
     const maxSidebarWidth = compact ? 420 : 520
@@ -322,26 +445,45 @@ export function AssistantSessionsRail({
                     <aside className="relative h-full w-full overflow-x-hidden border-r border-white/10 bg-sparkle-card/95 backdrop-blur-sm">
                         <ExpandedSessionsRailContent
                             compact={compact}
+                            railMode={railMode}
+                            railGroupMode={railGroupMode}
+                            railSortMode={railSortMode}
+                            railFilterMode={railFilterMode}
+                            playground={playground}
+                            backgroundActivitySessions={backgroundActivitySessions}
+                            assistantConnected={assistantConnected}
                             commandPending={commandPending}
                             groupedSessions={orderedGroupedSessions}
                             groupedArchivedSessions={orderedArchivedSessions}
                             activeSessionId={activeSessionId}
+                            activeThreadId={activeThreadId}
                             expandedGroupKeys={expandedGroupKeys}
                             showArchivedSessions={showArchivedSessions}
+                            onRailModeChange={onRailModeChange}
+                            onRailGroupModeChange={onRailGroupModeChange}
+                            onRailSortModeChange={onRailSortModeChange}
+                            onRailFilterModeChange={onRailFilterModeChange}
                             onToggleGroup={(key) => setExpandedGroupKeys((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next })}
                             onChooseProjectPath={() => void onChooseProjectPath()}
                             onCreateSession={(projectPath) => void onCreateSession(projectPath)}
+                            onCreatePlaygroundSession={(labId) => void onCreatePlaygroundSession(labId)}
                             onSelectSession={(sessionId) => void onSelectSession(sessionId)}
+                            onSelectThread={(input) => void onSelectThread(input)}
                             onOpenRename={openRenameModal}
                             onArchiveSession={(sessionId, archived) => void onArchiveSession(sessionId, archived)}
                             onDeleteRequest={setSessionToDelete}
+                            onDeleteSession={(sessionId) => onDeleteSession(sessionId)}
                             onSetShowArchivedSessions={setShowArchivedSessions}
+                            onSetPlaygroundRoot={(rootPath) => void onSetPlaygroundRoot(rootPath)}
+                            onCreatePlaygroundLab={(input) => onCreatePlaygroundLab(input)}
+                            onDeletePlaygroundLab={onDeletePlaygroundLab}
                             onProjectDragStart={handleProjectDragStart}
                             onProjectDragEnd={handleProjectDragEnd}
                             onProjectDragCancel={clearBodyDragState}
                             onSessionDragStart={handleSessionDragStart}
                             onSessionDragEnd={handleSessionDragEnd}
                             onSessionDragCancel={clearBodyDragState}
+                            onShowToast={onShowToast}
                         />
                         <button
                             ref={railRef}
@@ -352,14 +494,22 @@ export function AssistantSessionsRail({
                             onPointerMove={handleResizePointerMove}
                             onPointerUp={handleResizePointerEnd}
                             onPointerCancel={handleResizePointerEnd}
-                            className={`absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] sm:flex touch-none group-data-[side=left]:-right-4 group-data-[side=left]:cursor-w-resize group-data-[side=right]:left-0 group-data-[side=right]:cursor-e-resize ${isResizing ? 'cursor-grabbing bg-white/[0.04] after:bg-white/25' : 'after:bg-transparent hover:bg-white/[0.03] hover:after:bg-white/10'}`}
+                            className={`absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] sm:flex touch-none group-data-[side=left]:-right-4 group-data-[side=right]:left-0 ${isResizing ? 'cursor-grabbing bg-white/[0.04] after:bg-white/25' : 'cursor-default after:bg-transparent hover:bg-white/[0.03] hover:after:bg-white/10'}`}
                             title={railTitle}
                         />
                     </aside>
                 </div>
             </div>
             <RenameSessionModal renameTarget={renameTarget} renameDraft={renameDraft} onChangeDraft={setRenameDraft} onClose={closeRenameModal} onSubmit={() => void submitRename()} />
-            <SessionDeleteModal sessionToDelete={sessionToDelete} onConfirm={() => { if (sessionToDelete) void onDeleteSession(sessionToDelete.id); setSessionToDelete(null) }} onCancel={() => setSessionToDelete(null)} />
+            <SessionDeleteModal
+                sessionToDelete={sessionToDelete}
+                deleting={Boolean(deletingSessionId)}
+                onConfirm={() => void handleConfirmDeleteSession()}
+                onCancel={() => {
+                    if (deletingSessionId) return
+                    setSessionToDelete(null)
+                }}
+            />
         </>
     )
 }

@@ -12,19 +12,6 @@ interface DevScopeLogoProps {
     className?: string
 }
 
-const THEME_COLORS = {
-    dark: { primary: '#22d3ee', secondary: '#06b6d4', glow: 'cyan' },
-    midnight: { primary: '#6366f1', secondary: '#4f46e5', glow: 'indigo' },
-    purple: { primary: '#a78bfa', secondary: '#8b5cf6', glow: 'purple' },
-    ocean: { primary: '#22d3ee', secondary: '#06b6d4', glow: 'cyan' },
-    forest: { primary: '#34d399', secondary: '#10b981', glow: 'emerald' },
-    slate: { primary: '#38bdf8', secondary: '#0ea5e9', glow: 'sky' },
-    charcoal: { primary: '#fbbf24', secondary: '#f59e0b', glow: 'amber' },
-    navy: { primary: '#60a5fa', secondary: '#3b82f6', glow: 'blue' },
-    light: { primary: '#22d3ee', secondary: '#06b6d4', glow: 'cyan' },
-    green: { primary: '#34d399', secondary: '#10b981', glow: 'emerald' }
-} as const
-
 const CLEAN_README_ASCII_BANNER = [
     '██████╗ ███████╗██╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗',
     '██╔══██╗██╔════╝██║   ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝',
@@ -36,7 +23,10 @@ const CLEAN_README_ASCII_BANNER = [
 
 export default function DevScopeLogo({ size = 'md', showText = false, className }: DevScopeLogoProps) {
     const { settings } = useSettings()
-    const themeColors = THEME_COLORS[settings.theme] || THEME_COLORS.dark
+    const themeColors = {
+        primary: settings.accentColor.secondary,
+        secondary: settings.accentColor.primary
+    }
 
     const sizes = {
         sm: { icon: 24, text: 'text-xs' },
@@ -108,7 +98,10 @@ export default function DevScopeLogo({ size = 'md', showText = false, className 
 
 export function DevScopeLogoMini({ className }: { className?: string }) {
     const { settings } = useSettings()
-    const themeColors = THEME_COLORS[settings.theme] || THEME_COLORS.dark
+    const themeColors = {
+        primary: settings.accentColor.secondary,
+        secondary: settings.accentColor.primary
+    }
 
     return (
         <div className={cn('relative inline-flex', className)}>
@@ -128,7 +121,10 @@ export function DevScopeLogoMini({ className }: { className?: string }) {
 
 export function DevScopeLogoASCII({ className }: { className?: string }) {
     const { settings } = useSettings()
-    const themeColors = THEME_COLORS[settings.theme] || THEME_COLORS.dark
+    const themeColors = {
+        primary: settings.accentColor.secondary,
+        secondary: settings.accentColor.primary
+    }
 
     return (
         <div className={cn('relative inline-block', className)}>
@@ -144,7 +140,10 @@ export function DevScopeLogoASCII({ className }: { className?: string }) {
 
 export function DevScopeLogoASCIIMini({ className }: { className?: string }) {
     const { settings } = useSettings()
-    const themeColors = THEME_COLORS[settings.theme] || THEME_COLORS.dark
+    const themeColors = {
+        primary: settings.accentColor.secondary,
+        secondary: settings.accentColor.primary
+    }
 
     return (
         <div className={cn('relative inline-block', className)}>

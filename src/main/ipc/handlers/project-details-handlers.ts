@@ -10,7 +10,6 @@ import {
     PROJECT_MARKERS,
     type FrameworkDefinition
 } from '../project-detection'
-import { appendTaskLog, completeTask, createTask } from '../task-manager'
 import { resolveProjectIconPath } from '../../services/project-icon-resolver'
 import {
     detectDependencyInstallManager,
@@ -176,20 +175,25 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
         await access(projectPath)
 
         const entries = await readdir(projectPath)
+        const statsPromise = stat(projectPath)
         const markers: string[] = []
-        let readme: string | null = null
-        let packageJson: any = null
-        let frameworks: FrameworkDefinition[] = []
-        let dependencyInstallStatus: DependencyInstallStatus | null = null
 
         const readmeFile = getPreferredReadmeFile(entries)
-        if (readmeFile) {
-            try {
-                readme = await readFile(join(projectPath, readmeFile), 'utf-8')
-            } catch (err) {
+        const readmePromise = readmeFile
+            ? readFile(join(projectPath, readmeFile), 'utf-8').catch((err) => {
                 log.warn('Could not read README', err)
-            }
-        }
+                return null
+            })
+            : Promise.resolve<string | null>(null)
+
+        const packageJsonPromise = entries.includes('package.json')
+            ? readFile(join(projectPath, 'package.json'), 'utf-8')
+                .then((pkgContent) => JSON.parse(pkgContent))
+                .catch((err) => {
+                    log.warn('Could not parse package.json', err)
+                    return null
+                })
+            : Promise.resolve<any>(null)
 
         for (const marker of PROJECT_MARKERS) {
             if (marker.startsWith('*')) {
@@ -203,21 +207,27 @@ export async function handleGetProjectDetails(_event: Electron.IpcMainInvokeEven
         }
 
         const projectType = detectProjectTypeFromMarkers(markers)
-
-        if (entries.includes('package.json')) {
-            try {
-                const pkgContent = await readFile(join(projectPath, 'package.json'), 'utf-8')
-                packageJson = JSON.parse(pkgContent)
-                frameworks = detectFrameworksFromPackageJson(packageJson, entries)
-                dependencyInstallStatus = await detectNodeDependencyInstallStatus(projectPath, packageJson)
-            } catch (err) {
-                log.warn('Could not parse package.json', err)
-            }
-        }
-
-        const stats = await stat(projectPath)
+        const packageJson = await packageJsonPromise
+        const frameworks: FrameworkDefinition[] = packageJson
+            ? detectFrameworksFromPackageJson(packageJson, entries)
+            : []
+        const dependencyInstallStatusPromise = packageJson
+            ? detectNodeDependencyInstallStatus(projectPath, packageJson).catch((err) => {
+                log.warn('Could not inspect dependency install status', err)
+                return null
+            })
+            : Promise.resolve<DependencyInstallStatus | null>(null)
+        const projectIconPathPromise = resolveProjectIconPath(projectPath, entries, packageJson).catch((err) => {
+            log.warn('Could not resolve project icon', err)
+            return null
+        })
+        const [readme, stats, dependencyInstallStatus, projectIconPath] = await Promise.all([
+            readmePromise,
+            statsPromise,
+            dependencyInstallStatusPromise,
+            projectIconPathPromise
+        ])
         const folderName = projectPath.split(/[\\/]/).pop() || 'Unknown'
-        const projectIconPath = await resolveProjectIconPath(projectPath, entries, packageJson)
 
         return {
             success: true,
@@ -254,20 +264,11 @@ export async function handleInstallProjectDependencies(
 ) {
     log.info('IPC: installProjectDependencies', { projectPath, onlyMissing: Boolean(options?.onlyMissing) })
     const mode = options?.onlyMissing ? 'missing' : 'all'
-    const task = createTask({
-        type: 'project.dependencies.install',
-        title: mode === 'missing' ? 'Install missing dependencies' : 'Install project dependencies',
-        projectPath,
-        initialLog: mode === 'missing'
-            ? 'Checking and installing missing dependencies'
-            : 'Installing project dependencies'
-    })
 
     try {
         await access(projectPath)
         const packageJsonPath = join(projectPath, 'package.json')
         if (!(await pathExists(packageJsonPath))) {
-            completeTask(task.id, 'failed', 'No package.json found in project.')
             return { success: false, error: 'No package.json found in this project.' }
         }
 
@@ -276,17 +277,11 @@ export async function handleInstallProjectDependencies(
             const packageContent = await readFile(packageJsonPath, 'utf-8')
             packageJson = JSON.parse(packageContent) as ProjectPackageJson
         } catch (error: any) {
-            completeTask(task.id, 'failed', error?.message || 'Failed to read package.json.')
             return { success: false, error: error?.message || 'Failed to read package.json.' }
         }
 
         const installStatusBefore = await detectNodeDependencyInstallStatus(projectPath, packageJson)
-        appendTaskLog(
-            task.id,
-            `Dependency status before install: ${installStatusBefore.installedPackages}/${installStatusBefore.totalPackages} installed`
-        )
         if (options?.onlyMissing && installStatusBefore.missingPackages <= 0) {
-            completeTask(task.id, 'success', 'All dependencies are already installed.')
             return {
                 success: true,
                 manager: await detectDependencyInstallManager(projectPath, packageJson),
@@ -296,26 +291,11 @@ export async function handleInstallProjectDependencies(
             }
         }
         const manager = await detectDependencyInstallManager(projectPath, packageJson)
-        appendTaskLog(task.id, `Using package manager: ${manager}`)
         const startedAt = Date.now()
         const installRun = await runInstallProcess(projectPath, manager)
         const installStatusAfter = await detectNodeDependencyInstallStatus(projectPath, packageJson)
-        appendTaskLog(
-            task.id,
-            `Dependency status after install: ${installStatusAfter.installedPackages}/${installStatusAfter.totalPackages} installed`
-        )
 
         if (!installRun.success) {
-            const outputTail = installRun.output
-                .split(/\r?\n/)
-                .map((line) => line.trim())
-                .filter(Boolean)
-                .slice(-2)
-                .join(' | ')
-            if (outputTail) {
-                appendTaskLog(task.id, `Installer output: ${outputTail}`, 'error')
-            }
-            completeTask(task.id, 'failed', installRun.error || 'Dependency installation failed.')
             return {
                 success: false,
                 error: installRun.error || 'Dependency installation failed.',
@@ -327,7 +307,6 @@ export async function handleInstallProjectDependencies(
         }
 
         const label = options?.onlyMissing ? 'missing dependencies' : 'dependencies'
-        completeTask(task.id, 'success', `Installed ${label} using ${manager}.`)
         return {
             success: true,
             manager,
@@ -338,7 +317,6 @@ export async function handleInstallProjectDependencies(
         }
     } catch (err: any) {
         log.error('Failed to install project dependencies:', err)
-        completeTask(task.id, 'failed', err?.message || 'Failed to install dependencies.')
         return { success: false, error: err?.message || 'Failed to install dependencies.' }
     }
 }
@@ -355,136 +333,5 @@ export async function handleGetProjectProcesses(_event: Electron.IpcMainInvokeEv
     } catch (err: any) {
         log.error('Failed to get project processes:', err)
         return { success: false, error: err.message, isLive: false, processes: [], activePorts: [] }
-    }
-}
-
-export async function handleGetRunningApps(_event: Electron.IpcMainInvokeEvent, limit: number = 500) {
-    try {
-        const { pids: visibleWindowPids, signalAvailable: windowSignalAvailable } = await getVisibleWindowPidSet()
-
-        const processes = await si.processes()
-        const list = Array.isArray(processes?.list) ? processes.list : []
-        const aggregated = new Map<string, { processCount: number; cpu: number; memoryMb: number; appProcessCount: number }>()
-        const ignored = new Set([
-            'system', 'system idle process', 'registry', 'idle', 'memory compression'
-        ])
-
-        for (const process of list) {
-            const name = String(process?.name || '').trim()
-            if (!name) continue
-            if (ignored.has(name.toLowerCase())) continue
-
-            const pid = Number(process?.pid) || 0
-            const category = inferProcessCategory(name, pid, visibleWindowPids, windowSignalAvailable)
-            const classifiedAsApp = category === 'app'
-            const cpu = Number(process?.cpu) || 0
-            // systeminformation `memRss` is reported in KB; convert to MB.
-            const memoryMb = Math.max(0, Number(process?.memRss) || 0) / 1024
-            const current = aggregated.get(name)
-
-            if (current) {
-                current.processCount += 1
-                current.cpu += cpu
-                current.memoryMb += memoryMb
-                if (classifiedAsApp) current.appProcessCount += 1
-                continue
-            }
-
-            aggregated.set(name, {
-                processCount: 1,
-                cpu,
-                memoryMb,
-                appProcessCount: classifiedAsApp ? 1 : 0
-            })
-        }
-
-        const normalizedLimit = Math.max(20, Math.min(2000, Number(limit) || 500))
-        let apps = [...aggregated.entries()]
-            .map(([name, metrics]) => ({
-                name,
-                category: metrics.appProcessCount > 0 ? 'app' as const : 'background' as const,
-                processCount: metrics.processCount,
-                cpu: Number(metrics.cpu.toFixed(1)),
-                memoryMb: Number(metrics.memoryMb.toFixed(1))
-            }))
-            .sort((a, b) => {
-                if (a.category !== b.category) return a.category === 'app' ? -1 : 1
-                if (b.cpu !== a.cpu) return b.cpu - a.cpu
-                if (b.memoryMb !== a.memoryMb) return b.memoryMb - a.memoryMb
-                return a.name.localeCompare(b.name)
-            })
-            .slice(0, normalizedLimit)
-
-        // Fallback for cases where systeminformation returns empty process list on some Windows environments.
-        if (apps.length === 0) {
-            try {
-                const { stdout } = await execAsync('tasklist /FO CSV /NH', { timeout: 5000, maxBuffer: 2 * 1024 * 1024 })
-                const fallbackMap = new Map<string, { processCount: number; memoryMb: number; appProcessCount: number }>()
-                const lines = stdout.split(/\r?\n/).filter((line) => line.trim().length > 0)
-                for (const line of lines) {
-                    const parts = parseTasklistLine(line)
-                    if (parts.length < 5) continue
-
-                    const name = String(parts[0] || '').trim()
-                    if (!name) continue
-                    if (ignored.has(name.toLowerCase())) continue
-
-                    const pid = Number.parseInt(String(parts[1] || '').trim(), 10)
-                    const category = inferProcessCategory(
-                        name,
-                        Number.isFinite(pid) ? pid : 0,
-                        visibleWindowPids,
-                        windowSignalAvailable
-                    )
-                    const isApp = category === 'app'
-                    const memoryMb = parseTasklistMemoryMb(parts[4])
-                    const current = fallbackMap.get(name)
-                    if (current) {
-                        current.processCount += 1
-                        current.memoryMb += memoryMb
-                        if (isApp) current.appProcessCount += 1
-                    } else {
-                        fallbackMap.set(name, {
-                            processCount: 1,
-                            memoryMb,
-                            appProcessCount: isApp ? 1 : 0
-                        })
-                    }
-                }
-
-                apps = [...fallbackMap.entries()]
-                    .map(([name, metrics]) => ({
-                        name,
-                        category: metrics.appProcessCount > 0 ? 'app' as const : 'background' as const,
-                        processCount: metrics.processCount,
-                        cpu: 0,
-                        memoryMb: Number(metrics.memoryMb.toFixed(1))
-                    }))
-                    .sort((a, b) => {
-                        if (a.category !== b.category) return a.category === 'app' ? -1 : 1
-                        if (b.memoryMb !== a.memoryMb) return b.memoryMb - a.memoryMb
-                        return a.name.localeCompare(b.name)
-                    })
-                    .slice(0, normalizedLimit)
-            } catch (fallbackErr) {
-                log.warn('tasklist fallback failed:', fallbackErr)
-            }
-        }
-
-        return { success: true, apps }
-    } catch (err: any) {
-        log.error('Failed to get running apps:', err)
-        return { success: false, error: err.message, apps: [] }
-    }
-}
-
-export async function handleGetActivePorts(_event: Electron.IpcMainInvokeEvent) {
-    try {
-        const { getActivePorts } = await import('../../inspectors/process-detector')
-        const ports = await getActivePorts()
-        return { success: true, ports }
-    } catch (err: any) {
-        log.error('Failed to get active ports:', err)
-        return { success: false, error: err.message, ports: [] }
     }
 }

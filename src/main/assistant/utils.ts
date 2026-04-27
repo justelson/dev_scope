@@ -5,8 +5,16 @@ import type {
     AssistantPendingUserInput,
     AssistantThread
 } from '../../shared/assistant/contracts'
+import {
+    deriveAttachmentOnlySessionTitle,
+    parseSerializedAssistantMessage
+} from '../../shared/assistant/message-attachments'
 
 const DEFAULT_SESSION_TITLE = 'New Session'
+const LEGACY_DEFAULT_SESSION_TITLES = new Set([
+    DEFAULT_SESSION_TITLE.toLowerCase(),
+    'new playground chat'
+])
 const PLAN_BLOCK_REGEX = /<proposed_plan>\s*([\s\S]*?)\s*<\/proposed_plan>/i
 
 export function nowIso(): string {
@@ -18,15 +26,19 @@ export function createAssistantId(prefix: string): string {
 }
 
 export function deriveSessionTitleFromPrompt(prompt: string): string {
-    const normalized = String(prompt || '')
+    const parsedMessage = parseSerializedAssistantMessage(prompt)
+    const normalized = String(parsedMessage.body || '')
         .replace(/\s+/g, ' ')
         .trim()
+    if (!normalized && parsedMessage.attachments.length > 0) {
+        return deriveAttachmentOnlySessionTitle(parsedMessage.attachments)
+    }
     if (!normalized) return DEFAULT_SESSION_TITLE
     return normalized.slice(0, 60)
 }
 
 export function isDefaultSessionTitle(title: string): boolean {
-    return title.trim().toLowerCase() === DEFAULT_SESSION_TITLE.toLowerCase()
+    return LEGACY_DEFAULT_SESSION_TITLES.has(title.trim().toLowerCase())
 }
 
 export function extractProposedPlanMarkdown(text: string | undefined): string | undefined {

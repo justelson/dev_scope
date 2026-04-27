@@ -1,112 +1,55 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-    AlertCircle,
-    ArrowLeft,
-    Check,
-    Eye,
-    EyeOff,
-    ExternalLink,
-    Sparkles,
-    Trash2,
-    Wand2,
-    Zap
-} from 'lucide-react'
-import { Select } from '@/components/ui/FormControls'
-import { cn } from '@/lib/utils'
+import { ArrowLeft, GitBranch, Sparkles, Trash2 } from 'lucide-react'
 import { useSettings, type CommitAIProvider } from '@/lib/settings'
+import {
+    CodexProviderModal,
+    KeyProviderModal,
+    ProviderOverviewCard,
+    type StatusPillTone
+} from './ai-settings/AISettingsCards'
+import { PROVIDER_MODELS, type ProviderStatus } from './ai-settings/aiSettingsConfig'
+import { useCodexModelOptions } from './ai-settings/useCodexModelOptions'
 
-type ProviderStatus = 'idle' | 'testing' | 'success' | 'error'
-type ModelOption = { id: string; label: string; description?: string }
+const PROVIDERS: CommitAIProvider[] = ['groq', 'gemini', 'codex']
 
-const PROVIDER_MODELS: Record<CommitAIProvider, string> = {
-    groq: 'llama-3.1-8b-instant',
-    gemini: 'auto (Gemini Flash)',
-    codex: 'custom Codex model'
-}
-
-const PROVIDER_COLORS: Record<CommitAIProvider, { primary: string; bg: string; border: string; icon: string }> = {
+const PROVIDER_COPY: Record<
+    CommitAIProvider,
+    {
+        title: string
+        description: string
+        accessMode: string
+        keyHint?: string
+        keyPlaceholder?: string
+        docsUrl?: string
+    }
+> = {
     groq: {
-        primary: '#F55036',
-        bg: 'bg-[#F55036]/10',
-        border: 'border-[#F55036]/30',
-        icon: 'text-[#F55036]'
+        title: 'Groq',
+        description: 'Fast hosted inference',
+        accessMode: 'Hosted API',
+        keyHint: 'gsk_*',
+        keyPlaceholder: 'gsk_xxxxxxxxxxxx...',
+        docsUrl: 'https://console.groq.com/keys'
     },
     gemini: {
-        primary: '#4285F4',
-        bg: 'bg-[#4285F4]/10',
-        border: 'border-[#4285F4]/30',
-        icon: 'text-[#4285F4]'
+        title: 'Google Gemini',
+        description: 'Gemini API',
+        accessMode: 'Hosted API',
+        keyHint: 'AIza*',
+        keyPlaceholder: 'AIzaSyxxxxxxxxxxxx...',
+        docsUrl: 'https://aistudio.google.com/app/apikey'
     },
     codex: {
-        primary: '#10B981',
-        bg: 'bg-[#10B981]/10',
-        border: 'border-[#10B981]/30',
-        icon: 'text-[#10B981]'
+        title: 'Codex',
+        description: 'Local Codex CLI',
+        accessMode: 'Local CLI'
     }
-}
-
-function Card({
-    title,
-    description,
-    children,
-    className
-}: {
-    title: string
-    description: string
-    children: React.ReactNode
-    className?: string
-}) {
-    return (
-        <section className={cn('rounded-2xl border border-white/10 bg-sparkle-card p-6', className)}>
-            <div className="mb-4">
-                <h2 className="text-sm font-semibold text-sparkle-text">{title}</h2>
-                <p className="mt-1 text-sm text-sparkle-text-secondary">{description}</p>
-            </div>
-            {children}
-        </section>
-    )
-}
-
-function ToggleRow({
-    title,
-    description,
-    checked,
-    onToggle
-}: {
-    title: string
-    description: string
-    checked: boolean
-    onToggle: () => void
-}) {
-    return (
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-            <div className="min-w-0">
-                <p className="text-sm font-medium text-sparkle-text">{title}</p>
-                <p className="mt-1 text-xs text-sparkle-text-secondary">{description}</p>
-            </div>
-            <button
-                type="button"
-                onClick={onToggle}
-                className={cn(
-                    'inline-flex h-7 w-12 items-center rounded-full border transition-all',
-                    checked
-                        ? 'border-white/20 bg-[var(--accent-primary)]/80 justify-end'
-                        : 'border-white/10 bg-white/10 justify-start hover:border-white/20'
-                )}
-            >
-                <span className="mx-1 h-4 w-4 rounded-full bg-white shadow-sm" />
-            </button>
-        </div>
-    )
 }
 
 export default function AISettings() {
     const { settings, updateSettings } = useSettings()
-    const [showGroqKey, setShowGroqKey] = useState(false)
-    const [showGeminiKey, setShowGeminiKey] = useState(false)
-    const [codexModelOptions, setCodexModelOptions] = useState<ModelOption[]>([])
-    const [codexModelsError, setCodexModelsError] = useState('')
+    const [activeModal, setActiveModal] = useState<CommitAIProvider | null>(null)
     const [testStatus, setTestStatus] = useState<Record<CommitAIProvider, ProviderStatus>>({
         groq: 'idle',
         gemini: 'idle',
@@ -118,120 +61,109 @@ export default function AISettings() {
         codex: ''
     })
 
+    const { codexModelsError, resolvedCodexModelOptions } = useCodexModelOptions([
+        settings.gitCommitCodexModel,
+        settings.gitPullRequestCodexModel,
+        settings.assistantDefaultModel
+    ])
+
+    const activeProvider = settings.commitAIProvider
+    const hasAnyKey = Boolean(settings.groqApiKey || settings.geminiApiKey)
+
     const setProvider = (provider: CommitAIProvider) => {
         updateSettings({ commitAIProvider: provider })
     }
 
-    const updateProviderKey = (provider: Exclude<CommitAIProvider, 'codex'>, value: string) => {
-        if (provider === 'groq') {
-            updateSettings({ groqApiKey: value })
-        } else {
-            updateSettings({ geminiApiKey: value })
-        }
-        setTestStatus((prev) => ({ ...prev, [provider]: 'idle' }))
-        setTestError((prev) => ({ ...prev, [provider]: '' }))
+    const saveProviderKey = (provider: Exclude<CommitAIProvider, 'codex'>, value: string) => {
+        updateSettings(provider === 'groq' ? { groqApiKey: value } : { geminiApiKey: value })
+        resetProviderTest(provider)
+        setActiveModal(null)
     }
 
-    const updateCodexModel = (value: string) => {
-        updateSettings({ codexModel: value })
-        setTestStatus((prev) => ({ ...prev, codex: 'idle' }))
-        setTestError((prev) => ({ ...prev, codex: '' }))
+    const saveCodexModels = (commitModel: string, pullRequestModel: string) => {
+        updateSettings({
+            gitCommitCodexModel: commitModel,
+            gitPullRequestCodexModel: pullRequestModel
+        })
+        resetProviderTest('codex')
+        setActiveModal(null)
     }
 
-    useEffect(() => {
-        let cancelled = false
-
-        async function loadCodexModels() {
-            try {
-                const result = await window.devscope.assistant.listModels(false)
-                if (!result.success) {
-                    throw new Error(result.error || 'Failed to load Codex models.')
-                }
-                if (cancelled) return
-                setCodexModelOptions(Array.isArray(result.models) ? result.models : [])
-                setCodexModelsError('')
-            } catch (error) {
-                if (!cancelled) {
-                    setCodexModelOptions([])
-                    setCodexModelsError(error instanceof Error ? error.message : 'Failed to load Codex models.')
-                }
-            }
+    const handleTestConnection = async (
+        provider: CommitAIProvider,
+        overrides?: {
+            apiKey?: string
+            commitModel?: string
+            pullRequestModel?: string
         }
+    ) => {
+        const apiKey = provider === 'groq'
+            ? overrides?.apiKey ?? settings.groqApiKey
+            : provider === 'gemini'
+                ? overrides?.apiKey ?? settings.geminiApiKey
+                : ''
 
-        void loadCodexModels()
-        return () => {
-            cancelled = true
+        if (provider !== 'codex' && !String(apiKey || '').trim()) {
+            setTestStatus((prev) => ({ ...prev, [provider]: 'error' }))
+            setTestError((prev) => ({ ...prev, [provider]: 'Enter an API key first.' }))
+            return
         }
-    }, [])
-
-    const handleTestConnection = async (provider: CommitAIProvider) => {
-        const apiKey = provider === 'groq' ? settings.groqApiKey : provider === 'gemini' ? settings.geminiApiKey : ''
-        if (provider !== 'codex' && !apiKey) return
 
         setTestStatus((prev) => ({ ...prev, [provider]: 'testing' }))
         setTestError((prev) => ({ ...prev, [provider]: '' }))
 
         try {
             const result = provider === 'groq'
-                ? await window.devscope.testGroqConnection(apiKey)
+                ? await window.devscope.testGroqConnection(String(apiKey).trim())
                 : provider === 'gemini'
-                    ? await window.devscope.testGeminiConnection(apiKey)
-                    : await window.devscope.testCodexConnection(settings.codexModel || settings.assistantDefaultModel || undefined)
+                    ? await window.devscope.testGeminiConnection(String(apiKey).trim())
+                    : await window.devscope.testCodexConnection(
+                        overrides?.commitModel
+                        || overrides?.pullRequestModel
+                        || settings.gitCommitCodexModel
+                        || settings.gitPullRequestCodexModel
+                        || settings.assistantDefaultModel
+                        || undefined
+                    )
 
             if (result.success) {
                 setTestStatus((prev) => ({ ...prev, [provider]: 'success' }))
+                setTestError((prev) => ({ ...prev, [provider]: '' }))
             } else {
                 setTestStatus((prev) => ({ ...prev, [provider]: 'error' }))
-                setTestError((prev) => ({ ...prev, [provider]: result.error || 'Connection failed' }))
+                setTestError((prev) => ({ ...prev, [provider]: result.error || 'Connection failed.' }))
             }
         } catch (error) {
             setTestStatus((prev) => ({ ...prev, [provider]: 'error' }))
             setTestError((prev) => ({
                 ...prev,
-                [provider]: error instanceof Error ? error.message : 'Connection failed'
+                [provider]: error instanceof Error ? error.message : 'Connection failed.'
             }))
         }
     }
 
-    const hasAnyKey = Boolean(settings.groqApiKey || settings.geminiApiKey)
-    const activeProvider = settings.commitAIProvider
-    const activeModel = activeProvider === 'codex'
-        ? (settings.codexModel || settings.assistantDefaultModel || PROVIDER_MODELS.codex)
-        : PROVIDER_MODELS[activeProvider]
-    const activeColors = PROVIDER_COLORS[activeProvider]
-    const effectiveCodexModel = settings.codexModel || settings.assistantDefaultModel || ''
-    const resolvedCodexModelOptions = useMemo(() => {
-        const options = [...codexModelOptions]
-        const currentValue = String(effectiveCodexModel || '').trim()
-        if (currentValue && !options.some((option) => option.id === currentValue)) {
-            options.unshift({ id: currentValue, label: currentValue, description: 'Currently selected model' })
-        }
-        if (options.length === 0) {
-            options.push({ id: '', label: 'Default Codex model' })
-        } else if (!options.some((option) => option.id === '')) {
-            options.unshift({ id: '', label: 'Default Codex model' })
-        }
-        return options
-    }, [codexModelOptions, effectiveCodexModel])
+    const resetProviderTest = (provider: CommitAIProvider) => {
+        setTestStatus((prev) => ({ ...prev, [provider]: 'idle' }))
+        setTestError((prev) => ({ ...prev, [provider]: '' }))
+    }
 
     return (
         <div className="animate-fadeIn">
-            <div className="mb-8">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="rounded-lg bg-violet-500/10 p-2">
-                            <Sparkles className="text-violet-400" size={24} />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-semibold text-sparkle-text">AI Features</h1>
-                            <p className="text-sparkle-text-secondary">
-                                Configure commit-message and PR-draft AI providers.
-                            </p>
-                        </div>
+            <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="rounded-xl bg-violet-500/10 p-2.5">
+                        <Sparkles className="text-violet-300" size={22} />
                     </div>
+                    <div>
+                        <h1 className="text-2xl font-semibold text-sparkle-text">Git AI</h1>
+                        <p className="mt-1 text-sm text-sparkle-text-secondary">Commit messages and PR drafts.</p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
                     <Link
                         to="/settings"
-                        className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-sparkle-card px-4 py-2 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.03] hover:text-[var(--accent-primary)]"
+                        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-sparkle-card px-4 py-2 text-sm text-sparkle-text transition-colors hover:border-white/18 hover:bg-white/[0.04]"
                     >
                         <ArrowLeft size={16} />
                         <span>Back to Settings</span>
@@ -239,412 +171,160 @@ export default function AISettings() {
                 </div>
             </div>
 
-            <div className="space-y-6">
-                <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] via-white/[0.02] to-transparent p-6">
-                    <div 
-                        className="absolute right-0 top-0 h-32 w-32 -translate-y-1/2 translate-x-1/2 rounded-full blur-3xl" 
-                        style={{ backgroundColor: `${activeColors.primary}20` }}
-                    />
-                    <div className="relative">
-                        <div className="mb-3 flex items-center gap-2">
-                            <Zap className={activeColors.icon} size={18} />
-                            <p className={cn('text-xs font-semibold uppercase tracking-[0.18em]', activeColors.icon)}>
-                                Active AI Configuration
-                            </p>
-                        </div>
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className={cn('rounded-xl border p-3', activeColors.border, activeColors.bg)}>
-                                    <Wand2 className={activeColors.icon} size={20} />
-                                </div>
-                                <div>
-                                    <p className="text-base font-semibold text-sparkle-text">
-                                        {activeProvider === 'groq' ? 'Groq' : activeProvider === 'gemini' ? 'Google Gemini' : 'Codex'}
-                                    </p>
-                                    <code className={cn('text-xs font-mono', activeColors.icon)}>{activeModel}</code>
-                                </div>
-                            </div>
-                            <div className="hidden h-8 w-px bg-white/5 lg:block" />
-                            <div className="flex items-center gap-2">
-                                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5">
-                                    <span className="text-xs text-sparkle-text-secondary">Access: </span>
-                                    <span className={cn(
-                                        'text-xs font-medium',
-                                        activeProvider === 'codex'
-                                            ? 'text-emerald-300'
-                                            : hasAnyKey
-                                                ? 'text-green-400'
-                                                : 'text-red-400'
-                                    )}>
-                                        {activeProvider === 'codex' ? 'Codex CLI' : hasAnyKey ? 'API key configured' : 'Missing API key'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+            <section className="rounded-xl border border-white/10 bg-sparkle-card p-5">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 className="text-sm font-semibold text-sparkle-text">Default Git AI Provider</h2>
+                        <p className="mt-1 text-sm text-sparkle-text-secondary">Choose what Git uses.</p>
                     </div>
-                </section>
-
-                <Card
-                    title="Git AI Provider"
-                    description="Choose the default AI provider for commit-message generation and AI-authored PR drafts in DevScope Git flows."
-                >
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        {(['groq', 'gemini', 'codex'] as CommitAIProvider[]).map((provider) => {
-                            const selected = settings.commitAIProvider === provider
-                            const colors = PROVIDER_COLORS[provider]
-                            return (
-                                <button
-                                    key={provider}
-                                    type="button"
-                                    onClick={() => setProvider(provider)}
-                                    className={cn(
-                                        'group relative rounded-xl border px-5 py-4 text-left transition-all',
-                                        selected
-                                            ? `${colors.border} ${colors.bg} shadow-lg`
-                                            : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]'
-                                    )}
-                                >
-                                    {selected && (
-                                        <div className="absolute right-3 top-3">
-                                            <div className={cn('rounded-full p-1', colors.bg)}>
-                                                <Check size={14} className={colors.icon} />
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <div className={cn(
-                                            'rounded-lg p-2 transition-colors',
-                                            selected ? colors.bg : 'bg-white/[0.05] group-hover:bg-white/[0.08]'
-                                        )}>
-                                            <Zap size={18} className={selected ? colors.icon : 'text-sparkle-text-secondary'} />
-                                        </div>
-                                        <p className={cn(
-                                            'text-base font-semibold transition-colors',
-                                            selected ? colors.icon : 'text-sparkle-text'
-                                        )}>
-                                            {provider === 'groq' ? 'Groq' : provider === 'gemini' ? 'Google Gemini' : 'Codex'}
-                                        </p>
-                                    </div>
-                                    <p className="text-sm text-sparkle-text-secondary mb-2">
-                                        {provider === 'groq' ? 'Very fast inference' : provider === 'gemini' ? 'Gemini API models' : 'Uses the local Codex CLI session'}
-                                    </p>
-                                    <div className={cn(
-                                        'rounded-lg px-2.5 py-1.5 text-[11px] font-mono',
-                                        selected 
-                                            ? `${colors.bg} ${colors.icon}` 
-                                            : 'bg-white/[0.05] text-sparkle-text-muted'
-                                    )}>
-                                        {PROVIDER_MODELS[provider]}
-                                    </div>
-                                </button>
-                            )
-                        })}
-                    </div>
-                </Card>
-
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-                    <ProviderKeyCard
-                        provider="groq"
-                        model={PROVIDER_MODELS.groq}
-                        value={settings.groqApiKey}
-                        showKey={showGroqKey}
-                        onToggleShow={() => setShowGroqKey((value) => !value)}
-                        onChange={(value) => updateProviderKey('groq', value)}
-                        onTest={() => handleTestConnection('groq')}
-                        status={testStatus.groq}
-                        error={testError.groq}
-                        docsUrl="https://console.groq.com/keys"
-                    />
-
-                    <ProviderKeyCard
-                        provider="gemini"
-                        model={PROVIDER_MODELS.gemini}
-                        value={settings.geminiApiKey}
-                        showKey={showGeminiKey}
-                        onToggleShow={() => setShowGeminiKey((value) => !value)}
-                        onChange={(value) => updateProviderKey('gemini', value)}
-                        onTest={() => handleTestConnection('gemini')}
-                        status={testStatus.gemini}
-                        error={testError.gemini}
-                        docsUrl="https://aistudio.google.com/app/apikey"
-                    />
-
-                    <CodexProviderCard
-                        model={effectiveCodexModel}
-                        modelOptions={resolvedCodexModelOptions}
-                        modelsError={codexModelsError}
-                        onChange={updateCodexModel}
-                        onTest={() => handleTestConnection('codex')}
-                        status={testStatus.codex}
-                        error={testError.codex}
-                    />
+                    {settings.betaSettingsEnabled ? (
+                        <Link
+                            to="/settings/git"
+                            className="inline-flex items-center gap-2 rounded-lg border border-transparent bg-white/[0.04] px-3 py-1.5 text-sm text-sparkle-text transition-colors hover:bg-white/[0.07]"
+                        >
+                            <GitBranch size={15} />
+                            <span>Git settings</span>
+                        </Link>
+                    ) : null}
                 </div>
 
-                {hasAnyKey && (
-                    <div className="flex justify-center pt-2">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                updateSettings({ groqApiKey: '', geminiApiKey: '' })
-                                setTestStatus({ groq: 'idle', gemini: 'idle', codex: testStatus.codex })
-                                setTestError({ groq: '', gemini: '', codex: testError.codex })
-                            }}
-                            className="inline-flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/15"
-                        >
-                            <Trash2 size={14} />
-                            Clear all API keys
-                        </button>
-                    </div>
-                )}
-            </div>
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-3" role="radiogroup" aria-label="Default Git AI provider">
+                {PROVIDERS.map((provider) => {
+                    const copy = PROVIDER_COPY[provider]
+                    const connection = getProviderConnectionState(provider, settings, testStatus[provider])
+                    const tags = dedupeTags([
+                        provider === activeProvider ? { label: 'Active', tone: 'success' as const } : null,
+                        { label: connection.label, tone: connection.tone },
+                        { label: copy.accessMode, tone: 'neutral' as const }
+                    ])
+
+                    return (
+                        <ProviderOverviewCard
+                            key={provider}
+                            provider={provider}
+                            title={copy.title}
+                            description={copy.description}
+                            active={provider === activeProvider}
+                            tags={tags}
+                            details={getProviderDetails(provider, settings)}
+                            message={testStatus[provider] === 'error' && testError[provider]
+                                ? { tone: 'danger', text: testError[provider] }
+                                : undefined}
+                            onUse={provider === activeProvider ? undefined : () => setProvider(provider)}
+                            onConfigure={() => setActiveModal(provider)}
+                        />
+                    )
+                })}
+                </div>
+            </section>
+
+            {hasAnyKey ? (
+                <div className="mt-4 flex justify-end">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            updateSettings({ groqApiKey: '', geminiApiKey: '' })
+                            resetProviderTest('groq')
+                            resetProviderTest('gemini')
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300 transition-colors hover:border-red-500/30 hover:bg-red-500/14"
+                    >
+                        <Trash2 size={14} />
+                        <span>Clear API keys</span>
+                    </button>
+                </div>
+            ) : null}
+
+            <KeyProviderModal
+                open={activeModal === 'groq'}
+                provider="groq"
+                title={PROVIDER_COPY.groq.title}
+                description="Save a Groq key."
+                value={settings.groqApiKey}
+                placeholder={PROVIDER_COPY.groq.keyPlaceholder || ''}
+                keyHint={PROVIDER_COPY.groq.keyHint || ''}
+                docsUrl={PROVIDER_COPY.groq.docsUrl || ''}
+                status={testStatus.groq}
+                error={testError.groq}
+                onClose={() => setActiveModal(null)}
+                onSave={(value) => saveProviderKey('groq', value)}
+                onTest={(value) => void handleTestConnection('groq', { apiKey: value })}
+            />
+
+            <KeyProviderModal
+                open={activeModal === 'gemini'}
+                provider="gemini"
+                title={PROVIDER_COPY.gemini.title}
+                description="Save a Gemini key."
+                value={settings.geminiApiKey}
+                placeholder={PROVIDER_COPY.gemini.keyPlaceholder || ''}
+                keyHint={PROVIDER_COPY.gemini.keyHint || ''}
+                docsUrl={PROVIDER_COPY.gemini.docsUrl || ''}
+                status={testStatus.gemini}
+                error={testError.gemini}
+                onClose={() => setActiveModal(null)}
+                onSave={(value) => saveProviderKey('gemini', value)}
+                onTest={(value) => void handleTestConnection('gemini', { apiKey: value })}
+            />
+
+            <CodexProviderModal
+                open={activeModal === 'codex'}
+                commitModel={settings.gitCommitCodexModel}
+                pullRequestModel={settings.gitPullRequestCodexModel}
+                modelOptions={resolvedCodexModelOptions}
+                modelsError={codexModelsError}
+                status={testStatus.codex}
+                error={testError.codex}
+                onClose={() => setActiveModal(null)}
+                onSave={(commitModel, pullRequestModel) => saveCodexModels(commitModel, pullRequestModel)}
+                onTest={(commitModel, pullRequestModel) => void handleTestConnection('codex', { commitModel, pullRequestModel })}
+            />
         </div>
     )
 }
 
-function CodexProviderCard({
-    model,
-    modelOptions,
-    modelsError,
-    onChange,
-    onTest,
-    status,
-    error
-}: {
-    model: string
-    modelOptions: ModelOption[]
-    modelsError: string
-    onChange: (value: string) => void
-    onTest: () => void
-    status: ProviderStatus
-    error: string
-}) {
-    const colors = PROVIDER_COLORS.codex
-
-    return (
-        <section className={cn(
-            'rounded-2xl border p-6 transition-all',
-            'border-white/10 bg-sparkle-card hover:border-white/15'
-        )}>
-            <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className={cn('rounded-lg p-2', colors.bg)}>
-                        <Zap size={18} className={colors.icon} />
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-sparkle-text">Codex CLI</h3>
-                        <p className="text-xs text-sparkle-text-secondary mt-0.5">No API key required here</p>
-                    </div>
-                </div>
-            </div>
-
-            <p className="mb-3 text-sm text-sparkle-text-secondary leading-relaxed">
-                Uses the installed Codex CLI for commit-message generation and PR draft writing. Set the model you want these Git flows to use.
-            </p>
-
-            <div className={cn('mb-4 rounded-lg px-3 py-2 text-xs font-mono', colors.bg, colors.icon)}>
-                Model: {model || 'Default Codex model'}
-            </div>
-
-            <div className="space-y-3">
-                <div>
-                    <p className="mb-2 text-[11px] uppercase tracking-[0.18em] text-white/35">Codex model</p>
-                    <Select
-                        value={model}
-                        onChange={onChange}
-                        options={modelOptions.map((option) => ({
-                            value: option.id,
-                            label: option.label
-                        }))}
-                        placeholder="Select a Codex model"
-                    />
-                    {modelsError ? (
-                        <p className="mt-2 text-xs text-amber-300">{modelsError}</p>
-                    ) : null}
-                </div>
-
-                <button
-                    type="button"
-                    onClick={onTest}
-                    disabled={status === 'testing'}
-                    className={cn(
-                        'inline-flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-medium text-white transition-all',
-                        'disabled:cursor-not-allowed disabled:opacity-50',
-                        'hover:opacity-90 active:scale-[0.98]',
-                        colors.border
-                    )}
-                    style={{ backgroundColor: colors.primary }}
-                >
-                    {status === 'testing' ? (
-                        <>
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                            Testing...
-                        </>
-                    ) : status === 'success' ? (
-                        <>
-                            <Check size={16} />
-                            Connected
-                        </>
-                    ) : (
-                        <>
-                            <Zap size={16} />
-                            Test Codex CLI
-                        </>
-                    )}
-                </button>
-            </div>
-
-            {status === 'success' && (
-                <div className="mt-4 flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm text-green-300">
-                    <Check size={16} className="shrink-0" />
-                    <span>Codex CLI is available and responded successfully.</span>
-                </div>
-            )}
-
-            {status === 'error' && (
-                <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                    <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                </div>
-            )}
-        </section>
-    )
+function dedupeTags(
+    tags: Array<{ label: string; tone: StatusPillTone } | null>
+): Array<{ label: string; tone: StatusPillTone }> {
+    const seen = new Set<string>()
+    const result: Array<{ label: string; tone: StatusPillTone }> = []
+    for (const tag of tags) {
+        if (!tag) continue
+        const key = tag.label.trim().toLowerCase()
+        if (!key || seen.has(key)) continue
+        seen.add(key)
+        result.push(tag)
+    }
+    return result
 }
 
-function ProviderKeyCard({
-    provider,
-    model,
-    value,
-    showKey,
-    onToggleShow,
-    onChange,
-    onTest,
-    status,
-    error,
-    docsUrl
-}: {
-    provider: Exclude<CommitAIProvider, 'codex'>
-    model: string
-    value: string
-    showKey: boolean
-    onToggleShow: () => void
-    onChange: (value: string) => void
-    onTest: () => void
+function getProviderConnectionState(
+    provider: CommitAIProvider,
+    settings: ReturnType<typeof useSettings>['settings'],
     status: ProviderStatus
-    error: string
-    docsUrl: string
-}) {
-    const isGroq = provider === 'groq'
-    const colors = PROVIDER_COLORS[provider]
+): { label: string; tone: StatusPillTone } {
+    if (status === 'success') return { label: 'Connected', tone: 'success' }
+    if (status === 'testing') return { label: 'Testing', tone: 'accent' }
+    if (status === 'error') return { label: provider === 'codex' ? 'Unavailable' : 'Failed test', tone: 'danger' }
+    if (provider === 'codex') return { label: 'Local CLI', tone: 'neutral' }
+    const hasKey = provider === 'groq' ? Boolean(settings.groqApiKey) : Boolean(settings.geminiApiKey)
+    return hasKey ? { label: 'Key saved', tone: 'neutral' } : { label: 'No key', tone: 'danger' }
+}
 
-    return (
-        <section className={cn(
-            'rounded-2xl border p-6 transition-all',
-            'border-white/10 bg-sparkle-card hover:border-white/15'
-        )}>
-            <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className={cn('rounded-lg p-2', colors.bg)}>
-                        <Zap size={18} className={colors.icon} />
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-sparkle-text">
-                            {isGroq ? 'Groq API Key' : 'Gemini API Key'}
-                        </h3>
-                        <p className="text-xs text-sparkle-text-secondary mt-0.5">
-                            {isGroq ? 'gsk_*' : 'AIza*'}
-                        </p>
-                    </div>
-                </div>
-            </div>
-            
-            <p className="mb-3 text-sm text-sparkle-text-secondary leading-relaxed">
-                {isGroq
-                    ? 'Used for low-latency commit message generation with Groq-hosted models.'
-                    : 'Used for commit message generation through Google Gemini models.'}
-            </p>
-            
-            <div className={cn('mb-4 rounded-lg px-3 py-2 text-xs font-mono', colors.bg, colors.icon)}>
-                Model: {model}
-            </div>
+function getProviderDetails(
+    provider: CommitAIProvider,
+    settings: ReturnType<typeof useSettings>['settings']
+): Array<{ label: string; value: string }> {
+    if (provider === 'codex') {
+        return [
+            { label: 'Commit', value: settings.gitCommitCodexModel || 'Default' },
+            { label: 'PR', value: settings.gitPullRequestCodexModel || 'Default' }
+        ]
+    }
 
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-                <div className="relative flex-1">
-                    <input
-                        type={showKey ? 'text' : 'password'}
-                        value={value}
-                        onChange={(event) => onChange(event.target.value)}
-                        placeholder={isGroq ? 'gsk_xxxxxxxxxxxx...' : 'AIzaSyxxxxxxxxxxxx...'}
-                        className="w-full rounded-xl border border-white/10 bg-black/10 px-4 py-3 pr-12 text-sm font-mono text-sparkle-text placeholder:text-sparkle-text-muted focus:border-white/20 focus:outline-none transition-colors"
-                    />
-                    <button
-                        type="button"
-                        onClick={onToggleShow}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-sparkle-text-muted transition-colors hover:text-sparkle-text"
-                        title={showKey ? 'Hide key' : 'Show key'}
-                    >
-                        {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                </div>
-
-                <button
-                    type="button"
-                    onClick={onTest}
-                    disabled={!value || status === 'testing'}
-                    className={cn(
-                        'inline-flex items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-medium text-white transition-all',
-                        'disabled:cursor-not-allowed disabled:opacity-50',
-                        'hover:opacity-90 active:scale-[0.98]',
-                        colors.border
-                    )}
-                    style={{ backgroundColor: colors.primary }}
-                >
-                    {status === 'testing' ? (
-                        <>
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                            Testing...
-                        </>
-                    ) : status === 'success' ? (
-                        <>
-                            <Check size={16} />
-                            Connected
-                        </>
-                    ) : (
-                        <>
-                            <Zap size={16} />
-                            Test Connection
-                        </>
-                    )}
-                </button>
-            </div>
-
-            {status === 'success' && (
-                <div className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm text-green-300">
-                    <Check size={16} className="shrink-0" />
-                    <span>API key is valid and connection succeeded.</span>
-                </div>
-            )}
-
-            {status === 'error' && (
-                <div className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                    <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                </div>
-            )}
-
-            <div className="mt-4 border-t border-white/5 pt-4">
-                <a
-                    href={docsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={cn(
-                        'inline-flex items-center gap-2 text-sm transition-colors hover:underline',
-                        colors.icon
-                    )}
-                >
-                    <ExternalLink size={14} />
-                    {isGroq ? 'Get a Groq API key' : 'Get a Gemini API key'}
-                </a>
-            </div>
-        </section>
-    )
+    const hasKey = provider === 'groq' ? Boolean(settings.groqApiKey) : Boolean(settings.geminiApiKey)
+    return [
+        { label: 'Model', value: PROVIDER_MODELS[provider] },
+        { label: 'Saved key', value: hasKey ? 'Present' : 'Missing' }
+    ]
 }

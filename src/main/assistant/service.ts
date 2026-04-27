@@ -1,60 +1,73 @@
-import log from 'electron-log'
+import { app } from 'electron'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import type {
     AssistantAccountOverview,
+    AssistantApprovePendingPlaygroundLabRequestInput,
+    AssistantAttachSessionToPlaygroundLabInput,
     AssistantClearLogsInput,
     AssistantConnectOptions,
+    AssistantCreatePlaygroundLabInput,
+    AssistantCreateSessionInput,
+    AssistantDeclinePendingPlaygroundLabRequestInput,
     AssistantDeleteMessageInput,
+    AssistantDeletePlaygroundLabInput,
     AssistantDomainEvent,
-    AssistantLatestTurn,
-    AssistantMessage,
+    AssistantGetSessionTurnUsageInput,
     AssistantRuntimeStatus,
     AssistantSendPromptOptions,
+    AssistantSession,
     AssistantThread
 } from '../../shared/assistant/contracts'
 import { AssistantTextDeltaBuffer } from './assistant-text-delta-buffer'
 import { CodexAppServerRuntime } from './codex-app-server'
+import { sanitizeOptionalPath, nowIso } from './utils'
+import type { AssistantServiceActionDeps } from './service-action-deps'
 import { AssistantPersistence } from './persistence'
 import { applyDomainEvent, createDefaultSnapshot } from './projector'
+import { approvePendingPlaygroundLabRequestAction, attachSessionToPlaygroundLabAction, createPlaygroundLabAction, declinePendingPlaygroundLabRequestAction, deletePlaygroundLabAction, setPlaygroundRootAction } from './service-playground-actions'
+import {
+    clearAssistantLogsAction,
+    connectAssistantSession,
+    createAssistantSessionAction,
+    createAssistantThreadAction,
+    deleteAssistantMessageAction,
+    deleteAssistantSessionAction,
+    disconnectAssistantSession,
+    getAssistantRuntimeStatusAction,
+    getAssistantSessionTurnUsageAction,
+    interruptAssistantTurnAction,
+    archiveAssistantSessionAction,
+    renameAssistantSessionAction,
+    respondAssistantApprovalAction,
+    respondAssistantUserInputAction,
+    selectAssistantSessionAction,
+    selectAssistantThreadAction,
+    sendAssistantPromptAction,
+    setAssistantSessionProjectPathAction
+} from './service-session-actions'
 import {
     broadcastAssistantPayload,
     createAssistantDomainEvent,
-    ensureAssistantSession,
-    markActiveThreadCompletionSeen,
     trimAssistantEvents,
     updateLatestTurnAssistantMessage
 } from './service-helpers'
 import { handleAssistantRuntimeEvent } from './service-runtime-events'
-import { buildDeleteMessagePlan } from './service-history'
-import {
-    createAssistantSessionRecord,
-    createAssistantUserMessage,
-    createRunningLatestTurn
-} from './service-records'
 import {
     type AssistantStateRecord,
-    createAssistantThread,
     findSessionByThreadId,
-    findThreadForApproval,
-    findThreadForUserInput,
+    findThreadRecord,
     getActiveThread,
     getSelectedSession,
-    isClearableIssueActivity,
-    requireActiveThread,
     requireSession,
     requireThread
 } from './service-state'
-import {
-    createAssistantId,
-    deriveSessionTitleFromPrompt,
-    isDefaultSessionTitle,
-    nowIso,
-    sanitizeOptionalPath
-} from './utils'
 
 export class AssistantService {
     private static readonly MAX_IN_MEMORY_EVENTS = 256
     private static readonly ASSISTANT_TEXT_DELTA_FLUSH_MS = 40
     private static readonly ASSISTANT_EVENT_BROADCAST_BATCH_MS = 16
+
     private readonly runtime = new CodexAppServerRuntime()
     private readonly persistence = new AssistantPersistence()
     private readonly assistantTextDeltaBuffer = new AssistantTextDeltaBuffer({
@@ -69,17 +82,38 @@ export class AssistantService {
         }
     })
     private readonly subscribers = new Set<number>()
+    private readonly planBuffers = new Map<string, string>()
+    private readonly suppressedAssistantTextTurns = new Set<string>()
+    private readonly readyPromise: Promise<void>
+    private readonly actionDeps: AssistantServiceActionDeps
+
     private state: AssistantStateRecord = {
         snapshot: createDefaultSnapshot(),
         events: []
     }
-    private readonly planBuffers = new Map<string, string>()
     private pendingBroadcastEvents: AssistantDomainEvent[] = []
     private pendingBroadcastTimer: NodeJS.Timeout | null = null
-    private readonly readyPromise: Promise<void>
 
     constructor() {
         this.readyPromise = this.initialize()
+        this.actionDeps = {
+            runtime: this.runtime,
+            ensureReady: () => this.ensureReady(),
+            getSnapshot: () => this.state.snapshot,
+            hydrateSelectedSession: async (sessionId: string) => {
+                this.state.snapshot = await this.persistence.hydrateSelectedSession(this.state.snapshot, sessionId)
+            },
+            appendEvent: (type, occurredAt, payload, sessionId, threadId) => {
+                this.appendEvent(type, occurredAt, payload, sessionId, threadId)
+            },
+            getSessionRuntimeCwd: (session, thread, options) => this.getSessionRuntimeCwd(session, thread, options),
+            createSession: (input?: AssistantCreateSessionInput) => this.createSession(input),
+            createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) => this.createPlaygroundLab(input),
+            sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) => this.sendPrompt(prompt, options),
+            suppressAssistantTextForTurn: (threadId: string, turnId: string) => {
+                this.suppressedAssistantTextTurns.add(`${threadId}:${turnId}`)
+            }
+        }
         this.runtime.on('runtime', (event) => {
             this.handleRuntimeEvent(event)
         })
@@ -110,18 +144,7 @@ export class AssistantService {
     }
 
     async getStatus(): Promise<AssistantRuntimeStatus> {
-        await this.ensureReady()
-        const availability = await this.runtime.checkAvailability()
-        const session = getSelectedSession(this.state.snapshot)
-        const thread = getActiveThread(session)
-        return {
-            available: availability.available,
-            connected: Boolean(thread && (thread.state === 'ready' || thread.state === 'running' || thread.state === 'waiting')),
-            selectedSessionId: session?.id || null,
-            activeThreadId: thread?.id || null,
-            state: thread?.state || 'disconnected',
-            reason: availability.reason
-        }
+        return getAssistantRuntimeStatusAction(this.actionDeps)
     }
 
     async listModels(forceRefresh = false) {
@@ -151,287 +174,113 @@ export class AssistantService {
         return { success: true as const, overview }
     }
 
+    async getSessionTurnUsage(input?: AssistantGetSessionTurnUsageInput) {
+        return getAssistantSessionTurnUsageAction(
+            this.actionDeps,
+            (sessionId) => this.persistence.readSessionTurnUsage(sessionId),
+            input
+        )
+    }
+
     async connect(options?: AssistantConnectOptions) {
-        await this.ensureReady()
-        const session = options?.sessionId
-            ? requireSession(this.state.snapshot, options.sessionId)
-            : getSelectedSession(this.state.snapshot) || ensureAssistantSession(this.state.snapshot, (type, occurredAt, payload, sessionId, threadId) => {
-                this.appendEvent(type, occurredAt, payload, sessionId, threadId)
-            })
-        const thread = requireActiveThread(session)
-        await this.runtime.connect(thread, session.projectPath || process.cwd())
-        return { success: true as const, threadId: thread.id }
+        return connectAssistantSession(this.actionDeps, options)
     }
 
     async disconnect(sessionId?: string) {
-        await this.ensureReady()
-        const session = sessionId
-            ? requireSession(this.state.snapshot, sessionId)
-            : getSelectedSession(this.state.snapshot)
-        if (!session) {
-            return { success: true as const }
-        }
-        const thread = requireActiveThread(session)
-        this.runtime.disconnect(thread.id)
-        return { success: true as const }
+        return disconnectAssistantSession(this.actionDeps, sessionId)
     }
 
-    async createSession(title?: string, projectPath?: string) {
-        await this.ensureReady()
-        const createdAt = nowIso()
-        const sessionId = createAssistantId('assistant-session')
-        const thread = createAssistantThread(createdAt, null, projectPath || null)
-        const session = createAssistantSessionRecord({
-            sessionId,
-            title: title?.trim() || 'New Session',
-            projectPath: projectPath?.trim() || null,
-            createdAt,
-            thread
-        })
-        this.appendEvent('session.created', createdAt, { session }, sessionId, thread.id)
-        this.appendEvent('session.selected', createdAt, { sessionId }, sessionId, thread.id)
-        return { success: true as const, sessionId }
+    async createSession(input?: AssistantCreateSessionInput) {
+        return createAssistantSessionAction(this.actionDeps, input)
     }
 
     async selectSession(sessionId: string) {
+        return selectAssistantSessionAction(this.actionDeps, sessionId)
+    }
+
+    async selectThread(sessionId: string, threadId: string) {
+        return selectAssistantThreadAction(this.actionDeps, sessionId, threadId)
+    }
+
+    async hydrateSession(sessionId: string) {
         await this.ensureReady()
         requireSession(this.state.snapshot, sessionId)
         this.state.snapshot = await this.persistence.hydrateSelectedSession(this.state.snapshot, sessionId)
-        const session = requireSession(this.state.snapshot, sessionId)
-        const occurredAt = nowIso()
-        this.appendEvent('session.selected', occurredAt, { sessionId }, sessionId)
-        markActiveThreadCompletionSeen(session, occurredAt, (type, eventOccurredAt, payload, eventSessionId, threadId) => {
-            this.appendEvent(type, eventOccurredAt, payload, eventSessionId, threadId)
-        })
-        return { success: true as const, sessionId, snapshot: structuredClone(this.state.snapshot) }
+        return {
+            success: true as const,
+            sessionId,
+            snapshot: structuredClone(this.state.snapshot)
+        }
     }
 
     async renameSession(sessionId: string, title: string) {
-        await this.ensureReady()
-        const session = requireSession(this.state.snapshot, sessionId)
-        this.appendEvent('session.updated', nowIso(), {
-            sessionId,
-            patch: {
-                title: title.trim() || session.title,
-                updatedAt: nowIso()
-            }
-        }, sessionId)
-        return { success: true as const }
+        return renameAssistantSessionAction(this.actionDeps, sessionId, title)
     }
 
     async archiveSession(sessionId: string, archived = true) {
-        await this.ensureReady()
-        requireSession(this.state.snapshot, sessionId)
-        this.appendEvent('session.updated', nowIso(), {
-            sessionId,
-            patch: {
-                archived,
-                updatedAt: nowIso()
-            }
-        }, sessionId)
-        return { success: true as const }
+        return archiveAssistantSessionAction(this.actionDeps, sessionId, archived)
     }
 
     async deleteSession(sessionId: string) {
-        await this.ensureReady()
-        const session = requireSession(this.state.snapshot, sessionId)
-        const thread = getActiveThread(session)
-        if (thread) {
-            this.runtime.disconnect(thread.id)
-        }
-        this.appendEvent('session.deleted', nowIso(), { sessionId }, sessionId)
-        return { success: true as const }
+        return deleteAssistantSessionAction(this.actionDeps, sessionId)
     }
 
     async clearLogs(input?: AssistantClearLogsInput) {
-        await this.ensureReady()
-        const session = input?.sessionId
-            ? requireSession(this.state.snapshot, input.sessionId)
-            : requireSession(this.state.snapshot, this.state.snapshot.selectedSessionId || '')
-        const thread = requireActiveThread(session)
-        const occurredAt = nowIso()
-
-        this.appendEvent('thread.updated', occurredAt, {
-            threadId: thread.id,
-            patch: {
-                activities: thread.activities.filter((activity) => !isClearableIssueActivity(activity)),
-                updatedAt: occurredAt
-            }
-        }, session.id, thread.id)
-
-        return { success: true as const }
+        return clearAssistantLogsAction(this.actionDeps, input)
     }
 
     async deleteMessage(input: AssistantDeleteMessageInput) {
-        await this.ensureReady()
-        const session = input?.sessionId
-            ? requireSession(this.state.snapshot, input.sessionId)
-            : requireSession(this.state.snapshot, this.state.snapshot.selectedSessionId || '')
-        const thread = requireActiveThread(session)
-        const occurredAt = nowIso()
-        const deletePlan = buildDeleteMessagePlan(thread, input.messageId, occurredAt)
-
-        if (deletePlan.rollbackTurnCount) {
-            try {
-                await this.runtime.rollbackThread(thread.id, deletePlan.rollbackTurnCount)
-            } catch (error) {
-                log.warn('[Assistant] rollbackThread failed during deleteMessage; applying local history trim only', error)
-            }
-        }
-
-        this.appendEvent('thread.updated', occurredAt, {
-            threadId: thread.id,
-            patch: deletePlan.patch
-        }, session.id, thread.id)
-
-        return { success: true as const }
+        return deleteAssistantMessageAction(this.actionDeps, input)
     }
 
     async setSessionProjectPath(sessionId: string, projectPath: string | null) {
-        await this.ensureReady()
-        requireSession(this.state.snapshot, sessionId)
-        this.appendEvent('session.updated', nowIso(), {
-            sessionId,
-            patch: {
-                projectPath: sanitizeOptionalPath(projectPath),
-                updatedAt: nowIso()
-            }
-        }, sessionId)
-        return { success: true as const }
+        return setAssistantSessionProjectPathAction(this.actionDeps, sessionId, projectPath)
+    }
+
+    async setPlaygroundRoot(input: { rootPath: string | null }) {
+        return setPlaygroundRootAction(this.actionDeps, input)
+    }
+
+    async createPlaygroundLab(input: AssistantCreatePlaygroundLabInput) {
+        return createPlaygroundLabAction(this.actionDeps, input)
+    }
+
+    async deletePlaygroundLab(input: AssistantDeletePlaygroundLabInput) {
+        return deletePlaygroundLabAction(this.actionDeps, input)
+    }
+
+    async attachSessionToPlaygroundLab(input: AssistantAttachSessionToPlaygroundLabInput) {
+        return attachSessionToPlaygroundLabAction(this.actionDeps, input)
     }
 
     async newThread(sessionId?: string) {
-        await this.ensureReady()
-        const session = sessionId
-            ? requireSession(this.state.snapshot, sessionId)
-            : getSelectedSession(this.state.snapshot) || ensureAssistantSession(this.state.snapshot, (type, occurredAt, payload, eventSessionId, threadId) => {
-                this.appendEvent(type, occurredAt, payload, eventSessionId, threadId)
-            })
-        const previousThread = getActiveThread(session)
-        if (previousThread) {
-            this.runtime.disconnect(previousThread.id)
-        }
-
-        const createdAt = nowIso()
-        const thread = createAssistantThread(
-            createdAt,
-            previousThread,
-            session.projectPath ?? previousThread?.cwd ?? null
-        )
-        this.appendEvent('thread.created', createdAt, { sessionId: session.id, thread }, session.id, thread.id)
-        this.appendEvent('session.updated', createdAt, {
-            sessionId: session.id,
-            patch: {
-                activeThreadId: thread.id,
-                updatedAt: createdAt
-            }
-        }, session.id, thread.id)
-        return { success: true as const, threadId: thread.id }
+        return createAssistantThreadAction(this.actionDeps, sessionId)
     }
 
     async sendPrompt(prompt: string, options?: AssistantSendPromptOptions) {
-        await this.ensureReady()
-        const input = String(prompt || '').trim()
-        if (!input) throw new Error('Prompt is required.')
-
-        const session = options?.sessionId
-            ? requireSession(this.state.snapshot, options.sessionId)
-            : ensureAssistantSession(this.state.snapshot, (type, occurredAt, payload, sessionId, threadId) => {
-                this.appendEvent(type, occurredAt, payload, sessionId, threadId)
-            })
-        const thread = requireActiveThread(session)
-        const occurredAt = nowIso()
-        const title = isDefaultSessionTitle(session.title) ? deriveSessionTitleFromPrompt(input) : session.title
-        if (title !== session.title) {
-            this.appendEvent('session.updated', occurredAt, {
-                sessionId: session.id,
-                patch: {
-                    title,
-                    updatedAt: occurredAt
-                }
-            }, session.id, thread.id)
-        }
-
-        const userMessage = createAssistantUserMessage(input, occurredAt, createAssistantId('assistant-message'))
-        this.appendEvent('thread.message.user', occurredAt, { threadId: thread.id, message: userMessage }, session.id, thread.id)
-
-        const runtimeCwd = session.projectPath || thread.cwd || process.cwd()
-        const updatedThreadPatch: Partial<AssistantThread> & Pick<AssistantThread, 'model' | 'runtimeMode' | 'interactionMode' | 'cwd' | 'state' | 'lastError' | 'activePlan' | 'updatedAt'> = {
-            model: options?.model || thread.model,
-            runtimeMode: options?.runtimeMode || thread.runtimeMode,
-            interactionMode: options?.interactionMode || thread.interactionMode,
-            cwd: runtimeCwd,
-            state: 'starting',
-            lastError: null,
-            activePlan: null,
-            updatedAt: occurredAt
-        }
-        this.appendEvent('thread.updated', occurredAt, { threadId: thread.id, patch: updatedThreadPatch }, session.id, thread.id)
-
-        try {
-            await this.runtime.connect({ ...thread, ...updatedThreadPatch }, runtimeCwd)
-            const result = await this.runtime.sendPrompt(thread.id, input, {
-                model: options?.model,
-                runtimeMode: options?.runtimeMode,
-                interactionMode: options?.interactionMode,
-                effort: options?.effort,
-                serviceTier: options?.serviceTier
-            })
-            const latestTurn = createRunningLatestTurn(result.turnId, occurredAt, options)
-            this.appendEvent('thread.latest-turn.updated', occurredAt, { threadId: thread.id, latestTurn }, session.id, thread.id)
-            return { success: true as const, sessionId: session.id, threadId: thread.id, turnId: result.turnId }
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to send prompt.'
-            this.appendEvent('thread.updated', nowIso(), {
-                threadId: thread.id,
-                patch: {
-                    state: 'error',
-                    lastError: message,
-                    updatedAt: nowIso()
-                }
-            }, session.id, thread.id)
-            this.appendEvent('thread.activity.appended', nowIso(), {
-                threadId: thread.id,
-                activity: {
-                    id: createAssistantId('assistant-activity'),
-                    kind: 'runtime.error',
-                    tone: 'error',
-                    summary: 'Failed to start turn',
-                    detail: message,
-                    turnId: null,
-                    createdAt: nowIso()
-                }
-            }, session.id, thread.id)
-            throw error
-        }
+        return sendAssistantPromptAction(this.actionDeps, prompt, options)
     }
 
     async interruptTurn(turnId?: string, sessionId?: string) {
-        await this.ensureReady()
-        const session = requireSession(this.state.snapshot, sessionId)
-        const thread = requireActiveThread(session)
-        const effectiveTurnId = turnId || thread.latestTurn?.id
-        if (effectiveTurnId) {
-            await this.runtime.interruptTurn(thread.id, effectiveTurnId)
-        }
-        return { success: true as const }
+        return interruptAssistantTurnAction(this.actionDeps, turnId, sessionId)
     }
 
     async respondApproval(input: { requestId: string; decision: 'acceptForSession' | 'decline' }) {
-        await this.ensureReady()
-        const target = findThreadForApproval(this.state.snapshot, input.requestId)
-        if (!target) throw new Error(`Unknown approval request ${input.requestId}.`)
-        await this.runtime.respondApproval(target.thread.id, input.requestId, input.decision)
-        return { success: true as const }
+        return respondAssistantApprovalAction(this.actionDeps, input)
     }
 
     async respondUserInput(input: { requestId: string; answers: Record<string, string | string[]> }) {
-        await this.ensureReady()
-        const target = findThreadForUserInput(this.state.snapshot, input.requestId)
-        if (!target) throw new Error(`Unknown user-input request ${input.requestId}.`)
-        await this.runtime.respondUserInput(target.thread.id, input.requestId, input.answers)
-        return { success: true as const }
+        return respondAssistantUserInputAction(this.actionDeps, input)
     }
+
+    async approvePendingPlaygroundLabRequest(input: AssistantApprovePendingPlaygroundLabRequestInput) {
+        return approvePendingPlaygroundLabRequestAction(this.actionDeps, input)
+    }
+
+    async declinePendingPlaygroundLabRequest(input: AssistantDeclinePendingPlaygroundLabRequestInput) {
+        return declinePendingPlaygroundLabRequestAction(this.actionDeps, input)
+    }
+
     dispose() {
         this.assistantTextDeltaBuffer.dispose()
         this.runtime.dispose()
@@ -450,7 +299,41 @@ export class AssistantService {
         await this.readyPromise
     }
 
-    private appendEvent(type: AssistantDomainEvent['type'], occurredAt: string, payload: Record<string, unknown>, sessionId?: string, threadId?: string) {
+    private getSessionRuntimeCwd(
+        session: AssistantSession,
+        thread: AssistantThread,
+        options?: { playgroundTerminalAccess?: boolean }
+    ): string {
+        if (session.mode === 'playground') {
+            const projectPath = sanitizeOptionalPath(session.projectPath)
+            if (projectPath) return projectPath
+            if (!session.playgroundLabId) {
+                return options?.playgroundTerminalAccess
+                    ? this.getDetachedPlaygroundTerminalRoot()
+                    : this.getDetachedPlaygroundChatRoot()
+            }
+            return sanitizeOptionalPath(thread.cwd) || this.getDetachedPlaygroundChatRoot()
+        }
+        return session.projectPath || thread.cwd || process.cwd()
+    }
+
+    private getDetachedPlaygroundTerminalRoot(): string {
+        return app.getPath('home') || process.cwd()
+    }
+
+    private getDetachedPlaygroundChatRoot(): string {
+        const rootPath = join(app.getPath('userData'), 'assistant', 'playground-chat-only')
+        mkdirSync(rootPath, { recursive: true })
+        return rootPath
+    }
+
+    private appendEvent(
+        type: AssistantDomainEvent['type'],
+        occurredAt: string,
+        payload: Record<string, unknown>,
+        sessionId?: string,
+        threadId?: string
+    ) {
         const event = createAssistantDomainEvent(this.state.snapshot.snapshotSequence, type, occurredAt, payload, sessionId, threadId)
         this.state.events.push(event)
         this.state.events = trimAssistantEvents(this.state.events, AssistantService.MAX_IN_MEMORY_EVENTS)
@@ -479,8 +362,10 @@ export class AssistantService {
     private handleRuntimeEvent(event: Parameters<typeof handleAssistantRuntimeEvent>[0]) {
         handleAssistantRuntimeEvent(event, {
             planBuffers: this.planBuffers,
+            isAssistantTextSuppressed: (threadId, turnId) => Boolean(turnId && this.suppressedAssistantTextTurns.has(`${threadId}:${turnId}`)),
             findSessionByThreadId: (threadId) => findSessionByThreadId(this.state.snapshot, threadId),
             requireThread: (threadId) => requireThread(this.state.snapshot, threadId),
+            findThreadRecord: (threadId) => findThreadRecord(this.state.snapshot, threadId),
             queueAssistantTextDelta: (entry) => this.assistantTextDeltaBuffer.queue(entry),
             flushAssistantTextDelta: (target) => this.assistantTextDeltaBuffer.flush(target),
             appendEvent: (type, occurredAt, payload, sessionId, threadId) => this.appendEvent(type, occurredAt, payload, sessionId, threadId),
@@ -493,9 +378,11 @@ export class AssistantService {
 
         if (event.type !== 'turn.completed') return
 
+        const completedThreadRecord = findThreadRecord(this.state.snapshot, event.threadId)
         const selectedSession = getSelectedSession(this.state.snapshot)
         const activeThread = getActiveThread(selectedSession)
-        if (!selectedSession || !activeThread || activeThread.id !== event.threadId) return
+        if (!selectedSession || !activeThread) return
+        if ((completedThreadRecord?.thread.id || event.threadId) !== activeThread.id) return
         if (!activeThread.latestTurn || activeThread.latestTurn.state !== 'completed') return
         if (activeThread.lastSeenCompletedTurnId === activeThread.latestTurn.id) return
 

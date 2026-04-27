@@ -1,12 +1,28 @@
-import type { AssistantActivity, AssistantMessage } from '@shared/assistant/contracts'
+import type { AssistantActivity, AssistantMessage, AssistantProposedPlan } from '@shared/assistant/contracts'
+import {
+    getSerializedAttachmentDisplayName,
+    isSerializedClipboardAttachment,
+    parseSerializedAssistantMessage
+} from '@shared/assistant/message-attachments'
+import { estimateMarkdownContentHeight } from '@/lib/text-layout/markdown-blocks'
+import { stripProposedPlanBlocks } from './assistant-proposed-plan'
+import {
+    estimateAttachmentGridHeight,
+    getAssistantMessageWidth,
+    getPlanCardContentWidth,
+    getUserMessageBodyWidth,
+    measureTimelinePlainTextHeight
+} from './assistant-timeline-text-metrics'
 
 export type TimelineEntry =
     | { id: string; createdAt: string; type: 'message'; message: AssistantMessage }
+    | { id: string; createdAt: string; type: 'plan'; plan: AssistantProposedPlan; canImplement: boolean }
     | { id: string; createdAt: string; type: 'activity'; activity: AssistantActivity }
     | { id: string; createdAt: string; type: 'activity-group'; activities: AssistantActivity[] }
 
 export type TimelineRenderRow =
     | { kind: 'message'; id: string; createdAt: string; message: AssistantMessage }
+    | { kind: 'plan'; id: string; createdAt: string; plan: AssistantProposedPlan; canImplement: boolean }
     | { kind: 'activity'; id: string; createdAt: string; activity: AssistantActivity }
     | { kind: 'activity-group'; id: string; createdAt: string; activities: AssistantActivity[] }
     | { kind: 'working'; id: string; createdAt: string | null }
@@ -14,16 +30,70 @@ export type TimelineRenderRow =
 export type ParsedUserAttachment = {
     id: string
     name: string
+    displayName: string
     type: string
     path: string | null
     mime: string | null
     size: string | null
     preview: string | null
     note: string | null
+    origin: string | null
+    content: string | null
+    isClipboard: boolean
 }
 
 function shouldRenderActivity(activity: AssistantActivity): boolean {
     return activity.tone === 'tool'
+}
+
+function normalizeAssistantWarningText(value: string): string {
+    return value
+        .replace(/\u001b\[[0-9;]*m/g, '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[ \t]+/g, ' ')
+        .trim()
+}
+
+export function isWarningOnlyAssistantMessage(message: AssistantMessage): boolean {
+    if (message.role !== 'assistant') return false
+
+    const text = normalizeAssistantWarningText(message.text || '')
+    if (!text || text.includes('```') || text.length > 700) return false
+
+    return /^warning occurred\b/i.test(text)
+        || /^error occurred\b/i.test(text)
+        || /\bthe shell wrapper timed out\b/i.test(text)
+        || /\bshell wrapper timed out\b/i.test(text)
+        || /\bcommand timed out after \d+(?:\.\d+)?\s*(?:milliseconds?|ms|seconds?|s)\b/i.test(text)
+}
+
+export function shouldRenderMessage(message: AssistantMessage): boolean {
+    return !isWarningOnlyAssistantMessage(message)
+}
+
+export function isSubagentActivity(activity: AssistantActivity): boolean {
+    return activity.kind.startsWith('subagent.') || readActivityString(activity.payload?.category) === 'subagent'
+}
+
+export function isContextCompactionActivity(activity: AssistantActivity): boolean {
+    return activity.kind === 'context.compaction'
+        || readActivityString(activity.payload?.category) === 'context-compaction'
+        || readActivityString(activity.payload?.itemType) === 'context compaction'
+}
+
+export function isIssueActivity(activity: AssistantActivity): boolean {
+    return activity.tone === 'warning'
+        || activity.tone === 'error'
+        || activity.kind === 'process.stderr'
+        || activity.kind === 'runtime.error'
+}
+
+function getActivityRenderGroupKind(activity: AssistantActivity): 'issue' | 'subagent' | 'tool' | null {
+    if (isContextCompactionActivity(activity)) return null
+    if (isIssueActivity(activity)) return 'issue'
+    if (isSubagentActivity(activity)) return 'subagent'
+    if (activity.tone === 'tool') return 'tool'
+    return null
 }
 
 function readActivityString(value: unknown): string {
@@ -113,6 +183,8 @@ export function areActivitiesEquivalent(left: AssistantActivity, right: Assistan
         && getActivityCommand(left) === getActivityCommand(right)
         && getActivityOutput(left) === getActivityOutput(right)
         && getActivityPatch(left) === getActivityPatch(right)
+        && getActivityStatus(left) === getActivityStatus(right)
+        && getActivityElapsed(left) === getActivityElapsed(right)
 }
 
 export function areActivityListsEqual(left: AssistantActivity[], right: AssistantActivity[]): boolean {
@@ -124,50 +196,28 @@ export function areActivityListsEqual(left: AssistantActivity[], right: Assistan
 }
 
 export function parseUserMessageAttachments(text: string): { body: string; attachments: ParsedUserAttachment[] } {
-    const source = String(text || '')
-    const markerMatch = source.match(/\n\nAttached files \((\d+)\):\n/)
-    if (!markerMatch || markerMatch.index == null) {
-        return { body: source, attachments: [] }
+    const parsed = parseSerializedAssistantMessage(text)
+    return {
+        body: parsed.body,
+        attachments: parsed.attachments.map((attachment, index) => ({
+            id: `${attachment.name}-${index}`,
+            name: attachment.name,
+            displayName: getSerializedAttachmentDisplayName(attachment),
+            type: attachment.type,
+            path: attachment.path,
+            mime: attachment.mime,
+            size: attachment.size,
+            preview: attachment.preview,
+            note: attachment.note,
+            origin: attachment.origin,
+            content: attachment.content,
+            isClipboard: isSerializedClipboardAttachment(attachment)
+        }))
     }
+}
 
-    const body = source.slice(0, markerMatch.index).trimEnd()
-    const attachmentBlock = source.slice(markerMatch.index + markerMatch[0].length).trim()
-    if (!attachmentBlock) {
-        return { body, attachments: [] }
-    }
-
-    const sections = attachmentBlock
-        .split(/\n{2,}(?=\d+\.\s)/)
-        .map((section) => section.trim())
-        .filter(Boolean)
-
-    const attachments = sections.map((section, index) => {
-        const lines = section.split('\n').map((line) => line.trim()).filter(Boolean)
-        const header = lines[0] || `${index + 1}. Attachment [FILE]`
-        const headerMatch = header.match(/^\d+\.\s+(.+?)\s+\[([A-Z]+)\]$/)
-        const details = new Map<string, string>()
-
-        for (const line of lines.slice(1)) {
-            const separatorIndex = line.indexOf(':')
-            if (separatorIndex <= 0) continue
-            const key = line.slice(0, separatorIndex).trim().toLowerCase()
-            const value = line.slice(separatorIndex + 1).trim()
-            if (key && value) details.set(key, value)
-        }
-
-        return {
-            id: `${header}-${index}`,
-            name: headerMatch?.[1]?.trim() || `Attachment ${index + 1}`,
-            type: headerMatch?.[2]?.trim() || 'FILE',
-            path: details.get('path') || null,
-            mime: details.get('mime') || null,
-            size: details.get('size') || null,
-            preview: details.get('preview') || null,
-            note: details.get('note') || null
-        }
-    })
-
-    return { body, attachments }
+export function isClipboardAttachmentReference(path: string | null): boolean {
+    return String(path || '').trim().toLowerCase().startsWith('clipboard://')
 }
 
 export function canRenderAttachmentImage(path: string | null): boolean {
@@ -224,63 +274,70 @@ export function formatWorkingTimer(startIso: string, endIso: string): string | n
     return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
 }
 
-export function getTimelineEntries(messages: AssistantMessage[], activities: AssistantActivity[]): TimelineEntry[] {
+export function getTimelineEntries(
+    messages: AssistantMessage[],
+    activities: AssistantActivity[],
+    proposedPlans: AssistantProposedPlan[] = []
+): TimelineEntry[] {
+    const renderedMessages = messages.filter(shouldRenderMessage)
     const renderedActivities = activities.filter(shouldRenderActivity)
-    const allEntries: TimelineEntry[] = []
-    let messageIndex = 0
-    let activityIndex = renderedActivities.length - 1
-
-    while (messageIndex < messages.length || activityIndex >= 0) {
-        const message = messageIndex < messages.length ? messages[messageIndex] : null
-        const activity = activityIndex >= 0 ? renderedActivities[activityIndex] : null
-
-        if (!activity) {
-            allEntries.push({
-                id: message!.id,
-                createdAt: message!.createdAt,
-                type: 'message',
-                message: message!
-            })
-            messageIndex += 1
-            continue
-        }
-
-        if (!message) {
-            allEntries.push({
-                id: activity.id,
-                createdAt: activity.createdAt,
-                type: 'activity',
-                activity
-            })
-            activityIndex -= 1
-            continue
-        }
-
-        if (compareTimelinePosition(message.createdAt, message.id, activity.createdAt, activity.id) <= 0) {
-            allEntries.push({
-                id: message.id,
-                createdAt: message.createdAt,
-                type: 'message',
-                message
-            })
-            messageIndex += 1
-            continue
-        }
-
-        allEntries.push({
+    const allEntries: TimelineEntry[] = [
+        ...renderedMessages.map((message) => ({
+            id: message.id,
+            createdAt: message.createdAt,
+            type: 'message' as const,
+            message
+        })),
+        ...renderedActivities.map((activity) => ({
             id: activity.id,
             createdAt: activity.createdAt,
-            type: 'activity',
+            type: 'activity' as const,
             activity
+        })),
+        ...proposedPlans.map((plan, index) => {
+            const hasLaterMessage = renderedMessages.some((message) => {
+                if (message.turnId && plan.turnId && message.turnId === plan.turnId) return false
+                return compareTimelinePosition(plan.createdAt, plan.id, message.createdAt, message.id) < 0
+            })
+            return {
+                id: `plan-${plan.id}-${index}`,
+                createdAt: plan.createdAt,
+                type: 'plan' as const,
+                plan,
+                canImplement: !hasLaterMessage
+            }
         })
-        activityIndex -= 1
-    }
+    ].sort((left, right) => compareTimelinePosition(left.createdAt, left.id, right.createdAt, right.id))
 
     const grouped: TimelineEntry[] = []
     let currentGroup: AssistantActivity[] = []
 
     for (const entry of allEntries) {
         if (entry.type === 'activity' && entry.activity) {
+            const groupKind = getActivityRenderGroupKind(entry.activity)
+            if (!groupKind) {
+                if (currentGroup.length > 0) {
+                    grouped.push(
+                        currentGroup.length === 1
+                            ? { id: currentGroup[0].id, createdAt: currentGroup[0].createdAt, type: 'activity', activity: currentGroup[0] }
+                            : { id: `group-${currentGroup[0].id}`, createdAt: currentGroup[0].createdAt, type: 'activity-group', activities: currentGroup }
+                    )
+                    currentGroup = []
+                }
+                grouped.push(entry)
+                continue
+            }
+            if (
+                currentGroup.length > 0
+                && getActivityRenderGroupKind(currentGroup[0]) !== groupKind
+            ) {
+                grouped.push(
+                    currentGroup.length === 1
+                        ? { id: currentGroup[0].id, createdAt: currentGroup[0].createdAt, type: 'activity', activity: currentGroup[0] }
+                        : { id: `group-${currentGroup[0].id}`, createdAt: currentGroup[0].createdAt, type: 'activity-group', activities: currentGroup }
+                )
+                currentGroup = []
+            }
             currentGroup.push(entry.activity)
             continue
         }
@@ -310,6 +367,9 @@ export function buildTimelineRows(entries: TimelineEntry[], isWorking: boolean, 
     const rows: TimelineRenderRow[] = entries.map((entry) => {
         if (entry.type === 'message') {
             return { kind: 'message', id: entry.id, createdAt: entry.createdAt, message: entry.message }
+        }
+        if (entry.type === 'plan') {
+            return { kind: 'plan', id: entry.id, createdAt: entry.createdAt, plan: entry.plan, canImplement: entry.canImplement }
         }
         if (entry.type === 'activity-group') {
             return { kind: 'activity-group', id: entry.id, createdAt: entry.createdAt, activities: entry.activities }
@@ -382,6 +442,13 @@ export function getActivityFileCount(activity: AssistantActivity): number | null
 }
 
 export function getActivityTitle(activity: AssistantActivity): string {
+    if (activity.kind === 'subagent.spawn') return 'Subagent spawn'
+    if (activity.kind === 'subagent.send-input') return 'Subagent check-in'
+    if (activity.kind === 'subagent.wait') return 'Waiting on subagent'
+    if (activity.kind === 'subagent.resume') return 'Resume subagent'
+    if (activity.kind === 'subagent.close') return 'Close subagent'
+    if (isSubagentActivity(activity)) return 'Subagent activity'
+    if (activity.kind === 'user-input.resolved') return 'Consulted user'
     if (activity.kind === 'search') return 'Search'
     if (activity.kind === 'file-read') return 'Read file'
     if (activity.kind === 'file-change') return (getActivityFileCount(activity) || 0) > 1 ? 'Edited files' : 'Edited file'
@@ -392,10 +459,74 @@ export function getActivityTitle(activity: AssistantActivity): string {
 export function getActivityStatus(activity: AssistantActivity): 'success' | 'running' | 'failed' {
     const payload = activity.payload || {}
     const rawStatus = readActivityString(payload.status) || readActivityString(payload.state) || readActivityString(payload.phase)
+    const normalizedStatus = rawStatus.toLowerCase().replace(/[-_\s]/g, '')
     if (activity.tone === 'error') return 'failed'
-    if (rawStatus === 'running' || rawStatus === 'in_progress' || rawStatus === 'pending' || rawStatus === 'started') return 'running'
-    if (rawStatus === 'error' || rawStatus === 'failed' || rawStatus === 'cancelled') return 'failed'
+    if (normalizedStatus === 'running' || normalizedStatus === 'inprogress' || normalizedStatus === 'pending' || normalizedStatus === 'started') return 'running'
+    if (normalizedStatus === 'error' || normalizedStatus === 'failed' || normalizedStatus === 'cancelled' || normalizedStatus === 'declined') return 'failed'
     return 'success'
+}
+
+export function getContextCompactionStatus(activity: AssistantActivity): 'running' | 'completed' {
+    const payload = activity.payload || {}
+    const rawStatus = readActivityString(payload.status)
+        || readActivityString(payload.state)
+        || readActivityString(payload.phase)
+        || readActivityString(activity.summary)
+    const normalized = rawStatus.toLowerCase().replace(/[-_\s]/g, '')
+    if (
+        normalized === 'running'
+        || normalized === 'inprogress'
+        || normalized === 'pending'
+        || normalized === 'started'
+        || normalized === 'autocompacting'
+        || normalized === 'compacting'
+    ) {
+        return 'running'
+    }
+    return 'completed'
+}
+
+type SubagentThreadLabel = {
+    threadId: string | null
+    providerThreadId: string | null
+    label: string
+    role: string | null
+    nickname: string | null
+    state: string | null
+}
+
+function isSubagentThreadLabel(value: unknown): value is SubagentThreadLabel {
+    if (!value || typeof value !== 'object') return false
+    const candidate = value as Record<string, unknown>
+    return typeof candidate.label === 'string'
+}
+
+export function getSubagentActivityThreadLabels(activity: AssistantActivity): SubagentThreadLabel[] {
+    const value = activity.payload?.receiverThreadLabels
+    if (!Array.isArray(value)) return []
+    return value.filter(isSubagentThreadLabel)
+}
+
+export function getSubagentActivityTargets(activity: AssistantActivity): string[] {
+    const labels = getSubagentActivityThreadLabels(activity)
+    if (labels.length > 0) {
+        return labels
+            .map((entry) => readActivityString(entry.label) || readActivityString(entry.nickname) || readActivityString(entry.role))
+            .filter(Boolean)
+    }
+    return readActivityStringArray(activity.payload?.receiverLocalThreadIds)
+}
+
+export function getSubagentActivityPrompt(activity: AssistantActivity): string {
+    return readActivityString(activity.payload?.prompt)
+}
+
+export function getSubagentActivityModel(activity: AssistantActivity): string {
+    return readActivityString(activity.payload?.model)
+}
+
+export function getSubagentActivityReasoning(activity: AssistantActivity): string {
+    return readActivityString(activity.payload?.reasoningEffort)
 }
 
 export function getActivityElapsed(activity: AssistantActivity): string | null {
@@ -412,10 +543,35 @@ export function getActivityElapsed(activity: AssistantActivity): string | null {
     return startedAt && completedAt ? formatWorkingTimer(startedAt, completedAt) : null
 }
 
-export function estimateTimelineRowHeight(row: TimelineRenderRow): number {
+export function estimateTimelineRowHeight(
+    row: TimelineRenderRow,
+    options: { containerWidth?: number | null } = {}
+): number {
     if (row.kind === 'working') return 48
-    if (row.kind === 'activity') return 168
-    if (row.kind === 'activity-group') return 120 + Math.min(row.activities.length, 6) * 96
+    if (row.kind === 'activity') {
+        if (isContextCompactionActivity(row.activity)) return 72
+        if (isIssueActivity(row.activity)) return 124
+        return isSubagentActivity(row.activity) ? 212 : 168
+    }
+    if (row.kind === 'activity-group') {
+        const containsIssueActivity = row.activities.some((activity) => isIssueActivity(activity))
+        const containsSubagentActivity = row.activities.some((activity) => isSubagentActivity(activity))
+        if (containsIssueActivity) {
+            return 112 + Math.min(row.activities.length, 6) * 86
+        }
+        return containsSubagentActivity
+            ? 132 + Math.min(row.activities.length, 6) * 124
+            : 120 + Math.min(row.activities.length, 6) * 96
+    }
+    if (row.kind === 'plan') {
+        const displayedPlan = stripProposedPlanBlocks(row.plan.planMarkdown || '')
+        const planHeight = estimateMarkdownContentHeight(
+            displayedPlan,
+            getPlanCardContentWidth(options.containerWidth),
+            'assistant'
+        )
+        return Math.min(3200, 136 + planHeight)
+    }
 
     const parsedUserMessage = row.message.role === 'user'
         ? parseUserMessageAttachments(row.message.text || '')
@@ -423,24 +579,24 @@ export function estimateTimelineRowHeight(row: TimelineRenderRow): number {
     const attachmentCount = parsedUserMessage?.attachments.length || 0
     const rawBody = row.message.role === 'user'
         ? (parsedUserMessage?.body || '')
-        : (row.message.text || '')
-    const bodyLines = rawBody.split(/\r?\n/)
-    const lineCount = Math.max(1, bodyLines.length)
-    const estimatedWrappedLines = Math.ceil(Math.max(rawBody.length, 1) / (row.message.role === 'user' ? 56 : 64))
-    const contentLines = Math.max(lineCount, estimatedWrappedLines)
+        : stripProposedPlanBlocks(row.message.text || '')
 
     if (row.message.role === 'assistant') {
-        const codeFenceCount = Math.floor((rawBody.match(/```/g)?.length || 0) / 2)
-        const tableLineCount = bodyLines.filter((line) => line.includes('|')).length
-        const listLineCount = bodyLines.filter((line) => /^\s*(?:[-*+]\s|\d+\.\s)/.test(line)).length
-        const quoteLineCount = bodyLines.filter((line) => /^\s*>/.test(line)).length
-        const markdownBias = codeFenceCount * 220
-            + Math.min(tableLineCount, 20) * 14
-            + Math.min(listLineCount, 24) * 8
-            + Math.min(quoteLineCount, 16) * 8
-
-        return Math.min(5600, 156 + contentLines * 30 + markdownBias)
+        const assistantWidth = getAssistantMessageWidth(options.containerWidth)
+        const contentHeight = row.message.streaming
+            ? measureTimelinePlainTextHeight(rawBody || ' ', assistantWidth, 'pre-wrap').height
+            : estimateMarkdownContentHeight(rawBody || ' ', assistantWidth, 'assistant')
+        const footerHeight = row.message.streaming ? 48 : 36
+        return Math.min(5600, 44 + contentHeight + footerHeight)
     }
 
-    return Math.min(3200, 112 + attachmentCount * 164 + contentLines * 24)
+    const userBodyWidth = getUserMessageBodyWidth(options.containerWidth)
+    const textHeight = rawBody
+        ? measureTimelinePlainTextHeight(rawBody, userBodyWidth, 'pre-wrap').height
+        : 0
+    const attachmentHeight = estimateAttachmentGridHeight(attachmentCount, userBodyWidth)
+    const footerHeight = 38
+    const bubbleChromeHeight = 28
+
+    return Math.min(3200, bubbleChromeHeight + attachmentHeight + textHeight + footerHeight)
 }

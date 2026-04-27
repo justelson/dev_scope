@@ -40,7 +40,7 @@
 > This repository root is the active Windows desktop codebase for DevScope Air.
 > The older `devscope-win` implementation is not the active app and older work remains only in git history or archive folders.
 
-DevScope Air is the main Windows Electron app in this repository. It is built around local project discovery, project browsing, file preview, Git workflows, app settings, and release update flows from one desktop surface.
+DevScope Air is the main Windows Electron app in this repository. It is built around project discovery, indexed file browsing, project details, file preview and edit flows, Git workflows, assistant sessions, terminal management, app settings, and release update flows from one desktop surface.
 
 The current package is [`devscope-air-win`](./package.json).
 Current package version:
@@ -50,12 +50,13 @@ Current package version:
 
 | Feature | Description |
 | :--- | :--- |
-| **Project Discovery** | Scan a main projects root plus additional folders and index projects across multiple local locations. |
-| **Project Browsing** | Browse folders, inspect project details, and preview files without leaving the app shell. |
+| **Project Discovery** | Scan a main projects root plus additional folders, detect project types, and keep an indexed search cache for fast project/file lookup. |
+| **Project Browsing** | Browse folders, inspect project details, and preview files or project tree changes without leaving the app shell. |
 | **Git Productivity** | View status, diffs, history, branches, remotes, stashes, tags, commits, push state, and repository setup actions. |
-| **AI Commit Assistant** | Generate commit messages through Groq or Google Gemini from the app's Git-oriented flows. |
+| **Assistant Workflows** | Run assistant sessions with approvals, user input, attachments, Playground labs, no-lab terminal access, auto-generated chat titles, and project-aware context. |
+| **Terminal Workspace** | Manage live terminal sessions and preview-terminal runs from the dedicated terminals surface; the legacy `/tasks` route now redirects there. |
 | **Desktop Updates** | Check, download, and install release updates through the built-in updater flow. |
-| **Settings Surface** | Configure appearance, behavior, projects, AI, terminal preferences, logs, and app metadata. |
+| **Settings Surface** | Configure appearance, behavior, package runtimes, projects, assistant defaults, Git, terminal preferences, logs, and app metadata. |
 
 ## Capability Map
 
@@ -64,28 +65,30 @@ graph TD
     A[DevScope Air] --> B[Project Discovery]
     A --> C[Project Browse and Preview]
     A --> D[Git Workflows]
-    A --> E[AI Commit Generation]
-    A --> F[Desktop Updates]
-    A --> G[Settings]
+    A --> E[Assistant Sessions]
+    A --> F[Terminals]
+    A --> G[Desktop Updates]
+    A --> H[Settings]
 
     B --> B1[Main Projects Folder]
     B --> B2[Additional Folders]
-    B --> B3[Folder Indexing]
+    B --> B3[Folder and File Indexing]
 
     D --> D1[Status and Diffs]
     D --> D2[Commit and Push]
     D --> D3[Branches Remotes Tags Stashes]
 
-    E --> E1[Groq]
-    E --> E2[Google Gemini]
+    E --> E1[Approvals and User Input]
+    E --> E2[Playground Labs and Terminal Access]
+    E --> E3[Attachments and Context]
 ```
 
 ## Air Build Notes
 
-DevScope Air intentionally keeps some capability surfaces disabled in this build:
+DevScope Air intentionally keeps some capability surfaces narrow in this build:
 
-- **AI Runtime Status** is disabled in Air.
-- **AgentScope session tooling** is disabled in Air.
+- The assistant runtime is active in Air and is treated as a first-class workflow surface.
+- Some historical surfaces still exist only as redirects or settings-gated entry points.
 - The app still contains a broad shared tool registry, but not every historical surface is exposed in the current Air UI.
 
 ## Technology Stack
@@ -117,36 +120,36 @@ DevScope Air is built with a Windows-first desktop stack:
 
 2. Install dependencies:
    ```bash
-   npm install
+   bun install
    ```
 
 ### Running in Development
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ### Type Checking
 
 ```bash
-npm run typecheck
+bun run typecheck
 ```
 
 ### Building for Production
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### Packaging for Windows
 
 ```bash
-npm run build:win
+bun run build:win
 ```
 
 Packaged installers and update metadata are written to `dist/releases/v<package-version>/`.
 Unpacked desktop bundles are written to `dist/unpacked/v<package-version>/win-unpacked/`.
-Use `npm run dist:organize` to move older flat `dist` artifacts into that versioned layout.
+Use `bun run dist:organize` to move older flat `dist` artifacts into that versioned layout.
 
 ## Project Structure
 
@@ -155,22 +158,24 @@ graph TD
     A[Electron Main] --> B[IPC Handlers]
     A --> C[Update Manager]
     A --> D[Git and Project Integrations]
-    B --> E[Preload Adapters]
-    E --> F[Renderer Process]
-    F --> G[React Pages and UI]
-    G --> H[Projects]
-    G --> I[Settings]
-    G --> J[Tasks]
-    D --> K[Project Discovery]
-    D --> L[Git Operations]
-    F --> M[Shared Contracts]
+    A --> E[Assistant Runtime]
+    B --> F[Preload Adapters]
+    F --> G[Renderer Process]
+    G --> H[React Pages and UI]
+    H --> I[Projects]
+    H --> J[Assistant]
+    H --> K[Terminals]
+    H --> L[Settings]
+    D --> M[Project Discovery]
+    D --> N[Git Operations]
+    F --> O[Shared Contracts]
 ```
 
 ## Repository Areas
 
-- [`src/main`](./src/main): Electron main process, IPC registration, update logic, Git and project handlers.
+- [`src/main`](./src/main): Electron main process, IPC registration, update logic, Git and project handlers, assistant runtime, and file indexing services.
 - [`src/preload`](./src/preload): renderer bridge adapters and disabled-feature adapters.
-- [`src/renderer/src`](./src/renderer/src): React app shell, pages, layouts, and UI components.
+- [`src/renderer/src`](./src/renderer/src): React app shell, pages, layouts, and UI components for projects, assistant, terminals, and settings.
 - [`src/shared`](./src/shared): contracts, shared metrics, and tool-registry definitions.
 - [`apps/landing/devscope-web`](./apps/landing/devscope-web): separate landing-site package.
 
@@ -205,6 +210,12 @@ Distributed under the MIT License. See [`package.json`](./package.json) for the 
 
 <p align="center">
   Built for Windows developers who want project context and Git workflow in one place.
+</p>
+
+---
+
+<p align="center">
+  If you are curious, yes! this was built by a 15 year old, all you need to build is curiousity and motivation.
 </p>
 
 ---

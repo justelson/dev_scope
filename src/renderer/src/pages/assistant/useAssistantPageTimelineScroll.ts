@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 
 const TIMELINE_HIDE_SCROLL_BUTTON_THRESHOLD_PX = 180
+const INITIAL_LATEST_LOCK_MS = 1500
 
 interface UseAssistantPageTimelineScrollArgs {
     sessionId: string | null
@@ -20,8 +21,11 @@ interface UseAssistantPageTimelineScrollArgs {
 
 export function useAssistantPageTimelineScroll(args: UseAssistantPageTimelineScrollArgs) {
     const timelineScrollRef = useRef<HTMLDivElement | null>(null)
+    const timelineContentRef = useRef<HTMLDivElement | null>(null)
     const shouldAutoScrollRef = useRef(true)
     const timelineScrollRafRef = useRef<number | null>(null)
+    const latestLockRafRef = useRef<number | null>(null)
+    const latestLockUntilRef = useRef(0)
 
     const scrollTimelineToBottom = useCallback((behavior: ScrollBehavior = 'instant') => {
         const element = timelineScrollRef.current
@@ -40,7 +44,11 @@ export function useAssistantPageTimelineScroll(args: UseAssistantPageTimelineScr
     )
 
     const syncTimelineScrollState = useCallback((element: HTMLDivElement) => {
-        shouldAutoScrollRef.current = isTimelineNearBottom(element)
+        const nearBottom = isTimelineNearBottom(element)
+        shouldAutoScrollRef.current = nearBottom
+        if (!nearBottom) {
+            latestLockUntilRef.current = 0
+        }
     }, [isTimelineNearBottom])
 
     const onScrollTimeline = useCallback((element: HTMLDivElement) => {
@@ -58,6 +66,32 @@ export function useAssistantPageTimelineScroll(args: UseAssistantPageTimelineScr
         scrollTimelineToBottom('smooth')
     }, [scrollTimelineToBottom])
 
+    const cancelLatestLockRaf = useCallback(() => {
+        if (latestLockRafRef.current !== null) {
+            window.cancelAnimationFrame(latestLockRafRef.current)
+            latestLockRafRef.current = null
+        }
+    }, [])
+
+    const stabilizeLatestPosition = useCallback((remainingFrames: number) => {
+        const element = timelineScrollRef.current
+        if (!element) return
+        const withinLatestLock = Date.now() <= latestLockUntilRef.current
+        if (!withinLatestLock && !shouldAutoScrollRef.current && !isTimelineNearBottom(element)) return
+
+        scrollTimelineToBottom('instant')
+        syncTimelineScrollState(element)
+
+        if (remainingFrames <= 0) {
+            latestLockRafRef.current = null
+            return
+        }
+
+        latestLockRafRef.current = window.requestAnimationFrame(() => {
+            stabilizeLatestPosition(remainingFrames - 1)
+        })
+    }, [isTimelineNearBottom, scrollTimelineToBottom, syncTimelineScrollState])
+
     useLayoutEffect(() => {
         const element = timelineScrollRef.current
         if (element) syncTimelineScrollState(element)
@@ -66,10 +100,16 @@ export function useAssistantPageTimelineScroll(args: UseAssistantPageTimelineScr
     useLayoutEffect(() => {
         const element = timelineScrollRef.current
         if (!element) return
+        cancelLatestLockRaf()
         shouldAutoScrollRef.current = true
+        latestLockUntilRef.current = Date.now() + INITIAL_LATEST_LOCK_MS
         scrollTimelineToBottom('instant')
         syncTimelineScrollState(element)
-    }, [args.loading, args.sessionId, args.threadId, scrollTimelineToBottom, syncTimelineScrollState])
+        stabilizeLatestPosition(4)
+        return () => {
+            cancelLatestLockRaf()
+        }
+    }, [args.loading, args.sessionId, args.threadId, cancelLatestLockRaf, scrollTimelineToBottom, stabilizeLatestPosition, syncTimelineScrollState])
 
     useLayoutEffect(() => {
         const element = timelineScrollRef.current
@@ -94,14 +134,34 @@ export function useAssistantPageTimelineScroll(args: UseAssistantPageTimelineScr
     ])
 
     useEffect(() => {
+        const contentElement = timelineContentRef.current
+        const scrollElement = timelineScrollRef.current
+        if (!contentElement || !scrollElement || typeof ResizeObserver === 'undefined') return
+
+        const observer = new ResizeObserver(() => {
+            const withinLatestLock = Date.now() <= latestLockUntilRef.current
+            if (!withinLatestLock && !shouldAutoScrollRef.current && !isTimelineNearBottom(scrollElement)) return
+            scrollTimelineToBottom('instant')
+            syncTimelineScrollState(scrollElement)
+        })
+
+        observer.observe(contentElement)
         return () => {
+            observer.disconnect()
+        }
+    }, [args.sessionId, args.threadId, isTimelineNearBottom, scrollTimelineToBottom, syncTimelineScrollState])
+
+    useEffect(() => {
+        return () => {
+            cancelLatestLockRaf()
             if (timelineScrollRafRef.current !== null) {
                 window.cancelAnimationFrame(timelineScrollRafRef.current)
             }
         }
-    }, [])
+    }, [cancelLatestLockRaf])
 
     return {
+        timelineContentRef,
         timelineScrollRef,
         onScrollTimeline,
         onScrollToBottom

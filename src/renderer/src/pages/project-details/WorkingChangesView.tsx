@@ -1,48 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpRight, ChevronDown, RefreshCw, Sparkles } from 'lucide-react'
 import { resolvePreferredGitTextProvider } from '@/lib/gitAi'
+import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import { getProjectPullRequestConfig } from '@/lib/pullRequestWorkflow'
 import { FileDiffDetailModal } from './FileDiffDetailModal'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { Checkbox, Input } from '@/components/ui/FormControls'
 import { WorkingChangesSection } from './WorkingChangesSection'
 import type { DiffMode, WorkingChangeItem } from './workingChangesTypes'
 import { getDiffCounts, getDiffKey } from './workingChangesUtils'
-
-function slugifyBranchSegment(value: string) {
-    return String(value || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 40)
-}
-
-function buildBranchSeed(commitMessage: string) {
-    const fromCommit = slugifyBranchSegment(commitMessage)
-    if (fromCommit) return fromCommit
-
-    const now = new Date()
-    const yyyy = now.getFullYear()
-    const mm = String(now.getMonth() + 1).padStart(2, '0')
-    const dd = String(now.getDate()).padStart(2, '0')
-    const hh = String(now.getHours()).padStart(2, '0')
-    const min = String(now.getMinutes()).padStart(2, '0')
-    return `update-${yyyy}${mm}${dd}-${hh}${min}`
-}
-
-function buildProposedBranchName(commitMessage: string, branchNames: string[]) {
-    const existing = new Set(branchNames.map((name) => String(name || '').trim().toLowerCase()).filter(Boolean))
-    const seed = buildBranchSeed(commitMessage)
-    const base = `feature/${seed}`
-    if (!existing.has(base.toLowerCase())) return base
-
-    for (let index = 2; index < 100; index += 1) {
-        const next = `${base}-${index}`
-        if (!existing.has(next.toLowerCase())) return next
-    }
-
-    return `${base}-${Date.now()}`
-}
+import { BranchGuardModal, buildProposedBranchName } from './workingChangesBranchGuard'
 
 export function WorkingChangesView({
     stagedFiles,
@@ -69,7 +35,8 @@ export function WorkingChangesView({
     handleUnstageAll,
     handleDiscardUnstagedFile,
     handleDiscardUnstagedAll,
-    ensureStatsForPaths
+    ensureStatsForPaths,
+    refreshGitData
 }: {
     stagedFiles: WorkingChangeItem[]
     unstagedFiles: WorkingChangeItem[]
@@ -96,6 +63,7 @@ export function WorkingChangesView({
     handleDiscardUnstagedFile: (path: string) => Promise<void>
     handleDiscardUnstagedAll: () => Promise<void>
     ensureStatsForPaths?: (paths: string[]) => void
+    refreshGitData: (force?: boolean, options?: any) => Promise<void>
 }) {
     const [fileDiffs, setFileDiffs] = useState<Map<string, string>>(new Map())
     const [loadingDiffKeys, setLoadingDiffKeys] = useState<Set<string>>(new Set())
@@ -108,7 +76,6 @@ export function WorkingChangesView({
     const [isDiffModalLoading, setIsDiffModalLoading] = useState(false)
     const [revertTarget, setRevertTarget] = useState<{ file?: WorkingChangeItem; scope: 'file' | 'all' } | null>(null)
     const [showDangerMenu, setShowDangerMenu] = useState(false)
-    const [stackedTaskStatusText, setStackedTaskStatusText] = useState('')
     const [showBranchGuardModal, setShowBranchGuardModal] = useState(false)
     const [branchGuardMode, setBranchGuardMode] = useState<'safe' | 'danger'>('safe')
     const [proposedBranchName, setProposedBranchName] = useState('')
@@ -151,6 +118,8 @@ export function WorkingChangesView({
                 if (!createResult?.success) {
                     throw new Error(createResult?.error || 'Failed to create branch.')
                 }
+                invalidateProjectGitOverview(projectPath)
+                void refreshGitData(false, { quiet: true, mode: 'full' }).catch(() => undefined)
                 showToast(`Created branch ${proposed}.`, undefined, undefined, 'success')
                 await runStackedActionByMode(mode)
             } catch (err: any) {
@@ -182,6 +151,8 @@ export function WorkingChangesView({
             if (!createResult?.success) {
                 throw new Error(createResult?.error || 'Failed to create branch.')
             }
+            invalidateProjectGitOverview(projectPath)
+            void refreshGitData(false, { quiet: true, mode: 'full' }).catch(() => undefined)
 
             if (autoCreateNextTime) {
                 updateSettings({ gitAutoCreateBranchWhenTargetMatches: true })
@@ -288,9 +259,9 @@ export function WorkingChangesView({
     )
     const stackedActionLabel = useMemo(() => {
         if (isCreatingBranchForStackedFlow) return 'Creating branch...'
-        if (isStackedActionRunning) return stackedTaskStatusText || 'Starting...'
+        if (isStackedActionRunning) return 'Running PR flow...'
         return 'Commit, Push & Create PR'
-    }, [isCreatingBranchForStackedFlow, isStackedActionRunning, stackedTaskStatusText])
+    }, [isCreatingBranchForStackedFlow, isStackedActionRunning])
     const isPrimaryStackedActionDisabled = !hasGitHubRemote || !hasOnlyStagedChanges || isCommitting || isStackedActionRunning || isCreatingBranchForStackedFlow || (!commitMessage.trim() && !hasProviderForAutoCommit)
     const isDangerousStackedActionDisabled = !hasGitHubRemote || !hasAnyChanges || isCommitting || isStackedActionRunning || isCreatingBranchForStackedFlow || (!commitMessage.trim() && !hasProviderForAutoCommit)
 
@@ -315,61 +286,6 @@ export function WorkingChangesView({
             document.removeEventListener('keydown', handleEscape)
         }
     }, [showDangerMenu])
-
-    useEffect(() => {
-        const normalizedProjectPath = String(projectPath || '').trim().toLowerCase()
-        if (!normalizedProjectPath) return
-
-        const applyTask = (task: any) => {
-            if (!task || task.type !== 'git.stacked') return false
-            if (String(task.projectPath || '').trim().toLowerCase() !== normalizedProjectPath) return false
-            if (task.status !== 'running') {
-                setStackedTaskStatusText('')
-                return true
-            }
-
-            const latestLog = Array.isArray(task.logs)
-                ? [...task.logs]
-                    .reverse()
-                    .map((entry) => String(entry?.message || '').trim())
-                    .find((message) => message && !/^Target branch:|^Auto-stage all:|^Commit message:/i.test(message))
-                : ''
-            setStackedTaskStatusText(latestLog || 'Starting...')
-            return true
-        }
-
-        void window.devscope.listActiveTasks?.(projectPath).then((result) => {
-            if (!result?.success || !Array.isArray(result.tasks)) return
-            const matchingTask = result.tasks.find((task: any) => applyTask(task))
-            if (!matchingTask) {
-                setStackedTaskStatusText('')
-            }
-        }).catch(() => undefined)
-
-        const unsubscribe = window.devscope.onTaskEvent?.((event) => {
-            if (event.type === 'remove') {
-                void window.devscope.listActiveTasks?.(projectPath).then((result) => {
-                    if (!result?.success || !Array.isArray(result.tasks)) {
-                        setStackedTaskStatusText('')
-                        return
-                    }
-                    const matchingTask = result.tasks.find((task: any) => applyTask(task))
-                    if (!matchingTask) {
-                        setStackedTaskStatusText('')
-                    }
-                }).catch(() => {
-                    setStackedTaskStatusText('')
-                })
-                return
-            }
-            if (event.type !== 'upsert' || !event.task) return
-            applyTask(event.task)
-        })
-
-        return () => {
-            unsubscribe?.()
-        }
-    }, [isStackedActionRunning, projectPath])
 
     return (
         <>
@@ -502,78 +418,21 @@ export function WorkingChangesView({
                 />
             </div>
 
-            {showBranchGuardModal ? (
-                <div
-                    className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn"
-                    onClick={() => {
-                        if (isCreatingBranchForStackedFlow) return
-                        setShowBranchGuardModal(false)
-                    }}
-                >
-                    <div
-                        className="m-4 w-full max-w-lg rounded-2xl border border-white/10 bg-sparkle-card p-5 shadow-2xl"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <div className="flex items-start gap-3">
-                            <div className="rounded-xl border border-amber-500/25 bg-amber-500/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">
-                                Same branch
-                            </div>
-                        </div>
-                        <h3 className="mt-4 text-lg font-semibold text-white">Create a branch first?</h3>
-                        <p className="mt-2 text-sm text-white/62">
-                            Current branch and target branch are both <span className="font-medium text-white">{currentBranch}</span>.
-                        </p>
-                        <div className="mt-4 space-y-3">
-                            <div>
-                                <div className="mb-2 text-xs uppercase tracking-wide text-white/42">Proposed branch</div>
-                                <Input
-                                    value={proposedBranchName}
-                                    onChange={(value) => {
-                                        setProposedBranchName(value)
-                                        if (branchGuardError) setBranchGuardError('')
-                                    }}
-                                    placeholder="feature/my-change"
-                                    disabled={isCreatingBranchForStackedFlow}
-                                />
-                            </div>
-                            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                                <Checkbox
-                                    checked={autoCreateNextTime}
-                                    onChange={setAutoCreateNextTime}
-                                    label="Don't show again"
-                                    description="Next time DevScope will create a branch automatically."
-                                    size="sm"
-                                    disabled={isCreatingBranchForStackedFlow}
-                                />
-                            </div>
-                            {branchGuardError ? (
-                                <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                                    {branchGuardError}
-                                </div>
-                            ) : null}
-                        </div>
-                        <div className="mt-5 flex items-center justify-end gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setShowBranchGuardModal(false)}
-                                disabled={isCreatingBranchForStackedFlow}
-                                className="rounded-lg border border-white/10 px-3 py-2 text-sm text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
-                            >
-                                Deny
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => { void confirmBranchGuard() }}
-                                disabled={isCreatingBranchForStackedFlow}
-                                className="inline-flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/15 px-3.5 py-2 text-sm font-medium text-violet-100 transition-all hover:bg-violet-500/22 disabled:opacity-50"
-                            >
-                                {isCreatingBranchForStackedFlow ? <RefreshCw size={14} className="animate-spin" /> : null}
-                                Accept
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            ) : null}
+            <BranchGuardModal
+                isOpen={showBranchGuardModal}
+                isCreating={isCreatingBranchForStackedFlow}
+                currentBranch={currentBranch}
+                proposedBranchName={proposedBranchName}
+                setProposedBranchName={(value) => {
+                    setProposedBranchName(value)
+                    if (branchGuardError) setBranchGuardError('')
+                }}
+                autoCreateNextTime={autoCreateNextTime}
+                setAutoCreateNextTime={setAutoCreateNextTime}
+                branchGuardError={branchGuardError}
+                onCancel={() => setShowBranchGuardModal(false)}
+                onConfirm={() => { void confirmBranchGuard() }}
+            />
             <FileDiffDetailModal
                 isOpen={Boolean(selectedDiffFile)}
                 filePath={selectedDiffFile?.path || ''}

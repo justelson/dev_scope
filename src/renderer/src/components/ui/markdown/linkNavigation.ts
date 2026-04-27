@@ -3,6 +3,7 @@ import type { PreviewOpenOptions } from '../file-preview/types'
 type MarkdownPathTarget = {
     path: string
     anchor?: string
+    focusLine?: number
 }
 
 type MarkdownLinkNavigationOptions = {
@@ -20,6 +21,14 @@ function normalizePath(pathValue: string): string {
     return pathValue.replace(/\\/g, '/')
 }
 
+function safeDecode(value: string): string {
+    try {
+        return decodeURIComponent(value)
+    } catch {
+        return value
+    }
+}
+
 function denormalizePath(pathValue: string, sourcePath?: string): string {
     if (sourcePath?.includes('\\')) {
         return pathValue.replace(/\//g, '\\')
@@ -31,6 +40,13 @@ function isExternalHref(href: string): boolean {
     return /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(href)
 }
 
+export function isWindowsPathHref(pathValue: string | undefined): boolean {
+    const rawValue = String(pathValue || '').trim()
+    if (!rawValue) return false
+    const decodedValue = safeDecode(rawValue)
+    return /^[a-zA-Z]:[\\/]/.test(decodedValue) || decodedValue.startsWith('\\\\')
+}
+
 function splitHrefAnchor(href: string): { pathname: string; anchor?: string } {
     const hashIndex = href.indexOf('#')
     if (hashIndex < 0) return { pathname: href }
@@ -38,6 +54,46 @@ function splitHrefAnchor(href: string): { pathname: string; anchor?: string } {
         pathname: href.slice(0, hashIndex),
         anchor: href.slice(hashIndex + 1) || undefined
     }
+}
+
+function toPositiveInteger(value: string | undefined): number | undefined {
+    if (!value) return undefined
+    const parsed = Number.parseInt(value, 10)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function extractPathLineReference(pathname: string): { pathname: string; focusLine?: number } {
+    const match = pathname.match(/^(.*?)(?::(\d+))(?:\:(\d+))?$/)
+    if (!match) return { pathname }
+    const basePath = match[1]
+    if (!basePath || /^[a-zA-Z]$/.test(basePath)) return { pathname }
+    return {
+        pathname: basePath,
+        focusLine: toPositiveInteger(match[2])
+    }
+}
+
+function extractAnchorLineReference(anchor?: string): { anchor?: string; focusLine?: number } {
+    const normalizedAnchor = String(anchor || '').trim()
+    if (!normalizedAnchor) return { anchor: undefined }
+
+    const gitHubStyleMatch = normalizedAnchor.match(/^L(\d+)(?:C(\d+))?$/i)
+    if (gitHubStyleMatch) {
+        return {
+            anchor: normalizedAnchor,
+            focusLine: toPositiveInteger(gitHubStyleMatch[1])
+        }
+    }
+
+    const plainMatch = normalizedAnchor.match(/^(\d+)(?:\:(\d+))?$/)
+    if (plainMatch) {
+        return {
+            anchor: normalizedAnchor,
+            focusLine: toPositiveInteger(plainMatch[1])
+        }
+    }
+
+    return { anchor: normalizedAnchor }
 }
 
 function toFileUrlPath(pathname: string): string | null {
@@ -54,35 +110,57 @@ function toFileUrlPath(pathname: string): string | null {
     }
 }
 
+export function rewriteMarkdownFileUriHref(href: string | undefined): string | null {
+    const rawHref = String(href || '').trim()
+    if (!rawHref.toLowerCase().startsWith('file:')) return null
+
+    try {
+        const url = new URL(rawHref)
+        if (url.protocol.toLowerCase() !== 'file:') return null
+        const pathname = /^\/[a-zA-Z]:[\\/]/.test(url.pathname) ? url.pathname.slice(1) : url.pathname
+        if (!pathname) return null
+        return `${pathname}${url.hash || ''}`
+    } catch {
+        return null
+    }
+}
+
 export function resolveMarkdownLinkTarget(href: string, filePath?: string): MarkdownPathTarget | null {
     const rawHref = String(href || '').trim()
-    if (!rawHref || rawHref.startsWith('#') || isExternalHref(rawHref) && !rawHref.startsWith('file://')) {
+    if (
+        !rawHref
+        || rawHref.startsWith('#')
+        || (isExternalHref(rawHref) && !rawHref.toLowerCase().startsWith('file://') && !isWindowsPathHref(rawHref))
+    ) {
         return null
     }
 
     const { pathname, anchor } = splitHrefAnchor(rawHref)
+    const anchorReference = extractAnchorLineReference(anchor)
     let decodedPathname = pathname
-    try {
-        decodedPathname = pathname ? decodeURIComponent(pathname) : ''
-    } catch {
-        decodedPathname = pathname
-    }
+    decodedPathname = pathname ? safeDecode(pathname) : ''
+    const pathReference = extractPathLineReference(decodedPathname)
+    decodedPathname = pathReference.pathname
 
-    if (rawHref.startsWith('file://')) {
-        const resolvedFilePath = toFileUrlPath(rawHref)
+    if (rawHref.toLowerCase().startsWith('file://')) {
+        const resolvedFilePath = toFileUrlPath(decodedPathname)
         if (!resolvedFilePath) return null
-        return { path: denormalizePath(normalizePath(resolvedFilePath), filePath), anchor }
+        return {
+            path: denormalizePath(normalizePath(resolvedFilePath), filePath),
+            anchor: anchorReference.anchor,
+            focusLine: pathReference.focusLine ?? anchorReference.focusLine
+        }
     }
 
-    if (!filePath) return null
-
-    const normalizedSourcePath = normalizePath(filePath)
+    const normalizedSourcePath = filePath ? normalizePath(filePath) : ''
     const lastSlashIndex = normalizedSourcePath.lastIndexOf('/')
     const sourceDirectory = lastSlashIndex >= 0 ? normalizedSourcePath.slice(0, lastSlashIndex) : normalizedSourcePath
 
     let normalizedTargetPath = ''
-    if (/^[a-zA-Z]:[\\/]/.test(decodedPathname) || decodedPathname.startsWith('\\\\')) {
+    if (isWindowsPathHref(decodedPathname)) {
         normalizedTargetPath = normalizePath(decodedPathname)
+    } else if (!filePath) {
+        return null
     } else if (decodedPathname.startsWith('/')) {
         const driveMatch = /^[a-zA-Z]:\//.exec(normalizedSourcePath)
         normalizedTargetPath = driveMatch ? `${driveMatch[0]}${decodedPathname.slice(1)}` : decodedPathname
@@ -104,7 +182,8 @@ export function resolveMarkdownLinkTarget(href: string, filePath?: string): Mark
 
     return {
         path: denormalizePath(normalizedTargetPath, filePath),
-        anchor
+        anchor: anchorReference.anchor,
+        focusLine: pathReference.focusLine ?? anchorReference.focusLine
     }
 }
 
@@ -146,7 +225,9 @@ export async function navigateMarkdownLink({
 
     const { extension, name } = splitFileNameAndExtension(pathInfo.path)
     if (openPreview) {
-        await openPreview({ name, path: pathInfo.path }, extension)
+        await openPreview({ name, path: pathInfo.path }, extension, {
+            focusLine: target.focusLine
+        })
         return true
     }
 

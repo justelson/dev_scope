@@ -182,6 +182,10 @@ export function createDefaultAssistantSnapshot(): AssistantSnapshot {
         snapshotSequence: 0,
         updatedAt: new Date(0).toISOString(),
         selectedSessionId: null,
+        playground: {
+            rootPath: null,
+            labs: []
+        },
         sessions: [],
         knownModels: []
     }
@@ -227,11 +231,16 @@ function applyAssistantDomainEventInternal(snapshot: AssistantSnapshot, event: A
             shouldSortSessions = true
             break
         }
+        case 'playground.updated': {
+            next.playground = event.payload['playground'] as AssistantSnapshot['playground']
+            break
+        }
         case 'thread.created': {
             const sessionId = String(event.payload['sessionId'] || '')
             const sessionIndex = findSessionIndex(next, sessionId)
             const writable = ensureSessionWritable(next, previousSessions, sessionIndex)
             const thread = event.payload['thread'] as AssistantThread
+            const makeActive = event.payload['makeActive'] !== false
             if (!writable) break
 
             if (writable.session.threads === writable.previousSession.threads) {
@@ -242,7 +251,9 @@ function applyAssistantDomainEventInternal(snapshot: AssistantSnapshot, event: A
             }
             writable.session.threads.unshift(thread)
             writable.session.threadIds = sortThreadsNewestFirst([thread.id, ...writable.session.threadIds], writable.session.threads)
-            writable.session.activeThreadId = thread.id
+            if (makeActive) {
+                writable.session.activeThreadId = thread.id
+            }
             writable.session.updatedAt = event.occurredAt
             shouldSortSessions = true
             break

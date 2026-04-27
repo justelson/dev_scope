@@ -1,10 +1,22 @@
 import { app } from 'electron'
+import { execFile } from 'child_process'
 import log from 'electron-log'
+import { promisify } from 'util'
 import { clearAiDebugLogs, getAiDebugLogs } from '../../ai/ai-debug-log'
 import { generateGitCommitMessageWithProvider, testGitTextProviderConnection } from '../../ai/git-text'
+import type { DevScopeInstalledPackageRuntime, DevScopePackageRuntimeId } from '../../../shared/contracts/devscope-api'
 import type { DevScopeGitTextProvider } from '../../../shared/contracts/devscope-git-contracts'
 
 type CommitAIProvider = DevScopeGitTextProvider
+const execFileAsync = promisify(execFile)
+
+const PACKAGE_RUNTIME_DEFINITIONS: Array<{ id: DevScopePackageRuntimeId; name: string; command: string }> = [
+    { id: 'node', name: 'Node.js', command: 'node' },
+    { id: 'npm', name: 'npm', command: 'npm' },
+    { id: 'pnpm', name: 'pnpm', command: 'pnpm' },
+    { id: 'yarn', name: 'Yarn', command: 'yarn' },
+    { id: 'bun', name: 'Bun', command: 'bun' }
+]
 
 export async function handleSetStartupSettings(_event: Electron.IpcMainInvokeEvent, settings: { openAtLogin: boolean; openAsHidden: boolean }) {
     log.info('IPC: setStartupSettings', settings)
@@ -35,6 +47,44 @@ export async function handleGetStartupSettings() {
         }
     } catch (err: any) {
         log.error('Failed to get startup settings:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+async function detectPackageRuntime(command: string): Promise<{ installed: boolean; version?: string; path?: string }> {
+    try {
+        const versionResult = process.platform === 'win32'
+            ? await execFileAsync('cmd.exe', ['/d', '/s', '/c', `${command} --version`], { timeout: 2500, windowsHide: true })
+            : await execFileAsync(command, ['--version'], { timeout: 2500 })
+        let path: string | undefined
+        try {
+            const pathResult = process.platform === 'win32'
+                ? await execFileAsync('where.exe', [command], { timeout: 2500, windowsHide: true })
+                : await execFileAsync('which', [command], { timeout: 2500 })
+            path = String(pathResult.stdout || '').split(/\r?\n/).map((line) => line.trim()).find(Boolean)
+        } catch {
+            path = undefined
+        }
+        return {
+            installed: true,
+            version: String(versionResult.stdout || versionResult.stderr || '').trim().split(/\r?\n/)[0],
+            path
+        }
+    } catch {
+        return { installed: false }
+    }
+}
+
+export async function handleListInstalledPackageRuntimes() {
+    log.info('IPC: listInstalledPackageRuntimes')
+    try {
+        const runtimes: DevScopeInstalledPackageRuntime[] = await Promise.all(PACKAGE_RUNTIME_DEFINITIONS.map(async (definition) => ({
+            ...definition,
+            ...await detectPackageRuntime(definition.command)
+        })))
+        return { success: true, runtimes }
+    } catch (err: any) {
+        log.error('Failed to list package runtimes:', err)
         return { success: false, error: err.message }
     }
 }

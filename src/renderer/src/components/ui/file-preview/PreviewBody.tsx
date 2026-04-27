@@ -20,7 +20,6 @@ interface PreviewBodyProps {
     gitDiffText?: string
     viewport: ViewportPreset
     presetConfig: ViewportPresetConfig
-    htmlViewMode: 'rendered' | 'code'
     csvDistinctColorsEnabled: boolean
     mode: 'preview' | 'edit'
     editableContent: string
@@ -62,7 +61,6 @@ export default function PreviewBody({
     gitDiffText,
     viewport,
     presetConfig,
-    htmlViewMode,
     csvDistinctColorsEnabled,
     mode,
     editableContent,
@@ -106,7 +104,7 @@ export default function PreviewBody({
 
         return (
             <div className={cn(
-                'w-full h-full max-h-full max-w-[98%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden',
+                'w-full h-full max-h-full max-w-[98%] bg-sparkle-card border border-white/5 overflow-hidden',
                 (fillEditorHeight || useFullBleed) ? 'h-full max-h-full max-w-none rounded-none border-0' : ''
             )}>
                 <SyntaxPreview
@@ -151,44 +149,16 @@ export default function PreviewBody({
 
     if (isMediaPreviewType(file.type)) {
         return (
-            <div className={cn('w-full h-full min-h-0 overflow-hidden', useFullBleed ? '' : 'rounded-xl border border-white/5 bg-sparkle-card')}>
+            <div className={cn(
+                'w-full h-full min-h-0 overflow-hidden',
+                useFullBleed || file.type === 'image' ? '' : 'rounded-xl border border-white/5 bg-sparkle-card'
+            )}>
                 <MediaPreviewContent
                     file={file}
                     mediaItems={mediaItems}
                     onSelectMedia={onSelectMedia}
                     isExpanded={useFullBleed}
                 />
-            </div>
-        )
-    }
-
-    if (file.type === 'html' && htmlViewMode === 'code') {
-        const previewSize = formatPreviewBytes(meta.previewBytes)
-        const totalSize = formatPreviewBytes(meta.size)
-
-        return (
-            <div className={cn('w-full h-full min-h-0 flex flex-col gap-3', useFullBleed ? 'max-w-none gap-0' : 'max-w-[96%]')}>
-                {meta.truncated && (
-                    <div className="w-full px-3 py-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                        Preview truncated for stability.
-                        {previewSize ? ` Showing ${previewSize}` : ''}
-                        {totalSize ? ` of ${totalSize}` : ''}.
-                    </div>
-                )}
-                <div className={cn(
-                    'w-full h-full min-h-0 bg-sparkle-card overflow-hidden',
-                    useFullBleed ? 'rounded-none border-0' : 'rounded-xl border border-white/5'
-                )}>
-                    <SyntaxPreview
-                        content={content}
-                        language={file.language || 'html'}
-                        filePath={file.path}
-                        projectPath={projectPath}
-                        gitDiffText={gitDiffText}
-                        onEditorMount={onEditorMount}
-                        height={useFullBleed ? '100%' : undefined}
-                    />
-                </div>
             </div>
         )
     }

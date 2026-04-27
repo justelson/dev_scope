@@ -1,5 +1,4 @@
 import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react'
-import { cn } from '@/lib/utils'
 
 const COLOR_TOKEN_REGEX =
     /#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\(\s*[^)\n]+\)/g
@@ -15,25 +14,17 @@ function isCssColorToken(token: string): boolean {
     return /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(normalized)
 }
 
-function renderColorToken(token: string, key: string, compact = false): ReactNode {
+function renderColorToken(token: string, key: string): ReactNode {
     return (
-        <span key={key} className={cn('inline-flex items-center align-middle', compact ? 'gap-1' : 'gap-1.5')}>
-            <span
-                className={cn(
-                    'rounded-sm border border-white/30 shadow-sm shrink-0',
-                    compact ? 'w-2 h-2' : 'w-2.5 h-2.5'
-                )}
-                style={{ backgroundColor: token }}
-            />
-            <span
-                className="font-mono"
-                style={{
-                    color: token,
-                    textShadow: '0 0 0.25px currentColor'
-                }}
-            >
-                {token}
-            </span>
+        <span
+            key={key}
+            className="font-mono"
+            style={{
+                color: token,
+                textShadow: '0 0 0.25px currentColor'
+            }}
+        >
+            {token}
         </span>
     )
 }
@@ -43,7 +34,7 @@ export function hasColorToken(text: string): boolean {
     return COLOR_TOKEN_REGEX.test(text)
 }
 
-export function renderColorAwareText(text: string, keyPrefix: string, compact = false): ReactNode {
+export function renderColorAwareText(text: string, keyPrefix: string, _compact = false): ReactNode {
     if (!text) return text
 
     const matches = Array.from(text.matchAll(COLOR_TOKEN_REGEX))
@@ -62,7 +53,7 @@ export function renderColorAwareText(text: string, keyPrefix: string, compact = 
         }
 
         if (isCssColorToken(token)) {
-            parts.push(renderColorToken(token, `${keyPrefix}-color-${index}`, compact))
+            parts.push(renderColorToken(token, `${keyPrefix}-color-${index}`))
         } else {
             parts.push(<span key={`${keyPrefix}-raw-${index}`}>{token}</span>)
         }

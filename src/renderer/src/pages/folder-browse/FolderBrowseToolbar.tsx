@@ -1,4 +1,4 @@
-import { ChevronDown, Filter, Grid3x3, LayoutGrid, List, Search } from 'lucide-react'
+import { ChevronDown, Filter, Grid3x3, LayoutGrid, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getProjectTypeById, type ContentLayout, type ViewMode } from './types'
 import { useState, useRef, useEffect } from 'react'
@@ -70,8 +70,8 @@ export function FolderBrowseToolbar({
 
     return (
         <div className={cn(
-            'sticky z-20 -mx-6 bg-sparkle-bg/90 px-6 backdrop-blur-2xl transition-[padding,margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
-            isCondensedLayout ? '-top-4 mb-5 pb-4 pt-4' : '-top-6 mb-6 pb-5 pt-6'
+            'sticky z-20 -mx-6 border-b border-white/5 bg-sparkle-bg/95 px-6 backdrop-blur-xl transition-[padding,margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+            isCondensedLayout ? '-top-4 mb-4 pb-3 pt-3' : '-top-6 mb-4 pb-4 pt-4'
         )}>
             <div className={cn(
                 'flex justify-between gap-4 transition-[gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
@@ -81,7 +81,7 @@ export function FolderBrowseToolbar({
                     'flex flex-1 w-full gap-3',
                     isCondensedLayout ? 'flex-col lg:flex-row' : ''
                 )}>
-                    <div className="relative flex-1 group/search">
+                    <div className="group/search relative flex-1 rounded-xl border border-white/10 bg-sparkle-card shadow-sm transition-all focus-within:border-sparkle-primary/50 focus-within:bg-white/[0.03]">
                         <Search
                             className="absolute left-4 top-1/2 -translate-y-1/2 text-sparkle-text-secondary group-focus-within/search:text-sparkle-primary transition-colors"
                             size={18}
@@ -91,7 +91,7 @@ export function FolderBrowseToolbar({
                             placeholder="Search in folder..."
                             value={searchQuery}
                             onChange={(event) => onSearchQueryChange(event.target.value)}
-                            className="w-full bg-sparkle-card border border-white/10 rounded-xl py-2.5 pl-11 pr-4 text-sm text-sparkle-text focus:outline-none focus:border-sparkle-primary/50 focus:ring-4 focus:ring-sparkle-primary/10 transition-all placeholder:text-sparkle-text-muted shadow-sm"
+                            className="w-full rounded-xl border-0 bg-transparent py-2.5 pl-11 pr-4 text-sm text-sparkle-text transition-colors placeholder:text-sparkle-text-muted focus:outline-none focus:ring-0"
                         />
                     </div>
                 </div>

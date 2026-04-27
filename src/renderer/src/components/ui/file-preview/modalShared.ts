@@ -2,8 +2,16 @@ import type { DevScopePreviewTerminalSessionSummary } from '@shared/contracts/de
 import type { GitLineMarker } from './gitDiff'
 import type { PreviewFile } from './types'
 
-export type PendingIntent = 'close' | 'preview'
-export type OutlineItem = { label: string; line: number; kind: 'function' | 'class' | 'heading' }
+export type PendingIntent = 'close' | 'preview' | 'external'
+export type OutlineItemKind = 'function' | 'class' | 'heading'
+export type OutlineItem = {
+    id: string
+    label: string
+    line: number
+    kind: OutlineItemKind
+    level: number
+    children: OutlineItem[]
+}
 export type LocalDiffPreview = {
     additions: number
     deletions: number
@@ -22,7 +30,7 @@ export type PreviewTerminalSessionItem = DevScopePreviewTerminalSessionSummary &
 export type PreviewTerminalState = 'idle' | 'connecting' | 'active' | 'exited' | 'error'
 export type TerminalPanelPhase = 'hidden' | 'entering' | 'visible' | 'exiting'
 
-export const LEFT_PANEL_MIN_WIDTH = 260
+export const LEFT_PANEL_MIN_WIDTH = 256
 export const LEFT_PANEL_MAX_WIDTH = 460
 export const RIGHT_PANEL_MIN_WIDTH = 240
 export const RIGHT_PANEL_MAX_WIDTH = 520
@@ -76,12 +84,58 @@ export function isEditableFileType(fileType: PreviewFile['type']): boolean {
         || fileType === 'html'
 }
 
-export function extractOutlineItems(content: string, fileType: PreviewFile['type']): OutlineItem[] {
-    const lines = content.split(/\r?\n/)
-    const items: OutlineItem[] = []
-    const pushItem = (item: OutlineItem) => {
-        if (items.length >= 120) return
-        items.push(item)
+function countLineLeadingIndent(line: string): number {
+    let count = 0
+    for (const char of line) {
+        if (char === ' ') {
+            count += 1
+            continue
+        }
+        if (char === '\t') {
+            count += 4
+            continue
+        }
+        break
+    }
+    return count
+}
+
+function countBraceDelta(line: string): { open: number; close: number } {
+    const open = (line.match(/\{/g) || []).length
+    const close = (line.match(/\}/g) || []).length
+    return { open, close }
+}
+
+function stripHtmlTags(value: string): string {
+    return value.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function createOutlineNode(kind: OutlineItemKind, label: string, line: number, level: number, index: number): OutlineItem {
+    return {
+        id: `${kind}:${line}:${index}:${label}`,
+        label,
+        line,
+        kind,
+        level,
+        children: []
+    }
+}
+
+function extractHeadingOutline(lines: string[], fileType: PreviewFile['type']): OutlineItem[] {
+    const roots: OutlineItem[] = []
+    const stack: Array<{ level: number; node: OutlineItem }> = []
+    let itemIndex = 0
+
+    const pushNode = (node: OutlineItem) => {
+        while (stack.length > 0 && stack[stack.length - 1].level >= node.level) {
+            stack.pop()
+        }
+
+        const parent = stack[stack.length - 1]?.node
+        if (parent) parent.children.push(node)
+        else roots.push(node)
+
+        stack.push({ level: node.level, node })
     }
 
     for (let index = 0; index < lines.length; index += 1) {
@@ -89,25 +143,88 @@ export function extractOutlineItems(content: string, fileType: PreviewFile['type
         const trimmed = line.trim()
         if (!trimmed) continue
 
-        const headingMatch = /^(#{1,4})\s+(.+)$/.exec(trimmed)
-        if (headingMatch && (fileType === 'md' || fileType === 'text')) {
-            pushItem({ label: headingMatch[2].trim(), line: index + 1, kind: 'heading' })
+        const markdownHeadingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed)
+        if (markdownHeadingMatch && (fileType === 'md' || fileType === 'text')) {
+            pushNode(createOutlineNode('heading', markdownHeadingMatch[2].trim(), index + 1, markdownHeadingMatch[1].length, itemIndex))
+            itemIndex += 1
             continue
         }
 
+        if (fileType === 'html') {
+            const htmlHeadingMatch = /<h([1-6])[^>]*>(.*?)<\/h\1>/i.exec(trimmed)
+            if (htmlHeadingMatch) {
+                const label = stripHtmlTags(htmlHeadingMatch[2])
+                if (!label) continue
+                pushNode(createOutlineNode('heading', label, index + 1, Number(htmlHeadingMatch[1]), itemIndex))
+                itemIndex += 1
+            }
+        }
+    }
+
+    return roots
+}
+
+export function extractOutlineItems(content: string, fileType: PreviewFile['type']): OutlineItem[] {
+    const lines = content.split(/\r?\n/)
+    const headingTree = extractHeadingOutline(lines, fileType)
+    if (headingTree.length > 0) {
+        return headingTree.slice(0, 120)
+    }
+
+    const items: OutlineItem[] = []
+    const classStack: Array<{ node: OutlineItem; scopeDepth: number }> = []
+    let braceDepth = 0
+    let itemIndex = 0
+
+    const pushTopLevelItem = (item: OutlineItem) => {
+        if (items.length >= 120) return false
+        items.push(item)
+        return true
+    }
+
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index] || ''
+        const trimmed = line.trim()
+        if (!trimmed) continue
+
+        while (classStack.length > 0 && braceDepth < classStack[classStack.length - 1].scopeDepth) {
+            classStack.pop()
+        }
+
+        const indent = countLineLeadingIndent(line)
+        const { open, close } = countBraceDelta(line)
         const classMatch = /^(?:export\s+)?(?:default\s+)?class\s+([A-Za-z0-9_$]+)/.exec(trimmed)
+
         if (classMatch) {
-            pushItem({ label: classMatch[1], line: index + 1, kind: 'class' })
-            continue
+            const level = classStack.length + 1
+            const item = createOutlineNode('class', classMatch[1], index + 1, level, itemIndex)
+            itemIndex += 1
+
+            const parentClass = classStack[classStack.length - 1]?.node
+            if (parentClass) parentClass.children.push(item)
+            else if (!pushTopLevelItem(item)) break
+
+            classStack.push({
+                node: item,
+                scopeDepth: Math.max(braceDepth + 1, braceDepth + open - close)
+            })
+        } else {
+            const fnMatch = /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/.exec(trimmed)
+                || /^(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>/.exec(trimmed)
+                || /^(?:public\s+|private\s+|protected\s+|static\s+|async\s+)*([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{?$/.exec(trimmed)
+
+            if (fnMatch) {
+                const parentClass = classStack[classStack.length - 1]?.node
+                const level = parentClass ? 2 : 1
+                const item = createOutlineNode('function', fnMatch[1], index + 1, level + Math.floor(indent / 12), itemIndex)
+                itemIndex += 1
+
+                if (parentClass) parentClass.children.push(item)
+                else if (!pushTopLevelItem(item)) break
+            }
         }
 
-        const fnMatch = /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/.exec(trimmed)
-            || /^(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>/.exec(trimmed)
-            || /^([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{?$/.exec(trimmed)
-        if (fnMatch) {
-            pushItem({ label: fnMatch[1], line: index + 1, kind: 'function' })
-            continue
-        }
+        braceDepth = Math.max(0, braceDepth + open - close)
     }
 
     return items

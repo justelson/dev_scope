@@ -14,6 +14,19 @@ export function isTransientPushError(message: string): boolean {
     return PUSH_TRANSIENT_ERROR_PATTERNS.some((pattern) => pattern.test(message))
 }
 
+export function isNonFastForwardPushError(rawMessage: string): boolean {
+    const message = String(rawMessage || '').trim()
+    if (!message) return false
+
+    return (
+        /\bnon-fast-forward\b/i.test(message)
+        || /\bfetch first\b/i.test(message)
+        || /\[rejected\]\s+\(fetch first\)/i.test(message)
+        || /\bbranch is behind upstream\b/i.test(message)
+        || /\bhas new commits\b/i.test(message)
+    )
+}
+
 export function summarizePushError(rawMessage: string): string {
     const message = String(rawMessage || '').trim()
     const compact = message.replace(/\s+/g, ' ')
@@ -27,7 +40,7 @@ export function summarizePushError(rawMessage: string): string {
     if (/\bAuthentication failed\b/i.test(message) || /\b403\b/.test(message) || /\b401\b/.test(message)) {
         return 'Push was rejected by remote authentication. Re-authenticate Git credentials/token and retry.'
     }
-    if (/\bnon-fast-forward\b/i.test(message) || /\brejected\b/i.test(message)) {
+    if (isNonFastForwardPushError(message) || /\brejected\b/i.test(message)) {
         return 'Push rejected (non-fast-forward). Pull/rebase the latest remote changes, then push again.'
     }
 

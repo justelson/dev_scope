@@ -33,9 +33,11 @@ export function useFilePreviewTerminal({
     const [pendingTerminalCommand, setPendingTerminalCommand] = useState<string | null>(null)
     const [terminalShellLabel, setTerminalShellLabel] = useState(defaultShell === 'cmd' ? 'CMD' : 'PowerShell')
     const [terminalSessionCwd, setTerminalSessionCwd] = useState(projectPath || file.path || '')
+    const [terminalNewShell, setTerminalNewShell] = useState<Shell>(defaultShell)
 
     const terminalResizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
     const terminalHostRef = useRef<HTMLDivElement | null>(null)
+    const terminalMountedHostRef = useRef<HTMLDivElement | null>(null)
     const xtermRef = useRef<XtermTerminal | null>(null)
     const fitAddonRef = useRef<FitAddon | null>(null)
     const terminalHydratedSessionIdRef = useRef('')
@@ -93,6 +95,7 @@ export function useFilePreviewTerminal({
         setPendingTerminalCommand(null)
         setTerminalShellLabel(defaultShell === 'cmd' ? 'CMD' : 'PowerShell')
         setTerminalSessionCwd(projectPath || file.path || '')
+        setTerminalNewShell(defaultShell)
     }, [defaultShell, file.path, initialHeight, projectPath])
 
     useEffect(() => {
@@ -152,7 +155,7 @@ export function useFilePreviewTerminal({
         return nextSessions
     }, [canUsePreviewTerminal, defaultShell, file.path, projectPath])
 
-    const createPreviewTerminalSession = useCallback(async (title?: string) => {
+    const createPreviewTerminalSession = useCallback(async (preferredShell?: Shell, title?: string) => {
         if (!canUsePreviewTerminal) return null
         const nextSessionId = createPreviewTerminalSessionId()
         terminalSessionIdRef.current = nextSessionId
@@ -160,10 +163,13 @@ export function useFilePreviewTerminal({
         setTerminalState('connecting')
         setTerminalError(null)
 
+        const nextShell = preferredShell || defaultShell
+        setTerminalNewShell(nextShell)
+
         const result = await window.devscope.createPreviewTerminal({
             sessionId: nextSessionId,
             targetPath: projectPath || file.path,
-            preferredShell: defaultShell,
+            preferredShell: nextShell,
             cols: 100,
             rows: 28,
             title
@@ -217,21 +223,6 @@ export function useFilePreviewTerminal({
         xtermRef.current?.focus()
     }, [])
 
-    const restartPreviewTerminal = useCallback(async () => {
-        if (!canUsePreviewTerminal) return
-        setTerminalError(null)
-        setPendingTerminalCommand(null)
-        clearTerminalOutput()
-        if (!terminalVisible) {
-            setTerminalVisible(true)
-            return
-        }
-        if (terminalSessionIdRef.current) {
-            await stopPreviewTerminalSession(terminalSessionIdRef.current)
-        }
-        await createPreviewTerminalSession()
-    }, [canUsePreviewTerminal, clearTerminalOutput, createPreviewTerminalSession, stopPreviewTerminalSession, terminalVisible])
-
     const queueTerminalCommand = useCallback((command: string) => {
         setTerminalVisible(true)
         setPendingTerminalCommand(command)
@@ -239,6 +230,7 @@ export function useFilePreviewTerminal({
 
     const disposePreviewTerminal = useCallback(() => {
         terminalHydratedSessionIdRef.current = ''
+        terminalMountedHostRef.current = null
         fitAddonRef.current = null
         xtermRef.current?.dispose()
         xtermRef.current = null
@@ -283,6 +275,11 @@ export function useFilePreviewTerminal({
         if (!host) return
         let terminal = xtermRef.current
         let fitAddon = fitAddonRef.current
+        if (terminal && terminalMountedHostRef.current && terminalMountedHostRef.current !== host) {
+            disposePreviewTerminal()
+            terminal = null
+            fitAddon = null
+        }
         if (!terminal || !fitAddon) {
             terminal = new XtermTerminal({
                 cursorBlink: true,
@@ -298,10 +295,20 @@ export function useFilePreviewTerminal({
             terminal.loadAddon(new WebLinksAddon())
             terminal.open(host)
             terminal.focus()
+            terminalMountedHostRef.current = host
             xtermRef.current = terminal
             fitAddonRef.current = fitAddon
             terminal.onData((data) => {
                 void window.devscope.writePreviewTerminal({ sessionId: terminalSessionIdRef.current, data }).catch(() => undefined)
+            })
+            terminal.onTitleChange((title) => {
+                const normalizedTitle = String(title || '').trim()
+                const activeSessionId = terminalSessionIdRef.current
+                if (!normalizedTitle || !activeSessionId) return
+                void window.devscope.setPreviewTerminalTitle({
+                    sessionId: activeSessionId,
+                    title: normalizedTitle
+                }).catch(() => undefined)
             })
         }
 
@@ -309,6 +316,11 @@ export function useFilePreviewTerminal({
             terminal.clear()
             if (currentTerminalSession.recentOutput) terminal.write(currentTerminalSession.recentOutput)
             terminalHydratedSessionIdRef.current = currentTerminalSession.sessionId
+            window.requestAnimationFrame(() => {
+                const activeTerminal = xtermRef.current
+                if (!activeTerminal) return
+                activeTerminal.refresh(0, Math.max(0, activeTerminal.rows - 1))
+            })
         }
 
         const syncTerminalSize = () => {
@@ -328,12 +340,14 @@ export function useFilePreviewTerminal({
         resizeObserver.observe(host)
         window.addEventListener('resize', syncTerminalSize)
         const initialSyncTimer = window.setTimeout(syncTerminalSize, 0)
+        const retrySyncTimer = window.setTimeout(syncTerminalSize, 96)
         const settleSyncTimer = window.setTimeout(syncTerminalSize, TERMINAL_PANEL_ANIMATION_MS + 40)
 
         return () => {
             resizeObserver.disconnect()
             window.removeEventListener('resize', syncTerminalSize)
             window.clearTimeout(initialSyncTimer)
+            window.clearTimeout(retrySyncTimer)
             window.clearTimeout(settleSyncTimer)
         }
     }, [canUsePreviewTerminal, currentTerminalSession, disposePreviewTerminal, renderTerminalPanel, terminalTheme, terminalVisible])
@@ -348,9 +362,35 @@ export function useFilePreviewTerminal({
                     if (session.sessionId !== eventPayload.sessionId) return session
                     const nextRecentOutput = `${session.recentOutput || ''}${outputChunk}`.slice(-60_000)
                     const isActive = eventPayload.sessionId === terminalSessionIdRef.current
-                    return { ...session, recentOutput: nextRecentOutput, lastActivityAt: Date.now(), hasUnreadOutput: isActive ? false : true }
+                    return {
+                        ...session,
+                        title: eventPayload.title || session.title,
+                        shell: eventPayload.shell || session.shell,
+                        cwd: eventPayload.cwd || session.cwd,
+                        groupKey: eventPayload.groupKey || session.groupKey,
+                        status: eventPayload.status || session.status,
+                        recentOutput: nextRecentOutput,
+                        lastActivityAt: Date.now(),
+                        hasUnreadOutput: isActive ? false : true
+                    }
                 }))
                 if (eventPayload.sessionId === terminalSessionIdRef.current) xtermRef.current?.write(outputChunk)
+                return
+            }
+            if (eventPayload.type === 'title') {
+                setTerminalSessions((current) => current.map((session) => (
+                    session.sessionId === eventPayload.sessionId
+                        ? {
+                            ...session,
+                            title: eventPayload.title || session.title,
+                            shell: eventPayload.shell || session.shell,
+                            cwd: eventPayload.cwd || session.cwd,
+                            groupKey: eventPayload.groupKey || session.groupKey,
+                            status: eventPayload.status || session.status,
+                            lastActivityAt: Date.now()
+                        }
+                        : session
+                )))
                 return
             }
             if (eventPayload.type === 'started') {
@@ -429,6 +469,21 @@ export function useFilePreviewTerminal({
 
     useEffect(() => {
         if (!isResizingTerminal) return
+        const applyDragState = (active: boolean) => {
+            if (active) {
+                document.documentElement.style.setProperty('cursor', 'row-resize', 'important')
+                document.documentElement.style.setProperty('user-select', 'none', 'important')
+                document.body.style.setProperty('cursor', 'row-resize', 'important')
+                document.body.style.setProperty('user-select', 'none', 'important')
+                return
+            }
+
+            document.documentElement.style.removeProperty('cursor')
+            document.documentElement.style.removeProperty('user-select')
+            document.body.style.removeProperty('cursor')
+            document.body.style.removeProperty('user-select')
+        }
+
         const maxHeight = Math.max(220, Math.floor(window.innerHeight * 0.78))
         const clamp = (value: number) => Math.min(maxHeight, Math.max(PREVIEW_TERMINAL_MIN_HEIGHT, value))
         const onMove = (event: MouseEvent) => {
@@ -440,13 +495,11 @@ export function useFilePreviewTerminal({
         const stop = () => {
             terminalResizeRef.current = null
             setIsResizingTerminal(false)
-            document.body.style.cursor = ''
-            document.body.style.userSelect = ''
+            applyDragState(false)
             window.removeEventListener('mousemove', onMove)
             window.removeEventListener('mouseup', stop)
         }
-        document.body.style.cursor = 'row-resize'
-        document.body.style.userSelect = 'none'
+        applyDragState(true)
         window.addEventListener('mousemove', onMove)
         window.addEventListener('mouseup', stop)
         return stop
@@ -471,6 +524,8 @@ export function useFilePreviewTerminal({
         terminalError,
         terminalShellLabel,
         terminalSessionCwd,
+        terminalNewShell,
+        setTerminalNewShell,
         currentTerminalSession,
         terminalTheme,
         terminalHostRef,
@@ -480,7 +535,6 @@ export function useFilePreviewTerminal({
         clearTerminalOutput,
         focusTerminal,
         createPreviewTerminalSession,
-        restartPreviewTerminal,
         stopPreviewTerminalSession,
         selectPreviewTerminalSession,
         startTerminalResize

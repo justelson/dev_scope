@@ -1,24 +1,29 @@
-import { createPortal } from 'react-dom'
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import {
-    DndContext,
     type DragCancelEvent,
     type DragEndEvent,
     type DragStartEvent
 } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from '@dnd-kit/modifiers'
-import { Archive, ChevronRight, Edit2, MessageSquarePlus, Plus, SquarePen } from 'lucide-react'
 import type { AssistantSession } from '@shared/assistant/contracts'
-import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
-import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import type { DevScopeFolderItem } from '@shared/contracts/devscope-api'
 import { cn } from '@/lib/utils'
+import { AssistantSessionsRailBody } from './AssistantSessionsRailBody'
+import {
+    LabDeleteModal,
+    PlaygroundLabModal,
+    ProjectChatsDeleteModal
+} from './AssistantSessionsRailDialogs'
+import { AssistantSessionsRailFooter } from './AssistantSessionsRailFooter'
+import { AssistantSessionsRailHeaderControls } from './AssistantSessionsRailHeaderControls'
+import type { ExpandedSessionsRailContentProps } from './AssistantSessionsRailParts.types'
 import type { SessionProjectGroup } from './assistant-sessions-rail-utils'
 import {
-    ProjectGroupIcon,
-    SessionRow,
-    SortableProjectItem,
-    SortableSessionList,
+    buildAssistantThreadRecencyTierMap,
+    getSessionDisplayTitle
+} from './assistant-sessions-rail-utils'
+import { createProjectActionMenuItems, createSessionActionMenuItems } from './assistant-sessions-rail-menus'
+import { useAssistantRailContextMenu } from './useAssistantRailContextMenu'
+import {
     hasSessionChats,
     useAssistantRailCollisionDetection,
     useAssistantRailSensors
@@ -26,62 +31,280 @@ import {
 
 const CHAT_PAGE_SIZE = 5
 
-export function ExpandedSessionsRailContent(props: {
-    compact: boolean
-    commandPending: boolean
-    groupedSessions: SessionProjectGroup[]
-    groupedArchivedSessions: SessionProjectGroup[]
-    activeSessionId: string | null
-    expandedGroupKeys: Set<string>
-    showArchivedSessions: boolean
-    onToggleGroup: (key: string) => void
-    onChooseProjectPath: () => void
-    onCreateSession: (projectPath?: string) => void
-    onSelectSession: (sessionId: string) => void
-    onOpenRename: (session: AssistantSession) => void
-    onArchiveSession: (sessionId: string, archived?: boolean) => void
-    onDeleteRequest: (session: AssistantSession) => void
-    onSetShowArchivedSessions: (value: boolean) => void
-    onProjectDragStart: (projectKey: string) => void
-    onProjectDragEnd: (activeProjectKey: string, overProjectKey: string | null) => void
-    onProjectDragCancel: () => void
-    onSessionDragStart: (sessionId: string, projectKey: string) => void
-    onSessionDragEnd: (projectKey: string, activeSessionId: string, overSessionId: string | null) => void
-    onSessionDragCancel: () => void
-}) {
+function getTrailingPathSegment(value: string): string {
+    const normalized = String(value || '').trim().replace(/[\\/]+$/g, '')
+    if (!normalized) return ''
+    const segment = normalized.split(/[\\/]/).pop()?.trim() || ''
+    return segment.replace(/\.git$/i, '').trim()
+}
+
+function resolveRequestedLabTitle(input: {
+    title: string
+    source: 'empty' | 'git-clone' | 'existing-folder'
+    repoUrl: string
+    existingFolderPath: string
+}): string {
+    const explicitTitle = input.title.trim()
+    if (explicitTitle) return explicitTitle
+    if (input.source === 'git-clone') return getTrailingPathSegment(input.repoUrl) || 'New Lab'
+    if (input.source === 'existing-folder') return getTrailingPathSegment(input.existingFolderPath) || 'New Lab'
+    return 'New Lab'
+}
+
+export { RenameSessionModal, SessionDeleteModal } from './AssistantSessionsRailDialogs'
+
+export function ExpandedSessionsRailContent(props: ExpandedSessionsRailContentProps) {
     const {
         compact,
+        railMode,
+        railGroupMode,
+        railSortMode,
+        railFilterMode,
+        playground,
+        backgroundActivitySessions,
+        assistantConnected,
         commandPending,
         groupedSessions,
         groupedArchivedSessions,
         activeSessionId,
+        activeThreadId,
         expandedGroupKeys,
         showArchivedSessions,
+        onRailModeChange,
+        onRailGroupModeChange,
+        onRailSortModeChange,
+        onRailFilterModeChange,
         onToggleGroup,
         onChooseProjectPath,
         onCreateSession,
+        onCreatePlaygroundSession,
         onSelectSession,
+        onSelectThread,
         onOpenRename,
         onArchiveSession,
         onDeleteRequest,
+        onDeleteSession,
         onSetShowArchivedSessions,
+        onSetPlaygroundRoot,
+        onCreatePlaygroundLab,
+        onDeletePlaygroundLab,
         onProjectDragStart,
         onProjectDragEnd,
         onProjectDragCancel,
         onSessionDragStart,
         onSessionDragEnd,
-        onSessionDragCancel
+        onSessionDragCancel,
+        onShowToast
     } = props
+
     const projectSensors = useAssistantRailSensors()
     const collisionDetection = useAssistantRailCollisionDetection()
     const projectDragInProgressRef = useRef(false)
     const suppressProjectClickAfterDragRef = useRef(false)
+    const { openContextMenu, contextMenuPortal } = useAssistantRailContextMenu()
     const [visibleSessionCountByGroup, setVisibleSessionCountByGroup] = useState<Record<string, number>>({})
+    const [creatingLab, setCreatingLab] = useState(false)
+    const [labDialogOpen, setLabDialogOpen] = useState(false)
+    const [labTitle, setLabTitle] = useState('')
+    const [labRepoUrl, setLabRepoUrl] = useState('')
+    const [labSource, setLabSource] = useState<'empty' | 'git-clone' | 'existing-folder'>('empty')
+    const [existingRootFolders, setExistingRootFolders] = useState<DevScopeFolderItem[]>([])
+    const [existingRootFoldersLoading, setExistingRootFoldersLoading] = useState(false)
+    const [selectedExistingFolderPath, setSelectedExistingFolderPath] = useState('')
+    const [labToDelete, setLabToDelete] = useState<{ labId: string; label: string } | null>(null)
+    const [projectChatsToDelete, setProjectChatsToDelete] = useState<{ label: string; sessionIds: string[] } | null>(null)
+    const [deletingProjectChats, setDeletingProjectChats] = useState(false)
+    const [deletingLabId, setDeletingLabId] = useState<string | null>(null)
+    const [expandedThreadKeys, setExpandedThreadKeys] = useState<Set<string>>(new Set())
 
     const visibleArchivedGroups = groupedArchivedSessions
         .map((group) => ({ ...group, sessions: group.sessions.filter(hasSessionChats) }))
         .filter((group) => group.sessions.length > 0)
     const archivedCount = visibleArchivedGroups.reduce((sum, group) => sum + group.sessions.length, 0)
+    const limitedBackgroundActivitySessions = backgroundActivitySessions.slice(0, 3)
+    const remainingBackgroundActivityCount = Math.max(0, backgroundActivitySessions.length - limitedBackgroundActivitySessions.length)
+    const labByRootPath = useMemo(
+        () => new Map(playground.labs.map((lab) => [lab.rootPath, lab])),
+        [playground.labs]
+    )
+    const allVisibleSessions = useMemo(
+        () => [...groupedSessions.flatMap((group) => group.sessions), ...groupedArchivedSessions.flatMap((group) => group.sessions)],
+        [groupedArchivedSessions, groupedSessions]
+    )
+    const recencyTierByThreadId = useMemo(() => {
+        const sessionsById = new Map<string, AssistantSession>()
+        for (const session of allVisibleSessions) sessionsById.set(session.id, session)
+        for (const session of backgroundActivitySessions) sessionsById.set(session.id, session)
+        return buildAssistantThreadRecencyTierMap(Array.from(sessionsById.values()))
+    }, [allVisibleSessions, backgroundActivitySessions])
+
+    const handleDeleteLabRequest = useCallback((labId: string, label: string) => {
+        setLabToDelete({ labId, label })
+    }, [])
+
+    const handleDeleteProjectChatsRequest = useCallback((group: SessionProjectGroup) => {
+        const sessionIds = group.sessions.map((session) => session.id)
+        if (sessionIds.length === 0) return
+        setProjectChatsToDelete({ label: group.label, sessionIds })
+    }, [])
+
+    const getSessionMenuItems = useCallback((session: AssistantSession, archived = false) => (
+        createSessionActionMenuItems({
+            session,
+            archived,
+            onOpenRename,
+            onArchiveSession,
+            onDeleteRequest
+        })
+    ), [onArchiveSession, onDeleteRequest, onOpenRename])
+
+    const openSessionContextMenu = useCallback((
+        event: ReactMouseEvent<HTMLElement>,
+        session: AssistantSession,
+        archived = false
+    ) => {
+        openContextMenu(event, `${getSessionDisplayTitle(session)} actions`, getSessionMenuItems(session, archived))
+    }, [getSessionMenuItems, openContextMenu])
+
+    const getGroupPlaygroundLabId = useCallback((group: SessionProjectGroup) => {
+        const directLabId = group.sessions[0]?.playgroundLabId || null
+        if (directLabId) return directLabId
+        if (!group.path) return null
+        return labByRootPath.get(group.path)?.id || null
+    }, [labByRootPath])
+
+    const getProjectMenuItems = useCallback((group: SessionProjectGroup, isExpanded: boolean) => (
+        createProjectActionMenuItems({
+            railMode,
+            group,
+            playgroundLabId: getGroupPlaygroundLabId(group),
+            isExpanded,
+            onToggleGroup,
+            onCreateSession,
+            onCreatePlaygroundSession,
+            onDeletePlaygroundLab: handleDeleteLabRequest,
+            onDeleteProjectChats: handleDeleteProjectChatsRequest
+        })
+    ), [getGroupPlaygroundLabId, handleDeleteLabRequest, handleDeleteProjectChatsRequest, onCreatePlaygroundSession, onCreateSession, onToggleGroup, railMode])
+
+    const openProjectContextMenu = useCallback((
+        event: ReactMouseEvent<HTMLElement>,
+        group: SessionProjectGroup,
+        isExpanded: boolean
+    ) => {
+        openContextMenu(event, `${group.label} actions`, getProjectMenuItems(group, isExpanded))
+    }, [getProjectMenuItems, openContextMenu])
+
+    const handleCreateProjectChat = useCallback((group: SessionProjectGroup) => {
+        const labId = getGroupPlaygroundLabId(group)
+        if (railMode === 'playground') {
+            onCreatePlaygroundSession(labId)
+            return
+        }
+        onCreateSession(group.path || undefined)
+    }, [getGroupPlaygroundLabId, onCreatePlaygroundSession, onCreateSession, railMode])
+
+    const handleDeleteProjectGroup = useCallback((group: SessionProjectGroup) => {
+        const labId = getGroupPlaygroundLabId(group)
+        if (railMode === 'playground' && labId) {
+            handleDeleteLabRequest(labId, group.label)
+            return
+        }
+        handleDeleteProjectChatsRequest(group)
+    }, [getGroupPlaygroundLabId, handleDeleteLabRequest, handleDeleteProjectChatsRequest, railMode])
+
+    const handleConfirmDeleteProjectChats = useCallback(async () => {
+        if (!projectChatsToDelete || deletingProjectChats) return
+        const { label, sessionIds } = projectChatsToDelete
+        let deletedCount = 0
+        let firstError: string | null = null
+
+        try {
+            setDeletingProjectChats(true)
+            for (const sessionId of sessionIds) {
+                const result = await onDeleteSession(sessionId)
+                if (result.success) {
+                    deletedCount += 1
+                    continue
+                }
+                if (!firstError) firstError = result.error
+            }
+
+            if (deletedCount === sessionIds.length) {
+                setProjectChatsToDelete(null)
+                onShowToast({ message: `Deleted ${deletedCount} chat${deletedCount === 1 ? '' : 's'} from "${label}"` })
+                return
+            }
+
+            if (deletedCount > 0) {
+                setProjectChatsToDelete(null)
+                onShowToast({
+                    message: `Deleted ${deletedCount} of ${sessionIds.length} chats from "${label}". ${firstError || 'Some chats could not be deleted.'}`,
+                    tone: 'error'
+                })
+                return
+            }
+
+            onShowToast({
+                message: `Failed to delete chats from "${label}": ${firstError || 'Unknown error.'}`,
+                tone: 'error'
+            })
+        } finally {
+            setDeletingProjectChats(false)
+        }
+    }, [deletingProjectChats, onDeleteSession, onShowToast, projectChatsToDelete])
+
+    const handleConfirmDeleteLab = useCallback(async () => {
+        if (!labToDelete || deletingLabId) return
+
+        try {
+            setDeletingLabId(labToDelete.labId)
+            const result = await onDeletePlaygroundLab(labToDelete.labId)
+            if (!result.success) {
+                onShowToast({
+                    message: `Failed to remove lab "${labToDelete.label}": ${result.error}`,
+                    tone: 'error'
+                })
+                return
+            }
+            setLabToDelete(null)
+            onShowToast({ message: `Removed lab "${labToDelete.label}"` })
+        } finally {
+            setDeletingLabId(null)
+        }
+    }, [deletingLabId, labToDelete, onDeletePlaygroundLab, onShowToast])
+
+    useEffect(() => {
+        setExpandedThreadKeys((current) => {
+            const next = new Set(
+                Array.from(current).filter((threadId) =>
+                    allVisibleSessions.some((session) => session.threads.some((thread) => thread.id === threadId && thread.source === 'subagent'))
+                )
+            )
+
+            if (!activeThreadId) return next
+
+            const activeSession = allVisibleSessions.find((session) => session.id === activeSessionId) || null
+            const activeThread = activeSession?.threads.find((thread) => thread.id === activeThreadId) || null
+            if (!activeSession || !activeThread || activeThread.source !== 'subagent') return next
+
+            const threadById = new Map(activeSession.threads.map((thread) => [thread.id, thread]))
+            let parentThreadId = activeThread.parentThreadId
+
+            while (parentThreadId) {
+                const parentThread = threadById.get(parentThreadId)
+                if (!parentThread || parentThread.source !== 'subagent') break
+                next.add(parentThread.id)
+                parentThreadId = parentThread.parentThreadId
+            }
+
+            if (activeSession.threads.some((thread) => thread.parentThreadId === activeThread.id && thread.source === 'subagent')) {
+                next.add(activeThread.id)
+            }
+
+            return next
+        })
+    }, [activeSessionId, activeThreadId, allVisibleSessions])
 
     useEffect(() => {
         setVisibleSessionCountByGroup((current) => {
@@ -97,6 +320,42 @@ export function ExpandedSessionsRailContent(props: {
             return next
         })
     }, [groupedSessions])
+
+    useEffect(() => {
+        if (!labDialogOpen || labSource !== 'existing-folder' || !playground.rootPath) return
+
+        const rootPath = playground.rootPath
+        let cancelled = false
+        setExistingRootFoldersLoading(true)
+
+        void (async () => {
+            try {
+                const result = await window.devscope.scanProjects(rootPath, { forceRefresh: true })
+                if (cancelled || !result.success) return
+                const folders = [...(result.folders || [])].sort((left, right) => left.name.localeCompare(right.name))
+                setExistingRootFolders(folders)
+                setSelectedExistingFolderPath((current) => {
+                    if (current && folders.some((folder) => folder.path === current)) return current
+                    return folders[0]?.path || ''
+                })
+            } finally {
+                if (!cancelled) setExistingRootFoldersLoading(false)
+            }
+        })()
+
+        return () => {
+            cancelled = true
+        }
+    }, [labDialogOpen, labSource, playground.rootPath])
+
+    const handleToggleThread = useCallback((threadId: string) => {
+        setExpandedThreadKeys((current) => {
+            const next = new Set(current)
+            if (next.has(threadId)) next.delete(threadId)
+            else next.add(threadId)
+            return next
+        })
+    }, [])
 
     const handleProjectTitlePointerDownCapture = useCallback(() => {
         suppressProjectClickAfterDragRef.current = false
@@ -133,205 +392,226 @@ export function ExpandedSessionsRailContent(props: {
         onProjectDragCancel()
     }, [onProjectDragCancel])
 
-    const handleShowMoreSessions = useCallback((groupKey: string) => {
+    const handleShowMoreSessions = useCallback((groupKey: string, nextVisibleCount: number) => {
         setVisibleSessionCountByGroup((current) => ({
             ...current,
-            [groupKey]: Math.max(CHAT_PAGE_SIZE, current[groupKey] ?? CHAT_PAGE_SIZE) + CHAT_PAGE_SIZE
+            [groupKey]: Math.max(CHAT_PAGE_SIZE, nextVisibleCount)
         }))
     }, [])
 
-    return (
-        <div className={cn('relative z-10 flex h-full flex-col', compact ? 'px-2.5' : 'px-3')}>
-            <div className="flex items-center justify-between gap-2 px-1 py-3">
-                <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="text-sm font-semibold tracking-tight text-sparkle-text">T3 x dvs</span>
-                    <span className="rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-sparkle-text-muted/60">Alpha</span>
-                </div>
-            </div>
-            <div className="mb-3 px-2">
-                <button type="button" onClick={() => onChooseProjectPath()} disabled={commandPending} className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-sparkle-text-muted/70 transition-all hover:border-[var(--accent-primary)]/50 hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)] disabled:opacity-40" title="Add project (Open Folder)"><Plus size={14} /><span>Add Project</span></button>
-            </div>
-            <div className="relative mb-3 flex items-center px-3"><div className="h-px flex-1 bg-white/5" /><span className="px-3 text-[10px] tracking-wide text-sparkle-text-muted/25">Projects</span><div className="h-px flex-1 bg-white/5" /></div>
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-hide">
-                <DndContext
-                    sensors={projectSensors}
-                    collisionDetection={collisionDetection}
-                    modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
-                    onDragStart={handleProjectSortStart}
-                    onDragEnd={handleProjectSortEnd}
-                    onDragCancel={handleProjectSortCancel}
-                >
-                    <SortableContext items={groupedSessions.map((group) => group.key)} strategy={verticalListSortingStrategy}>
-                        <div className="space-y-0.5">
-                            {groupedSessions.map((group) => {
-                                const isExpanded = expandedGroupKeys.has(group.key)
-                                const projectIcon = (
-                                    <ProjectGroupIcon
-                                        group={group}
-                                        size={14}
-                                        expanded={isExpanded}
-                                    />
-                                )
-                                const chatSessions = group.sessions.filter(hasSessionChats)
-                                const hasChats = chatSessions.length > 0
-                                const configuredVisibleCount = Math.max(CHAT_PAGE_SIZE, visibleSessionCountByGroup[group.key] ?? CHAT_PAGE_SIZE)
-                                const activeSessionIndex = chatSessions.findIndex((session) => session.id === activeSessionId)
-                                const resolvedVisibleCount = activeSessionIndex >= 0
-                                    ? Math.max(configuredVisibleCount, Math.ceil((activeSessionIndex + 1) / CHAT_PAGE_SIZE) * CHAT_PAGE_SIZE)
-                                    : configuredVisibleCount
-                                const visibleChatSessions = chatSessions.slice(0, resolvedVisibleCount)
-                                const hasMoreChats = chatSessions.length > resolvedVisibleCount
+    const handleShowLessSessions = useCallback((groupKey: string, minimumVisibleCount: number) => {
+        setVisibleSessionCountByGroup((current) => ({
+            ...current,
+            [groupKey]: Math.max(CHAT_PAGE_SIZE, minimumVisibleCount)
+        }))
+    }, [])
 
-                                return (
-                                    <SortableProjectItem key={group.key} projectKey={group.key}>
-                                        {(handleProps) => (
-                                            <>
-                                                <div className={cn('group/project-header relative rounded-lg border border-transparent transition-[background-color,border-color,box-shadow] duration-200', handleProps.isOver && !handleProps.isDragging && 'border-white/10 bg-white/[0.03] shadow-[0_10px_30px_rgba(0,0,0,0.16)]')}>
-                                                    <button
-                                                        type="button"
-                                                        {...handleProps.attributes}
-                                                        {...handleProps.listeners}
-                                                        onPointerDownCapture={handleProjectTitlePointerDownCapture}
-                                                        onClick={(event) => handleProjectTitleClick(event, group.key)}
-                                                        className={cn(
-                                                            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-[background-color,color,opacity] duration-150',
-                                                            handleProps.isDragging
-                                                                ? 'cursor-grabbing bg-white/[0.03] text-sparkle-text'
-                                                                : 'cursor-grab active:cursor-grabbing hover:bg-white/[0.04] group-hover/project-header:bg-white/[0.04]'
-                                                        )}
-                                                    >
-                                                        <ChevronRight size={14} className={cn('shrink-0 text-sparkle-text-muted/70 transition-transform duration-150', isExpanded && 'rotate-90')} />
-                                                        {projectIcon}
-                                                        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden"><span className="truncate text-xs font-medium text-sparkle-text/90">{group.label}</span><span className="shrink-0 font-mono text-[10px] text-sparkle-text-muted/40">({chatSessions.length})</span></div>
-                                                    </button>
-                                                    <button type="button" onClick={(event) => { event.stopPropagation(); onCreateSession(group.path && group.path !== '' ? group.path : undefined) }} className={cn('absolute right-1 top-1 hidden size-5 items-center justify-center rounded-md p-0 text-sparkle-text-muted/70 transition-colors hover:bg-white/[0.06] hover:text-sparkle-text', !handleProps.isDragging && 'group-hover/project-header:flex')} title="New chat in project"><SquarePen size={12} /></button>
-                                                </div>
-                                                <AnimatedHeight isOpen={isExpanded} duration={350}>
-                                                    <div className="ml-2.5 flex min-w-0 flex-col gap-0.5 border-l border-white/10 px-1 py-0.5">
-                                                        {hasChats ? (
-                                                            <>
-                                                                <SortableSessionList
-                                                                    projectKey={group.key}
-                                                                    sessions={visibleChatSessions}
-                                                                    activeSessionId={activeSessionId}
-                                                                    compact={compact}
-                                                                    onSelectSession={onSelectSession}
-                                                                    onOpenRename={onOpenRename}
-                                                                    onArchiveSession={onArchiveSession}
-                                                                    onDeleteRequest={onDeleteRequest}
-                                                                    onSessionDragStart={onSessionDragStart}
-                                                                    onSessionDragEnd={onSessionDragEnd}
-                                                                    onSessionDragCancel={onSessionDragCancel}
-                                                                />
-                                                                {hasMoreChats ? (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleShowMoreSessions(group.key)}
-                                                                        className="mt-1 flex w-full items-center justify-center rounded-md border border-white/10 bg-white/[0.02] px-2 py-1.5 text-[11px] font-medium text-sparkle-text-muted/70 transition-colors hover:border-white/20 hover:bg-white/[0.04] hover:text-sparkle-text"
-                                                                    >
-                                                                        Show 5 more
-                                                                    </button>
-                                                                ) : null}
-                                                            </>
-                                                        ) : (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => { const firstSession = group.sessions[0]; if (firstSession) onSelectSession(firstSession.id) }}
-                                                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
-                                                                title="Open empty project session"
-                                                            >
-                                                                <span className="min-w-0 flex-1 truncate text-xs text-sparkle-text-muted/55">No chats yet</span>
-                                                                <span className="shrink-0 text-[10px] text-sparkle-text-muted/35">Start chatting</span>
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </AnimatedHeight>
-                                            </>
-                                        )}
-                                    </SortableProjectItem>
-                                )
-                            })}
-                            {groupedSessions.length === 0 ? <div className={cn('flex flex-col items-center gap-2 px-4 text-center', compact ? 'py-6' : 'py-8')}><MessageSquarePlus size={compact ? 20 : 24} className="text-sparkle-text-muted/30" /><p className="text-xs text-sparkle-text-muted">No projects yet</p></div> : null}
-                        </div>
-                    </SortableContext>
-                </DndContext>
-            </div>
-            <div className="mt-auto space-y-0.5 border-t border-white/10 px-1 py-2">
-                {archivedCount > 0 ? <button type="button" onClick={() => onSetShowArchivedSessions(!showArchivedSessions)} className={cn('group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors', showArchivedSessions ? 'bg-white/[0.06] text-sparkle-text' : 'text-sparkle-text-muted/70 hover:bg-white/[0.04] hover:text-sparkle-text')}><Archive size={14} className={cn('transition-colors', showArchivedSessions ? 'text-amber-400' : 'text-sparkle-text-muted/50')} /><span className="flex-1 text-left">Archived Chats</span><span className="rounded-[4px] border border-white/10 bg-white/[0.03] px-1 py-0.5 text-[9px]">{archivedCount}</span></button> : null}
-                <AnimatedHeight isOpen={showArchivedSessions} duration={300}>
-                    <div className="mt-1 max-h-[30vh] overflow-y-auto rounded-lg bg-black/20 p-1 custom-scrollbar">
-                        {visibleArchivedGroups.length > 0 ? visibleArchivedGroups.map((group) => (
-                            <section key={`footer-archived-${group.key}`} className="mb-2 space-y-0.5 last:mb-0">
-                                <div className="flex items-center gap-2 px-2 py-1 text-[10px] uppercase tracking-widest text-sparkle-text-muted/40">
-                                    <ProjectGroupIcon group={group} size={10} expanded />
-                                    <span className="truncate">{group.label}</span>
-                                </div>
-                                {group.sessions.map((session) => <div key={session.id} className="group/menu-item relative"><SessionRow session={session} activeSessionId={activeSessionId} archived compact={compact} onClick={(event) => { event.preventDefault(); if (session.id === activeSessionId) return; onSelectSession(session.id) }} onOpenRename={onOpenRename} onArchiveSession={onArchiveSession} onDeleteRequest={onDeleteRequest} /></div>)}
-                            </section>
-                        )) : <div className="py-4 text-center text-[10px] italic text-sparkle-text-muted/40">No archived sessions</div>}
-                    </div>
-                </AnimatedHeight>
-            </div>
+    const handleChoosePlaygroundRoot = useCallback(async () => {
+        const folderResult = await window.devscope.selectFolder()
+        if (!folderResult.success || folderResult.cancelled || !folderResult.folderPath) return
+        await onSetPlaygroundRoot(folderResult.folderPath)
+    }, [onSetPlaygroundRoot])
+
+    const handleCreateLab = useCallback(async () => {
+        if (creatingLab) return
+        setCreatingLab(true)
+        try {
+            const requestedLabTitle = resolveRequestedLabTitle({
+                title: labTitle,
+                source: labSource,
+                repoUrl: labRepoUrl,
+                existingFolderPath: selectedExistingFolderPath
+            })
+
+            if (labSource === 'existing-folder') {
+                const existingFolderPath = selectedExistingFolderPath.trim()
+                if (!existingFolderPath) return
+                const existingLab = labByRootPath.get(existingFolderPath) || null
+                if (existingLab) {
+                    await Promise.resolve(onCreatePlaygroundSession(existingLab.id))
+                    setLabDialogOpen(false)
+                    onShowToast({ message: `Opened a new chat in "${existingLab.title}".` })
+                } else {
+                    const result = await onCreatePlaygroundLab({
+                        title: labTitle || undefined,
+                        source: 'existing-folder',
+                        existingFolderPath,
+                        openSession: true
+                    })
+                    if (!result.success) {
+                        onShowToast({
+                            message: `Failed to create lab "${requestedLabTitle}": ${result.error}`,
+                            tone: 'error'
+                        })
+                        return
+                    }
+                    const createdLabTitle = result.playground.labs.find((lab) => lab.id === result.labId)?.title || requestedLabTitle
+                    if (result.sessionId) {
+                        await Promise.resolve(onSelectSession(result.sessionId))
+                    }
+                    setLabDialogOpen(false)
+                    onShowToast({ message: `"${createdLabTitle}" lab has been created with a new chat open.` })
+                }
+                return
+            }
+
+            const result = await onCreatePlaygroundLab({
+                title: labTitle || undefined,
+                source: labSource,
+                repoUrl: labSource === 'git-clone' ? labRepoUrl : undefined,
+                openSession: true
+            })
+
+            if (!result.success) {
+                onShowToast({
+                    message: labSource === 'git-clone'
+                        ? `Failed to clone repo into "${requestedLabTitle}": ${result.error}`
+                        : `Failed to create lab "${requestedLabTitle}": ${result.error}`,
+                    tone: 'error'
+                })
+                return
+            }
+
+            const createdLabTitle = result.playground.labs.find((lab) => lab.id === result.labId)?.title || requestedLabTitle
+            if (result.sessionId) {
+                await Promise.resolve(onSelectSession(result.sessionId))
+            }
+            setLabDialogOpen(false)
+            onShowToast({
+                message: labSource === 'git-clone'
+                    ? `Repo cloned. "${createdLabTitle}" lab has been created with a new chat open.`
+                    : `"${createdLabTitle}" lab has been created with a new chat open.`
+            })
+        } finally {
+            setCreatingLab(false)
+        }
+    }, [creatingLab, labByRootPath, labRepoUrl, labSource, labTitle, onCreatePlaygroundLab, onCreatePlaygroundSession, onSelectSession, onShowToast, selectedExistingFolderPath])
+
+    const sectionLabel = railGroupMode === 'flat'
+        ? 'Chats'
+        : (railMode === 'playground' ? 'Labs' : 'Projects')
+    const playgroundRootMissing = railMode === 'playground' && !playground.rootPath
+    const unassignedGroup = railMode === 'playground'
+        ? groupedSessions.find((group) => !group.path) || null
+        : null
+    const labGroups = railGroupMode === 'flat'
+        ? groupedSessions
+        : railMode === 'playground'
+        ? groupedSessions.filter((group) => Boolean(group.path))
+        : groupedSessions
+    const activeConnectionPending = commandPending && !assistantConnected && Boolean(activeSessionId)
+
+    return (
+        <div className={cn('relative z-10 flex h-full flex-col', compact ? 'pl-2.5 pr-1' : 'pl-3 pr-1.5')}>
+            <AssistantSessionsRailHeaderControls
+                railMode={railMode}
+                commandPending={commandPending}
+                playgroundRootMissing={playgroundRootMissing}
+                onRailModeChange={onRailModeChange}
+                onChooseProjectPath={onChooseProjectPath}
+                onOpenLabDialog={() => setLabDialogOpen(true)}
+                onChoosePlaygroundRoot={() => void handleChoosePlaygroundRoot()}
+                onCreatePlaygroundSession={onCreatePlaygroundSession}
+            />
+
+            <AssistantSessionsRailBody
+                compact={compact}
+                railMode={railMode}
+                railGroupMode={railGroupMode}
+                railSortMode={railSortMode}
+                playgroundRootMissing={playgroundRootMissing}
+                sectionLabel={sectionLabel}
+                unassignedGroup={unassignedGroup}
+                labGroups={labGroups}
+                activeSessionId={activeSessionId}
+                activeThreadId={activeThreadId}
+                activeConnectionPending={activeConnectionPending}
+                expandedGroupKeys={expandedGroupKeys}
+                expandedThreadKeys={expandedThreadKeys}
+                visibleSessionCountByGroup={visibleSessionCountByGroup}
+                recencyTierByThreadId={recencyTierByThreadId}
+                projectSensors={projectSensors}
+                collisionDetection={collisionDetection}
+                getSessionMenuItems={getSessionMenuItems}
+                onSessionContextMenu={openSessionContextMenu}
+                onSessionDragStart={onSessionDragStart}
+                onSessionDragEnd={onSessionDragEnd}
+                onSessionDragCancel={onSessionDragCancel}
+                onToggleThread={handleToggleThread}
+                onSelectThread={onSelectThread}
+                onToggleGroup={onToggleGroup}
+                onProjectContextMenu={openProjectContextMenu}
+                onProjectTitlePointerDownCapture={handleProjectTitlePointerDownCapture}
+                onProjectTitleClick={handleProjectTitleClick}
+                onProjectDragStart={handleProjectSortStart}
+                onProjectDragEnd={handleProjectSortEnd}
+                onProjectDragCancel={handleProjectSortCancel}
+                onCreateProjectChat={handleCreateProjectChat}
+                onDeleteProjectGroup={handleDeleteProjectGroup}
+                onChoosePlaygroundRoot={handleChoosePlaygroundRoot}
+                onRailGroupModeChange={onRailGroupModeChange}
+                onRailSortModeChange={onRailSortModeChange}
+                onShowMoreSessions={handleShowMoreSessions}
+                onShowLessSessions={handleShowLessSessions}
+                getGroupPlaygroundLabId={getGroupPlaygroundLabId}
+            />
+
+            <AssistantSessionsRailFooter
+                compact={compact}
+                activeSessionId={activeSessionId}
+                activeThreadId={activeThreadId}
+                recencyTierByThreadId={recencyTierByThreadId}
+                limitedBackgroundActivitySessions={limitedBackgroundActivitySessions}
+                remainingBackgroundActivityCount={remainingBackgroundActivityCount}
+                archivedCount={archivedCount}
+                showArchivedSessions={showArchivedSessions}
+                visibleArchivedGroups={visibleArchivedGroups}
+                getSessionMenuItems={getSessionMenuItems}
+                onSessionContextMenu={openSessionContextMenu}
+                onSetShowArchivedSessions={onSetShowArchivedSessions}
+                onSelectSession={onSelectSession}
+                onSelectThread={onSelectThread}
+            />
+
+            <PlaygroundLabModal
+                open={labDialogOpen}
+                playground={playground}
+                title={labTitle}
+                repoUrl={labRepoUrl}
+                source={labSource}
+                creating={creatingLab}
+                existingRootFolders={existingRootFolders}
+                existingRootFoldersLoading={existingRootFoldersLoading}
+                selectedExistingFolderPath={selectedExistingFolderPath}
+                onClose={() => {
+                    if (creatingLab) return
+                    setLabDialogOpen(false)
+                }}
+                onChangeTitle={setLabTitle}
+                onChangeRepoUrl={setLabRepoUrl}
+                onChangeSource={setLabSource}
+                onChangeSelectedExistingFolderPath={setSelectedExistingFolderPath}
+                onSubmit={() => void handleCreateLab()}
+            />
+            <LabDeleteModal
+                labToDelete={labToDelete}
+                deletingLabId={deletingLabId}
+                onConfirm={() => void handleConfirmDeleteLab()}
+                onCancel={() => {
+                    if (deletingLabId) return
+                    setLabToDelete(null)
+                }}
+            />
+            <ProjectChatsDeleteModal
+                projectChatsToDelete={projectChatsToDelete}
+                deletingProjectChats={deletingProjectChats}
+                onConfirm={() => void handleConfirmDeleteProjectChats()}
+                onCancel={() => {
+                    if (deletingProjectChats) return
+                    setProjectChatsToDelete(null)
+                }}
+            />
+            {contextMenuPortal}
         </div>
-    )
-}
-
-export function RenameSessionModal({
-    renameTarget,
-    renameDraft,
-    onChangeDraft,
-    onClose,
-    onSubmit
-}: {
-    renameTarget: AssistantSession | null
-    renameDraft: string
-    onChangeDraft: (value: string) => void
-    onClose: () => void
-    onSubmit: () => void
-}) {
-    if (!renameTarget || typeof document === 'undefined') return null
-    return createPortal(
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" onClick={onClose}>
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-md animate-fadeIn" />
-            <div className="relative w-full max-w-sm overflow-hidden rounded-[24px] border border-white/10 bg-sparkle-card shadow-2xl animate-scaleIn" onClick={(event) => event.stopPropagation()}>
-                <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[var(--accent-primary)]/40 via-[var(--accent-primary)]/10 to-transparent" />
-                <div className="p-6">
-                    <h3 className="mb-1 text-lg font-bold tracking-tight text-white">Rename Session</h3>
-                    <p className="mb-5 text-sm text-sparkle-text-secondary">Enter a new descriptive title for this conversation.</p>
-                    <div className="relative group">
-                        <Edit2 size={14} className="absolute left-3 top-3.5 text-sparkle-text-muted transition-colors group-focus-within:text-[var(--accent-primary)]" />
-                        <input autoFocus value={renameDraft} onChange={(event) => onChangeDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); onSubmit() } else if (event.key === 'Escape') { event.preventDefault(); onClose() } }} className="w-full rounded-xl border border-white/10 bg-sparkle-bg py-3 pl-10 pr-4 text-sm text-sparkle-text outline-none transition-all focus:border-[var(--accent-primary)]/40 focus:ring-4 focus:ring-[var(--accent-primary)]/10" placeholder="e.g. Refactoring the login flow" maxLength={160} />
-                    </div>
-                    <div className="mt-7 flex items-center gap-3">
-                        <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-white/10 bg-sparkle-bg px-4 py-2.5 text-sm font-semibold text-sparkle-text-secondary transition-all hover:border-white/20 hover:bg-sparkle-card-hover hover:text-white">Cancel</button>
-                        <button type="button" onClick={onSubmit} disabled={!renameDraft.trim()} className={cn('flex-1 rounded-xl px-4 py-2.5 text-sm font-bold transition-all shadow-lg', renameDraft.trim() ? 'bg-[var(--accent-primary)] text-white hover:bg-[var(--accent-primary)]/90 shadow-[var(--accent-primary)]/20 active:scale-[0.98]' : 'bg-sparkle-border/40 text-sparkle-text-muted cursor-not-allowed opacity-50')}>Save Changes</button>
-                    </div>
-                </div>
-            </div>
-        </div>,
-        document.body
-    )
-}
-
-export function SessionDeleteModal({
-    sessionToDelete,
-    onConfirm,
-    onCancel
-}: {
-    sessionToDelete: AssistantSession | null
-    onConfirm: () => void
-    onCancel: () => void
-}) {
-    return (
-        <ConfirmModal
-            isOpen={Boolean(sessionToDelete)}
-            title="Delete Session?"
-            message={`Are you sure you want to delete "${sessionToDelete?.title || 'this session'}"? This action cannot be undone.`}
-            confirmLabel="Delete Session"
-            onConfirm={onConfirm}
-            onCancel={onCancel}
-            variant="danger"
-            fullscreen
-        />
     )
 }

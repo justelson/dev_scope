@@ -1,4 +1,7 @@
-import { GitPullRequest, Link, Plus } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { GitPullRequest, Link, Plus, RefreshCw, Upload } from 'lucide-react'
+import { buildGitPublishPlan } from '@/lib/gitPublishPlanner'
+import { Select } from '@/components/ui/FormControls'
 import { GitGraph } from './GitGraph'
 
 type InitStepSetter = (step: string) => void
@@ -9,10 +12,14 @@ export function ProjectDetailsGitUnpushedView(props: {
     setInitStep: InitStepSetter
     setShowInitModal: BoolSetter
     showPushAction: boolean
-    unpushedStatsLoading: boolean
-    currentBranchNeedsPublish: boolean
-    compactPushSummaryLines: string[]
+    currentBranch: string
+    branches: any[]
+    remotes: any[]
     hasGitHubRemote: boolean
+    pullRequestActionLabel: string
+    pullRequestActionDisabled: boolean
+    onPushCommits: (options?: { commitHash?: string }) => Promise<void> | void
+    isPushing: boolean
     onOpenCreatePullRequest: () => void
     unpushedCommits: any[]
     onCommitClick: (commit: any) => void
@@ -23,15 +30,40 @@ export function ProjectDetailsGitUnpushedView(props: {
         setInitStep,
         setShowInitModal,
         showPushAction,
-        unpushedStatsLoading,
-        currentBranchNeedsPublish,
-        compactPushSummaryLines,
+        currentBranch,
+        branches,
+        remotes,
         hasGitHubRemote,
+        pullRequestActionLabel,
+        pullRequestActionDisabled,
+        onPushCommits,
+        isPushing,
         onOpenCreatePullRequest,
         unpushedCommits,
         onCommitClick,
         localOnlyCommitHashes
     } = props
+    const ALL_COMMITS_VALUE = '__all__'
+    const [selectedPushCommitHash, setSelectedPushCommitHash] = useState<string>(ALL_COMMITS_VALUE)
+    const selectedCommitHash = selectedPushCommitHash === ALL_COMMITS_VALUE ? null : selectedPushCommitHash
+    const pushPlan = useMemo(() => buildGitPublishPlan({
+        currentBranch,
+        branches,
+        remotes,
+        unpushedCommits,
+        selectedCommitHash,
+        intent: selectedCommitHash ? 'push-range' : 'push-all'
+    }), [branches, currentBranch, remotes, selectedCommitHash, unpushedCommits])
+    const pushSelectorOptions = useMemo(() => [
+        {
+            value: ALL_COMMITS_VALUE,
+            label: `All local commits (${unpushedCommits.length})`
+        },
+        ...unpushedCommits.map((commit) => ({
+            value: commit.hash,
+            label: `Up to ${commit.shortHash} · ${commit.message}`
+        }))
+    ], [unpushedCommits])
 
     return (
         <>
@@ -59,34 +91,40 @@ export function ProjectDetailsGitUnpushedView(props: {
 
             {showPushAction && (
                 <div className="bg-black/20 rounded-xl border border-white/5 p-4 mb-4">
-                    <h3 className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
-                        <GitPullRequest size={16} />
-                        Local Commits
-                    </h3>
-                    {unpushedStatsLoading && !currentBranchNeedsPublish ? (
-                        <p className="text-xs text-white/50 mb-3">Loading unpushed commit summary...</p>
-                    ) : null}
-                    <div className="mb-3 space-y-2">
-                        {compactPushSummaryLines.map((line) => (
-                            <div key={line} className="rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-xs text-white/62">
-                                {line}
+                    <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <div className="min-w-0 flex-1">
+                                <Select
+                                    value={selectedPushCommitHash}
+                                    onChange={setSelectedPushCommitHash}
+                                    options={pushSelectorOptions}
+                                    placeholder="Select commit range"
+                                    className="w-full"
+                                    size="md"
+                                />
                             </div>
-                        ))}
-                    </div>
-                    <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/62">
-                        {hasGitHubRemote
-                            ? 'Create the PR from this branch once the branch is ready.'
-                            : 'These commits stay local until you push them with your normal Git remote workflow.'}
-                    </div>
-                    <div className="mt-3 flex justify-end">
-                        <button
-                            onClick={onOpenCreatePullRequest}
-                            disabled={!hasGitHubRemote}
-                            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/80 transition-colors hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                            <GitPullRequest size={14} />
-                            {hasGitHubRemote ? 'Create PR' : 'GitHub Remote Required'}
-                        </button>
+                            <button
+                                onClick={() => void onPushCommits(selectedCommitHash ? { commitHash: selectedCommitHash } : undefined)}
+                                disabled={isPushing || pushPlan.commitCount <= 0}
+                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--accent-primary)]/16 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-primary)]/24 disabled:cursor-not-allowed disabled:bg-white/[0.04] disabled:text-white/35"
+                            >
+                                {isPushing ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
+                                {isPushing ? 'Pushing...' : pushPlan.currentBranchNeedsPublish ? 'Publish Branch' : 'Push Commits'}
+                            </button>
+                            <button
+                                onClick={onOpenCreatePullRequest}
+                                disabled={pullRequestActionDisabled}
+                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-white/[0.05] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:bg-white/[0.04] disabled:text-white/35"
+                            >
+                                <GitPullRequest size={14} />
+                                {hasGitHubRemote ? pullRequestActionLabel : 'GitHub Remote Required'}
+                            </button>
+                        </div>
+                        <div className="text-[11px] text-white/45">
+                            {selectedCommitHash
+                                ? `${pushPlan.commitCount} commit${pushPlan.commitCount === 1 ? '' : 's'} will be pushed.`
+                                : `${unpushedCommits.length} local commit${unpushedCommits.length === 1 ? '' : 's'} available.`}
+                        </div>
                     </div>
                 </div>
             )}

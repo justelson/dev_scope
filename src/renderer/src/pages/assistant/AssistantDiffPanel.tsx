@@ -18,10 +18,11 @@ import type { AssistantDiffTarget } from './assistant-diff-types'
 
 export const AssistantDiffPanel = memo(function AssistantDiffPanel(props: {
     open: boolean
+    compact?: boolean
     selectedDiff: AssistantDiffTarget | null
     onClose: () => void
 }) {
-    const { open, selectedDiff, onClose } = props
+    const { open, compact = false, selectedDiff, onClose } = props
     const { settings } = useSettings()
     const iconTheme = settings.theme === 'light' ? 'light' : 'dark'
     const [copied, setCopied] = useState(false)
@@ -112,9 +113,9 @@ export const AssistantDiffPanel = memo(function AssistantDiffPanel(props: {
     return (
         <div
             className={cn('relative overflow-hidden transition-all duration-300', open ? 'opacity-100' : 'pointer-events-none opacity-0')}
-            style={{ width: open ? '460px' : '0px' }}
+            style={{ width: open ? (compact ? '360px' : '460px') : '0px' }}
         >
-            <aside className="flex h-full min-h-0 flex-col bg-sparkle-bg">
+            <aside className="flex h-full min-h-0 flex-col border-l border-white/10 bg-sparkle-bg">
                 <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">

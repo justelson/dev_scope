@@ -85,6 +85,14 @@ export type AssistantRuntimeEvent =
         type: 'thread.started'
         payload: {
             providerThreadId: string
+            source?: 'root' | 'subagent' | 'other'
+            parentProviderThreadId?: string
+            agentNickname?: string
+            agentRole?: string
+            subagentDepth?: number
+            threadName?: string
+            cwd?: string
+            state?: AssistantThreadState
         }
     })
     | (AssistantRuntimeEventBase & {
@@ -164,6 +172,7 @@ export type AssistantRuntimeEvent =
     | (AssistantRuntimeEventBase & {
         type: 'activity'
         payload: {
+            activityId?: string
             kind: string
             summary: string
             detail?: string

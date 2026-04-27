@@ -17,7 +17,8 @@ export interface ScriptRunDraft {
     envOverrides?: Record<string, string>
 }
 
-export type PackageScriptRunner = 'npm' | 'pnpm' | 'yarn' | 'bun'
+export type PackageScriptRunner = 'node' | 'npm' | 'pnpm' | 'yarn' | 'bun'
+export type PackageScriptRunnerPreference = 'auto' | PackageScriptRunner
 
 const SERVER_SCRIPT_NAME_PATTERN = /(^|:)(dev|serve|start|preview|watch|host|web|electron|desktop|api|backend)/i
 const SERVER_SCRIPT_COMMAND_PATTERN = /\b(vite|next\s+dev|nuxt|astro|webpack(?:-dev-server)?|react-scripts\s+start|serve|nodemon|ts-node-dev|concurrently|electron(?:\s+\.)?|expo\s+start|parcel|ng\s+serve|remix|svelte-kit)\b/i
@@ -124,7 +125,11 @@ export function detectScriptIntentWithConfidence(
     return { intent: topIntent, confidence }
 }
 
-export function detectPackageScriptRunner(markers: string[] = []): PackageScriptRunner {
+export function detectPackageScriptRunner(
+    markers: string[] = [],
+    preference: PackageScriptRunnerPreference = 'auto'
+): PackageScriptRunner {
+    if (preference !== 'auto') return preference
     if (markers.includes('pnpm-lock.yaml')) return 'pnpm'
     if (markers.includes('yarn.lock')) return 'yarn'
     if (markers.includes('bun.lockb') || markers.includes('bun.lock')) return 'bun'
@@ -132,6 +137,7 @@ export function detectPackageScriptRunner(markers: string[] = []): PackageScript
 }
 
 export function getScriptCommand(scriptName: string, runner: PackageScriptRunner): string {
+    if (runner === 'node') return `node --run ${scriptName}`
     if (runner === 'yarn') return `yarn ${scriptName}`
     if (runner === 'pnpm') return `pnpm run ${scriptName}`
     if (runner === 'bun') return `bun run ${scriptName}`
@@ -141,7 +147,7 @@ export function getScriptCommand(scriptName: string, runner: PackageScriptRunner
 export function appendScriptArgsForRunner(baseCommand: string, args: string, runner: PackageScriptRunner): string {
     const trimmedArgs = args.trim()
     if (!trimmedArgs) return baseCommand
-    if (runner === 'npm' || runner === 'pnpm') {
+    if (runner === 'node' || runner === 'npm' || runner === 'pnpm') {
         return `${baseCommand} -- ${trimmedArgs}`
     }
     return `${baseCommand} ${trimmedArgs}`
@@ -230,4 +236,3 @@ export function applyShellEnvOverrides(
         .join('; ')
     return `${powershellPrefix}; ${baseCommand}`
 }
-

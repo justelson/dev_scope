@@ -49,7 +49,7 @@ export function mergeProjectPullRequestConfig(
 }
 
 export function resolvePreferredPullRequestProvider(settings: Settings): { provider: CommitAIProvider; apiKey?: string; model?: string } | null {
-    return resolvePreferredGitTextProvider(settings)
+    return resolvePreferredGitTextProvider(settings, 'pull-request')
 }
 
 async function readGuideFile(filePath: string): Promise<string> {

@@ -1,6 +1,10 @@
-import { ArrowLeft, ArrowUp, Check, Code, Copy, ExternalLink, FileJson, FilePlus, FileText, FolderOpen, FolderPlus, Plus, RefreshCw, Settings, Terminal } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
+import { ArrowLeft, ArrowUp, Check, Code, Copy, FileJson, FilePlus, FileText, Folder, FolderGit2, FolderPlus, Plus, RefreshCw, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FileActionsMenu } from '@/components/ui/FileActionsMenu'
+import { OpenWithProjectButton } from '@/components/ui/OpenWithProjectButton'
+import { buildRootRelativeBreadcrumbSegments } from './folderBrowsePageUtils'
 
 type RootStats = {
     projects: number
@@ -8,9 +12,19 @@ type RootStats = {
     types: number
 }
 
+type BreadcrumbDropdownItem = {
+    name: string
+    path: string
+    isProject?: boolean
+}
+
+const headerIconButtonClass =
+    '!inline-flex !h-10 !w-10 !items-center !justify-center !rounded-xl !border-0 !bg-transparent !text-white/40 transition-colors hover:!bg-white/5 hover:!text-white'
+
 interface FolderBrowseHeaderProps {
     folderName: string
     decodedPath: string
+    displayRootPath?: string | null
     totalProjects: number
     isProjectsRootView?: boolean
     rootStats?: RootStats
@@ -19,175 +33,229 @@ interface FolderBrowseHeaderProps {
     onBack: () => void
     onNavigateUp: () => void
     canNavigateUp: boolean
+    onNavigateToPath: (path: string) => void
     onViewAsProject: () => void
-    onOpenTerminal: () => void
+    preferredShell: 'powershell' | 'cmd'
     onCopyPath: () => void
     copiedPath: boolean
     onOpenStats?: (key: 'projects' | 'frameworks' | 'types') => void
     onOpenProjectsSettings?: () => void
-    onOpenInExplorer: () => void
     onRefresh: () => void
     onCreateFile: (presetExtension?: string) => void
     onCreateFolder: () => void
+    onCloneRepository: () => void
 }
 
 export function FolderBrowseHeader({
-    folderName,
     decodedPath,
-    totalProjects,
+    displayRootPath,
     isProjectsRootView = false,
-    rootStats,
     isCurrentFolderGitRepo,
     loading,
     onBack,
     onNavigateUp,
     canNavigateUp,
+    onNavigateToPath,
     onViewAsProject,
-    onOpenTerminal,
+    preferredShell,
     onCopyPath,
     copiedPath,
-    onOpenStats,
     onOpenProjectsSettings,
-    onOpenInExplorer,
     onRefresh,
     onCreateFile,
-    onCreateFolder
+    onCreateFolder,
+    onCloneRepository
 }: FolderBrowseHeaderProps) {
-    const title = isProjectsRootView ? 'Projects' : folderName
-    const stats = rootStats ?? { projects: totalProjects, frameworks: 0, types: 0 }
+    const breadcrumbSegments = useMemo(
+        () => buildRootRelativeBreadcrumbSegments(decodedPath, displayRootPath),
+        [decodedPath, displayRootPath]
+    )
+    const [openBreadcrumbPath, setOpenBreadcrumbPath] = useState<string | null>(null)
+    const [breadcrumbChildrenByPath, setBreadcrumbChildrenByPath] = useState<Record<string, BreadcrumbDropdownItem[]>>({})
+    const [loadingBreadcrumbPath, setLoadingBreadcrumbPath] = useState<string | null>(null)
+    const breadcrumbMenuRef = useRef<HTMLDivElement | null>(null)
+
+    useEffect(() => {
+        if (!openBreadcrumbPath) return
+        const handlePointerDown = (event: PointerEvent) => {
+            if (breadcrumbMenuRef.current?.contains(event.target as Node)) return
+            setOpenBreadcrumbPath(null)
+        }
+        window.addEventListener('pointerdown', handlePointerDown)
+        return () => window.removeEventListener('pointerdown', handlePointerDown)
+    }, [openBreadcrumbPath])
+
+    useEffect(() => {
+        setOpenBreadcrumbPath(null)
+    }, [decodedPath])
+
+    const openBreadcrumbMenu = async (path: string) => {
+        setOpenBreadcrumbPath(path)
+        if (breadcrumbChildrenByPath[path]) return
+
+        setLoadingBreadcrumbPath(path)
+        try {
+            const result = await window.devscope.scanProjects(path)
+            if (!result.success) {
+                setBreadcrumbChildrenByPath((current) => ({ ...current, [path]: [] }))
+                return
+            }
+
+            const children = [
+                ...(result.folders || []).map((folder) => ({
+                    name: folder.name,
+                    path: folder.path,
+                    isProject: false
+                })),
+                ...(result.projects || []).map((project) => ({
+                    name: project.name,
+                    path: project.path,
+                    isProject: true
+                }))
+            ].sort((left, right) => {
+                if (left.isProject !== right.isProject) return left.isProject ? 1 : -1
+                return left.name.localeCompare(right.name)
+            })
+
+            setBreadcrumbChildrenByPath((current) => ({ ...current, [path]: children }))
+        } catch {
+            setBreadcrumbChildrenByPath((current) => ({ ...current, [path]: [] }))
+        } finally {
+            setLoadingBreadcrumbPath((current) => current === path ? null : current)
+        }
+    }
+
+    const handleBreadcrumbClick = (path: string) => {
+        onNavigateToPath(path)
+    }
+
+    const handleBreadcrumbMenuRequest = (path: string, event: ReactMouseEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+        void openBreadcrumbMenu(path)
+    }
 
     return (
         <div className={cn(
             'flex flex-col transition-[margin,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
-            'mb-8 gap-5'
+            'mb-2 gap-3'
         )}>
             <div className={cn(
-                'flex flex-col gap-4 transition-[gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
-                'lg:flex-row lg:items-center lg:justify-between'
+                'flex min-w-0 items-center gap-3 transition-[gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'
             )}>
-                <div className="flex items-center gap-4 min-w-0">
-                    {!isProjectsRootView && (
-                        <div className={cn(
-                            'flex items-center gap-1.5 rounded-xl border border-white/5 bg-white/5 shrink-0',
-                            'p-1'
-                        )}>
-                            <button
-                                onClick={onBack}
-                                className={cn(
-                                    'flex items-center justify-center rounded-lg text-white/50 transition-all active:scale-95 hover:bg-white/10 hover:text-white',
-                                    'h-9 w-9'
-                                )}
-                                title="Back"
-                            >
-                                <ArrowLeft size={18} />
-                            </button>
-                            <button
-                                onClick={onNavigateUp}
-                                disabled={!canNavigateUp}
-                                className={cn(
-                                    'flex items-center justify-center rounded-lg text-white/50 transition-all active:scale-95 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30',
-                                    'h-9 w-9'
-                                )}
-                                title="Go to parent folder"
-                            >
-                                <ArrowUp size={18} />
-                            </button>
+                <div className={cn(
+                    'group flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 transition-[background-color] duration-200 hover:bg-white/[0.04]'
+                )}>
+                    <button
+                        onClick={onBack}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/45 transition-colors hover:bg-white/10 hover:text-white"
+                        title="Back"
+                    >
+                        <ArrowLeft size={15} />
+                    </button>
+                    <button
+                        onClick={onNavigateUp}
+                        disabled={!canNavigateUp}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/45 transition-colors hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                        title="Go to parent folder"
+                    >
+                        <ArrowUp size={15} />
+                    </button>
+                    <div className="h-5 w-px shrink-0 bg-white/[0.08]" />
+                    <div
+                        ref={breadcrumbMenuRef}
+                        className="relative min-w-0 flex-1"
+                    >
+                        <div className="flex min-w-0 items-center overflow-hidden font-mono text-xs text-white/45 transition-colors group-hover:text-white/65">
+                            {breadcrumbSegments.map((segment, index) => (
+                                <span key={segment.path} className="flex min-w-0 items-center">
+                                    {index > 0 && <span className="mx-1 text-white/20">\</span>}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleBreadcrumbClick(segment.path)}
+                                        onDoubleClick={(event) => handleBreadcrumbMenuRequest(segment.path, event)}
+                                        onContextMenu={(event) => handleBreadcrumbMenuRequest(segment.path, event)}
+                                        className={cn(
+                                            'min-w-0 truncate rounded-md px-1.5 py-1 text-left transition-colors hover:bg-white/10 hover:text-white',
+                                            index === breadcrumbSegments.length - 1 && 'text-white/65'
+                                        )}
+                                    >
+                                        {segment.label}
+                                    </button>
+                                </span>
+                            ))}
                         </div>
-                    )}
-
-                    {/* Folder Info */}
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div className={cn(
-                            'rounded-xl bg-yellow-500/10 border border-yellow-500/10 shrink-0',
-                            'p-2.5'
-                        )}>
-                            <FolderOpen className="text-yellow-400" size={22} />
-                        </div>
-                        <div className="min-w-0">
-                            <div className="min-w-0 flex items-center gap-3">
-                                <h1 className={cn(
-                                    'truncate font-bold text-white leading-tight',
-                                    'text-2xl'
-                                )}>
-                                    {title}
-                                </h1>
-                                {!isProjectsRootView && totalProjects > 0 && (
-                                    <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-yellow-500/20 text-yellow-300 rounded-full border border-yellow-500/20 shadow-sm shrink-0">
-                                        {totalProjects} {totalProjects === 1 ? 'project' : 'projects'}
-                                    </span>
-                                )}
-                            </div>
-                            {isProjectsRootView && (
-                                <div className="mt-2 flex items-center gap-2 flex-wrap">
-                                    <button
-                                        type="button"
-                                        onClick={() => onOpenStats?.('projects')}
-                                        className="px-2.5 py-1 rounded-md border border-amber-400/45 bg-amber-500/15 text-xs font-semibold text-amber-300 hover:bg-amber-500/25 transition-colors"
-                                    >
-                                        {stats.projects} projects
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => onOpenStats?.('frameworks')}
-                                        className="px-2.5 py-1 rounded-md border border-emerald-400/45 bg-emerald-500/15 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 transition-colors"
-                                    >
-                                        {stats.frameworks} frameworks
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => onOpenStats?.('types')}
-                                        className="px-2.5 py-1 rounded-md border border-yellow-400/45 bg-yellow-500/15 text-xs font-semibold text-yellow-300 hover:bg-yellow-500/25 transition-colors"
-                                    >
-                                        {stats.types} types
-                                    </button>
+                        {openBreadcrumbPath && (
+                            <div className="absolute left-0 top-[calc(100%+0.45rem)] z-50 w-[min(360px,80vw)] overflow-hidden rounded-xl bg-[#18181c] shadow-2xl shadow-black/40 ring-1 ring-white/10">
+                                <div className="max-h-72 overflow-y-auto py-1.5">
+                                    {loadingBreadcrumbPath === openBreadcrumbPath && (
+                                        <div className="px-3 py-2 text-xs text-white/40">Loading</div>
+                                    )}
+                                    {loadingBreadcrumbPath !== openBreadcrumbPath && (breadcrumbChildrenByPath[openBreadcrumbPath] || []).length === 0 && (
+                                        <div className="px-3 py-2 text-xs text-white/40">No folders</div>
+                                    )}
+                                    {(breadcrumbChildrenByPath[openBreadcrumbPath] || []).map((child) => (
+                                        <button
+                                            key={child.path}
+                                            type="button"
+                                            onClick={() => {
+                                                setOpenBreadcrumbPath(null)
+                                                onNavigateToPath(child.path)
+                                            }}
+                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white"
+                                        >
+                                            <Folder size={13} className={child.isProject ? 'text-sky-300' : 'text-yellow-300'} />
+                                            <span className="min-w-0 flex-1 truncate">{child.name}</span>
+                                            {child.isProject && (
+                                                <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-sky-200">
+                                                    project
+                                                </span>
+                                            )}
+                                        </button>
+                                    ))}
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
+                    <button
+                        onClick={onCopyPath}
+                        className={cn(
+                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-transparent transition-colors",
+                            copiedPath
+                                ? "border-green-500/20 bg-green-500/10 text-green-400"
+                                : "text-white/40 hover:border-white/5 hover:bg-white/10 hover:text-white"
+                        )}
+                        title={copiedPath ? "Copied path" : "Copy path"}
+                    >
+                        {copiedPath ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
                 </div>
 
                 {/* Primary Actions */}
                 <div className={cn(
-                    'flex items-center gap-2 shrink-0 self-end',
-                    'lg:self-auto'
+                    'flex shrink-0 items-center gap-2'
                 )}>
                     {isProjectsRootView && onOpenProjectsSettings && (
                         <button
                             onClick={onOpenProjectsSettings}
-                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/75 hover:text-white hover:bg-white/10 transition-all"
+                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/75 transition-colors hover:bg-white/10 hover:text-white"
                             title="Projects settings"
                         >
                             <Settings size={16} />
                         </button>
                     )}
-                    <div className={cn('flex items-center gap-1.5 mr-2', isProjectsRootView && 'ml-1')}>
+                    <div className={cn('flex items-center gap-1.5', isProjectsRootView && 'ml-1')}>
                         <button
                             onClick={onRefresh}
                             disabled={loading}
-                            className={cn(
-                                'flex items-center justify-center rounded-xl border border-white/5 text-white/40 transition-all hover:bg-white/5 hover:text-white disabled:opacity-50',
-                                'h-10 w-10'
-                            )}
+                            className={cn(headerIconButtonClass, 'disabled:!opacity-50')}
                             title="Refresh"
                         >
                             <RefreshCw size={16} className={cn(loading && 'animate-spin')} />
                         </button>
-                        <button
-                            onClick={onOpenInExplorer}
-                            className={cn(
-                                'flex items-center justify-center rounded-xl border border-white/5 text-white/40 transition-all hover:bg-white/5 hover:text-white',
-                                'h-10 w-10'
-                            )}
-                            title="Open in folder"
-                        >
-                            <ExternalLink size={16} />
-                        </button>
                         <FileActionsMenu
                             title="Create"
-                            buttonClassName={cn(
-                                '!inline-flex !items-center !justify-center !rounded-xl !border-white/5 !text-white/40 hover:!text-white hover:!bg-white/5',
-                                '!h-10 !w-10'
-                            )}
+                            buttonClassName={headerIconButtonClass}
                             triggerIcon={<Plus size={16} className="mx-auto" />}
                             items={[
                                 {
@@ -195,6 +263,12 @@ export function FolderBrowseHeader({
                                     label: 'New File (Choose Type...)',
                                     icon: <FilePlus size={13} />,
                                     onSelect: () => onCreateFile()
+                                },
+                                {
+                                    id: 'clone-repository',
+                                    label: 'Clone Repository...',
+                                    icon: <FolderGit2 size={13} />,
+                                    onSelect: onCloneRepository
                                 },
                                 {
                                     id: 'new-md-file',
@@ -236,54 +310,24 @@ export function FolderBrowseHeader({
                         <button
                             onClick={onViewAsProject}
                             className={cn(
-                                'flex items-center gap-2 rounded-xl bg-sky-500 text-white font-bold transition-all active:scale-95 shadow-lg shadow-sky-500/20 hover:bg-sky-400',
+                                'flex items-center gap-2 rounded-xl bg-sky-500 text-white font-bold transition-colors shadow-lg shadow-sky-500/20 hover:bg-sky-400',
                                 'px-4 py-2.5 text-sm'
                             )}
                             title="View as Project"
                         >
                             <Code size={18} />
-                            <span>View as Project</span>
+                            <span className="hidden 2xl:inline">View as Project</span>
                         </button>
                     )}
-                    <button
-                        onClick={onOpenTerminal}
-                        className={cn(
-                            'flex items-center gap-2 border border-white/10 bg-white/5 text-white/70 font-medium rounded-xl transition-all hover:bg-white/10 hover:text-white',
-                            'px-4 py-2.5 text-sm'
-                        )}
-                        title="Open terminal in this folder"
-                    >
-                        <Terminal size={17} />
-                        <span>Terminal</span>
-                    </button>
+                    <OpenWithProjectButton
+                        projectPath={decodedPath || null}
+                        preferredShell={preferredShell}
+                        menuWidthMode="trigger"
+                        menuPresentation="inline"
+                    />
                 </div>
             </div>
 
-            {/* Path Bar */}
-            <div className={cn(
-                'group flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] pr-2 transition-[padding,background-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-white/[0.04]',
-                'pl-4 py-2'
-            )}>
-                <FolderOpen size={14} className="text-white/20 shrink-0" />
-                <span className="min-w-0 flex-1 truncate font-mono text-xs text-white/40 group-hover:text-white/60 transition-colors">
-                    {decodedPath}
-                </span>
-                <button
-                    onClick={onCopyPath}
-                    className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-transparent",
-                        copiedPath
-                            ? "text-green-400 bg-green-500/10 border-green-500/20"
-                            : "text-white/40 hover:text-white hover:bg-white/10 hover:border-white/5"
-                    )}
-                    title={copiedPath ? "Copied path" : "Copy path"}
-                >
-                    {copiedPath ? <Check size={14} /> : <Copy size={14} />}
-                    <span className="leading-none">
-                        {copiedPath ? 'Copied!' : 'Copy Path'}
-                    </span>
-                </button>
-            </div>
         </div>
     )
 

@@ -32,8 +32,6 @@ export function createDisabledAdapters() {
             onSessionClosed: () => () => { },
             onOutput: () => () => { },
             onStatusChange: () => () => { }
-        },
-        getAIRuntimeStatus: () => Promise.resolve(disabledFeature('AI Runtime')),
-        getAIAgents: () => Promise.resolve({ success: true, agents: [] })
+        }
     }
 }

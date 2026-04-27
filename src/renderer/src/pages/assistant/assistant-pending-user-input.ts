@@ -5,9 +5,14 @@ export type AssistantPendingUserInputDraftAnswers = Record<string, string>
 export type AssistantPendingUserInputProgress = {
     questionIndex: number
     activeQuestion: AssistantUserInputQuestion | null
+    selectedAnswer: string | null
+    normalizedSelectedAnswer: string | null
     selectedOptionLabel: string | null
+    isCustomAnswer: boolean
+    hasAnswer: boolean
     answeredQuestionCount: number
     isLastQuestion: boolean
+    isReviewStep: boolean
 }
 
 export function buildAssistantPendingUserInputAnswers(
@@ -46,21 +51,39 @@ export function deriveAssistantPendingUserInputProgress(
         return {
             questionIndex: 0,
             activeQuestion: null,
+            selectedAnswer: null,
+            normalizedSelectedAnswer: null,
             selectedOptionLabel: null,
+            isCustomAnswer: false,
+            hasAnswer: false,
             answeredQuestionCount: 0,
-            isLastQuestion: true
+            isLastQuestion: true,
+            isReviewStep: true
         }
     }
 
-    const normalizedQuestionIndex = Math.max(0, Math.min(questionIndex, questions.length - 1))
-    const activeQuestion = questions[normalizedQuestionIndex] || null
+    const normalizedQuestionIndex = Math.max(0, Math.min(questionIndex, questions.length))
+    const isReviewStep = normalizedQuestionIndex >= questions.length
+    const activeQuestion = isReviewStep ? null : questions[normalizedQuestionIndex] || null
+    const selectedAnswer = activeQuestion ? String(draftAnswers[activeQuestion.id] || '') || null : null
+    const normalizedSelectedAnswer = selectedAnswer?.trim() || null
+    const isCustomAnswer = Boolean(
+        activeQuestion
+        && normalizedSelectedAnswer
+        && !activeQuestion.options.some((option) => option.label === normalizedSelectedAnswer)
+    )
 
     return {
         questionIndex: normalizedQuestionIndex,
         activeQuestion,
-        selectedOptionLabel: activeQuestion ? String(draftAnswers[activeQuestion.id] || '').trim() || null : null,
+        selectedAnswer,
+        normalizedSelectedAnswer,
+        selectedOptionLabel: isCustomAnswer ? null : normalizedSelectedAnswer,
+        isCustomAnswer,
+        hasAnswer: Boolean(normalizedSelectedAnswer),
         answeredQuestionCount: questions.reduce((count, question) => count + (String(draftAnswers[question.id] || '').trim() ? 1 : 0), 0),
-        isLastQuestion: normalizedQuestionIndex >= questions.length - 1
+        isLastQuestion: !isReviewStep && normalizedQuestionIndex >= questions.length - 1,
+        isReviewStep
     }
 }
 

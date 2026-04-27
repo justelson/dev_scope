@@ -5,8 +5,16 @@ const LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'assistant-left-sidebar-collapsed'
 const LEFT_SIDEBAR_WIDTH_STORAGE_KEY = 'assistant-left-sidebar-width'
 const RIGHT_SIDEBAR_OPEN_STORAGE_KEY = 'assistant-right-sidebar-open'
 const RIGHT_PANEL_MODE_STORAGE_KEY = 'assistant-right-panel-mode'
+const RAIL_MODE_STORAGE_KEY = 'assistant-rail-mode'
+const RAIL_GROUP_MODE_STORAGE_KEY = 'assistant-rail-group-mode'
+const RAIL_SORT_MODE_STORAGE_KEY = 'assistant-rail-sort-mode'
+const RAIL_FILTER_MODE_STORAGE_KEY = 'assistant-rail-filter-mode'
 
 export type AssistantRightPanelMode = 'none' | 'details' | 'plan' | 'diff'
+export type AssistantRailMode = 'work' | 'playground'
+export type AssistantRailGroupMode = 'project' | 'flat'
+export type AssistantRailSortMode = 'updated' | 'created'
+export type AssistantRailFilterMode = 'all' | 'relevant'
 
 export const SIDEBAR_EFFORT_LABELS: Record<AssistantComposerPreferenceEffort, string> = {
     low: 'Low',
@@ -28,6 +36,22 @@ export function useAssistantPageSidebarState() {
         const legacySaved = localStorage.getItem(RIGHT_SIDEBAR_OPEN_STORAGE_KEY)
         return legacySaved !== null ? (legacySaved === 'true' ? 'details' : 'none') : 'details'
     })
+    const [railMode, setRailMode] = useState<AssistantRailMode>(() => {
+        const savedMode = localStorage.getItem(RAIL_MODE_STORAGE_KEY)
+        return savedMode === 'playground' ? 'playground' : 'work'
+    })
+    const [railGroupMode, setRailGroupMode] = useState<AssistantRailGroupMode>(() => {
+        const savedMode = localStorage.getItem(RAIL_GROUP_MODE_STORAGE_KEY)
+        return savedMode === 'flat' ? 'flat' : 'project'
+    })
+    const [railSortMode, setRailSortMode] = useState<AssistantRailSortMode>(() => {
+        const savedMode = localStorage.getItem(RAIL_SORT_MODE_STORAGE_KEY)
+        return savedMode === 'created' ? 'created' : 'updated'
+    })
+    const [railFilterMode, setRailFilterMode] = useState<AssistantRailFilterMode>(() => {
+        const savedMode = localStorage.getItem(RAIL_FILTER_MODE_STORAGE_KEY)
+        return savedMode === 'relevant' ? 'relevant' : 'all'
+    })
 
     useEffect(() => {
         localStorage.setItem(LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, String(leftSidebarCollapsed))
@@ -42,12 +66,36 @@ export function useAssistantPageSidebarState() {
         localStorage.setItem(RIGHT_SIDEBAR_OPEN_STORAGE_KEY, String(rightPanelMode === 'details'))
     }, [rightPanelMode])
 
+    useEffect(() => {
+        localStorage.setItem(RAIL_MODE_STORAGE_KEY, railMode)
+    }, [railMode])
+
+    useEffect(() => {
+        localStorage.setItem(RAIL_GROUP_MODE_STORAGE_KEY, railGroupMode)
+    }, [railGroupMode])
+
+    useEffect(() => {
+        localStorage.setItem(RAIL_SORT_MODE_STORAGE_KEY, railSortMode)
+    }, [railSortMode])
+
+    useEffect(() => {
+        localStorage.setItem(RAIL_FILTER_MODE_STORAGE_KEY, railFilterMode)
+    }, [railFilterMode])
+
     return {
         leftSidebarCollapsed,
         setLeftSidebarCollapsed,
         leftSidebarWidth,
         setLeftSidebarWidth,
         rightPanelMode,
-        setRightPanelMode
+        setRightPanelMode,
+        railMode,
+        setRailMode,
+        railGroupMode,
+        setRailGroupMode,
+        railSortMode,
+        setRailSortMode,
+        railFilterMode,
+        setRailFilterMode,
     }
 }

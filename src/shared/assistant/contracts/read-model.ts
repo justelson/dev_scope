@@ -71,6 +71,32 @@ export interface AssistantActivePlan {
     updatedAt: string
 }
 
+export type AssistantSessionMode = 'work' | 'playground'
+
+export interface AssistantPlaygroundPendingLabRequest {
+    id: string
+    kind: 'create-empty' | 'clone-repo'
+    prompt: string
+    suggestedLabName: string
+    repoUrl: string | null
+    createdAt: string
+}
+
+export interface AssistantPlaygroundLab {
+    id: string
+    title: string
+    rootPath: string
+    source: 'empty' | 'git-clone' | 'existing-folder'
+    repoUrl: string | null
+    createdAt: string
+    updatedAt: string
+}
+
+export interface AssistantPlaygroundState {
+    rootPath: string | null
+    labs: AssistantPlaygroundLab[]
+}
+
 export interface AssistantLatestTurn {
     id: string
     state: 'running' | 'completed' | 'interrupted' | 'error'
@@ -83,9 +109,33 @@ export interface AssistantLatestTurn {
     usage?: AssistantTurnUsage | null
 }
 
+export type AssistantThreadSource = 'root' | 'subagent' | 'other'
+
+export interface AssistantSessionTurnUsageEntry {
+    id: string
+    sessionId: string
+    threadId: string
+    model: string
+    state: AssistantLatestTurn['state']
+    requestedAt: string
+    startedAt: string | null
+    completedAt: string | null
+    assistantMessageId: string | null
+    effort?: AssistantLatestTurn['effort']
+    serviceTier?: AssistantLatestTurn['serviceTier']
+    usage: AssistantTurnUsage | null
+    updatedAt: string
+}
+
 export interface AssistantThread {
     id: string
     providerThreadId: string | null
+    source: AssistantThreadSource
+    parentThreadId: string | null
+    providerParentThreadId: string | null
+    subagentDepth: number | null
+    agentNickname: string | null
+    agentRole: string | null
     model: string
     cwd: string | null
     messageCount: number
@@ -108,7 +158,10 @@ export interface AssistantThread {
 export interface AssistantSession {
     id: string
     title: string
+    mode: AssistantSessionMode
     projectPath: string | null
+    playgroundLabId: string | null
+    pendingLabRequest: AssistantPlaygroundPendingLabRequest | null
     archived: boolean
     createdAt: string
     updatedAt: string
@@ -173,6 +226,12 @@ export interface AssistantAccountOverview {
     fetchedAt: string
 }
 
+export interface AssistantSessionTurnUsagePayload {
+    sessionId: string
+    turns: AssistantSessionTurnUsageEntry[]
+    fetchedAt: string
+}
+
 export interface AssistantRuntimeStatus {
     available: boolean
     connected: boolean
@@ -186,6 +245,7 @@ export interface AssistantSnapshot {
     snapshotSequence: number
     updatedAt: string
     selectedSessionId: string | null
+    playground: AssistantPlaygroundState
     sessions: AssistantSession[]
     knownModels: AssistantModelInfo[]
 }
@@ -195,6 +255,7 @@ export type AssistantDomainEventType =
     | 'session.selected'
     | 'session.updated'
     | 'session.deleted'
+    | 'playground.updated'
     | 'thread.created'
     | 'thread.updated'
     | 'thread.message.user'

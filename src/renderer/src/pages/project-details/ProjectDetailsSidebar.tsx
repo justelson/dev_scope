@@ -7,6 +7,7 @@ import {
     type ScriptIntentContext,
     type ScriptIntentPrediction
 } from './scriptRun'
+import { ProjectDetailsInlineLoading } from './ProjectDetailsInlineLoading'
 
 export function ProjectDetailsSidebar({
     dockOpen = false,
@@ -14,6 +15,7 @@ export function ProjectDetailsSidebar({
     dependencies,
     devDependencies,
     dependencyInstallStatus,
+    loadingProjectDetails = false,
     scriptPredictions,
     scriptIntentContext,
     onRunScript,
@@ -34,17 +36,21 @@ export function ProjectDetailsSidebar({
         missingSample?: string[]
         reason?: string
     } | null
+    loadingProjectDetails?: boolean
     scriptPredictions: Record<string, ScriptIntentPrediction>
     scriptIntentContext: ScriptIntentContext
     onRunScript: (name: string, command: string) => void
     onShowDependencies: () => void
 }) {
+    const scriptEntries = Object.entries(scripts || {})
     const mergedDependencies = [
         ...Object.entries(dependencies || {}).map(([name, version]) => ({ name, version, scope: 'runtime' as const })),
         ...Object.entries(devDependencies || {}).map(([name, version]) => ({ name, version, scope: 'dev' as const }))
     ]
     const previewDependencies = mergedDependencies.slice(0, 5)
     const totalDependencies = mergedDependencies.length
+    const hasScripts = scriptEntries.length > 0
+    const showLoadingCards = loadingProjectDetails && !hasScripts && totalDependencies === 0
 
     const installLabel = dependencyInstallStatus?.installed === true
         ? 'All Installed'
@@ -69,7 +75,24 @@ export function ProjectDetailsSidebar({
             'col-span-12 flex flex-col gap-6',
             dockOpen ? 'mt-1' : 'lg:col-span-4'
         )}>
-            {scripts && Object.keys(scripts).length > 0 && (
+            {showLoadingCards && (
+                <>
+                    <div className="overflow-hidden rounded-2xl border border-white/5 bg-sparkle-card shadow-sm">
+                        <ProjectDetailsInlineLoading
+                            title="Loading scripts"
+                            detail="Collecting runnable scripts and intent metadata from the project manifest."
+                        />
+                    </div>
+                    <div className="overflow-hidden rounded-2xl border border-white/5 bg-sparkle-card shadow-sm">
+                        <ProjectDetailsInlineLoading
+                            title="Loading dependencies"
+                            detail="Checking package metadata and install status for this project."
+                        />
+                    </div>
+                </>
+            )}
+
+            {hasScripts && (
                 <div className="bg-sparkle-card border border-white/5 rounded-2xl overflow-hidden shadow-sm flex flex-col">
                     <div className="px-5 py-4 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
                         <div className="flex items-center gap-2 text-white/80 font-medium">
@@ -77,11 +100,11 @@ export function ProjectDetailsSidebar({
                             <span>Scripts</span>
                         </div>
                         <span className="text-xs bg-white/5 text-white/40 px-2 py-1 rounded-md">
-                            {Object.keys(scripts).length}
+                            {scriptEntries.length}
                         </span>
                     </div>
                     <div className="max-h-[380px] overflow-y-auto custom-scrollbar p-2">
-                        {Object.entries(scripts).map(([name, command]) => {
+                        {scriptEntries.map(([name, command]) => {
                             const prediction = scriptPredictions[name] || detectScriptIntentWithConfidence(name, command, scriptIntentContext)
                             const confidencePercent = Math.round(prediction.confidence * 100)
 

@@ -4,50 +4,54 @@
 
 import { BrowserWindow, ipcMain } from 'electron'
 import log from 'electron-log'
-import { systemMetricsBridge } from '../system-metrics/manager'
 import {
-    handleGetDetailedSystemStats,
-    handleGetDeveloperTooling,
     handleGetFileSystemRoots,
-    handleGetReadinessReport,
-    handleGetSystemOverview,
-    handleRefreshAll,
-    handleSystemMetricsBootstrap,
-    handleSystemMetricsRead,
-    handleSystemMetricsSubscribe,
-    handleSystemMetricsUnsubscribe
 } from './handlers/system-handlers'
 import {
     handleClearAiDebugLogs,
     handleGenerateCommitMessage,
     handleGetAiDebugLogs,
     handleGetStartupSettings,
+    handleListInstalledPackageRuntimes,
     handleSetStartupSettings,
     handleTestCodexConnection,
     handleTestGeminiConnection,
     handleTestGroqConnection
 } from './handlers/settings-ai-handlers'
 import {
+    handleAssistantApprovePendingPlaygroundLabRequest,
     handleAssistantArchiveSession,
+    handleAssistantAttachSessionToPlaygroundLab,
     handleAssistantBootstrap,
     handleAssistantClearLogs,
     handleAssistantConnect,
+    handleAssistantCreatePlaygroundLab,
     handleAssistantCreateSession,
+    handleAssistantDeletePlaygroundLab,
     handleAssistantDeleteMessage,
     handleAssistantDeleteSession,
+    handleAssistantDeclinePendingPlaygroundLabRequest,
+    handleAssistantDownloadTranscriptionModel,
     handleAssistantDisconnect,
     handleAssistantGetAccountOverview,
+    handleAssistantGetSessionTurnUsage,
+    handleAssistantGetTranscriptionModelState,
     handleAssistantGetSnapshot,
     handleAssistantGetStatus,
+    handleAssistantHydrateSession,
     handleAssistantInterruptTurn,
     handleAssistantListModels,
     handleAssistantNewThread,
     handleAssistantPersistClipboardImage,
+    handleAssistantResolveClipboardAttachment,
     handleAssistantRenameSession,
     handleAssistantRespondApproval,
+    handleAssistantTranscribeAudioWithLocalModel,
     handleAssistantRespondUserInput,
     handleAssistantSelectSession,
+    handleAssistantSelectThread,
     handleAssistantSendPrompt,
+    handleAssistantSetPlaygroundRoot,
     handleAssistantSetSessionProjectPath,
     handleAssistantSubscribe,
     handleAssistantUnsubscribe
@@ -64,14 +68,13 @@ import {
     handleOpenWith,
     handleListInstalledIdes,
     handleScanProjects,
+    handleSearchIndexedPaths,
     handleSelectFolder,
     handleSelectMarkdownFile
 } from './handlers/project-discovery-handlers'
 import {
-    handleGetActivePorts,
     handleGetProjectDetails,
     handleInstallProjectDependencies,
-    handleGetRunningApps,
     handleGetProjectProcesses,
     handleGetProjectSessions
 } from './handlers/project-details-handlers'
@@ -93,10 +96,10 @@ import {
     handleCreatePreviewTerminal,
     handleListPreviewTerminalSessions,
     handleResizePreviewTerminal,
+    handleSetPreviewTerminalTitle,
     handleWritePreviewTerminal
 } from './handlers/preview-terminal-handlers'
 import { handleRunPythonPreview, handleStopPythonPreview } from './handlers/python-preview-handlers'
-import { handleListActiveTasks } from './handlers/task-manager-handlers'
 import {
     handleCheckForUpdates,
     handleDownloadUpdate,
@@ -134,6 +137,7 @@ import {
     handleAddRemoteOrigin,
     handleApplyStash,
     handleCheckoutBranch,
+    handleCloneGitRepository,
     handleCreateBranch,
     handleCreateCommit,
     handleCreateOrOpenPullRequest,
@@ -170,16 +174,6 @@ import {
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     log.info('Registering IPC handlers...')
 
-    ipcMain.handle('devscope:system:bootstrap', handleSystemMetricsBootstrap)
-    ipcMain.handle('devscope:system:subscribe', handleSystemMetricsSubscribe)
-    ipcMain.handle('devscope:system:unsubscribe', handleSystemMetricsUnsubscribe)
-    ipcMain.handle('devscope:system:readMetrics', handleSystemMetricsRead)
-
-    ipcMain.handle('devscope:getSystemOverview', handleGetSystemOverview)
-    ipcMain.handle('devscope:getDetailedSystemStats', handleGetDetailedSystemStats)
-    ipcMain.handle('devscope:getDeveloperTooling', handleGetDeveloperTooling)
-    ipcMain.handle('devscope:getReadinessReport', handleGetReadinessReport)
-    ipcMain.handle('devscope:refreshAll', handleRefreshAll)
     ipcMain.handle('devscope:getFileSystemRoots', handleGetFileSystemRoots)
     ipcMain.handle(UPDATE_GET_STATE_CHANNEL, handleGetUpdateState)
     ipcMain.handle(UPDATE_CHECK_CHANNEL, handleCheckForUpdates)
@@ -188,6 +182,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     ipcMain.handle('devscope:setStartupSettings', handleSetStartupSettings)
     ipcMain.handle('devscope:getStartupSettings', handleGetStartupSettings)
+    ipcMain.handle('devscope:listInstalledPackageRuntimes', handleListInstalledPackageRuntimes)
     ipcMain.handle('devscope:testGroqConnection', handleTestGroqConnection)
     ipcMain.handle('devscope:testGeminiConnection', handleTestGeminiConnection)
     ipcMain.handle('devscope:testCodexConnection', handleTestCodexConnection)
@@ -200,37 +195,51 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle(ASSISTANT_IPC.getSnapshot, handleAssistantGetSnapshot)
     ipcMain.handle(ASSISTANT_IPC.getStatus, handleAssistantGetStatus)
     ipcMain.handle(ASSISTANT_IPC.getAccountOverview, handleAssistantGetAccountOverview)
+    ipcMain.handle(ASSISTANT_IPC.getSessionTurnUsage, handleAssistantGetSessionTurnUsage)
     ipcMain.handle(ASSISTANT_IPC.listModels, handleAssistantListModels)
     ipcMain.handle(ASSISTANT_IPC.connect, handleAssistantConnect)
     ipcMain.handle(ASSISTANT_IPC.disconnect, handleAssistantDisconnect)
     ipcMain.handle(ASSISTANT_IPC.createSession, handleAssistantCreateSession)
     ipcMain.handle(ASSISTANT_IPC.selectSession, handleAssistantSelectSession)
+    ipcMain.handle(ASSISTANT_IPC.selectThread, handleAssistantSelectThread)
+    ipcMain.handle(ASSISTANT_IPC.hydrateSession, handleAssistantHydrateSession)
     ipcMain.handle(ASSISTANT_IPC.renameSession, handleAssistantRenameSession)
     ipcMain.handle(ASSISTANT_IPC.archiveSession, handleAssistantArchiveSession)
     ipcMain.handle(ASSISTANT_IPC.deleteSession, handleAssistantDeleteSession)
     ipcMain.handle(ASSISTANT_IPC.deleteMessage, handleAssistantDeleteMessage)
     ipcMain.handle(ASSISTANT_IPC.clearLogs, handleAssistantClearLogs)
     ipcMain.handle(ASSISTANT_IPC.setSessionProjectPath, handleAssistantSetSessionProjectPath)
+    ipcMain.handle(ASSISTANT_IPC.setPlaygroundRoot, handleAssistantSetPlaygroundRoot)
+    ipcMain.handle(ASSISTANT_IPC.createPlaygroundLab, handleAssistantCreatePlaygroundLab)
+    ipcMain.handle(ASSISTANT_IPC.deletePlaygroundLab, handleAssistantDeletePlaygroundLab)
+    ipcMain.handle(ASSISTANT_IPC.attachSessionToPlaygroundLab, handleAssistantAttachSessionToPlaygroundLab)
+    ipcMain.handle(ASSISTANT_IPC.approvePendingPlaygroundLabRequest, handleAssistantApprovePendingPlaygroundLabRequest)
+    ipcMain.handle(ASSISTANT_IPC.declinePendingPlaygroundLabRequest, handleAssistantDeclinePendingPlaygroundLabRequest)
     ipcMain.handle(ASSISTANT_IPC.persistClipboardImage, handleAssistantPersistClipboardImage)
+    ipcMain.handle(ASSISTANT_IPC.resolveClipboardAttachment, handleAssistantResolveClipboardAttachment)
     ipcMain.handle(ASSISTANT_IPC.newThread, handleAssistantNewThread)
     ipcMain.handle(ASSISTANT_IPC.sendPrompt, handleAssistantSendPrompt)
     ipcMain.handle(ASSISTANT_IPC.interruptTurn, handleAssistantInterruptTurn)
     ipcMain.handle(ASSISTANT_IPC.respondApproval, handleAssistantRespondApproval)
     ipcMain.handle(ASSISTANT_IPC.respondUserInput, handleAssistantRespondUserInput)
+    ipcMain.handle(ASSISTANT_IPC.getTranscriptionModelState, handleAssistantGetTranscriptionModelState)
+    ipcMain.handle(ASSISTANT_IPC.downloadTranscriptionModel, handleAssistantDownloadTranscriptionModel)
+    ipcMain.handle(ASSISTANT_IPC.transcribeAudioWithLocalModel, handleAssistantTranscribeAudioWithLocalModel)
 
     ipcMain.handle('devscope:selectFolder', handleSelectFolder)
     ipcMain.handle('devscope:selectMarkdownFile', handleSelectMarkdownFile)
     ipcMain.handle('devscope:getUserHomePath', handleGetUserHomePath)
     ipcMain.handle('devscope:scanProjects', handleScanProjects)
     ipcMain.handle('devscope:indexAllFolders', handleIndexAllFolders)
+    ipcMain.handle('devscope:searchIndexedPaths', handleSearchIndexedPaths)
     ipcMain.handle('devscope:openInExplorer', handleOpenInExplorer)
     ipcMain.handle('devscope:openInTerminal', handleOpenInTerminal)
     ipcMain.handle('devscope:listInstalledIdes', handleListInstalledIdes)
     ipcMain.handle('devscope:openProjectInIde', handleOpenProjectInIde)
-    ipcMain.handle('devscope:tasks:listActive', handleListActiveTasks)
     ipcMain.handle('devscope:previewTerminal:create', handleCreatePreviewTerminal)
     ipcMain.handle('devscope:previewTerminal:list', handleListPreviewTerminalSessions)
     ipcMain.handle('devscope:previewTerminal:write', handleWritePreviewTerminal)
+    ipcMain.handle('devscope:previewTerminal:setTitle', handleSetPreviewTerminalTitle)
     ipcMain.handle('devscope:previewTerminal:resize', handleResizePreviewTerminal)
     ipcMain.handle('devscope:previewTerminal:close', handleClosePreviewTerminal)
     ipcMain.handle('devscope:pythonPreview:run', handleRunPythonPreview)
@@ -252,8 +261,6 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:moveFileSystemItem', handleMoveFileSystemItem)
     ipcMain.handle('devscope:getProjectSessions', handleGetProjectSessions)
     ipcMain.handle('devscope:getProjectProcesses', handleGetProjectProcesses)
-    ipcMain.handle('devscope:getRunningApps', handleGetRunningApps)
-    ipcMain.handle('devscope:getActivePorts', handleGetActivePorts)
 
     ipcMain.handle('devscope:getGitHistory', handleGetGitHistory)
     ipcMain.handle('devscope:getGitHistoryCount', handleGetGitHistoryCount)
@@ -305,6 +312,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:initGitRepo', handleInitGitRepo)
     ipcMain.handle('devscope:createInitialCommit', handleCreateInitialCommit)
     ipcMain.handle('devscope:addRemoteOrigin', handleAddRemoteOrigin)
+    ipcMain.handle('devscope:cloneGitRepository', handleCloneGitRepository)
     ipcMain.handle('devscope:getGitignoreTemplates', handleGetGitignoreTemplates)
     ipcMain.handle('devscope:generateGitignoreContent', handleGenerateGitignoreContent)
     ipcMain.handle('devscope:getGitignorePatterns', handleGetGitignorePatterns)
@@ -315,25 +323,29 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.removeAllListeners('window:close')
     ipcMain.removeHandler('window:isMaximized')
 
-    ipcMain.on('window:minimize', () => {
-        if (!mainWindow.isDestroyed()) mainWindow.minimize()
+    ipcMain.on('window:minimize', (event) => {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender)
+        if (!targetWindow || targetWindow.isDestroyed()) return
+        targetWindow.minimize()
     })
-    ipcMain.on('window:maximize', () => {
-        if (!mainWindow.isDestroyed()) {
-            if (mainWindow.isMaximized()) mainWindow.unmaximize()
-            else mainWindow.maximize()
-        }
+    ipcMain.on('window:maximize', (event) => {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender)
+        if (!targetWindow || targetWindow.isDestroyed()) return
+        if (targetWindow.isMaximized()) targetWindow.unmaximize()
+        else targetWindow.maximize()
     })
-    ipcMain.on('window:close', () => {
-        if (!mainWindow.isDestroyed()) mainWindow.close()
+    ipcMain.on('window:close', (event) => {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender)
+        if (!targetWindow || targetWindow.isDestroyed()) return
+        targetWindow.close()
     })
-    ipcMain.handle('window:isMaximized', () => {
-        if (mainWindow.isDestroyed()) return false
-        return mainWindow.isMaximized()
+    ipcMain.handle('window:isMaximized', (event) => {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender)
+        if (!targetWindow || targetWindow.isDestroyed()) return false
+        return targetWindow.isMaximized()
     })
 
     mainWindow.webContents.once('destroyed', () => {
-        systemMetricsBridge.unsubscribe(mainWindow.webContents.id)
         peekAssistantService()?.unsubscribe(mainWindow.webContents.id)
     })
 }

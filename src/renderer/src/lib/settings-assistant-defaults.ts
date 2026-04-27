@@ -1,4 +1,5 @@
 import type {
+    AssistantBusyMessageMode,
     AssistantDefaultEffort,
     AssistantDefaultInteractionMode,
     AssistantDefaultRuntimeMode,
@@ -8,10 +9,12 @@ import type {
 type AssistantDefaultsSubset = Pick<
     Settings,
     | 'assistantDefaultModel'
+    | 'assistantDefaultPromptTemplate'
     | 'assistantDefaultRuntimeMode'
     | 'assistantDefaultInteractionMode'
     | 'assistantDefaultEffort'
     | 'assistantDefaultFastMode'
+    | 'assistantBusyMessageMode'
 >
 
 export function loadLegacyAssistantComposerDefaults(
@@ -83,13 +86,24 @@ export function getAssistantDefaultSpeedLabel(fastModeEnabled: boolean): string 
     return fastModeEnabled ? 'Fast' : 'Standard'
 }
 
+export function getAssistantBusyMessageModeLabel(value: AssistantBusyMessageMode): string {
+    return value === 'force' ? 'Force while busy' : 'Queue while busy'
+}
+
 export function getAssistantDefaultsPreview(settings: AssistantDefaultsSubset): string {
     const modelLabel = settings.assistantDefaultModel.trim() || 'Auto model'
-    return [
+    const parts = [
         modelLabel,
         getAssistantDefaultInteractionModeLabel(settings.assistantDefaultInteractionMode),
         getAssistantDefaultRuntimeModeLabel(settings.assistantDefaultRuntimeMode),
         getAssistantDefaultEffortLabel(settings.assistantDefaultEffort),
-        getAssistantDefaultSpeedLabel(settings.assistantDefaultFastMode)
-    ].join(' • ')
+        getAssistantDefaultSpeedLabel(settings.assistantDefaultFastMode),
+        getAssistantBusyMessageModeLabel(settings.assistantBusyMessageMode)
+    ]
+
+    if (settings.assistantDefaultPromptTemplate.trim()) {
+        parts.push('Template set')
+    }
+
+    return parts.join(' • ')
 }

@@ -57,13 +57,15 @@ Long-term maintainability is a core priority.
 
 ## Validation Defaults
 
-If the user explicitly re-approves validation, prefer the lightest useful command first:
+Default post-edit validation for this repo is `bun run typecheck` before reporting completion, unless the user explicitly says to skip validation for that edit.
 
-1. `npm run typecheck`
+If broader validation is needed, prefer the lightest useful command first:
+
+1. `bun run typecheck`
 2. targeted package/app-specific checks
 3. full builds only when necessary for the requested change
 
-After edits, run a lightweight syntax/type validation check when validation permission has been granted in the current session.
+After edits, run the lightweight syntax/type validation check before informing the user that the work is done, unless they explicitly asked to skip it.
 
 If validation is skipped because permission was not granted, say that explicitly in the final response.
 

@@ -4,6 +4,8 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
+Snapshot alignment: April 27, 2026 current-state pass.
+
 ## Core References
 
 - [`CURRENT_CODEBASE_ARCHITECTURE.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CODEBASE_ARCHITECTURE.md)
@@ -11,13 +13,15 @@ The source-of-truth runtime is the Windows Electron app at the repository root. 
 - [`REPO_BOUNDARIES.md`](C:\Users\elson\my_coding_play\devscope\docs\current\REPO_BOUNDARIES.md)
   Focused runtime ownership and layering rules for refactors and cross-process changes.
 - [`CURRENT_CAPABILITIES_MATRIX.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CURRENT_CAPABILITIES_MATRIX.md)
-  What the app exposes today, including assistant, Git, project, file, and update flows.
+  What the app exposes today, including assistant hydration/recovery, Playground lab setup, file preview, Git, project, and update flows.
 - [`ENGINEERING_QUALITY_STANDARDS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\ENGINEERING_QUALITY_STANDARDS.md)
   Quality expectations by layer.
 - [`CHANGE_SCOPE_GUIDELINES.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CHANGE_SCOPE_GUIDELINES.md)
   Scope and layering rules for changes.
 - [`CHANGE_VALIDATION_CHECKLIST.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CHANGE_VALIDATION_CHECKLIST.md)
   Lightweight validation guidance.
+- [`WORKTREE_TO_PR_WORKFLOW.md`](C:\Users\elson\my_coding_play\devscope\docs\current\WORKTREE_TO_PR_WORKFLOW.md)
+  End-to-end playbook for LOC sweeps, modularization, validation, commit batching, and PR filing.
 - [`BRANCH_WORKFLOW.md`](C:\Users\elson\my_coding_play\devscope\docs\current\BRANCH_WORKFLOW.md)
   Default branch intent for `main` versus `dev`.
 - [`RELEASE_VERSIONING.md`](C:\Users\elson\my_coding_play\devscope\docs\current\RELEASE_VERSIONING.md)
@@ -26,10 +30,20 @@ The source-of-truth runtime is the Windows Electron app at the repository root. 
   Packaging and release operations.
 - [`UI_BORDER_AND_DIVIDER_STANDARDS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\UI_BORDER_AND_DIVIDER_STANDARDS.md)
   Canonical border, divider, and subtle-line treatment for the current UI.
+- [`CONNECTED_DROPDOWN_BUTTON_PATTERN.md`](C:\Users\elson\my_coding_play\devscope\docs\current\CONNECTED_DROPDOWN_BUTTON_PATTERN.md)
+  Canonical attached split-button/dropdown pattern for compact state controls.
 - [`UPDATE_TESTING_PLAYBOOK.md`](C:\Users\elson\my_coding_play\devscope\docs\current\UPDATE_TESTING_PLAYBOOK.md)
   Updater validation workflow.
 - [`BRANDING_ASSETS.md`](C:\Users\elson\my_coding_play\devscope\docs\current\BRANDING_ASSETS.md)
   Branding asset roles and generation flow.
+
+## Current App State
+
+- Assistant session hydration, deletion fallback, connection recovery, streaming tool cards, stable raw-response activity IDs, MCP progress, fuzzy file-search activity, turn-diff updates, and live command/file-change output deltas are part of the live runtime.
+- Playground chats can start detached from a lab, then use per-chat terminal access or escalate into terminal-access/lab-setup guided turns only when the prompt actually needs command or workspace access.
+- File preview now includes the IDE-style full-screen shell, HTML preview loading through the app file protocol, compact file-link chips, streamlined header/edit actions, Python run-mode controls, and an overlay terminal panel.
+- Folder/project browsing emphasizes compact headers, root-relative paths, indexed deep search, and project Git summaries that show actual addition/deletion counts where available.
+- Settings include installed package-runtime detection for project scripts, official runtime icons, imported dark theme presets, live tool-output defaults, no-lab Playground terminal defaults, and the current assistant defaults/behavior surfaces.
 
 ## Task-Specific Skills
 

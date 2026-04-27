@@ -2,6 +2,8 @@ import type { AssistantSnapshot } from '../../shared/assistant/contracts'
 import { applyAssistantDomainEvent, createDefaultAssistantSnapshot } from '../../shared/assistant/projector'
 import {
     clearResolvedApprovals,
+    deriveSessionTitleFromPrompt,
+    isDefaultSessionTitle,
     clearResolvedUserInputs,
     nowIso,
     runtimeStateAfterRestore,
@@ -23,8 +25,24 @@ export function recoverPersistedSnapshot(snapshot: AssistantSnapshot): Assistant
     const recovered = cloneSnapshot(snapshot)
     const recoveredAt = nowIso()
 
+    recovered.playground = {
+        rootPath: recovered.playground?.rootPath || null,
+        labs: Array.isArray(recovered.playground?.labs) ? recovered.playground.labs : []
+    }
+
     for (const session of recovered.sessions) {
+        session.mode = session.mode === 'playground' ? 'playground' : 'work'
+        if (isDefaultSessionTitle(session.title)) {
+            const firstUserMessage = session.threads
+                .flatMap((thread) => thread.messages || [])
+                .find((message) => message.role === 'user' && String(message.text || '').trim().length > 0)
+            session.title = firstUserMessage
+                ? deriveSessionTitleFromPrompt(firstUserMessage.text)
+                : 'New Session'
+        }
         session.updatedAt = session.updatedAt || recoveredAt
+        session.playgroundLabId = session.playgroundLabId || null
+        session.pendingLabRequest = session.pendingLabRequest || null
         session.threadIds = sortThreadsNewestFirst(session.threadIds || [], session.threads || [])
         if (!session.threadIds.includes(session.activeThreadId || '')) {
             session.activeThreadId = session.threadIds[0] || null

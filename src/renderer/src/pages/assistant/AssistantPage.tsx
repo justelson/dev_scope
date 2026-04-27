@@ -1,48 +1,47 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { AssistantActivity, AssistantMessage, AssistantTurnUsage } from '@shared/assistant/contracts'
+import type { AssistantMessage } from '@shared/assistant/contracts'
 import { FilePreviewModal } from '@/components/ui/FilePreviewModal'
+import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import { useFilePreview } from '@/components/ui/file-preview/useFilePreview'
-import { useAssistantStore } from '@/lib/assistant/store'
-import { isAssistantThreadActivelyWorking } from '@/lib/assistant/selectors'
 import { ASSISTANT_MAIN_SIDEBAR_COLLAPSED_STORAGE_KEY, useSidebar } from '@/components/layout/Sidebar'
+import { useAssistantStoreActions, useAssistantStoreSelector } from '@/lib/assistant/store'
+import { getActiveAssistantThread, getSelectedAssistantSession } from '@/lib/assistant/selectors'
+import { useSettings } from '@/lib/settings'
 import { ConnectedAssistantSessionsRail } from './AssistantConnectedSessionsRail'
 import { AssistantConversationPane } from './AssistantConversationPane'
 import { AssistantDiffPanel } from './AssistantDiffPanel'
-import { AssistantPlanPanel } from './AssistantPlanPanel'
-import {
-    DeleteHistoryConfirm,
-    formatCompactMetric,
-    formatContextMetric,
-    getIssueActivities,
-    buildIssueLogEntry,
-    copyTextToClipboard,
-    IssueLogDetailsModal,
-    resolveUsageMetricTone,
-    type LogDetailsTab,
-    type UsageMetricTone
-} from './AssistantPageHelpers'
-import { AssistantThreadDetailsPanel } from './AssistantThreadDetailsPanel'
+import { ConnectedAssistantPlanPanel } from './ConnectedAssistantPlanPanel'
+import { ConnectedAssistantThreadDetailsPanel } from './ConnectedAssistantThreadDetailsPanel'
+import { AssistantTransientToast, DeleteHistoryConfirm, useAssistantTransientToast } from './AssistantPageHelpers'
 import type { AssistantDiffTarget } from './assistant-diff-types'
-import { getAssistantActivePlanProgress, hasAssistantPlanPanelContent } from './assistant-plan-utils'
+import { openAssistantFileTarget } from './assistant-file-navigation'
+import { resolveSessionProjectPath } from './assistant-sessions-rail-utils'
 import {
-    subscribeAssistantComposerSessionState,
-    readAssistantComposerSessionState,
-    type AssistantComposerSessionState
-} from './assistant-composer-session-state'
-import { formatAssistantModelLabel } from './assistant-model-labels'
-import {
-    SIDEBAR_EFFORT_LABELS,
     useAssistantPageSidebarState,
     type AssistantRightPanelMode
 } from './useAssistantPageSidebarState'
-import { getAssistantLinkBaseFilePath, openAssistantFileTarget } from './assistant-file-navigation'
-import { useAssistantPageTimelineScroll } from './useAssistantPageTimelineScroll'
 
-type IssueActivityGroup = {
-    activity: AssistantActivity
-    activities: AssistantActivity[]
-    count: number
+type AssistantPageShellSelection = {
+    bootstrapped: boolean
+    assistantConnected: boolean
+    commandPending: boolean
+    playgroundRootPath: string | null
+    selectedSessionId: string | null
+    selectedSessionMode: 'work' | 'playground'
+    activeThreadId: string | null
+    selectedProjectPath: string
+}
+
+function areAssistantPageShellSelectionsEqual(left: AssistantPageShellSelection, right: AssistantPageShellSelection): boolean {
+    return left.bootstrapped === right.bootstrapped
+        && left.assistantConnected === right.assistantConnected
+        && left.commandPending === right.commandPending
+        && left.playgroundRootPath === right.playgroundRootPath
+        && left.selectedSessionId === right.selectedSessionId
+        && left.selectedSessionMode === right.selectedSessionMode
+        && left.activeThreadId === right.activeThreadId
+        && left.selectedProjectPath === right.selectedProjectPath
 }
 
 function readAssistantMainSidebarCollapsedPreference(): boolean {
@@ -54,14 +53,53 @@ function readAssistantMainSidebarCollapsedPreference(): boolean {
     }
 }
 
+const PLAYGROUND_TERMINAL_ACCESS_BY_SESSION_STORAGE_KEY = 'assistant-playground-terminal-access-by-session'
+const PLAYGROUND_TERMINAL_ACCESS_REQUESTS_MUTED_BY_SESSION_STORAGE_KEY = 'assistant-playground-terminal-access-requests-muted-by-session'
+
+function readBooleanSessionPreferenceMap(key: string): Record<string, boolean> {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(key) || '{}') as unknown
+        if (!parsed || typeof parsed !== 'object') return {}
+        return Object.fromEntries(
+            Object.entries(parsed).filter((entry): entry is [string, boolean] => (
+                typeof entry[0] === 'string' && typeof entry[1] === 'boolean'
+            ))
+        )
+    } catch {
+        return {}
+    }
+}
+
+function writeBooleanSessionPreferenceMap(key: string, value: Record<string, boolean>): void {
+    try {
+        localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+    }
+}
+
 export default function AssistantPage() {
     const navigate = useNavigate()
-    const controller = useAssistantStore()
+    const actions = useAssistantStoreActions()
+    const { settings } = useSettings()
+    const shell = useAssistantStoreSelector<AssistantPageShellSelection>((state) => {
+        const selectedSession = getSelectedAssistantSession(state.snapshot)
+        const activeThread = getActiveAssistantThread(selectedSession)
+
+        return {
+            bootstrapped: state.hydrated,
+            assistantConnected: state.status.connected,
+            commandPending: state.commandPending,
+            playgroundRootPath: state.snapshot.playground.rootPath || null,
+            selectedSessionId: selectedSession?.id || null,
+            selectedSessionMode: selectedSession?.mode || 'work',
+            activeThreadId: activeThread?.id || null,
+            selectedProjectPath: selectedSession ? resolveSessionProjectPath(selectedSession) : ''
+        }
+    }, areAssistantPageShellSelectionsEqual)
     const preview = useFilePreview()
     const { isCollapsed: mainSidebarCollapsed, setIsCollapsed: setMainSidebarCollapsed } = useSidebar()
-    const headerMenuRef = useRef<HTMLDivElement | null>(null)
-    const autoConnectAttemptedSessionRef = useRef<string | null>(null)
-    const lastUsageByThreadRef = useRef<Map<string, AssistantTurnUsage>>(new Map())
+    const autoRoutedSelectionRef = useRef<string | null>(null)
+    const autoStartedDetachedPlaygroundRef = useRef(false)
     const mainSidebarBeforeAssistantRef = useRef<boolean | null>(null)
     const previousMainSidebarCollapsedRef = useRef(mainSidebarCollapsed)
     const autoCollapsedInnerSidebarRef = useRef(false)
@@ -71,40 +109,47 @@ export default function AssistantPage() {
         setLeftSidebarCollapsed,
         leftSidebarWidth,
         setLeftSidebarWidth,
+        railMode,
+        setRailMode,
+        railGroupMode,
+        setRailGroupMode,
+        railSortMode,
+        setRailSortMode,
+        railFilterMode,
+        setRailFilterMode,
         rightPanelMode,
         setRightPanelMode
     } = useAssistantPageSidebarState()
-    const [showHeaderMenu, setShowHeaderMenu] = useState(false)
-    const [selectedLogActivity, setSelectedLogActivity] = useState<AssistantActivity | null>(null)
     const [selectedDiffTarget, setSelectedDiffTarget] = useState<AssistantDiffTarget | null>(null)
     const [pendingMessageDelete, setPendingMessageDelete] = useState<AssistantMessage | null>(null)
     const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null)
-    const [logDetailsTab, setLogDetailsTab] = useState<LogDetailsTab>('rendered')
-    const [copiedLogId, setCopiedLogId] = useState<string | null>(null)
-    const [copyErrorByLogId, setCopyErrorByLogId] = useState<Record<string, string | null>>({})
-    const [projectPathCopied, setProjectPathCopied] = useState(false)
-    const [showFullProjectPath, setShowFullProjectPath] = useState(false)
-    const [allLogsCopied, setAllLogsCopied] = useState(false)
-    const [clearingLogs, setClearingLogs] = useState(false)
-    const [logsExpanded, setLogsExpanded] = useState(false)
-    const [composerSessionState, setComposerSessionState] = useState<AssistantComposerSessionState>({})
+    const [playgroundTerminalAccessBySession, setPlaygroundTerminalAccessBySession] = useState(() => (
+        readBooleanSessionPreferenceMap(PLAYGROUND_TERMINAL_ACCESS_BY_SESSION_STORAGE_KEY)
+    ))
+    const [playgroundTerminalAccessRequestMutedBySession, setPlaygroundTerminalAccessRequestMutedBySession] = useState(() => (
+        readBooleanSessionPreferenceMap(PLAYGROUND_TERMINAL_ACCESS_REQUESTS_MUTED_BY_SESSION_STORAGE_KEY)
+    ))
+    const { toast, showToast } = useAssistantTransientToast()
 
     useEffect(() => {
-        const selectedSessionId = controller.selectedSession?.id || null
-        setComposerSessionState(readAssistantComposerSessionState(selectedSessionId))
-    }, [controller.selectedSession?.id])
-
-    useEffect(() => subscribeAssistantComposerSessionState((updatedSessionId, nextState) => {
-        if (!controller.selectedSession?.id || updatedSessionId !== controller.selectedSession.id) return
-        setComposerSessionState(nextState)
-    }), [controller.selectedSession?.id])
+        writeBooleanSessionPreferenceMap(PLAYGROUND_TERMINAL_ACCESS_BY_SESSION_STORAGE_KEY, playgroundTerminalAccessBySession)
+    }, [playgroundTerminalAccessBySession])
 
     useEffect(() => {
-        const threadId = controller.activeThread?.id
-        const usage = controller.activeThread?.latestTurn?.usage
-        if (!threadId || !usage) return
-        lastUsageByThreadRef.current.set(threadId, usage)
-    }, [controller.activeThread?.id, controller.activeThread?.latestTurn?.usage])
+        writeBooleanSessionPreferenceMap(PLAYGROUND_TERMINAL_ACCESS_REQUESTS_MUTED_BY_SESSION_STORAGE_KEY, playgroundTerminalAccessRequestMutedBySession)
+    }, [playgroundTerminalAccessRequestMutedBySession])
+
+    const selectedPlaygroundTerminalAccess = useMemo(() => {
+        const sessionId = shell.selectedSessionId
+        if (!sessionId) return settings.assistantPlaygroundTerminalAccessDefault
+        return playgroundTerminalAccessBySession[sessionId] ?? settings.assistantPlaygroundTerminalAccessDefault
+    }, [playgroundTerminalAccessBySession, settings.assistantPlaygroundTerminalAccessDefault, shell.selectedSessionId])
+
+    const selectedPlaygroundTerminalAccessRequestMuted = useMemo(() => {
+        const sessionId = shell.selectedSessionId
+        if (!sessionId || selectedPlaygroundTerminalAccess) return false
+        return playgroundTerminalAccessRequestMutedBySession[sessionId] === true
+    }, [playgroundTerminalAccessRequestMutedBySession, selectedPlaygroundTerminalAccess, shell.selectedSessionId])
 
     useEffect(() => {
         mainSidebarBeforeAssistantRef.current = mainSidebarCollapsed
@@ -154,200 +199,36 @@ export default function AssistantPage() {
     }, [leftSidebarCollapsed, mainSidebarCollapsed, rightPanelMode, setLeftSidebarCollapsed])
 
     useEffect(() => {
-        if (!showHeaderMenu) return
-        const handlePointerDown = (event: MouseEvent) => {
-            if (!headerMenuRef.current?.contains(event.target as Node)) setShowHeaderMenu(false)
+        const sessionId = shell.selectedSessionId
+        if (!sessionId) {
+            autoRoutedSelectionRef.current = null
+            return
         }
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setShowHeaderMenu(false)
-        }
-        document.addEventListener('mousedown', handlePointerDown)
-        window.addEventListener('keydown', handleEscape)
-        return () => {
-            document.removeEventListener('mousedown', handlePointerDown)
-            window.removeEventListener('keydown', handleEscape)
-        }
-    }, [showHeaderMenu])
 
-    const selectedProjectPath = String(controller.selectedSession?.projectPath || controller.activeThread?.cwd || '').trim()
-    const assistantMessageFilePath = useMemo(
-        () => getAssistantLinkBaseFilePath(selectedProjectPath),
-        [selectedProjectPath]
-    )
-    const planPanelAvailable = hasAssistantPlanPanelContent(controller.activePlan, controller.latestProposedPlan)
-    const activePlanProgress = getAssistantActivePlanProgress(controller.activePlan, controller.activeThread?.latestTurn || null)
-    const planProgressLabel = activePlanProgress ? `${activePlanProgress.currentStepNumber}/${activePlanProgress.totalSteps}` : null
-    const planIsComplete = activePlanProgress?.isComplete === true
-    const shouldShowWorkingIndicator = isAssistantThreadActivelyWorking(controller.activeThread)
-        && !controller.timelineMessages.some((message) => message.role === 'assistant' && message.streaming)
-    const selectedProjectLabel = selectedProjectPath
-        ? selectedProjectPath.split(/[\\/]/).filter(Boolean).pop() || selectedProjectPath
-        : 'not set'
-    const selectedProjectPathWithTilde = selectedProjectPath
-        ? selectedProjectPath.replace(/^[A-Z]:\\Users\\[^\\]+/, '~').replace(/\\/g, '/')
-        : ''
-    const displayProjectPath = showFullProjectPath ? selectedProjectPathWithTilde : selectedProjectLabel
-    const availableModels = useMemo(() => {
-        if (controller.knownModels.length > 0) return controller.knownModels
-        const activeModel = String(controller.activeThread?.model || '').trim()
-        return activeModel ? [{ id: activeModel, label: activeModel }] : []
-    }, [controller.activeThread?.model, controller.knownModels])
-    const sidebarSelectedModel = formatAssistantModelLabel(composerSessionState.model || controller.activeThread?.model || availableModels[0]?.id || '')
-    const latestTurnUsage = useMemo(() => {
-        const threadId = controller.activeThread?.id
-        if (!threadId) return null
-        return controller.activeThread?.latestTurn?.usage
-            || lastUsageByThreadRef.current.get(threadId)
-            || null
-    }, [controller.activeThread?.id, controller.activeThread?.latestTurn?.usage])
-    const contextUsedTokens = latestTurnUsage?.totalTokens ?? null
-    const contextWindowTokens = latestTurnUsage?.modelContextWindow ?? null
-    const sessionSidebarWidth = leftSidebarCollapsed ? 0 : Math.max(180, Math.min(520, Math.round(leftSidebarWidth)))
-    const sidebarMetricChips = [
-        {
-            label: 'Input tokens',
-            value: latestTurnUsage?.inputTokens != null ? formatCompactMetric(latestTurnUsage.inputTokens) : null,
-            tone: resolveUsageMetricTone(latestTurnUsage?.inputTokens, contextWindowTokens, { normal: 12_000, high: 40_000 })
-        },
-        {
-            label: 'Output tokens',
-            value: latestTurnUsage?.outputTokens != null ? formatCompactMetric(latestTurnUsage.outputTokens) : null,
-            tone: resolveUsageMetricTone(latestTurnUsage?.outputTokens, contextWindowTokens, { normal: 4_000, high: 16_000 })
-        },
-        {
-            label: 'Reasoning tokens',
-            value: latestTurnUsage?.reasoningOutputTokens != null ? formatCompactMetric(latestTurnUsage.reasoningOutputTokens) : null,
-            tone: resolveUsageMetricTone(latestTurnUsage?.reasoningOutputTokens, contextWindowTokens, { normal: 4_000, high: 16_000 })
-        },
-        {
-            label: 'Cached input',
-            value: latestTurnUsage?.cachedInputTokens != null ? formatCompactMetric(latestTurnUsage.cachedInputTokens) : null,
-            tone: resolveUsageMetricTone(latestTurnUsage?.cachedInputTokens, contextWindowTokens, { normal: 8_000, high: 24_000 })
-        },
-        {
-            label: 'Total tokens',
-            value: latestTurnUsage?.totalTokens != null ? formatCompactMetric(latestTurnUsage.totalTokens) : null,
-            tone: resolveUsageMetricTone(latestTurnUsage?.totalTokens, contextWindowTokens, { normal: 16_000, high: 48_000 })
-        },
-        {
-            label: 'Context usage',
-            value: contextWindowTokens ? formatContextMetric(contextUsedTokens, contextWindowTokens) : null,
-            tone: resolveUsageMetricTone(contextUsedTokens, contextWindowTokens, { normal: 0, high: 0 })
+        const selectionKey = `${sessionId}:${shell.selectedSessionMode}`
+        if (autoRoutedSelectionRef.current === selectionKey) return
+        autoRoutedSelectionRef.current = selectionKey
+
+        if (railMode !== shell.selectedSessionMode) {
+            setRailMode(shell.selectedSessionMode)
         }
-    ].filter((entry): entry is { label: string; value: string; tone: UsageMetricTone } => Boolean(entry.value))
-    const selectedThinkingLabel = SIDEBAR_EFFORT_LABELS[composerSessionState.effort || 'high']
-    const selectedSpeedLabel = composerSessionState.fastModeEnabled ? 'Fast' : 'Standard'
-    const selectedRuntimeMode = composerSessionState.runtimeMode || controller.activeThread?.runtimeMode || 'approval-required'
-    const selectedRuntimeLabel = selectedRuntimeMode === 'full-access' ? 'Full access' : 'Supervised'
-    const contextUsedDisplay = contextUsedTokens != null ? formatCompactMetric(contextUsedTokens) : controller.activeThread?.latestTurn ? 'Not reported' : 'No turn yet'
-    const contextAvailableDisplay = contextWindowTokens != null ? formatCompactMetric(contextWindowTokens) : controller.activeThread?.latestTurn ? 'Not reported' : 'No turn yet'
-    const contextPercentage = contextUsedTokens != null && contextWindowTokens != null && contextWindowTokens > 0
-        ? Math.round((contextUsedTokens / contextWindowTokens) * 100)
-        : null
-    const contextColor = contextPercentage != null
-        ? contextPercentage >= 90 ? 'text-red-300' : contextPercentage >= 70 ? 'text-amber-300' : 'text-emerald-300'
-        : 'text-sparkle-text'
-    const lastTimelineMessage = controller.timelineMessages[controller.timelineMessages.length - 1] || null
-    const latestTimelineActivity = controller.activityFeed[0] || null
-    const shouldComputeIssueActivities = rightPanelMode === 'details' || Boolean(selectedLogActivity)
-    const issueActivities = useMemo(() => {
-        if (!shouldComputeIssueActivities) return []
-
-        const nextActivities = [...getIssueActivities(controller.activityFeed)]
-        if (controller.commandError) {
-            nextActivities.unshift({
-                id: `assistant-local-error-${controller.commandError}`,
-                kind: 'ui.command-error',
-                tone: 'error',
-                summary: 'Assistant command failed',
-                detail: controller.commandError,
-                turnId: controller.activeThread?.latestTurn?.id || null,
-                createdAt: latestTimelineActivity?.createdAt || controller.activeThread?.updatedAt || controller.selectedSession?.updatedAt || new Date(0).toISOString()
-            })
-        }
-        return nextActivities
-    }, [
-        controller.activityFeed,
-        controller.commandError,
-        controller.activeThread?.latestTurn?.id,
-        controller.activeThread?.updatedAt,
-        controller.selectedSession?.updatedAt,
-        latestTimelineActivity?.createdAt,
-        shouldComputeIssueActivities
-    ])
-    const groupedIssueActivities = useMemo<IssueActivityGroup[]>(() => {
-        const groups: IssueActivityGroup[] = []
-        for (const activity of issueActivities) {
-            const lastGroup = groups[groups.length - 1]
-            if (lastGroup && lastGroup.activity.summary === activity.summary && lastGroup.activity.tone === activity.tone) {
-                lastGroup.count += 1
-                lastGroup.activities.push(activity)
-            } else {
-                groups.push({ activity, activities: [activity], count: 1 })
-            }
-        }
-        return groups
-    }, [issueActivities])
-    const latestIssueGroup = groupedIssueActivities[0] || null
-    const olderIssueGroups = groupedIssueActivities.slice(1)
-    const { timelineScrollRef, onScrollTimeline, onScrollToBottom } = useAssistantPageTimelineScroll({
-        sessionId: controller.selectedSession?.id || null,
-        threadId: controller.activeThread?.id || null,
-        loading: controller.loading,
-        timelineMessageCount: controller.timelineMessages.length,
-        lastTimelineMessageId: lastTimelineMessage?.id || null,
-        lastTimelineMessageUpdatedAt: lastTimelineMessage?.updatedAt || null,
-        activityFeedCount: controller.activityFeed.length,
-        latestTimelineActivityId: latestTimelineActivity?.id || null,
-        latestTimelineActivityCreatedAt: latestTimelineActivity?.createdAt || null,
-        shouldShowWorkingIndicator,
-        latestTurnStartedAt: controller.activeThread?.latestTurn?.startedAt || null,
-        latestTurnState: controller.activeThread?.latestTurn?.state || null,
-        threadState: controller.activeThread?.state || null
-    })
-
-    useEffect(() => {
-        if (olderIssueGroups.length === 0 && logsExpanded) setLogsExpanded(false)
-    }, [logsExpanded, olderIssueGroups.length])
-
-    useEffect(() => {
-        if (rightPanelMode === 'plan' && !planPanelAvailable) setRightPanelMode('none')
-    }, [planPanelAvailable, rightPanelMode])
-
-    useEffect(() => {
-        if (rightPanelMode === 'diff' && !selectedDiffTarget) setRightPanelMode('none')
-    }, [rightPanelMode, selectedDiffTarget])
+    }, [railMode, setRailMode, shell.selectedSessionId, shell.selectedSessionMode])
 
     useEffect(() => {
         setSelectedDiffTarget(null)
         if (rightPanelMode === 'diff') setRightPanelMode('none')
-    }, [controller.selectedSession?.id, controller.activeThread?.id])
-
-    useEffect(() => {
-        if (!controller.bootstrapped || !controller.status?.available || controller.status?.connected || controller.commandPending) return
-        const sessionId = controller.selectedSession?.id || null
-        if (!sessionId || autoConnectAttemptedSessionRef.current === sessionId) return
-        autoConnectAttemptedSessionRef.current = sessionId
-        void controller.connect(sessionId)
-    }, [
-        controller.bootstrapped,
-        controller.commandPending,
-        controller.selectedSession?.id,
-        controller.status?.available,
-        controller.status?.connected,
-        controller.connect
-    ])
+    }, [setRightPanelMode, shell.activeThreadId, shell.selectedSessionId])
 
     const openAssistantTarget = useCallback(async (target: string, startInEditMode = false) => {
         const opened = await openAssistantFileTarget({
             target,
-            projectPath: selectedProjectPath,
+            projectPath: shell.selectedProjectPath,
             navigate,
             openPreview: preview.openPreview,
             previewOptions: startInEditMode ? { startInEditMode: true } : undefined
         })
         return opened
-    }, [navigate, preview.openPreview, selectedProjectPath])
+    }, [navigate, preview.openPreview, shell.selectedProjectPath])
 
     const handleOpenAssistantInternalLink = useCallback(async (href: string) => {
         await openAssistantTarget(href)
@@ -357,67 +238,89 @@ export default function AssistantPage() {
         await openAssistantTarget(filePath, true)
     }, [openAssistantTarget])
 
+    const handleOpenAttachmentPreview = useCallback(async (
+        file: { name: string; path: string },
+        ext: string,
+        options?: PreviewOpenOptions
+    ) => {
+        await preview.openPreview(file, ext, options)
+    }, [preview.openPreview])
+
+    const handleStartDetachedPlaygroundChat = useCallback(async () => {
+        setRailMode('playground')
+        await actions.createSession({ mode: 'playground' })
+    }, [actions, setRailMode])
+
+    const handlePlaygroundTerminalAccessChange = useCallback((enabled: boolean) => {
+        const sessionId = shell.selectedSessionId
+        if (!sessionId) return
+        setPlaygroundTerminalAccessBySession((current) => ({
+            ...current,
+            [sessionId]: enabled
+        }))
+        if (enabled) {
+            setPlaygroundTerminalAccessRequestMutedBySession((current) => ({
+                ...current,
+                [sessionId]: false
+            }))
+        }
+    }, [shell.selectedSessionId])
+
+    const handlePlaygroundTerminalAccessRequestMutedChange = useCallback((muted: boolean) => {
+        const sessionId = shell.selectedSessionId
+        if (!sessionId) return
+        setPlaygroundTerminalAccessRequestMutedBySession((current) => ({
+            ...current,
+            [sessionId]: muted
+        }))
+    }, [shell.selectedSessionId])
+
+    const handleChoosePlaygroundRoot = useCallback(async () => {
+        const folderResult = await window.devscope.selectFolder()
+        if (!folderResult.success || folderResult.cancelled || !folderResult.folderPath) return
+        setRailMode('playground')
+        await actions.setPlaygroundRoot(folderResult.folderPath)
+    }, [actions, setRailMode])
+
+    useEffect(() => {
+        if (railMode !== 'playground' || shell.selectedSessionId || !shell.playgroundRootPath) {
+            autoStartedDetachedPlaygroundRef.current = false
+            return
+        }
+        if (!shell.bootstrapped || shell.commandPending) return
+        if (autoStartedDetachedPlaygroundRef.current) return
+
+        autoStartedDetachedPlaygroundRef.current = true
+        void handleStartDetachedPlaygroundChat()
+    }, [
+        handleStartDetachedPlaygroundChat,
+        railMode,
+        shell.bootstrapped,
+        shell.commandPending,
+        shell.playgroundRootPath,
+        shell.selectedSessionId
+    ])
+
     const handleViewActivityDiff = useCallback((target: AssistantDiffTarget) => {
         setSelectedDiffTarget(target)
         setRightPanelMode('diff')
-    }, [])
+    }, [setRightPanelMode])
 
-    const handleDeleteUserMessage = async () => {
+    const handleDeleteUserMessage = useCallback(async () => {
         if (!pendingMessageDelete) return
         try {
             setDeletingMessageId(pendingMessageDelete.id)
-            const result = await controller.deleteMessageResult(pendingMessageDelete.id, controller.selectedSession?.id)
-            if (result.success) setPendingMessageDelete(null)
+            const result = await actions.deleteMessageResult(pendingMessageDelete.id, shell.selectedSessionId || undefined)
+            if (!result.success) {
+                showToast(`Failed to delete message: ${result.error}`, 'error')
+                return
+            }
+            setPendingMessageDelete(null)
+            showToast('Deleted message')
         } finally {
             setDeletingMessageId(null)
         }
-    }
-    const handleCopyProjectPath = async () => {
-        if (!selectedProjectPath) return
-        try {
-            await copyTextToClipboard(selectedProjectPath)
-            setProjectPathCopied(true)
-            window.setTimeout(() => setProjectPathCopied(false), 1600)
-        } catch {}
-    }
-    const handleCopyLog = async (activity: AssistantActivity) => {
-        try {
-            await copyTextToClipboard(JSON.stringify(buildIssueLogEntry(activity), null, 2))
-            setCopiedLogId(activity.id)
-            setCopyErrorByLogId((current) => ({ ...current, [activity.id]: null }))
-            window.setTimeout(() => setCopiedLogId((current) => current === activity.id ? null : current), 1600)
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to copy to clipboard'
-            setCopyErrorByLogId((current) => ({ ...current, [activity.id]: message }))
-            window.setTimeout(() => {
-                setCopyErrorByLogId((current) => {
-                    const next = { ...current }
-                    if (next[activity.id] === message) delete next[activity.id]
-                    return next
-                })
-            }, 2400)
-        }
-    }
-    const handleCopyAllLogs = async () => {
-        if (issueActivities.length === 0) return
-        try {
-            const allLogs = issueActivities.map((activity) => JSON.stringify(buildIssueLogEntry(activity), null, 2)).join('\n\n---\n\n')
-            await copyTextToClipboard(allLogs)
-            setAllLogsCopied(true)
-            window.setTimeout(() => setAllLogsCopied(false), 1600)
-        } catch {}
-    }
-    const handleClearLogs = async () => {
-        if (!controller.selectedSession?.id || !latestIssueGroup || clearingLogs) return
-        try {
-            setClearingLogs(true)
-            setLogsExpanded(false)
-            const result = await controller.clearLogsResult(controller.selectedSession.id)
-            if (result.success) controller.clearCommandError()
-        } finally {
-            setClearingLogs(false)
-        }
-    }
+    }, [actions, pendingMessageDelete, shell.selectedSessionId, showToast])
 
     const handleToggleAssistantLeftSidebar = useCallback(() => {
         autoCollapsedInnerSidebarRef.current = false
@@ -430,6 +333,39 @@ export default function AssistantPage() {
         })
     }, [mainSidebarCollapsed, rightPanelMode, setLeftSidebarCollapsed, setMainSidebarCollapsed])
 
+    const handleToggleRightSidebar = useCallback(() => {
+        setRightPanelMode((current) => current === 'details' ? 'none' : 'details')
+    }, [setRightPanelMode])
+
+    const handleTogglePlanPanel = useCallback(() => {
+        setRightPanelMode((current) => current === 'plan' ? 'none' : 'plan')
+    }, [setRightPanelMode])
+
+    const handleCloseRightPanel = useCallback(() => {
+        setRightPanelMode('none')
+    }, [setRightPanelMode])
+
+    const handleCloseDiffPanel = useCallback(() => {
+        setRightPanelMode('none')
+        setSelectedDiffTarget(null)
+    }, [setRightPanelMode])
+
+    const handleShowThreadDetailsPanel = useCallback(() => {
+        setRightPanelMode('details')
+    }, [setRightPanelMode])
+
+    const handleShowPlanPanel = useCallback(() => {
+        setRightPanelMode('plan')
+    }, [setRightPanelMode])
+
+    const handleCancelPendingMessageDelete = useCallback(() => {
+        if (deletingMessageId) return
+        setPendingMessageDelete(null)
+    }, [deletingMessageId])
+
+    const sessionSidebarWidth = leftSidebarCollapsed ? 0 : Math.max(180, Math.min(520, Math.round(leftSidebarWidth)))
+    const compactRightPanel = !leftSidebarCollapsed && rightPanelMode !== 'none'
+
     return (
         <div className="-m-6 flex h-[calc(100vh-46px)] min-h-[calc(100vh-46px)] flex-col overflow-hidden animate-fadeIn [--accent-primary:var(--color-primary)] [--accent-secondary:var(--color-secondary)]">
             <div className="min-h-0 flex-1 overflow-hidden">
@@ -437,119 +373,71 @@ export default function AssistantPage() {
                     <ConnectedAssistantSessionsRail
                         collapsed={leftSidebarCollapsed}
                         width={sessionSidebarWidth}
+                        railMode={railMode}
+                        railGroupMode={railGroupMode}
+                        railSortMode={railSortMode}
+                        railFilterMode={railFilterMode}
+                        onRailModeChange={setRailMode}
+                        onRailGroupModeChange={setRailGroupMode}
+                        onRailSortModeChange={setRailSortMode}
+                        onRailFilterModeChange={setRailFilterMode}
                         onWidthChange={setLeftSidebarWidth}
+                        onShowToast={showToast}
                     />
                     <div className="flex min-w-0 flex-1">
                         <AssistantConversationPane
                             rightPanelOpen={rightPanelMode !== 'none'}
                             rightPanelMode={rightPanelMode}
-                            planPanelAvailable={planPanelAvailable}
-                            planProgressLabel={planProgressLabel}
-                            planIsComplete={planIsComplete}
-                            showHeaderMenu={showHeaderMenu}
-                            setShowHeaderMenu={setShowHeaderMenu}
-                            headerMenuRef={headerMenuRef}
-                            timelineScrollRef={timelineScrollRef}
                             deletingMessageId={deletingMessageId}
-                            latestProjectLabel={selectedProjectLabel}
-                            assistantMessageFilePath={assistantMessageFilePath || null}
                             leftSidebarCollapsed={leftSidebarCollapsed}
+                            fallbackSessionMode={railMode}
+                            playgroundRootMissing={railMode === 'playground' && !shell.playgroundRootPath}
+                            playgroundTerminalAccess={selectedPlaygroundTerminalAccess}
+                            playgroundTerminalAccessRequestMuted={selectedPlaygroundTerminalAccessRequestMuted}
+                            autoStartDetachedPlaygroundChat={railMode === 'playground' && Boolean(shell.playgroundRootPath)}
+                            onPlaygroundTerminalAccessChange={handlePlaygroundTerminalAccessChange}
+                            onPlaygroundTerminalAccessRequestMutedChange={handlePlaygroundTerminalAccessRequestMutedChange}
                             onToggleLeftSidebar={handleToggleAssistantLeftSidebar}
-                            availableModels={availableModels}
-                            controller={controller}
-                            onScrollTimeline={onScrollTimeline}
-                            onScrollToBottom={onScrollToBottom}
+                            onChoosePlaygroundRoot={handleChoosePlaygroundRoot}
+                            onStartDetachedPlaygroundChat={handleStartDetachedPlaygroundChat}
                             onRequestDeleteUserMessage={setPendingMessageDelete}
-                            onToggleRightSidebar={() => setRightPanelMode((current) => current === 'details' ? 'none' : 'details')}
-                            onTogglePlanPanel={() => setRightPanelMode((current) => current === 'plan' ? 'none' : 'plan')}
+                            onToggleRightSidebar={handleToggleRightSidebar}
+                            onTogglePlanPanel={handleTogglePlanPanel}
                             onOpenAssistantLink={handleOpenAssistantInternalLink}
+                            onOpenAttachmentPreview={handleOpenAttachmentPreview}
                             onOpenEditedFile={handleOpenEditedFile}
                             onViewDiff={handleViewActivityDiff}
+                            onShowToast={showToast}
                         />
                         <AssistantDiffPanel
                             open={rightPanelMode === 'diff'}
+                            compact={compactRightPanel}
                             selectedDiff={selectedDiffTarget}
-                            onClose={() => {
-                                setRightPanelMode('none')
-                                setSelectedDiffTarget(null)
-                            }}
+                            onClose={handleCloseDiffPanel}
                         />
-                        <AssistantPlanPanel
+                        <ConnectedAssistantPlanPanel
                             open={rightPanelMode === 'plan'}
-                            activePlan={controller.activePlan}
-                            latestTurn={controller.activeThread?.latestTurn || null}
-                            latestProposedPlan={controller.latestProposedPlan}
-                            markdownFilePath={assistantMessageFilePath || null}
-                            onClose={() => setRightPanelMode('none')}
+                            compact={compactRightPanel}
+                            onClose={handleCloseRightPanel}
+                            onShowThreadDetails={handleShowThreadDetailsPanel}
                             onOpenInternalLink={handleOpenAssistantInternalLink}
                         />
-                        <AssistantThreadDetailsPanel
+                        <ConnectedAssistantThreadDetailsPanel
                             open={rightPanelMode === 'details'}
-                            selectedProjectPath={selectedProjectPath}
-                            selectedProjectLabel={selectedProjectLabel}
-                            displayProjectPath={displayProjectPath}
-                            showFullProjectPath={showFullProjectPath}
-                            projectPathCopied={projectPathCopied}
-                            contextPercentage={contextPercentage}
-                            contextColor={contextColor}
-                            contextUsedDisplay={contextUsedDisplay}
-                            contextAvailableDisplay={contextAvailableDisplay}
-                            pendingApprovalsCount={controller.pendingApprovals.length}
-                            pendingUserInputsCount={controller.pendingUserInputs.length}
-                            sidebarSelectedModel={sidebarSelectedModel}
-                            selectedRuntimeLabel={selectedRuntimeLabel}
-                            selectedThinkingLabel={selectedThinkingLabel}
-                            selectedSpeedLabel={selectedSpeedLabel}
-                            sidebarMetricChips={sidebarMetricChips}
-                            issueActivities={issueActivities}
-                            latestIssueGroup={latestIssueGroup}
-                            olderIssueGroups={olderIssueGroups}
-                            copiedLogId={copiedLogId}
-                            copyErrorByLogId={copyErrorByLogId}
-                            allLogsCopied={allLogsCopied}
-                            clearingLogs={clearingLogs}
-                            logsExpanded={logsExpanded}
-                            selectedSessionId={controller.selectedSession?.id || null}
-                            assistantConnected={Boolean(controller.status?.connected)}
-                            assistantAvailable={Boolean(controller.status?.available)}
-                            commandPending={controller.commandPending}
-                            onClose={() => setRightPanelMode('none')}
-                            onToggleProjectPath={() => setShowFullProjectPath((current) => !current)}
-                            onCopyProjectPath={() => void handleCopyProjectPath()}
-                            onToggleLogsExpanded={() => setLogsExpanded((current) => !current)}
-                            onCopyAllLogs={() => void handleCopyAllLogs()}
-                            onClearLogs={() => void handleClearLogs()}
-                            onCopyLog={(activity) => void handleCopyLog(activity)}
-                            onShowLogDetails={(activity) => {
-                                setSelectedLogActivity(activity)
-                                setLogDetailsTab('rendered')
-                            }}
-                            onToggleAssistantConnection={() => {
-                                if (controller.status?.connected) {
-                                    void controller.disconnect(controller.selectedSession?.id || undefined)
-                                } else {
-                                    void controller.connect(controller.selectedSession?.id || undefined)
-                                }
-                            }}
+                            compact={compactRightPanel}
+                            onClose={handleCloseRightPanel}
+                            onShowPlan={handleShowPlanPanel}
                         />
                     </div>
                 </div>
             </div>
-            <IssueLogDetailsModal
-                activity={selectedLogActivity}
-                tab={logDetailsTab}
-                onChangeTab={setLogDetailsTab}
-                onClose={() => setSelectedLogActivity(null)}
-            />
             <DeleteHistoryConfirm
                 isOpen={Boolean(pendingMessageDelete)}
                 deleting={Boolean(deletingMessageId)}
                 onConfirm={() => void handleDeleteUserMessage()}
-                onCancel={() => {
-                    if (deletingMessageId) return
-                    setPendingMessageDelete(null)
-                }}
+                onCancel={handleCancelPendingMessageDelete}
             />
+            <AssistantTransientToast toast={toast} />
             {preview.previewFile ? (
                 <FilePreviewModal
                     file={preview.previewFile}
@@ -559,7 +447,8 @@ export default function AssistantPage() {
                     size={preview.previewSize}
                     previewBytes={preview.previewBytes}
                     modifiedAt={preview.previewModifiedAt}
-                    projectPath={selectedProjectPath || undefined}
+                    projectPath={shell.selectedProjectPath || undefined}
+                    disableFullscreen
                     onOpenLinkedPreview={preview.openPreview}
                     mediaItems={preview.previewMediaItems}
                     onClose={preview.closePreview}

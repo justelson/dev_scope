@@ -75,6 +75,42 @@ export type DevScopeIndexedProject = DevScopeProject & {
     depth: number
 }
 
+export type DevScopeIndexedPathEntry = {
+    path: string
+    rootPath: string
+    parentPath: string | null
+    relativePath: string
+    name: string
+    type: 'file' | 'directory'
+    extension: string
+    size?: number
+    lastModified?: number
+    isHidden: boolean
+    isProject: boolean
+    projectType?: string | null
+    projectIconPath?: string | null
+    markers: string[]
+    frameworks: string[]
+    depth: number
+}
+
+export type DevScopeIndexedPathSearchInput = {
+    scopePath?: string
+    roots?: string[]
+    term?: string
+    extensionFilters?: string[]
+    limit?: number
+    includeFiles?: boolean
+    includeDirectories?: boolean
+    showHidden?: boolean
+}
+
+export type DevScopeIndexedPathSearchResult = {
+    entries: DevScopeIndexedPathEntry[]
+    ancestors: DevScopeIndexedPathEntry[]
+    totalMatched: number
+}
+
 export type DevScopeProcessInfo = {
     pid: number
     name: string

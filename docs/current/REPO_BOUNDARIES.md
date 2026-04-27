@@ -1,6 +1,6 @@
 # Repo Boundaries
 
-Last updated: March 19, 2026
+Last updated: April 27, 2026
 
 This document is the focused layer-boundary reference for day-to-day engineering work.
 
@@ -40,6 +40,8 @@ Use it together with:
 - Keep IPC handlers thin. Put domain logic in services/core modules.
 - Prefer shared contracts over duplicated main/renderer types.
 - Preserve the landing app as a separate client surface.
+- Keep installed-runtime detection in main-process IPC/services. Renderer settings may display and choose runtimes, but should not perform command/path discovery directly.
+- Keep Playground no-lab terminal-access and lab-setup decisions contract-driven through assistant send/user-input options, not ad hoc renderer-only state.
 
 ## Refactor Guidance
 

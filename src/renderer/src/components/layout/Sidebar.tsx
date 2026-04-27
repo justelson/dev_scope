@@ -3,7 +3,7 @@
  */
 
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, Activity, FolderTree, Bot } from 'lucide-react'
+import { Settings, FolderOpen, House, ChevronLeft, ChevronRight, FolderTree, Bot, SquareTerminal } from 'lucide-react'
 import { useAppUpdateState } from '@/lib/app-updates'
 import { cn } from '@/lib/utils'
 import { createContext, useCallback, useEffect, useContext, type ReactNode } from 'react'
@@ -54,7 +54,7 @@ const NAV_ITEMS: NavItem[] = [
     { id: 'projects', label: 'Projects', path: '/projects', icon: FolderOpen },
     { id: 'explorer', label: 'Explorer', path: '/explorer', icon: FolderTree },
     { id: 'assistant', label: 'Assistant', path: '/assistant', icon: Bot },
-    { id: 'tasks', label: 'Tasks', path: '/tasks', icon: Activity },
+    { id: 'terminals', label: 'Terminals', path: '/terminals', icon: SquareTerminal },
     { id: 'settings', label: 'Settings', path: '/settings', icon: Settings }
 ]
 
@@ -104,7 +104,6 @@ export default function Sidebar() {
     const { settings } = useSettings()
     const updateState = useAppUpdateState()
     const visibleNavItems = NAV_ITEMS.filter((item) => {
-        if (item.id === 'tasks') return settings.tasksPageEnabled
         if (item.id === 'explorer') return settings.explorerTabEnabled
         return true
     })

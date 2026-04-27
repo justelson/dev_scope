@@ -1,6 +1,4 @@
-import type { ClipboardEvent, Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react'
-import type { AssistantInteractionMode, AssistantRuntimeMode } from '@shared/assistant/contracts'
-import type { MentionCandidate } from './assistant-composer-mentions'
+import type { ClipboardEvent, KeyboardEvent } from 'react'
 import {
     InlineMentionTag,
     reconcileInlineMentionTags,
@@ -8,8 +6,6 @@ import {
     replaceInlineMentionTokensWithLabels,
     sortInlineMentionTags
 } from './assistant-composer-inline-mentions'
-import type { AssistantComposerPreferenceEffort } from './assistant-composer-preferences'
-import type { ComposerContextFile } from './assistant-composer-types'
 import {
     ATTACHMENT_REMOVE_MS,
     buildAttachmentPath,
@@ -22,70 +18,19 @@ import {
     readFileAsDataUrl,
     summarizeTextPreview
 } from './assistant-composer-utils'
-
-type SetStringState = Dispatch<SetStateAction<string>>
-type SetBooleanState = Dispatch<SetStateAction<boolean>>
-type SetNumberState = Dispatch<SetStateAction<number>>
-type SetStringArrayState = Dispatch<SetStateAction<string[]>>
-type SetContextFilesState = Dispatch<SetStateAction<ComposerContextFile[]>>
-type SetInlineMentionTagsState = Dispatch<SetStateAction<InlineMentionTag[]>>
-
-export type AssistantComposerHandlersArgs = {
-    disabled: boolean
-    isConnected: boolean
-    isSending: boolean
-    onSend: (prompt: string, contextFiles: ComposerContextFile[], options: {
-        model?: string
-        runtimeMode: AssistantRuntimeMode
-        interactionMode: AssistantInteractionMode
-        effort: AssistantComposerPreferenceEffort
-        serviceTier?: 'fast'
-    }) => Promise<boolean>
-    text: string
-    setText: SetStringState
-    inlineMentionTags: InlineMentionTag[]
-    setInlineMentionTags: SetInlineMentionTagsState
-    contextFiles: ComposerContextFile[]
-    setContextFiles: SetContextFilesState
-    sentPromptHistory: string[]
-    setSentPromptHistory: SetStringArrayState
-    historyCursor: number | null
-    setHistoryCursor: Dispatch<SetStateAction<number | null>>
-    draftBeforeHistory: string
-    setDraftBeforeHistory: SetStringState
-    showMentionMenu: boolean
-    setShowMentionMenu: SetBooleanState
-    mentionCandidates: MentionCandidate[]
-    mentionState: { start: number; query: string } | null
-    activeMentionCandidate: MentionCandidate | null
-    setActiveMentionIndex: SetNumberState
-    showModelDropdown: boolean
-    setShowModelDropdown: SetBooleanState
-    filteredModelOptions: Array<{ id: string; label: string; description?: string }>
-    activeModelCandidate: { id: string; label: string; description?: string } | null
-    setActiveModelIndex: SetNumberState
-    showBranchDropdown: boolean
-    setShowBranchDropdown: SetBooleanState
-    filteredBranches: Array<{ name: string; label?: string; commit?: string; current?: boolean }>
-    setActiveBranchIndex: SetNumberState
-    selectedModel: string
-    setSelectedModel: SetStringState
-    selectedRuntimeMode: AssistantRuntimeMode
-    setSelectedRuntimeMode: Dispatch<SetStateAction<AssistantRuntimeMode>>
-    selectedInteractionMode: AssistantInteractionMode
-    selectedEffort: AssistantComposerPreferenceEffort
-    fastModeEnabled: boolean
-    setComposerCursor: SetNumberState
-    removingAttachmentIds: string[]
-    setRemovingAttachmentIds: SetStringArrayState
-    textareaRef: RefObject<HTMLTextAreaElement | null>
-}
+import type { MentionCandidate } from './assistant-composer-mentions'
+import type { AssistantComposerHandlersArgs } from './assistant-composer-handlers.types'
+import type { ComposerContextFile } from './assistant-composer-types'
 
 export function createAssistantComposerHandlers(args: AssistantComposerHandlersArgs) {
     const {
         disabled,
+        disabledReason = null,
+        allowEmptySubmit,
         isConnected,
         isSending,
+        isThinking,
+        busyMessageMode,
         onSend,
         text,
         setText,
@@ -113,7 +58,9 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         showBranchDropdown,
         setShowBranchDropdown,
         filteredBranches,
+        activeBranchCandidate,
         setActiveBranchIndex,
+        onSwitchBranch,
         selectedModel,
         setSelectedModel,
         selectedRuntimeMode,
@@ -124,8 +71,22 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         setComposerCursor,
         removingAttachmentIds,
         setRemovingAttachmentIds,
-        textareaRef
+        textareaRef,
+        onBlockedSend,
+        onOptimisticSendClear,
+        shouldRestoreAfterFailedSend,
+        onRestoreFailedSendDraft
     } = args
+
+    const resolveBlockedSendReason = (hasContent: boolean): string => {
+        if (!allowEmptySubmit && !hasContent) return 'Write a message or attach a file first.'
+        if (disabledReason === 'no-session') return 'Select or create a chat before sending.'
+        if (disabledReason === 'project-required') return 'Choose a project before sending in a work chat.'
+        if (disabled) return 'Assistant is unavailable right now.'
+        if (!isConnected) return 'Assistant is disconnected. Reconnect before sending.'
+        if (isSending) return 'Message is already sending.'
+        return 'Cannot send this message right now.'
+    }
 
     const upsertAttachment = (attachment: ComposerContextFile) => {
         setContextFiles((prev) => {
@@ -140,6 +101,16 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
             setContextFiles((prev) => prev.filter((entry) => entry.id !== id))
             setRemovingAttachmentIds((prev) => prev.filter((entryId) => entryId !== id))
         }, ATTACHMENT_REMOVE_MS)
+    }
+
+    const restoreComposerFocus = () => {
+        window.requestAnimationFrame(() => {
+            const textarea = textareaRef.current
+            if (!textarea || textarea.disabled) return
+            const cursor = textarea.value.length
+            textarea.focus()
+            textarea.setSelectionRange(cursor, cursor)
+        })
     }
 
     const applyMentionCandidate = (candidate: MentionCandidate) => {
@@ -168,11 +139,35 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         })
     }
 
+    const getReadableFilePath = (file: File): string => {
+        try {
+            const resolvedPath = window.devscope.assistant.getPathForFile(file)
+            if (String(resolvedPath || '').trim()) return String(resolvedPath).trim()
+        } catch {}
+
+        return String((file as File & { path?: string }).path || '').trim()
+    }
+
+    const persistAttachmentFile = async (file: File, name: string, source: 'paste' | 'manual', mimeType: string): Promise<string> => {
+        const dataUrl = await readFileAsDataUrl(file)
+        const saveResult = await window.devscope.assistant.persistClipboardImage({
+            dataUrl,
+            fileName: name,
+            mimeType,
+            source
+        })
+        if (!saveResult.success || !saveResult.path) {
+            const errorMessage = saveResult.success ? 'Attachment path was not returned.' : saveResult.error
+            throw new Error(errorMessage || 'Failed to save attachment.')
+        }
+        return saveResult.path
+    }
+
     const attachFile = async (file: File, source: 'paste' | 'manual') => {
         const declaredMimeType = String(file.type || '').trim().toLowerCase()
         const fallbackName = declaredMimeType.startsWith('image/') ? `${source}-image-${Date.now()}.${inferImageExtensionFromMimeType(declaredMimeType)}` : `${source}-file-${Date.now()}`
         const name = file.name || fallbackName
-        const electronPath = String((file as File & { path?: string }).path || '').trim()
+        const electronPath = getReadableFilePath(file)
         const metaPath = electronPath || buildAttachmentPath(source, name)
         const mimeType = declaredMimeType || 'application/octet-stream'
         const looksLikeImageByName = /\.(png|jpe?g|gif|webp|svg|bmp|ico|tiff?|avif|apng|heic|heif|jfif|jxl)$/i.test(name)
@@ -180,11 +175,12 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
 
         const addImageAttachment = async (dataUrl: string, resolvedMimeType: string) => {
             let attachmentPath = metaPath
-            if (source === 'paste') {
+            if (source === 'paste' || !electronPath) {
                 const saveResult = await window.devscope.assistant.persistClipboardImage({
                     dataUrl,
                     fileName: name,
-                    mimeType: resolvedMimeType
+                    mimeType: resolvedMimeType,
+                    source
                 })
                 if (!saveResult.success || !saveResult.path) {
                     const errorMessage = saveResult.success ? 'Clipboard image path was not returned.' : saveResult.error
@@ -200,20 +196,22 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
                 sizeBytes: file.size,
                 kind: 'image',
                 previewDataUrl: dataUrl,
-                content: needsInlineImageContent && source !== 'paste' ? dataUrl : undefined,
+                content: needsInlineImageContent && source !== 'paste' && !attachmentPath ? dataUrl : undefined,
                 previewText: source === 'paste' ? 'Pasted image from clipboard.' : 'Attached image file.',
                 source,
-                animateIn: true
+                animateIn: source === 'paste' ? false : true
             })
         }
 
         if (mimeType.startsWith('image/') || looksLikeImageByName) {
+            let imageAttached = false
             try {
                 const dataUrl = await readFileAsDataUrl(file)
                 const dataUrlMimeMatch = dataUrl.match(/^data:([^;,]+)[;,]/i)
                 await addImageAttachment(dataUrl, String(dataUrlMimeMatch?.[1] || '').trim().toLowerCase() || (mimeType.startsWith('image/') ? mimeType : 'image/png'))
+                imageAttached = true
             } catch {}
-            return
+            if (imageAttached) return
         }
 
         if (source === 'paste' && !declaredMimeType) {
@@ -231,10 +229,11 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         try {
             const rawText = await file.text()
             const trimmed = rawText.length > MAX_ATTACHMENT_CONTENT_CHARS ? `${rawText.slice(0, MAX_ATTACHMENT_CONTENT_CHARS)}\n\n[truncated]` : rawText
-            const meta = getContextFileMeta({ path: metaPath, name, mimeType })
+            const attachmentPath = electronPath || await persistAttachmentFile(file, name, source, mimeType)
+            const meta = getContextFileMeta({ path: attachmentPath, name, mimeType })
             upsertAttachment({
                 id: createAttachmentId(),
-                path: metaPath,
+                path: attachmentPath,
                 name,
                 mimeType,
                 sizeBytes: file.size,
@@ -245,9 +244,15 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
                 animateIn: true
             })
         } catch {
+            let attachmentPath = metaPath
+            if (!electronPath) {
+                try {
+                    attachmentPath = await persistAttachmentFile(file, name, source, mimeType)
+                } catch {}
+            }
             upsertAttachment({
                 id: createAttachmentId(),
-                path: metaPath,
+                path: attachmentPath,
                 name,
                 mimeType,
                 sizeBytes: file.size,
@@ -259,7 +264,7 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         }
     }
 
-    const handleSend = async () => {
+    const submitPrompt = async (dispatchMode: 'immediate' | 'queue' | 'force') => {
         const prompt = replaceInlineMentionTokensWithLabels(text, inlineMentionTags).trim()
         const inlineMentionFiles: ComposerContextFile[] = inlineMentionTags.map((tag) => {
             const meta = getContextFileMeta({ path: tag.path, name: tag.label })
@@ -275,7 +280,11 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
             const fileKey = `${String(file.path || '').toLowerCase()}::${String(file.name || '').toLowerCase()}`
             return collection.findIndex((candidate) => `${String(candidate.path || '').toLowerCase()}::${String(candidate.name || '').toLowerCase()}` === fileKey) === index
         })
-        if ((!prompt && contextFilesForSend.length === 0) || disabled || isSending || !isConnected) return
+        const hasContent = Boolean(prompt || contextFilesForSend.length > 0)
+        if ((!allowEmptySubmit && !hasContent) || disabled || isSending || !isConnected) {
+            onBlockedSend?.(resolveBlockedSendReason(hasContent))
+            return
+        }
         const prevText = text
         const prevTags = inlineMentionTags
         const prevFiles = contextFiles
@@ -284,20 +293,41 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         setContextFiles([])
         setHistoryCursor(null)
         setDraftBeforeHistory('')
+        onOptimisticSendClear?.()
+        restoreComposerFocus()
         const success = await onSend(prompt, contextFilesForSend, {
             model: selectedModel || undefined,
             runtimeMode: selectedRuntimeMode,
             interactionMode: selectedInteractionMode,
             effort: selectedEffort,
-            serviceTier: fastModeEnabled ? 'fast' : undefined
+            serviceTier: fastModeEnabled ? 'fast' : undefined,
+            dispatchMode
         })
         if (!success) {
-            setText(prevText)
-            setInlineMentionTags(prevTags)
-            setContextFiles(prevFiles)
+            const shouldRestore = shouldRestoreAfterFailedSend?.() ?? true
+            if (shouldRestore) {
+                setText(prevText)
+                setInlineMentionTags(prevTags)
+                setContextFiles(prevFiles)
+                onRestoreFailedSendDraft?.(prevText)
+            }
+            restoreComposerFocus()
             return
         }
         if (prompt) setSentPromptHistory((prev) => prev[prev.length - 1] === prompt ? prev : [...prev.slice(-49), prompt])
+        restoreComposerFocus()
+    }
+
+    const handleSend = async () => {
+        await submitPrompt(isThinking ? busyMessageMode : 'immediate')
+    }
+
+    const handleQueueSend = async () => {
+        await submitPrompt('queue')
+    }
+
+    const handleForceSend = async () => {
+        await submitPrompt('force')
     }
 
     const handleRecallPrevious = () => {
@@ -418,6 +448,11 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
                 setActiveBranchIndex((current) => (current - 1 + filteredBranches.length) % filteredBranches.length)
                 return
             }
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                void onSwitchBranch((activeBranchCandidate || filteredBranches[0]).name)
+                return
+            }
             if (event.key === 'Escape') {
                 event.preventDefault()
                 setShowBranchDropdown(false)
@@ -466,6 +501,8 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         applyMentionCandidate,
         attachFile,
         handleSend,
+        handleQueueSend,
+        handleForceSend,
         handleRecallPrevious,
         handleRecallNext,
         handleKeyDown,

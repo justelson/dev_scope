@@ -1,9 +1,10 @@
 import type { Components } from 'react-markdown'
 import { Children, Fragment, cloneElement, isValidElement, type HTMLAttributes, type ReactNode } from 'react'
-import { AlertTriangle, ExternalLink, Info, Lightbulb, ShieldAlert, Siren } from 'lucide-react'
+import { AlertTriangle, Info, Lightbulb, ShieldAlert, Siren } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CodeBlock, InlineCode } from './CodeElements'
 import { renderColorAwareChildren } from './colorTokens'
+import { looksLikeMarkdownFileReference } from './fileReferences'
 import { resolveImageSrc, resolveImageSrcSet } from './paths'
 import { resolveMarkdownLinkTarget } from './linkNavigation'
 
@@ -127,7 +128,7 @@ export function createMarkdownComponents(
             <h6 className={cn('text-sm font-semibold text-sparkle-text-dark mt-4 mb-2', getAlignmentClass(align), className)} {...props}>{children}</h6>
         ),
         p: ({ children, className, align, ...props }: ParagraphProps) => (
-            <p className={cn('text-sparkle-text-dark leading-relaxed mb-4 last:mb-0 break-words [overflow-wrap:anywhere]', getAlignmentClass(align), className)} {...props}>
+            <p className={cn('text-sparkle-text-dark leading-relaxed mb-4 last:mb-0 break-words [overflow-wrap:break-word]', getAlignmentClass(align), className)} {...props}>
                 {renderColorAwareChildren(children, 'p')}
             </p>
         ),
@@ -135,43 +136,39 @@ export function createMarkdownComponents(
             const rawHref = String(href || '').trim()
             const isAnchorLink = rawHref.startsWith('#')
             const internalTarget = rawHref && resolveMarkdownLinkTarget(rawHref, filePath)
-            const isInternalLink = Boolean(internalTarget && options?.onInternalLinkClick)
+            const isInternalLink = Boolean(internalTarget)
 
             if (isAnchorLink) {
                 return (
                     <a
                         href={href}
-                        className="text-[var(--accent-primary)] hover:text-white hover:underline inline-flex items-center gap-1"
+                        draggable={false}
+                        className="text-[var(--accent-primary)] hover:text-white hover:underline"
                     >
                         {renderColorAwareChildren(children, 'a')}
                     </a>
                 )
             }
 
-            if (isInternalLink) {
-                return (
-                    <a
-                        href={href}
-                        onClick={(event) => {
-                            event.preventDefault()
-                            void options?.onInternalLinkClick?.(rawHref)
-                        }}
-                        className="text-[var(--accent-primary)] hover:text-white hover:underline inline-flex items-center gap-1 cursor-pointer"
-                    >
-                        {renderColorAwareChildren(children, 'a')}
-                    </a>
-                )
-            }
+            if (isInternalLink) return (
+                <a
+                    href={href}
+                    draggable={false}
+                    className="cursor-pointer text-[var(--accent-primary)] hover:text-white hover:underline"
+                >
+                    {renderColorAwareChildren(children, 'a')}
+                </a>
+            )
 
             return (
                 <a
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1"
+                    draggable={false}
+                    className="text-blue-400 hover:text-blue-300 hover:underline"
                 >
                     {renderColorAwareChildren(children, 'a')}
-                    <ExternalLink size={12} className="opacity-50" />
                 </a>
             )
         },
@@ -188,6 +185,18 @@ export function createMarkdownComponents(
             const isInline = !match && !className
 
             if (isInline) {
+                const text = flattenNodeText(children).trim()
+                if (filePath && looksLikeMarkdownFileReference(text) && resolveMarkdownLinkTarget(text, filePath)) {
+                    return (
+                        <code
+                            data-devscope-file-reference={text}
+                            draggable={false}
+                            className="mx-0.5 cursor-pointer rounded border border-white/10 bg-sparkle-accent px-1.5 py-0.5 font-mono text-sm text-pink-300"
+                        >
+                            {children}
+                        </code>
+                    )
+                }
                 return <InlineCode>{children}</InlineCode>
             }
 
@@ -228,7 +237,7 @@ export function createMarkdownComponents(
         ol: ({ children }) => (
             <ol className="list-decimal list-outside ml-6 mb-4 space-y-1 text-sparkle-text-dark">{children}</ol>
         ),
-        li: ({ children }) => <li className="leading-relaxed pl-1 break-words [overflow-wrap:anywhere]">{renderColorAwareChildren(children, 'li')}</li>,
+        li: ({ children }) => <li className="leading-relaxed pl-1 break-words [overflow-wrap:break-word]">{renderColorAwareChildren(children, 'li')}</li>,
         blockquote: ({ children }) => {
             const alert = detectMarkdownAlert(children)
             if (alert) {
@@ -256,23 +265,16 @@ export function createMarkdownComponents(
         },
         hr: () => <hr className="my-6 border-white/10" />,
         img: ({ src, alt }) => (
-            <span className="inline-flex flex-col items-center align-bottom mr-2 mb-2">
-                <img
-                    src={resolveImageSrc(src || '', filePath)}
-                    alt={alt || ''}
-                    className="h-auto max-w-full rounded-lg border border-white/10"
-                />
-                {alt && (
-                    <span className="hidden text-center text-sm text-sparkle-text-secondary mt-2 group-hover:block">
-                        {alt}
-                    </span>
-                )}
-            </span>
+            <img
+                src={resolveImageSrc(src || '', filePath)}
+                alt={alt || ''}
+                className="my-4 h-auto max-w-full rounded-lg border border-white/10"
+            />
         ),
         picture: ({ children }) => (
-            <span className="inline-flex max-w-full flex-col items-center align-bottom mr-2 mb-2">
+            <picture className="my-4 block max-w-full">
                 {children}
-            </span>
+            </picture>
         ),
         source: ({ src, srcSet, ...props }: SourceProps) => (
             <source
@@ -299,7 +301,7 @@ export function createMarkdownComponents(
             </th>
         ),
         td: ({ children }) => (
-            <td className="border-r border-white/10 px-4 py-3 text-sparkle-text-dark last:border-r-0 break-words [overflow-wrap:anywhere]">
+            <td className="border-r border-white/10 px-4 py-3 text-sparkle-text-dark last:border-r-0 break-words [overflow-wrap:break-word]">
                 {renderColorAwareChildren(children, 'td')}
             </td>
         ),

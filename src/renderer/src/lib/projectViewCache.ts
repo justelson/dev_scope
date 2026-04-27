@@ -8,6 +8,7 @@ const PERSISTED_GIT_CACHE_KEY_PREFIX = 'devscope:git-snapshot:v1:'
 
 const projectDetailsCache = new Map<string, { value: ProjectDetailsLike; updatedAt: number }>()
 const fileTreeCache = new Map<string, { value: FileTreeLike; updatedAt: number }>()
+const previewFolderTreeCache = new Map<string, { value: FileTreeLike; updatedAt: number }>()
 const gitSnapshotCache = new Map<string, { value: GitSnapshotLike; updatedAt: number }>()
 
 function normalizePathKey(projectPath: string): string {
@@ -202,6 +203,31 @@ export function setCachedFileTree(projectPath: string, value: FileTreeLike): voi
     const key = normalizePathKey(projectPath)
     if (!key || !Array.isArray(value)) return
     fileTreeCache.set(key, { value, updatedAt: Date.now() })
+}
+
+function buildPreviewFolderTreeCacheKey(rootPath: string, folderPath: string): string {
+    const normalizedRootPath = normalizePathKey(rootPath)
+    const normalizedFolderPath = normalizePathKey(folderPath)
+    if (!normalizedRootPath || !normalizedFolderPath) return ''
+    return `${normalizedRootPath}::${normalizedFolderPath}`
+}
+
+export function getCachedPreviewFolderTree(rootPath: string, folderPath: string): FileTreeLike | null {
+    const key = buildPreviewFolderTreeCacheKey(rootPath, folderPath)
+    if (!key) return null
+    const cached = previewFolderTreeCache.get(key)
+    if (!cached) return null
+    if (!isFresh(cached.updatedAt)) {
+        previewFolderTreeCache.delete(key)
+        return null
+    }
+    return cached.value
+}
+
+export function setCachedPreviewFolderTree(rootPath: string, folderPath: string, value: FileTreeLike): void {
+    const key = buildPreviewFolderTreeCacheKey(rootPath, folderPath)
+    if (!key || !Array.isArray(value)) return
+    previewFolderTreeCache.set(key, { value, updatedAt: Date.now() })
 }
 
 export function getCachedProjectGitSnapshot(projectPath: string): GitSnapshotLike | null {

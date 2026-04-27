@@ -8,6 +8,12 @@ function readMessageId(event: AssistantDomainEvent): string {
     return String(event.payload['messageId'] || '')
 }
 
+function readActivityId(event: AssistantDomainEvent): string {
+    const activity = event.payload['activity']
+    if (!activity || typeof activity !== 'object') return ''
+    return String((activity as Record<string, unknown>)['id'] || '')
+}
+
 export function collapseAssistantDeltaEvents(events: AssistantDomainEvent[]): AssistantDomainEvent[] {
     if (events.length < 2) return events
 
@@ -29,6 +35,18 @@ export function collapseAssistantDeltaEvents(events: AssistantDomainEvent[]): As
                     delta: `${readDelta(previous)}${readDelta(event)}`
                 }
             }
+            continue
+        }
+
+        if (
+            previous
+            && previous.type === 'thread.activity.appended'
+            && event.type === 'thread.activity.appended'
+            && previous.threadId === event.threadId
+            && readActivityId(previous)
+            && readActivityId(previous) === readActivityId(event)
+        ) {
+            collapsed[collapsed.length - 1] = event
             continue
         }
 

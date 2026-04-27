@@ -8,12 +8,12 @@ import type {
     GitStatusDetail,
     GitStashSummary,
     GitTagSummary,
-    InstalledIde,
     ProjectDetails
 } from './types'
 import type { CreateFileSystemTarget, FileSystemClipboardItem } from './projectDetailsPageHelpers'
 import {
     readStoredProjectActiveTab,
+    readStoredProjectGitActivity,
     readStoredProjectGitView,
     resolveBranchState
 } from './projectDetailsPageHelpers'
@@ -25,9 +25,6 @@ export function useProjectDetailsViewState(decodedPath: string, settings: any) {
     const [error, setError] = useState<string | null>(null)
     const [showHidden, setShowHidden] = useState(false)
     const [copiedPath, setCopiedPath] = useState(false)
-    const [installedIdes, setInstalledIdes] = useState<InstalledIde[]>([])
-    const [loadingInstalledIdes, setLoadingInstalledIdes] = useState(false)
-    const [openingIdeId, setOpeningIdeId] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'readme' | 'files' | 'git'>(() => (
         readStoredProjectActiveTab(decodedPath) || 'readme'
     ))
@@ -68,8 +65,12 @@ export function useProjectDetailsViewState(decodedPath: string, settings: any) {
     const [isPushing, setIsPushing] = useState(false)
     const [isFetching, setIsFetching] = useState(false)
     const [isPulling, setIsPulling] = useState(false)
-    const [lastFetched, setLastFetched] = useState<number | undefined>(undefined)
-    const [lastPulled, setLastPulled] = useState<number | undefined>(undefined)
+    const initialGitActivity = useMemo(
+        () => readStoredProjectGitActivity(decodedPath),
+        [decodedPath]
+    )
+    const [lastFetched, setLastFetched] = useState<number | undefined>(() => initialGitActivity.lastFetched)
+    const [lastPulled, setLastPulled] = useState<number | undefined>(() => initialGitActivity.lastPulled)
     const [toast, setToast] = useState<{
         message: string
         visible: boolean
@@ -145,12 +146,6 @@ export function useProjectDetailsViewState(decodedPath: string, settings: any) {
         setShowHidden,
         copiedPath,
         setCopiedPath,
-        installedIdes,
-        setInstalledIdes,
-        loadingInstalledIdes,
-        setLoadingInstalledIdes,
-        openingIdeId,
-        setOpeningIdeId,
         activeTab,
         setActiveTab,
         showDependenciesModal,

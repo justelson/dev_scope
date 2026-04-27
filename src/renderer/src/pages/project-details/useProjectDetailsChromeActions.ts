@@ -23,9 +23,6 @@ type UseProjectDetailsChromeActionsParams = {
         tone?: 'success' | 'error' | 'info'
     } | null>>
     setCopiedPath: Dispatch<SetStateAction<boolean>>
-    setInstalledIdes: Dispatch<SetStateAction<any[]>>
-    setLoadingInstalledIdes: Dispatch<SetStateAction<boolean>>
-    setOpeningIdeId: Dispatch<SetStateAction<string | null>>
 }
 
 export function useProjectDetailsChromeActions({
@@ -35,10 +32,7 @@ export function useProjectDetailsChromeActions({
     projectRootPath,
     toast,
     setToast,
-    setCopiedPath,
-    setInstalledIdes,
-    setLoadingInstalledIdes,
-    setOpeningIdeId
+    setCopiedPath
 }: UseProjectDetailsChromeActionsParams) {
     const showToast = useCallback((
         message: string,
@@ -66,28 +60,10 @@ export function useProjectDetailsChromeActions({
         }
     }, [toast?.visible, setToast])
 
-    const loadInstalledIdes = useCallback(async () => {
-        setLoadingInstalledIdes(true)
-        try {
-            const result = await window.devscope.listInstalledIdes()
-            if (result.success) {
-                setInstalledIdes(result.ides)
-                return
-            }
-            setInstalledIdes([])
-        } catch (err) {
-            console.error('Failed to load installed IDEs:', err)
-            setInstalledIdes([])
-        } finally {
-            setLoadingInstalledIdes(false)
-        }
-    }, [setInstalledIdes, setLoadingInstalledIdes])
-
     useEffect(() => {
         if (!decodedPath) return
         trackRecentProject(decodedPath, 'project')
-        void loadInstalledIdes()
-    }, [decodedPath, loadInstalledIdes])
+    }, [decodedPath])
 
     const handleCopyPath = useCallback(async () => {
         if (!projectRootPath) return
@@ -106,24 +82,6 @@ export function useProjectDetailsChromeActions({
         }
     }, [projectRootPath, setCopiedPath, showToast])
 
-    const handleOpenProjectInIde = useCallback(async (ideId: string) => {
-        if (!projectRootPath) return
-
-        setOpeningIdeId(ideId)
-        try {
-            const result = await window.devscope.openProjectInIde(projectRootPath, ideId)
-            if (!result.success) {
-                showToast(result.error || 'Failed to open project in IDE', undefined, undefined, 'error')
-                return
-            }
-            showToast(`Opening in ${result.ide.name}`)
-        } catch (err: any) {
-            showToast(err?.message || 'Failed to open project in IDE', undefined, undefined, 'error')
-        } finally {
-            setOpeningIdeId(null)
-        }
-    }, [projectRootPath, setOpeningIdeId, showToast])
-
     const goBack = useCallback(() => {
         const parentPath = getParentFolderPath(projectPath || decodedPath)
         if (parentPath) {
@@ -141,9 +99,7 @@ export function useProjectDetailsChromeActions({
 
     return {
         showToast,
-        loadInstalledIdes,
         handleCopyPath,
-        handleOpenProjectInIde,
         goBack,
         formatRelTime
     }

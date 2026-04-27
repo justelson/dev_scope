@@ -3,7 +3,13 @@ import { ProjectDetailsContent } from './ProjectDetailsContent'
 import { ProjectDetailsErrorView, ProjectDetailsLoadingView } from './ProjectDetailsStateViews'
 import { ProjectDetailsOverlays } from './ProjectDetailsOverlays'
 import { ProjectDetailsTransientUi } from './ProjectDetailsTransientUi'
-import { getParentFolderPath } from './projectDetailsPageHelpers'
+import { buildProjectDetailsShell } from './projectDetailsShell'
+import {
+    buildProjectDetailsContentProps,
+    buildProjectDetailsFileSystemModalProps,
+    buildProjectDetailsOverlayProps,
+    buildProjectDetailsTransientUiProps
+} from './projectDetailsPageViewProps'
 
 export function ProjectDetailsPageView(props: any) {
     const {
@@ -11,6 +17,7 @@ export function ProjectDetailsPageView(props: any) {
         project,
         error,
         navigate,
+        decodedPath,
         isCondensedLayout,
         themeColor,
         showScriptsModal,
@@ -68,15 +75,10 @@ export function ProjectDetailsPageView(props: any) {
         projectTerminalLabel,
         projectRootPath,
         showToast,
-        installedIdes,
-        loadingInstalledIdes,
-        openingIdeId,
-        handleOpenProjectInIde,
         handleCopyPath,
         copiedPath,
         handleOpenInExplorer,
         goBack,
-        loadInstalledIdes,
         activeTab,
         setActiveTab,
         fileTree,
@@ -167,7 +169,6 @@ export function ProjectDetailsPageView(props: any) {
         remotes,
         tags,
         stashes,
-        decodedPath,
         changesPage,
         setChangesPage,
         ITEMS_PER_PAGE,
@@ -230,273 +231,41 @@ export function ProjectDetailsPageView(props: any) {
         setDeleteTarget
     } = props
 
-    if (loading) {
+    const fallbackProjectPath = String(decodedPath || '').trim()
+    const displayProject = project ?? (fallbackProjectPath ? buildProjectDetailsShell(fallbackProjectPath) : null)
+    const progressiveProps = displayProject
+        ? {
+            ...props,
+            project: displayProject,
+            projectDetailsLoading: loading
+        }
+        : props
+
+    if (loading && !displayProject) {
         return <ProjectDetailsLoadingView />
     }
     if (!project) {
-        return <ProjectDetailsErrorView error={error} onBackToProjects={() => navigate('/projects')} />
+        if (!loading && error) {
+            return <ProjectDetailsErrorView error={error} onBackToProjects={() => navigate('/projects')} />
+        }
+        if (!displayProject) {
+            return <ProjectDetailsLoadingView />
+        }
     }
 
     return (
         <div
             className={isCondensedLayout
-                ? 'animate-fadeIn pb-24 pl-6 pt-6 pr-6 transition-[width,margin-right,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'
-                : 'mx-auto animate-fadeIn pb-24 px-6 pt-6 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'}
+                ? 'animate-fadeIn pb-24 transition-[width,margin-right,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'
+                : 'mx-auto animate-fadeIn pb-24 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'}
             style={{
                 maxWidth: isCondensedLayout ? undefined : '1600px'
             }}
         >
-            <ProjectDetailsOverlays
-                project={project}
-                showScriptsModal={showScriptsModal}
-                setShowScriptsModal={setShowScriptsModal}
-                showDependenciesModal={showDependenciesModal}
-                setShowDependenciesModal={setShowDependenciesModal}
-                onDependenciesUpdated={async () => {
-                    await loadProjectDetails()
-                }}
-                onRunScript={runScript}
-                scriptPredictions={scriptPredictions}
-                selectedCommit={selectedCommit}
-                commitDiff={commitDiff}
-                loadingDiff={loadingDiff}
-                setSelectedCommit={setSelectedCommit}
-                setCommitDiff={setCommitDiff}
-                showAuthorMismatch={showAuthorMismatch}
-                gitUser={gitUser}
-                repoOwner={repoOwner}
-                handleAuthorMismatchConfirm={handleAuthorMismatchConfirm}
-                setShowAuthorMismatch={setShowAuthorMismatch}
-                dontShowAuthorWarning={!settings.gitWarnOnAuthorMismatch}
-                setDontShowAuthorWarning={(value: boolean) => updateSettings({ gitWarnOnAuthorMismatch: !value })}
-                showInitModal={showInitModal}
-                setShowInitModal={setShowInitModal}
-                setInitStep={setInitStep}
-                initStep={initStep}
-                branchName={branchName}
-                setBranchName={setBranchName}
-                customBranchName={customBranchName}
-                setCustomBranchName={setCustomBranchName}
-                createGitignore={createGitignore}
-                setCreateGitignore={setCreateGitignore}
-                gitignoreTemplate={gitignoreTemplate}
-                setGitignoreTemplate={setGitignoreTemplate}
-                availableTemplates={availableTemplates}
-                availablePatterns={availablePatterns}
-                selectedPatterns={selectedPatterns}
-                setSelectedPatterns={setSelectedPatterns}
-                patternSearch={patternSearch}
-                setPatternSearch={setPatternSearch}
-                createInitialCommit={createInitialCommit}
-                setCreateInitialCommit={setCreateInitialCommit}
-                initialCommitMessage={initialCommitMessage}
-                setInitialCommitMessage={setInitialCommitMessage}
-                isInitializing={isInitializing}
-                handleInitGit={handleInitGit}
-                remoteUrl={remoteUrl}
-                setRemoteUrl={setRemoteUrl}
-                isAddingRemote={isAddingRemote}
-                handleAddRemote={handleAddRemote}
-                handleSkipRemote={handleSkipRemote}
-            />
-            <ProjectDetailsContent
-                isCondensedLayout={isCondensedLayout}
-                themeColor={themeColor}
-                project={project}
-                isProjectLive={isProjectLive}
-                activePorts={activePorts}
-                formatRelTime={formatRelTime}
-                onOpenTerminal={() => openTerminal({ displayName: projectTerminalLabel, id: 'main', category: 'project' }, projectRootPath)}
-                scriptCount={Object.keys(project.scripts || {}).length}
-                dependencyCount={Object.keys(project.dependencies || {}).length + Object.keys(project.devDependencies || {}).length}
-                installedIdes={installedIdes}
-                loadingInstalledIdes={loadingInstalledIdes}
-                openingIdeId={openingIdeId}
-                onOpenProjectInIde={handleOpenProjectInIde}
-                handleCopyPath={handleCopyPath}
-                copiedPath={copiedPath}
-                handleOpenInExplorer={handleOpenInExplorer}
-                goBack={goBack}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                fileTree={fileTree}
-                loadingGit={loadingGit}
-                loadingGitHistory={loadingGitHistory}
-                loadingFiles={loadingFiles}
-                changedFiles={changedFiles}
-                stagedFiles={stagedFiles}
-                unstagedFiles={unstagedFiles}
-                unpushedCommits={unpushedCommits}
-                onBrowseFolder={() => {
-                    const encodedPath = encodeURIComponent(projectRootPath)
-                    navigate(`/folder-browse/${encodedPath}`)
-                }}
-                onShowScriptsModal={() => setShowScriptsModal(true)}
-                onShowDependenciesModal={() => setShowDependenciesModal(true)}
-                loadProjectDetails={async () => {
-                    await Promise.all([loadProjectDetails(), loadInstalledIdes()])
-                }}
-                refreshFileTree={props.refreshFileTree}
-                onToggleAllFolders={handleToggleAllFolders}
-                readmeContentRef={readmeContentRef}
-                readmeExpanded={readmeExpanded}
-                readmeNeedsExpand={readmeNeedsExpand}
-                setReadmeExpanded={setReadmeExpanded}
-                fileSearch={fileSearch}
-                setFileSearch={setFileSearch}
-                setIsExpandingFolders={setIsExpandingFolders}
-                expandedFolders={expandedFolders}
-                setExpandedFolders={setExpandedFolders}
-                loadingFolderPaths={loadingFolderPaths}
-                allFolderPathsSet={allFolderPathsSet}
-                isExpandingFolders={isExpandingFolders}
-                showHidden={showHidden}
-                setShowHidden={setShowHidden}
-                sortBy={sortBy}
-                setSortBy={setSortBy}
-                sortAsc={sortAsc}
-                setSortAsc={setSortAsc}
-                visibleFileList={visibleFileList}
-                openPreview={openPreview}
-                onFileTreeOpen={handleFileTreeOpen}
-                onToggleFolder={handleToggleFolder}
-                onFileTreeOpenWith={handleFileTreeOpenWith}
-                onFileTreeOpenInExplorer={handleFileTreeOpenInExplorer}
-                onFileTreeCopyPath={handleFileTreeCopyPath}
-                onFileTreeCopy={handleFileTreeCopy}
-                onFileTreeRename={handleFileTreeRename}
-                onFileTreeDelete={handleFileTreeDelete}
-                onFileTreePaste={handleFileTreePaste}
-                onFileTreeMove={handleFileTreeMove}
-                onFileTreeCreateFile={handleFileTreeCreateFile}
-                onFileTreeCreateFolder={handleFileTreeCreateFolder}
-                hasFileClipboardItem={Boolean(fileClipboardItem)}
-                gitUser={gitUser}
-                repoOwner={repoOwner}
-                gitError={gitError}
-                gitView={gitView}
-                setGitView={setGitView}
-                refreshGitData={refreshGitData}
-                isGitRepo={isGitRepo}
-                setShowInitModal={setShowInitModal}
-                currentBranch={currentBranch}
-                targetBranch={targetBranch}
-                setTargetBranch={setTargetBranch}
-                branches={branches}
-                isSwitchingBranch={isSwitchingBranch}
-                handleSwitchBranch={handleSwitchBranch}
-                commitMessage={commitMessage}
-                setCommitMessage={setCommitMessage}
-                handleGenerateCommitMessage={handleGenerateCommitMessage}
-                isGeneratingCommitMessage={isGeneratingCommitMessage}
-                isCommitting={isCommitting}
-                isStackedActionRunning={isStackedActionRunning}
-                settings={settings}
-                handleCommit={handleCommit}
-                handleCommitPushAndCreatePullRequest={handleCommitPushAndCreatePullRequest}
-                handleDangerouslyStageCommitPushAndCreatePullRequest={handleDangerouslyStageCommitPushAndCreatePullRequest}
-                handleStageFile={handleStageFile}
-                handleUnstageFile={handleUnstageFile}
-                handleStageAll={handleStageAll}
-                handleUnstageAll={handleUnstageAll}
-                handleDiscardUnstagedFile={handleDiscardUnstagedFile}
-                handleDiscardUnstagedAll={handleDiscardUnstagedAll}
-                ensureStatsForPaths={ensureWorkingChangeStats}
-                hasRemote={hasRemote}
-                gitSyncStatus={gitSyncStatus}
-                incomingCommits={incomingCommits}
-                setInitStep={setInitStep}
-                handleFetch={handleFetch}
-                handlePush={handlePush}
-                handlePull={handlePull}
-                isPushing={isPushing}
-                isFetching={isFetching}
-                isPulling={isPulling}
-                lastFetched={lastFetched}
-                lastPulled={lastPulled}
-                gitHistory={gitHistory}
-                gitHistoryTotalCount={gitHistoryTotalCount}
-                historyHasMore={historyHasMore}
-                loadingMoreHistory={loadingMoreHistory}
-                loadMoreGitHistory={loadMoreGitHistory}
-                remotes={remotes}
-                tags={tags}
-                stashes={stashes}
-                decodedPath={decodedPath}
-                changesPage={changesPage}
-                setChangesPage={setChangesPage}
-                ITEMS_PER_PAGE={ITEMS_PER_PAGE}
-                handleCommitClick={handleCommitClick}
-                unpushedPage={unpushedPage}
-                setUnpushedPage={setUnpushedPage}
-                pullsPage={pullsPage}
-                setPullsPage={setPullsPage}
-                COMMITS_PER_PAGE={COMMITS_PER_PAGE}
-                commitPage={commitPage}
-                setCommitPage={setCommitPage}
-                scriptPredictions={scriptPredictions}
-                scriptIntentContext={scriptIntentContext}
-                runScript={runScript}
-                setShowDependenciesModal={setShowDependenciesModal}
-                showToast={showToast}
-            />
-            <ProjectDetailsTransientUi
-                projectPath={project.path}
-                pendingScriptRun={pendingScriptRun}
-                scriptPortInput={scriptPortInput}
-                setScriptPortInput={setScriptPortInput}
-                setScriptRunError={setScriptRunError}
-                scriptExposeNetwork={scriptExposeNetwork}
-                setScriptExposeNetwork={setScriptExposeNetwork}
-                scriptAdvancedOpen={scriptAdvancedOpen}
-                setScriptAdvancedOpen={setScriptAdvancedOpen}
-                scriptExtraArgsInput={scriptExtraArgsInput}
-                setScriptExtraArgsInput={setScriptExtraArgsInput}
-                scriptEnvInput={scriptEnvInput}
-                setScriptEnvInput={setScriptEnvInput}
-                scriptRunError={scriptRunError}
-                scriptCommandPreview={scriptCommandPreview}
-                scriptRunner={scriptRunner}
-                closeScriptRunModal={closeScriptRunModal}
-                handleConfirmScriptRun={handleConfirmScriptRun}
-                previewFile={previewFile}
-                previewMediaItems={previewMediaItems}
-                previewContent={previewContent}
-                loadingPreview={loadingPreview}
-                previewTruncated={previewTruncated}
-                previewSize={previewSize}
-                previewBytes={previewBytes}
-                previewModifiedAt={previewModifiedAt}
-                openPreview={openPreview}
-                onPreviewSaved={async () => {
-                    await Promise.all([refreshVisibleFileTree(getParentFolderPath(previewFile?.path || '') || undefined), refreshGitData()])
-                }}
-                closePreview={closePreview}
-                toast={toast}
-                navigate={navigate}
-                setToast={setToast}
-            />
-            <ProjectDetailsFileSystemModals
-                createTarget={createTarget}
-                createErrorMessage={createErrorMessage}
-                submitCreateTarget={submitCreateTarget}
-                setCreateTarget={setCreateTarget}
-                createDraft={createDraft}
-                setCreateDraft={setCreateDraft}
-                setCreateErrorMessage={setCreateErrorMessage}
-                renameTarget={renameTarget}
-                renameDraft={renameDraft}
-                setRenameDraft={setRenameDraft}
-                renameErrorMessage={renameErrorMessage}
-                submitRenameTarget={submitRenameTarget}
-                setRenameTarget={setRenameTarget}
-                setRenameExtensionSuffix={setRenameExtensionSuffix}
-                renameExtensionSuffix={renameExtensionSuffix}
-                setRenameErrorMessage={setRenameErrorMessage}
-                deleteTarget={deleteTarget}
-                confirmDeleteTarget={confirmDeleteTarget}
-                setDeleteTarget={setDeleteTarget}
-            />
+            <ProjectDetailsOverlays {...buildProjectDetailsOverlayProps(progressiveProps)} />
+            <ProjectDetailsContent {...buildProjectDetailsContentProps(progressiveProps)} />
+            <ProjectDetailsTransientUi {...buildProjectDetailsTransientUiProps(progressiveProps)} />
+            <ProjectDetailsFileSystemModals {...buildProjectDetailsFileSystemModalProps(progressiveProps)} />
         </div>
     )
 }

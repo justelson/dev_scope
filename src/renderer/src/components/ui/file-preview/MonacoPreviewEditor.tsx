@@ -1,40 +1,40 @@
-import Editor, { loader } from '@monaco-editor/react'
+import Editor from '@monaco-editor/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
-import * as monaco from 'monaco-editor'
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import { useSettings } from '@/lib/settings'
+import { monaco } from '@/lib/monaco/runtime'
 import { parseUnifiedDiffMarkers, type GitLineMarker } from './gitDiff'
 
-const globalWithMonaco = globalThis as typeof globalThis & {
-    MonacoEnvironment?: {
-        getWorker: (_moduleId: string, label: string) => Worker
-    }
-}
+const MONACO_THEME_ID = 'devscope-preview'
 
-if (!globalWithMonaco.MonacoEnvironment) {
-    globalWithMonaco.MonacoEnvironment = {
-        getWorker: (_moduleId: string, label: string) => {
-            if (label === 'json') return new jsonWorker()
-            if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker()
-            if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker()
-            if (label === 'typescript' || label === 'javascript') return new tsWorker()
-            return new editorWorker()
+function areLineMarkersEqual(left: GitLineMarker[], right: GitLineMarker[]): boolean {
+    if (left === right) return true
+    if (left.length !== right.length) return false
+    for (let index = 0; index < left.length; index += 1) {
+        if (left[index].line !== right[index].line || left[index].type !== right[index].type) {
+            return false
         }
     }
+    return true
 }
 
-loader.config({ monaco })
+function focusPreviewEditorLine(editor: MonacoEditor.IStandaloneCodeEditor | null, focusLine?: number | null): void {
+    if (!editor || !focusLine || focusLine < 1) return
+    const model = editor.getModel()
+    const lineNumber = model
+        ? Math.min(Math.max(1, Math.floor(focusLine)), model.getLineCount())
+        : Math.floor(focusLine)
 
-const MONACO_THEME_ID = 'devscope-preview'
+    editor.revealLineInCenter(lineNumber, monaco.editor.ScrollType.Immediate)
+    editor.setPosition({ lineNumber, column: 1 })
+    editor.focus()
+}
 
 const baseOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
     readOnly: true,
     domReadOnly: true,
+    folding: true,
+    showFoldingControls: 'always',
     minimap: {
         enabled: true,
         side: 'right',
@@ -53,7 +53,7 @@ const baseOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
     contextmenu: true,
     overviewRulerLanes: 3,
     hideCursorInOverviewRuler: true,
-    wordWrap: 'off',
+    wordWrap: 'on',
     wrappingStrategy: 'advanced',
     cursorBlinking: 'solid',
     occurrencesHighlight: 'off',
@@ -73,7 +73,8 @@ const baseOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
     padding: { top: 14, bottom: 14 },
     stickyScroll: { enabled: false },
     unicodeHighlight: { ambiguousCharacters: false },
-    links: false
+    links: false,
+    fixedOverflowWidgets: true
 }
 
 const largeFileOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
@@ -129,6 +130,11 @@ function applyMonacoTheme(theme: string) {
     const bg = readThemeVariable('--color-bg', isLightTheme ? '#f9fafb' : '#0c121f')
     const border = readThemeVariable('--color-border', isLightTheme ? '#e2e8f0' : '#1f2a3d')
     const accent = readThemeVariable('--accent-primary', isLightTheme ? '#2563eb' : '#60a5fa')
+    const selectionHighlightBackground = isLightTheme ? `${accent}1f` : `${accent}26`
+    const selectionHighlightBorder = isLightTheme ? `${accent}55` : `${accent}66`
+    const wordHighlightBackground = isLightTheme ? `${accent}18` : `${accent}1c`
+    const wordHighlightStrongBackground = isLightTheme ? `${accent}24` : `${accent}24`
+    const wordHighlightBorder = isLightTheme ? `${accent}3d` : `${accent}4a`
 
     const themeData: monaco.editor.IStandaloneThemeData = {
         base: isLightTheme ? 'vs' : 'vs-dark',
@@ -144,7 +150,14 @@ function applyMonacoTheme(theme: string) {
             'editorLineNumber.activeForeground': textDark,
             'editor.selectionBackground': isLightTheme ? '#47556933' : '#94a3b833',
             'editor.inactiveSelectionBackground': isLightTheme ? '#64748b26' : '#94a3b826',
-            'editor.selectionHighlightBackground': 'transparent',
+            'editor.selectionHighlightBackground': selectionHighlightBackground,
+            'editor.selectionHighlightBorder': selectionHighlightBorder,
+            'editor.wordHighlightBackground': wordHighlightBackground,
+            'editor.wordHighlightStrongBackground': wordHighlightStrongBackground,
+            'editor.wordHighlightBorder': wordHighlightBorder,
+            'editor.wordHighlightStrongBorder': selectionHighlightBorder,
+            'editor.findMatchHighlightBackground': wordHighlightStrongBackground,
+            'editor.findMatchHighlightBorder': selectionHighlightBorder,
             'editorIndentGuide.background1': `${border}99`,
             'editorIndentGuide.activeBackground1': `${textSecondary}aa`,
             'editorRuler.foreground': `${border}99`,
@@ -182,7 +195,7 @@ export default function MonacoPreviewEditor({
     readOnly = true,
     onChange,
     onEditorMount,
-    wordWrap = 'off',
+    wordWrap = 'on',
     minimapEnabled = true,
     fontSize = 13,
     findRequestToken = 0,
@@ -199,6 +212,7 @@ export default function MonacoPreviewEditor({
     const [lineMarkers, setLineMarkers] = useState<GitLineMarker[]>([])
     const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
     const decorationIdsRef = useRef<string[]>([])
+    const externalSyncInFlightRef = useRef(false)
 
     useEffect(() => {
         applyMonacoTheme(settings.theme)
@@ -217,7 +231,7 @@ export default function MonacoPreviewEditor({
 
     useEffect(() => {
         if (Array.isArray(lineMarkersOverride)) {
-            setLineMarkers(lineMarkersOverride)
+            setLineMarkers((current) => areLineMarkersEqual(current, lineMarkersOverride) ? current : lineMarkersOverride)
             return
         }
 
@@ -226,27 +240,36 @@ export default function MonacoPreviewEditor({
         const loadGitMarkers = async () => {
             if (typeof gitDiffText === 'string') {
                 if (!disposed) {
-                    setLineMarkers(parseUnifiedDiffMarkers(gitDiffText))
+                    const nextMarkers = parseUnifiedDiffMarkers(gitDiffText)
+                    setLineMarkers((current) => areLineMarkersEqual(current, nextMarkers) ? current : nextMarkers)
                 }
                 return
             }
 
             if (!projectPath || !filePath || isLargeFile) {
-                if (!disposed) setLineMarkers([])
+                if (!disposed) {
+                    setLineMarkers((current) => current.length === 0 ? current : [])
+                }
                 return
             }
 
             try {
                 const response = await window.devscope.getWorkingDiff(projectPath, filePath, 'combined')
                 if (disposed || !response?.success) {
-                    if (!disposed) setLineMarkers([])
+                    if (!disposed) {
+                        setLineMarkers((current) => current.length === 0 ? current : [])
+                    }
                     return
                 }
 
                 const nextMarkers = parseUnifiedDiffMarkers(String(response.diff || ''))
-                if (!disposed) setLineMarkers(nextMarkers)
+                if (!disposed) {
+                    setLineMarkers((current) => areLineMarkersEqual(current, nextMarkers) ? current : nextMarkers)
+                }
             } catch {
-                if (!disposed) setLineMarkers([])
+                if (!disposed) {
+                    setLineMarkers((current) => current.length === 0 ? current : [])
+                }
             }
         }
 
@@ -254,7 +277,7 @@ export default function MonacoPreviewEditor({
         return () => {
             disposed = true
         }
-    }, [gitDiffText, projectPath, filePath, isLargeFile, value, lineMarkersOverride])
+    }, [gitDiffText, projectPath, filePath, isLargeFile, lineMarkersOverride])
 
     useEffect(() => {
         const editor = editorRef.current
@@ -300,6 +323,31 @@ export default function MonacoPreviewEditor({
             editorRef.current = null
         }
     }, [])
+
+    useEffect(() => {
+        const editor = editorRef.current
+        const model = editor?.getModel()
+        if (!editor || !model) return
+
+        const currentValue = model.getValue(monaco.editor.EndOfLinePreference.LF, false)
+        if (currentValue === value) return
+
+        const selection = editor.getSelection()
+        const scrollTop = editor.getScrollTop()
+        const scrollLeft = editor.getScrollLeft()
+
+        externalSyncInFlightRef.current = true
+        editor.executeEdits('devscope-external-sync', [{
+            range: model.getFullModelRange(),
+            text: value
+        }])
+        if (selection) {
+            editor.setSelection(selection)
+        }
+        editor.setScrollTop(scrollTop)
+        editor.setScrollLeft(scrollLeft)
+        externalSyncInFlightRef.current = false
+    }, [value, modelPath])
 
     const editorOptions = useMemo<MonacoEditor.IStandaloneEditorConstructionOptions>(() => {
         const base = isLargeFile ? largeFileOptions : baseOptions
@@ -356,28 +404,25 @@ export default function MonacoPreviewEditor({
     }, [replaceRequestToken])
 
     useEffect(() => {
-        if (!focusLine || focusLine < 1) return
-        const editor = editorRef.current
-        if (!editor) return
-        editor.revealLineInCenter(focusLine)
-        editor.setPosition({ lineNumber: focusLine, column: 1 })
-        editor.focus()
+        focusPreviewEditorLine(editorRef.current, focusLine)
     }, [focusLine])
 
     return (
         <Editor
-            value={value}
+            defaultValue={value}
             language={language}
             path={modelPath}
             theme={editorTheme}
             options={editorOptions}
             onChange={(nextValue) => {
                 if (typeof onChange !== 'function') return
+                if (externalSyncInFlightRef.current) return
                 onChange(typeof nextValue === 'string' ? nextValue : '')
             }}
             onMount={(editor) => {
                 editorRef.current = editor
                 decorationIdsRef.current = editor.deltaDecorations([], [])
+                focusPreviewEditorLine(editor, focusLine)
                 onEditorMount?.(editor)
             }}
         />

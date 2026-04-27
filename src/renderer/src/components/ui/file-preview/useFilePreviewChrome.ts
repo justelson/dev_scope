@@ -3,65 +3,94 @@ import { LEFT_PANEL_MAX_WIDTH, LEFT_PANEL_MIN_WIDTH, RIGHT_PANEL_MAX_WIDTH, RIGH
 import { VIEWPORT_PRESETS, type ViewportPreset } from './viewport'
 
 type UseFilePreviewChromeParams = {
-    resetKey: string
     defaultStartExpanded: boolean
     defaultLeftPanelOpen: boolean
     defaultRightPanelOpen: boolean
+    initialFocusLine?: number | null
+    initialFocusLineRequestId?: number | null
 }
 
 export function useFilePreviewChrome({
-    resetKey,
     defaultStartExpanded,
     defaultLeftPanelOpen,
-    defaultRightPanelOpen
+    defaultRightPanelOpen,
+    initialFocusLine = null,
+    initialFocusLineRequestId = null
 }: UseFilePreviewChromeParams) {
     const [viewport, setViewport] = useState<ViewportPreset>('responsive')
     const [isExpanded, setIsExpanded] = useState(defaultStartExpanded)
     const [leftPanelOpen, setLeftPanelOpen] = useState(defaultLeftPanelOpen)
     const [rightPanelOpen, setRightPanelOpen] = useState(defaultRightPanelOpen)
-    const [leftPanelWidth, setLeftPanelWidth] = useState(260)
+    const [leftPanelWidth, setLeftPanelWidth] = useState(256)
     const [rightPanelWidth, setRightPanelWidth] = useState(288)
     const [isResizingPanels, setIsResizingPanels] = useState(false)
     const [csvDistinctColorsEnabled, setCsvDistinctColorsEnabled] = useState(true)
-    const [editorWordWrap, setEditorWordWrap] = useState<'on' | 'off'>('off')
+    const [editorWordWrap, setEditorWordWrap] = useState<'on' | 'off'>('on')
     const [editorMinimapEnabled, setEditorMinimapEnabled] = useState(true)
     const [editorFontSize, setEditorFontSize] = useState(13)
     const [findRequestToken, setFindRequestToken] = useState(0)
     const [replaceRequestToken, setReplaceRequestToken] = useState(0)
-    const [focusLine, setFocusLine] = useState<number | null>(null)
+    const [focusLine, setFocusLine] = useState<number | null>(initialFocusLine)
 
     const previewSurfaceRef = useRef<HTMLDivElement | null>(null)
     const panelResizeRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
+    const leftPanelWidthRef = useRef(leftPanelWidth)
+    const rightPanelWidthRef = useRef(rightPanelWidth)
 
     useEffect(() => {
-        setViewport('responsive')
-        setIsExpanded(defaultStartExpanded)
-        setLeftPanelOpen(defaultLeftPanelOpen)
-        setRightPanelOpen(defaultRightPanelOpen)
-        setLeftPanelWidth(260)
-        setRightPanelWidth(288)
-        setIsResizingPanels(false)
-        setCsvDistinctColorsEnabled(true)
-        setEditorWordWrap('off')
-        setEditorMinimapEnabled(true)
-        setEditorFontSize(13)
-        setFindRequestToken(0)
-        setReplaceRequestToken(0)
+        if (!initialFocusLine) {
+            setFocusLine(null)
+            return
+        }
+
+        let disposed = false
         setFocusLine(null)
-    }, [defaultLeftPanelOpen, defaultRightPanelOpen, defaultStartExpanded, resetKey])
+        let frameId: number | null = null
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            frameId = window.requestAnimationFrame(() => {
+                if (!disposed) setFocusLine(initialFocusLine)
+            })
+        } else {
+            timeoutId = setTimeout(() => {
+                if (!disposed) setFocusLine(initialFocusLine)
+            }, 0)
+        }
+
+        return () => {
+            disposed = true
+            if (frameId !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+                window.cancelAnimationFrame(frameId)
+                return
+            }
+            if (timeoutId !== null) clearTimeout(timeoutId)
+        }
+    }, [initialFocusLine, initialFocusLineRequestId])
+
+    useEffect(() => {
+        leftPanelWidthRef.current = leftPanelWidth
+    }, [leftPanelWidth])
+
+    useEffect(() => {
+        rightPanelWidthRef.current = rightPanelWidth
+    }, [rightPanelWidth])
 
     useEffect(() => {
         if (!isExpanded) return
 
         const applyBodyDragState = (active: boolean) => {
             if (active) {
-                document.body.style.cursor = 'col-resize'
-                document.body.style.userSelect = 'none'
+                document.documentElement.style.setProperty('cursor', 'col-resize', 'important')
+                document.documentElement.style.setProperty('user-select', 'none', 'important')
+                document.body.style.setProperty('cursor', 'col-resize', 'important')
+                document.body.style.setProperty('user-select', 'none', 'important')
                 return
             }
 
-            document.body.style.cursor = ''
-            document.body.style.userSelect = ''
+            document.documentElement.style.removeProperty('cursor')
+            document.documentElement.style.removeProperty('user-select')
+            document.body.style.removeProperty('cursor')
+            document.body.style.removeProperty('user-select')
         }
 
         const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -97,7 +126,7 @@ export function useFilePreviewChrome({
             panelResizeRef.current = {
                 side,
                 startX: event.clientX,
-                startWidth: side === 'left' ? leftPanelWidth : rightPanelWidth
+                startWidth: side === 'left' ? leftPanelWidthRef.current : rightPanelWidthRef.current
             }
             setIsResizingPanels(true)
             applyBodyDragState(true)
@@ -110,7 +139,7 @@ export function useFilePreviewChrome({
             window.removeEventListener('mousedown', handleMouseDown)
             stopResize()
         }
-    }, [isExpanded, leftPanelWidth, rightPanelWidth])
+    }, [isExpanded])
 
     const modalStyle = useMemo(() => {
         if (isExpanded) {

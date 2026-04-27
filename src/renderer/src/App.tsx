@@ -1,5 +1,5 @@
 // ... imports
-import { useRef, lazy, Suspense, useEffect, useMemo, createContext, useContext, type ReactNode } from 'react'
+import { useRef, lazy, Suspense, useEffect, useMemo, useState, createContext, useContext, type ReactNode } from 'react'
 import { HashRouter, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import TitleBar from './components/layout/TitleBar'
 import Sidebar, { SidebarProvider, useSidebar } from './components/layout/Sidebar'
@@ -11,10 +11,11 @@ import { SettingsProvider, useSettings } from './lib/settings'
 import { CommandPaletteProvider } from './lib/commandPalette'
 import CommandPalette from './components/CommandPalette'
 import LinkHoverStatus from './components/ui/LinkHoverStatus'
+import { GitCloneProgressToast } from './components/ui/GitCloneProgressToast'
 
 const Settings = lazy(() => import('./pages/Settings'))
 const Home = lazy(() => import('./pages/Home'))
-const Tasks = lazy(() => import('./pages/Tasks'))
+const Terminals = lazy(() => import('./pages/Tasks'))
 const ProjectDetails = lazy(() => import('./pages/ProjectDetails'))
 const FolderBrowse = lazy(() => import('./pages/FolderBrowse'))
 const Explorer = lazy(() => import('./pages/Explorer'))
@@ -34,6 +35,7 @@ const TerminalSettings = lazy(() => import('./pages/settings/TerminalSettings'))
 const LogsSettings = lazy(() => import('./pages/settings/LogsSettings'))
 const LAST_MAIN_TAB_KEY = 'devscope:last-main-tab:v1'
 const LAST_APP_ROUTE_KEY = 'devscope:last-app-route:v1'
+const EXTERNAL_EXPLORER_ACCESS_KEY = 'devscope:external-explorer-access:v1'
 
 // Terminal Context
 interface TerminalContextType {
@@ -78,12 +80,12 @@ function isAssistantAreaPath(pathname: string): boolean {
 
 function resolveMainTabPath(
     pathname: string,
-    options?: { allowTasks?: boolean; allowExplorer?: boolean }
-): '/home' | '/projects' | '/settings' | '/tasks' | '/explorer' | '/assistant' | null {
-    const allowTasks = options?.allowTasks !== false
+    options?: { allowExplorer?: boolean }
+): '/home' | '/projects' | '/settings' | '/terminals' | '/explorer' | '/assistant' | null {
     const allowExplorer = options?.allowExplorer === true
     if (pathname === '/home' || pathname.startsWith('/home/')) return '/home'
-    if (allowTasks && (pathname === '/tasks' || pathname.startsWith('/tasks/'))) return '/tasks'
+    if (pathname === '/terminals' || pathname.startsWith('/terminals/')) return '/terminals'
+    if (pathname === '/tasks' || pathname.startsWith('/tasks/')) return '/terminals'
     if (allowExplorer && isExplorerAreaPath(pathname)) return '/explorer'
     if (isAssistantAreaPath(pathname)) return '/assistant'
     if (pathname === '/settings' || pathname.startsWith('/settings/')) return '/settings'
@@ -91,10 +93,10 @@ function resolveMainTabPath(
     return null
 }
 
-function readLastMainTabPath(allowTasks: boolean, allowExplorer: boolean): '/home' | '/projects' | '/settings' | '/tasks' | '/explorer' | '/assistant' {
+function readLastMainTabPath(allowExplorer: boolean): '/home' | '/projects' | '/settings' | '/terminals' | '/explorer' | '/assistant' {
     try {
         const stored = String(localStorage.getItem(LAST_MAIN_TAB_KEY) || '').trim()
-        const resolved = resolveMainTabPath(stored, { allowTasks, allowExplorer })
+        const resolved = resolveMainTabPath(stored, { allowExplorer })
         if (resolved) return resolved
     } catch {
         // Ignore storage read errors.
@@ -104,40 +106,53 @@ function readLastMainTabPath(allowTasks: boolean, allowExplorer: boolean): '/hom
 
 function normalizeRestorableRoute(
     pathname: string,
-    options?: { allowTasks?: boolean; allowExplorer?: boolean }
+    options?: { allowExplorer?: boolean }
 ): string | null {
     const trimmed = String(pathname || '').trim()
     if (!trimmed || trimmed === '/' || trimmed === '/quick-open') return null
 
-    const allowTasks = options?.allowTasks !== false
     const allowExplorer = options?.allowExplorer === true
 
     if (trimmed === '/home' || trimmed.startsWith('/home/')) return '/home'
     if (trimmed === '/projects' || trimmed.startsWith('/projects/')) return trimmed
     if (trimmed.startsWith('/folder-browse/')) return trimmed
     if (trimmed === '/settings' || trimmed.startsWith('/settings/')) return trimmed
-    if (allowTasks && (trimmed === '/tasks' || trimmed.startsWith('/tasks/'))) return trimmed
+    if (trimmed === '/terminals' || trimmed.startsWith('/terminals/')) return trimmed
+    if (trimmed === '/tasks' || trimmed.startsWith('/tasks/')) return trimmed.replace(/^\/tasks/, '/terminals')
     if (allowExplorer && (trimmed === '/explorer' || trimmed.startsWith('/explorer/'))) return trimmed
     if (trimmed === '/assistant' || trimmed.startsWith('/assistant/')) return trimmed
 
     return null
 }
 
-function readLastLaunchRoute(allowTasks: boolean, allowExplorer: boolean): string {
+function readLastLaunchRoute(allowExplorer: boolean): string {
     try {
         const stored = String(localStorage.getItem(LAST_APP_ROUTE_KEY) || '').trim()
-        const resolved = normalizeRestorableRoute(stored, { allowTasks, allowExplorer })
+        const resolved = normalizeRestorableRoute(stored, { allowExplorer })
         if (resolved) return resolved
     } catch {
         // Ignore storage read errors.
     }
 
-    return readLastMainTabPath(allowTasks, allowExplorer)
+    return readLastMainTabPath(allowExplorer)
+}
+
+function hasExternalExplorerLaunchAccess(pathname: string, search: string): boolean {
+    if (!isExplorerAreaPath(pathname)) return false
+    return new URLSearchParams(search).get('shellLaunch') === '1'
+}
+
+function readExternalExplorerLaunchAccess(): boolean {
+    try {
+        return sessionStorage.getItem(EXTERNAL_EXPLORER_ACCESS_KEY) === '1'
+    } catch {
+        return false
+    }
 }
 
 function LaunchRedirect() {
     const { settings } = useSettings()
-    return <Navigate to={readLastLaunchRoute(settings.tasksPageEnabled, settings.explorerTabEnabled)} replace />
+    return <Navigate to={readLastLaunchRoute(settings.explorerTabEnabled)} replace />
 }
 
 function PageLoader() {
@@ -148,9 +163,12 @@ function MainContent() {
     const mainRef = useRef<HTMLElement>(null!)
     const location = useLocation()
     const navigate = useNavigate()
+    const [externalExplorerAccess, setExternalExplorerAccess] = useState<boolean>(() => readExternalExplorerLaunchAccess())
     const isSettingsRoute = location.pathname.startsWith('/settings')
     const { isCollapsed } = useSidebar()
     const { settings } = useSettings()
+    const hasRouteLaunchAccess = hasExternalExplorerLaunchAccess(location.pathname, location.search)
+    const allowExplorerRoute = settings.explorerTabEnabled || externalExplorerAccess || hasRouteLaunchAccess
 
     const { targetY, currentY, animationFrame, isAnimating } = useSmoothScroll(mainRef, {
         ease: 0.12,
@@ -174,7 +192,6 @@ function MainContent() {
 
     useEffect(() => {
         const mainTabPath = resolveMainTabPath(location.pathname, {
-            allowTasks: settings.tasksPageEnabled,
             allowExplorer: settings.explorerTabEnabled
         })
         if (!mainTabPath) return
@@ -183,11 +200,10 @@ function MainContent() {
         } catch {
             // Ignore storage write errors.
         }
-    }, [location.pathname, settings.explorerTabEnabled, settings.tasksPageEnabled])
+    }, [location.pathname, settings.explorerTabEnabled])
 
     useEffect(() => {
         const restorableRoute = normalizeRestorableRoute(location.pathname, {
-            allowTasks: settings.tasksPageEnabled,
             allowExplorer: settings.explorerTabEnabled
         })
         if (!restorableRoute) return
@@ -197,19 +213,28 @@ function MainContent() {
         } catch {
             // Ignore storage write errors.
         }
-    }, [location.pathname, settings.explorerTabEnabled, settings.tasksPageEnabled])
+    }, [location.pathname, settings.explorerTabEnabled])
 
     useEffect(() => {
-        if (settings.tasksPageEnabled) return
+        if (!hasExternalExplorerLaunchAccess(location.pathname, location.search)) return
+        setExternalExplorerAccess(true)
+        try {
+            sessionStorage.setItem(EXTERNAL_EXPLORER_ACCESS_KEY, '1')
+        } catch {
+            // Ignore storage write errors.
+        }
+    }, [location.pathname, location.search])
+
+    useEffect(() => {
         if (!location.pathname.startsWith('/tasks')) return
-        navigate('/home', { replace: true })
-    }, [settings.tasksPageEnabled, location.pathname, navigate])
+        navigate(location.pathname.replace(/^\/tasks/, '/terminals') || '/terminals', { replace: true })
+    }, [location.pathname, navigate])
 
     useEffect(() => {
-        if (settings.explorerTabEnabled) return
+        if (allowExplorerRoute) return
         if (!isExplorerAreaPath(location.pathname)) return
         navigate('/home', { replace: true })
-    }, [settings.explorerTabEnabled, location.pathname, navigate])
+    }, [allowExplorerRoute, location.pathname, navigate])
 
     return (
         <main
@@ -224,16 +249,15 @@ function MainContent() {
                     <Route path="/projects" element={<FolderBrowse />} />
                     <Route
                         path="/explorer"
-                        element={settings.explorerTabEnabled ? <Explorer /> : <Navigate to="/home" replace />}
+                        element={allowExplorerRoute ? <Explorer /> : <Navigate to="/home" replace />}
                     />
                     <Route
                         path="/explorer/:folderPath"
-                        element={settings.explorerTabEnabled ? <Explorer /> : <Navigate to="/home" replace />}
+                        element={allowExplorerRoute ? <Explorer /> : <Navigate to="/home" replace />}
                     />
-                    <Route
-                        path="/tasks"
-                        element={settings.tasksPageEnabled ? <Tasks /> : <Navigate to="/home" replace />}
-                    />
+                    <Route path="/tasks" element={<Navigate to="/terminals" replace />} />
+                    <Route path="/tasks/*" element={<Navigate to="/terminals" replace />} />
+                    <Route path="/terminals" element={<Terminals />} />
                     <Route path="/projects/:projectPath" element={<ProjectDetails />} />
                     <Route path="/folder-browse/:folderPath" element={<FolderBrowse />} />
                     <Route path="/settings" element={<Settings />} />
@@ -327,7 +351,6 @@ function AppContent() {
     }, [settings.projectsFolder, settings.additionalFolders])
 
     useEffect(() => {
-        if (!settings.enableFolderIndexing || !settings.autoIndexOnStartup) return
         if (foldersToIndex.length === 0) return
 
         // Defer startup indexing so initial UI remains interactive.
@@ -340,7 +363,7 @@ function AppContent() {
         return () => {
             window.clearTimeout(timer)
         }
-    }, [settings.enableFolderIndexing, settings.autoIndexOnStartup, foldersToIndex])
+    }, [foldersToIndex])
 
     if (location.pathname === '/quick-open') {
         return (
@@ -361,6 +384,7 @@ function AppContent() {
             </SidebarProvider>
             <UpdatePromptCenter />
             <LinkHoverStatus />
+            <GitCloneProgressToast />
         </div>
     )
 }

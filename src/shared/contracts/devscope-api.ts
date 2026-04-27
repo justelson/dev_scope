@@ -1,18 +1,29 @@
-import type { SharedSystemMetrics } from '../system-metrics'
-import type { FullReport, ReadinessReport, SystemHealth, ToolingReport } from '../../main/inspectors/types'
 import type {
     AssistantApprovalResponseInput,
     AssistantAccountOverviewPayload,
+    AssistantApprovePendingPlaygroundLabRequestInput,
+    AssistantAttachSessionToPlaygroundLabInput,
     AssistantBootstrapPayload,
     AssistantClearLogsInput,
     AssistantConnectOptions,
+    AssistantCreatePlaygroundLabInput,
+    AssistantCreateSessionInput,
+    AssistantDeclinePendingPlaygroundLabRequestInput,
+    AssistantDeletePlaygroundLabInput,
     AssistantDeleteMessageInput,
     AssistantEventStreamPayload,
+    AssistantGetSessionTurnUsageInput,
     AssistantModelInfo,
+    AssistantPlaygroundResultPayload,
     AssistantPersistClipboardImageInput,
     AssistantRuntimeStatus,
     AssistantSendPromptOptions,
+    AssistantSelectThreadInput,
+    AssistantSetPlaygroundRootInput,
+    AssistantSessionTurnUsageResultPayload,
     AssistantSnapshot,
+    AssistantTranscribeAudioInput,
+    AssistantTranscriptionModelState,
     AssistantUserInputResponseInput
 } from '../assistant/contracts'
 import type {
@@ -39,14 +50,15 @@ import type {
     DevScopeFileItem,
     DevScopeFileTreeNode,
     DevScopeFolderItem,
+    DevScopeIndexedPathSearchInput,
+    DevScopeIndexedPathSearchResult,
     DevScopeIndexedProject,
     DevScopeInstalledIde,
     DevScopePathInfo,
     DevScopeProcessInfo,
     DevScopeProject,
     DevScopeProjectDetails,
-    DevScopePythonPreviewEvent,
-    DevScopeRunningApp
+    DevScopePythonPreviewEvent
 } from './devscope-project-contracts'
 
 export * from './devscope-git-contracts'
@@ -58,7 +70,7 @@ export type DevScopeResult<T = Record<string, unknown>> = DevScopeOk<T> | DevSco
 
 export type DevScopePreviewTerminalEvent = {
     sessionId: string
-    type: 'started' | 'output' | 'exit' | 'error'
+    type: 'started' | 'output' | 'exit' | 'error' | 'title'
     data?: string
     message?: string
     shell?: string
@@ -67,6 +79,34 @@ export type DevScopePreviewTerminalEvent = {
     groupKey?: string
     status?: 'running' | 'exited' | 'error'
     exitCode?: number
+}
+
+export const GIT_CLONE_PROGRESS_CHANNEL = 'devscope:gitClone:progress'
+
+export type DevScopeGitCloneStatus = 'running' | 'success' | 'error'
+
+export type DevScopeGitCloneInput = {
+    cloneId: string
+    repoUrl: string
+    destinationDirectory: string
+    targetName?: string
+}
+
+export type DevScopeGitCloneProgressEvent = {
+    cloneId: string
+    status: DevScopeGitCloneStatus
+    message: string
+    repoName?: string
+    clonePath?: string
+    phase?: string
+    percent?: number
+    error?: string
+}
+
+export type DevScopeGitCloneResult = {
+    cloneId: string
+    repoName: string
+    clonePath: string
 }
 
 export type DevScopePreviewTerminalSessionSummary = {
@@ -80,46 +120,6 @@ export type DevScopePreviewTerminalSessionSummary = {
     lastActivityAt: number
     exitCode?: number | null
     recentOutput?: string
-}
-
-export type DevScopeTaskType =
-    | 'git.commit'
-    | 'git.push'
-    | 'git.pr'
-    | 'git.fetch'
-    | 'git.pull'
-    | 'git.checkout'
-    | 'git.init'
-    | 'git.remote'
-    | 'git.tag'
-    | 'git.stash'
-    | 'project.dependencies.install'
-
-export type DevScopeTaskStatus = 'running' | 'success' | 'failed'
-
-export type DevScopeTaskLogEntry = {
-    at: number
-    level: 'info' | 'error'
-    message: string
-}
-
-export type DevScopeTask = {
-    id: string
-    type: DevScopeTaskType
-    title: string
-    status: DevScopeTaskStatus
-    projectPath?: string
-    startedAt: number
-    updatedAt: number
-    endedAt?: number
-    metadata?: Record<string, string | number | boolean>
-    logs: DevScopeTaskLogEntry[]
-}
-
-export type DevScopeTaskEvent = {
-    type: 'upsert' | 'remove'
-    task?: DevScopeTask
-    taskId?: string
 }
 
 export type DevScopeReleaseChannel = 'alpha' | 'beta' | 'stable'
@@ -161,14 +161,6 @@ export type DevScopeUpdateActionResult = {
     state: DevScopeUpdateState
 }
 
-export interface DevScopeSystemApi {
-    bootstrap: () => Promise<DevScopeResult<{ controlBuffer?: ArrayBuffer; metricsBuffer?: ArrayBuffer }>>
-    subscribe: (options?: { intervalMs?: number }) => Promise<DevScopeResult>
-    unsubscribe: () => Promise<DevScopeResult>
-    readSharedMetrics: () => SharedSystemMetrics | null
-    readMetrics: () => Promise<DevScopeResult>
-}
-
 export interface DevScopeWindowApi {
     minimize: () => void
     maximize: () => void
@@ -199,43 +191,46 @@ export interface DevScopeAssistantApi {
     getSnapshot: () => Promise<AssistantSnapshot>
     getStatus: () => Promise<AssistantRuntimeStatus>
     getAccountOverview: () => Promise<DevScopeResult<AssistantAccountOverviewPayload>>
+    getSessionTurnUsage: (input?: AssistantGetSessionTurnUsageInput) => Promise<DevScopeResult<AssistantSessionTurnUsageResultPayload>>
     listModels: (forceRefresh?: boolean) => Promise<DevScopeResult<{ models: AssistantModelInfo[] }>>
     connect: (options?: AssistantConnectOptions) => Promise<DevScopeResult<{ threadId: string }>>
     disconnect: (sessionId?: string) => Promise<DevScopeResult>
-    createSession: (title?: string, projectPath?: string) => Promise<DevScopeResult<{ sessionId: string }>>
-    selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot: AssistantSnapshot }>>
+    createSession: (input?: AssistantCreateSessionInput) => Promise<DevScopeResult<{ sessionId: string }>>
+    selectSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot?: AssistantSnapshot }>>
+    selectThread: (input: AssistantSelectThreadInput) => Promise<DevScopeResult<{ sessionId: string; threadId: string; snapshot?: AssistantSnapshot }>>
+    hydrateSession: (sessionId: string) => Promise<DevScopeResult<{ sessionId: string; snapshot: AssistantSnapshot }>>
     renameSession: (sessionId: string, title: string) => Promise<DevScopeResult>
     archiveSession: (sessionId: string, archived?: boolean) => Promise<DevScopeResult>
     deleteSession: (sessionId: string) => Promise<DevScopeResult>
     deleteMessage: (input: AssistantDeleteMessageInput) => Promise<DevScopeResult>
     clearLogs: (input?: AssistantClearLogsInput) => Promise<DevScopeResult>
     setSessionProjectPath: (sessionId: string, projectPath: string | null) => Promise<DevScopeResult>
+    setPlaygroundRoot: (input: AssistantSetPlaygroundRootInput) => Promise<DevScopeResult<AssistantPlaygroundResultPayload>>
+    createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) => Promise<DevScopeResult<{ labId: string; sessionId?: string | null } & AssistantPlaygroundResultPayload>>
+    deletePlaygroundLab: (input: AssistantDeletePlaygroundLabInput) => Promise<DevScopeResult<AssistantPlaygroundResultPayload>>
+    attachSessionToPlaygroundLab: (input: AssistantAttachSessionToPlaygroundLabInput) => Promise<DevScopeResult<AssistantPlaygroundResultPayload>>
+    approvePendingPlaygroundLabRequest: (input: AssistantApprovePendingPlaygroundLabRequestInput) => Promise<DevScopeResult<{ sessionId: string; labId: string } & AssistantPlaygroundResultPayload>>
+    declinePendingPlaygroundLabRequest: (input: AssistantDeclinePendingPlaygroundLabRequestInput) => Promise<DevScopeResult>
+    getPathForFile: (file: File) => string
     persistClipboardImage: (input: AssistantPersistClipboardImageInput) => Promise<DevScopeResult<{ path: string }>>
+    resolveClipboardAttachment: (input: { reference: string }) => Promise<DevScopeResult<{ path: string | null }>>
     newThread: (sessionId?: string) => Promise<DevScopeResult<{ threadId: string }>>
     sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) =>
         Promise<DevScopeResult<{ sessionId: string; threadId: string; turnId: string }>>
     interruptTurn: (turnId?: string, sessionId?: string) => Promise<DevScopeResult>
     respondApproval: (input: AssistantApprovalResponseInput) => Promise<DevScopeResult>
     respondUserInput: (input: AssistantUserInputResponseInput) => Promise<DevScopeResult>
+    getTranscriptionModelState: () => Promise<DevScopeResult<{ state: AssistantTranscriptionModelState }>>
+    downloadTranscriptionModel: () => Promise<DevScopeResult<{ state: AssistantTranscriptionModelState }>>
+    transcribeAudioWithLocalModel: (input: AssistantTranscribeAudioInput) => Promise<DevScopeResult<{ text: string }>>
     onEvent: (callback: (event: AssistantEventStreamPayload) => void) => () => void
 }
 
 export interface DevScopeApi {
-    // System
-    getSystemOverview: () => Promise<SystemHealth>
-    getDetailedSystemStats: () => Promise<Record<string, unknown>>
-    getDeveloperTooling: () => Promise<ToolingReport>
-    getReadinessReport: () => Promise<ReadinessReport>
-    refreshAll: () => Promise<FullReport>
-    system: DevScopeSystemApi
-
-    // Capabilities disabled in Air
-    getAIRuntimeStatus: () => Promise<DevScopeResult<{ status: AssistantRuntimeStatus }>>
-    getAIAgents: () => Promise<DevScopeResult<{ agents: unknown[] }>>
-
     // Settings + AI
     setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) => Promise<DevScopeResult>
     getStartupSettings: () => Promise<DevScopeResult>
+    listInstalledPackageRuntimes: () => Promise<DevScopeResult<{ runtimes: DevScopeInstalledPackageRuntime[] }>>
     getAiDebugLogs: (limit?: number) => Promise<DevScopeResult>
     clearAiDebugLogs: () => Promise<DevScopeResult>
     testGroqConnection: (apiKey: string) => Promise<DevScopeResult>
@@ -275,7 +270,13 @@ export interface DevScopeApi {
     getProjectDetails: (projectPath: string) => Promise<DevScopeResult<{ project: DevScopeProjectDetails }>>
     getFileTree: (
         projectPath: string,
-        options?: { showHidden?: boolean; maxDepth?: number; rootPath?: string }
+        options?: {
+            showHidden?: boolean
+            maxDepth?: number
+            rootPath?: string
+            includeGitStatus?: boolean
+            includeFileSize?: boolean
+        }
     ) => Promise<DevScopeResult<{ tree: DevScopeFileTreeNode[] }>>
     getGitHistory: (
         projectPath: string,
@@ -393,6 +394,8 @@ export interface DevScopeApi {
     initGitRepo: (projectPath: string, branchName: string, createGitignore: boolean, gitignoreTemplate?: string) => Promise<DevScopeResult>
     createInitialCommit: (projectPath: string, message: string) => Promise<DevScopeResult>
     addRemoteOrigin: (projectPath: string, remoteUrl: string) => Promise<DevScopeResult>
+    cloneGitRepository: (input: DevScopeGitCloneInput) => Promise<DevScopeResult<DevScopeGitCloneResult>>
+    onGitCloneProgress: (callback: (event: DevScopeGitCloneProgressEvent) => void) => () => void
     getGitignoreTemplates: () => Promise<DevScopeResult<{ templates: string[] }>>
     generateGitignoreContent: (template: string) => Promise<DevScopeResult<{ content: string }>>
     getGitignorePatterns: () => Promise<DevScopeResult<{ patterns: Array<{ id: string; label: string; description: string; category: string; patterns: string[] }> }>>
@@ -421,11 +424,10 @@ export interface DevScopeApi {
     listPreviewTerminalSessions: (input?: { targetPath?: string }) =>
         Promise<DevScopeResult<{ groupKey?: string; cwd?: string; sessions: DevScopePreviewTerminalSessionSummary[] }>>
     writePreviewTerminal: (input: { sessionId: string; data: string }) => Promise<DevScopeResult>
+    setPreviewTerminalTitle: (input: { sessionId: string; title: string }) => Promise<DevScopeResult<{ title: string }>>
     resizePreviewTerminal: (input: { sessionId: string; cols: number; rows: number }) => Promise<DevScopeResult>
     closePreviewTerminal: (sessionId: string) => Promise<DevScopeResult<{ closed: boolean }>>
     onPreviewTerminalEvent: (callback: (event: DevScopePreviewTerminalEvent) => void) => () => void
-    listActiveTasks: (projectPath?: string) => Promise<DevScopeResult<{ tasks: DevScopeTask[] }>>
-    onTaskEvent: (callback: (event: DevScopeTaskEvent) => void) => () => void
     openFile: (filePath: string) => Promise<DevScopeResult>
     openWith: (filePath: string) => Promise<DevScopeResult>
     createFileSystemItem: (
@@ -439,9 +441,13 @@ export interface DevScopeApi {
     moveFileSystemItem: (sourcePath: string, destinationDirectory: string) => Promise<DevScopeResult<{ path: string; name: string }>>
     getProjectSessions: (projectPath: string) => Promise<DevScopeResult>
     getProjectProcesses: (projectPath: string) => Promise<DevScopeResult<{ isLive: boolean; processes: DevScopeProcessInfo[]; activePorts: number[] }>>
-    getRunningApps: (limit?: number) => Promise<DevScopeResult<{ apps: DevScopeRunningApp[] }>>
-    getActivePorts: () => Promise<DevScopeResult<{ ports: number[] }>>
-    indexAllFolders: (folders: string[]) => Promise<DevScopeResult<{ projects: DevScopeIndexedProject[]; indexedCount: number; indexedFolders: number; scannedFolderPaths: string[]; errors?: Array<{ folder: string; error: string }> }>>
+    indexAllFolders: (
+        folders: string[],
+        options?: { forceRefresh?: boolean }
+    ) => Promise<DevScopeResult<{ projects: DevScopeIndexedProject[]; indexedCount: number; indexedFolders: number; indexedFiles: number; scannedFolderPaths: string[]; errors?: Array<{ folder: string; error: string }> }>>
+    searchIndexedPaths: (
+        input: DevScopeIndexedPathSearchInput
+    ) => Promise<DevScopeResult<DevScopeIndexedPathSearchResult>>
     getFileSystemRoots: () => Promise<DevScopeResult<{ roots: string[] }>>
 
     terminal: DevScopeTerminalApi
@@ -449,4 +455,15 @@ export interface DevScopeApi {
     agentscope: DevScopeAgentScopeApi
     updates: DevScopeUpdatesApi
     window: DevScopeWindowApi
+}
+
+export type DevScopePackageRuntimeId = 'node' | 'npm' | 'pnpm' | 'yarn' | 'bun'
+
+export interface DevScopeInstalledPackageRuntime {
+    id: DevScopePackageRuntimeId
+    name: string
+    command: string
+    installed: boolean
+    version?: string
+    path?: string
 }

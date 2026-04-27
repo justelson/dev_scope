@@ -115,7 +115,6 @@ export function useProjectFileTreeActions({
         handleToggleFolder,
         handleToggleAllFolders
     } = useProjectFileTreeNavigationActions({
-        fileSearch,
         fileTreeFullyLoaded,
         projectRootPath,
         refreshFileTree,
@@ -460,14 +459,6 @@ export function useProjectFileTreeActions({
         setFileTree,
         showToast
     ])
-
-    useEffect(() => {
-        if (activeTab !== 'files' || loadingFiles) return
-        if (!fileSearch.trim()) return
-        if (fileTreeFullyLoaded) return
-        void refreshFileTree({ deep: true })
-    }, [activeTab, fileSearch, fileTreeFullyLoaded, loadingFiles, refreshFileTree])
-
     return {
         refreshVisibleFileTree,
         handleToggleFolder,

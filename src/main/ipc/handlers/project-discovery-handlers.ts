@@ -84,11 +84,38 @@ export async function handleScanProjects(
     return result
 }
 
-export async function handleIndexAllFolders(_event: Electron.IpcMainInvokeEvent, folders: string[]) {
-    log.info('IPC: indexAllFolders', folders)
-    const result = await devscopeCore.projects.indexAllFolders(folders)
+export async function handleIndexAllFolders(
+    _event: Electron.IpcMainInvokeEvent,
+    folders: string[],
+    options?: { forceRefresh?: boolean }
+) {
+    log.info('IPC: indexAllFolders', { folders, forceRefresh: Boolean(options?.forceRefresh) })
+    const result = await devscopeCore.projects.indexAllFolders(folders, options)
     log.info(`Indexed ${result.indexedCount} projects from ${folders.length} folders (max depth: unlimited)`)
     return result
+}
+
+export async function handleSearchIndexedPaths(
+    _event: Electron.IpcMainInvokeEvent,
+    input: {
+        scopePath?: string
+        roots?: string[]
+        term?: string
+        extensionFilters?: string[]
+        limit?: number
+        includeFiles?: boolean
+        includeDirectories?: boolean
+        showHidden?: boolean
+    }
+) {
+    log.info('IPC: searchIndexedPaths', {
+        scopePath: input?.scopePath,
+        roots: input?.roots,
+        term: input?.term,
+        limit: input?.limit
+    })
+    const result = await devscopeCore.projects.searchIndexedPaths(input)
+    return { success: true, ...result }
 }
 
 export async function handleOpenInExplorer(_event: Electron.IpcMainInvokeEvent, path: string) {

@@ -1,8 +1,7 @@
-import { useDeferredValue, useMemo } from 'react'
-import { parseFileSearchQuery } from '@/lib/utils'
-import { buildFileSearchIndex, searchFileIndex } from '@/lib/fileSearchIndex'
+import { useMemo } from 'react'
 import { buildDirectoryChildInfoMap, getAllFolderPaths } from './fileTreeUtils'
 import type { FileTreeNode } from './types'
+import { useIndexedProjectFileSearch } from './useIndexedProjectFileSearch'
 
 export interface FlatFileItem {
     node: FileTreeNode
@@ -16,6 +15,7 @@ export interface FlatFileItem {
 }
 
 interface UseProjectFileViewParams {
+    projectRootPath: string
     fileTree: FileTreeNode[]
     gitStatusMap: Record<string, FileTreeNode['gitStatus']>
     showHidden: boolean
@@ -50,6 +50,7 @@ function mergeGitStatus(current: GitVisualStatus | undefined, incoming: GitVisua
 }
 
 export function useProjectFileView({
+    projectRootPath,
     fileTree,
     gitStatusMap,
     showHidden,
@@ -60,6 +61,22 @@ export function useProjectFileView({
     previewableExtensions,
     previewableFileNames
 }: UseProjectFileViewParams) {
+    const {
+        hasFileSearch,
+        parsedFileSearch,
+        indexedSearchTree,
+        indexedSearchExpandedFolders
+    } = useIndexedProjectFileSearch({
+        projectRootPath,
+        fileSearch,
+        showHidden
+    })
+
+    const treeSource = useMemo(
+        () => hasFileSearch ? (indexedSearchTree || []) : fileTree,
+        [fileTree, hasFileSearch, indexedSearchTree]
+    )
+
     const treeWithGitStatus = useMemo(() => {
         const directStatusMap = new Map<string, GitVisualStatus>()
         const folderStatusMap = new Map<string, GitVisualStatus>()
@@ -95,8 +112,8 @@ export function useProjectFileView({
             }
         }
 
-        return fileTree.map(decorateNode)
-    }, [fileTree, gitStatusMap])
+        return treeSource.map(decorateNode)
+    }, [gitStatusMap, treeSource])
 
     const changedFiles = useMemo(() => {
         const byPath = new Map<string, FileTreeNode>()
@@ -124,43 +141,21 @@ export function useProjectFileView({
     }, [gitStatusMap])
 
     const allFolderPathsSet = useMemo(() => new Set(getAllFolderPaths(treeWithGitStatus)), [treeWithGitStatus])
-    const deferredFileSearch = useDeferredValue(fileSearch)
-    const parsedFileSearch = useMemo(() => parseFileSearchQuery(deferredFileSearch), [deferredFileSearch])
-    const hasFileSearch = deferredFileSearch.trim().length > 0
-    const fileSearchIndex = useMemo(() => {
-        if (!hasFileSearch) return null
-        return buildFileSearchIndex(treeWithGitStatus)
-    }, [hasFileSearch, treeWithGitStatus])
     const folderChildInfoMap = useMemo(() => buildDirectoryChildInfoMap(treeWithGitStatus), [treeWithGitStatus])
-
-    const indexedSearch = useMemo(() => {
-        if (!hasFileSearch || !fileSearchIndex) return null
-        return searchFileIndex(fileSearchIndex, parsedFileSearch, {
-            showHidden,
-            includeDirectories: true
-        })
-    }, [hasFileSearch, fileSearchIndex, parsedFileSearch, showHidden])
-
-    const searchExpandedFolders = useMemo(() => {
-        if (!indexedSearch) return new Set<string>()
-        return indexedSearch.expandedFolderPathSet
-    }, [indexedSearch])
 
     const effectiveExpandedFolders = useMemo(() => {
         if (hasFileSearch) {
-            return new Set([...expandedFolders, ...searchExpandedFolders])
+            return new Set([...expandedFolders, ...indexedSearchExpandedFolders])
         }
         return expandedFolders
-    }, [expandedFolders, searchExpandedFolders, hasFileSearch])
+    }, [expandedFolders, indexedSearchExpandedFolders, hasFileSearch])
 
     const visibleFileList = useMemo((): FlatFileItem[] => {
         const result: FlatFileItem[] = []
-        const searchVisiblePaths = indexedSearch?.visiblePathSet
 
         const processNodes = (nodes: FileTreeNode[], depth: number) => {
             const filtered = nodes
                 .filter((node) => showHidden || !node.isHidden)
-                .filter((node) => !hasFileSearch || Boolean(searchVisiblePaths?.has(node.path)))
                 .sort((a, b) => {
                     if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
                     if (sortBy === 'name') return sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
@@ -190,8 +185,6 @@ export function useProjectFileView({
     }, [
         treeWithGitStatus,
         showHidden,
-        hasFileSearch,
-        indexedSearch,
         sortBy,
         sortAsc,
         effectiveExpandedFolders,

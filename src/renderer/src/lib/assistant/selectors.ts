@@ -22,6 +22,14 @@ export function getVisibleAssistantSessions(snapshot: AssistantSnapshot, include
     return snapshot.sessions.filter((session) => includeArchived || !session.archived)
 }
 
+export function getAssistantSessionsByMode(
+    snapshot: AssistantSnapshot,
+    mode: AssistantSession['mode'],
+    includeArchived = false
+): AssistantSession[] {
+    return snapshot.sessions.filter((session) => session.mode === mode && (includeArchived || !session.archived))
+}
+
 export function getAssistantPendingApprovals(thread: AssistantThread | null): AssistantPendingApproval[] {
     if (!thread) return []
     return thread.pendingApprovals.filter((approval) => approval.status === 'pending')
@@ -146,6 +154,36 @@ export function formatAssistantRelativeTime(value: string): string {
     const days = Math.floor(hours / 24)
     if (days < 7) return `${days}d`
     return new Date(timestamp).toLocaleDateString()
+}
+
+export function isAssistantSessionBackgroundActive(session: AssistantSession, activeSessionId: string | null): boolean {
+    const activeThread = getActiveAssistantThread(session)
+    const phase = getAssistantThreadPhase(activeThread)
+
+    if (phase.key === 'starting' || phase.key === 'running' || phase.key === 'waiting' || phase.key === 'waiting-approval' || phase.key === 'waiting-input') {
+        return true
+    }
+
+    if (
+        session.id !== activeSessionId
+        && activeThread?.latestTurn?.state === 'completed'
+        && activeThread.lastSeenCompletedTurnId !== activeThread.latestTurn.id
+    ) {
+        return true
+    }
+
+    return false
+}
+
+export function getAssistantBackgroundActivitySessions(
+    snapshot: AssistantSnapshot,
+    mode: AssistantSession['mode'],
+    activeSessionId: string | null
+): AssistantSession[] {
+    return snapshot.sessions
+        .filter((session) => session.mode === mode && !session.archived)
+        .filter((session) => isAssistantSessionBackgroundActive(session, activeSessionId))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id))
 }
 
 export function formatAssistantDateTime(value: string): string {

@@ -10,6 +10,9 @@ import { getProjectTypeById, type Project } from './types'
 
 export function FolderBrowseOverlays(input: {
     closePreview: () => void
+    cloneRepoErrorMessage: string | null
+    cloneRepoModalOpen: boolean
+    cloneRepoUrl: string
     confirmDeleteTarget: () => Promise<void>
     createDraft: string
     createErrorMessage: string | null
@@ -40,6 +43,9 @@ export function FolderBrowseOverlays(input: {
     setCreateDraft: (value: string) => void
     setCreateErrorMessage: (value: string | null) => void
     setCreateTarget: (value: null) => void
+    setCloneRepoErrorMessage: (value: string | null) => void
+    setCloneRepoModalOpen: (value: boolean) => void
+    setCloneRepoUrl: (value: string) => void
     setDeleteTarget: (value: FileSystemClipboardItem | null) => void
     setRenameDraft: (value: string) => void
     setRenameErrorMessage: (value: string | null) => void
@@ -56,12 +62,23 @@ export function FolderBrowseOverlays(input: {
         modalTypes: any[]
         setStatsModal: (value: any) => void
     }
+    submitCloneRepo: () => Promise<void>
     submitCreateTarget: (nextName?: string) => Promise<void>
     submitRenameTarget: () => Promise<void>
-    toast: { message: string; visible: boolean; tone?: 'success' | 'error' } | null
+    toast: {
+        message: string
+        visible: boolean
+        tone?: 'success' | 'error' | 'info'
+        detail?: string
+        progress?: number
+        persistent?: boolean
+    } | null
 }) {
     const {
         closePreview,
+        cloneRepoErrorMessage,
+        cloneRepoModalOpen,
+        cloneRepoUrl,
         confirmDeleteTarget,
         createDraft,
         createErrorMessage,
@@ -88,12 +105,16 @@ export function FolderBrowseOverlays(input: {
         setCreateDraft,
         setCreateErrorMessage,
         setCreateTarget,
+        setCloneRepoErrorMessage,
+        setCloneRepoModalOpen,
+        setCloneRepoUrl,
         setDeleteTarget,
         setRenameDraft,
         setRenameErrorMessage,
         setRenameExtensionSuffix,
         setRenameTarget,
         statsModalController,
+        submitCloneRepo,
         submitCreateTarget,
         submitRenameTarget,
         toast
@@ -145,6 +166,26 @@ export function FolderBrowseOverlays(input: {
                     setCreateTarget(null)
                     setCreateErrorMessage(null)
                 }}
+            />
+            <PromptModal
+                isOpen={cloneRepoModalOpen}
+                title="Clone Repository"
+                message={`Clone into: ${decodedPath}`}
+                value={cloneRepoUrl}
+                onChange={(value) => {
+                    setCloneRepoUrl(value)
+                    if (cloneRepoErrorMessage) setCloneRepoErrorMessage(null)
+                }}
+                onConfirm={() => { void submitCloneRepo() }}
+                onCancel={() => {
+                    setCloneRepoModalOpen(false)
+                    setCloneRepoUrl('')
+                    setCloneRepoErrorMessage(null)
+                }}
+                confirmLabel="Clone"
+                placeholder="https://github.com/owner/repo.git"
+                maxLength={800}
+                errorMessage={cloneRepoErrorMessage}
             />
             <PromptModal
                 isOpen={Boolean(createTarget && createTarget.type === 'directory')}
@@ -207,11 +248,31 @@ export function FolderBrowseOverlays(input: {
                         'fixed bottom-4 right-4 z-[120] max-w-sm rounded-xl px-4 py-3 text-sm shadow-lg backdrop-blur-md transition-all duration-300',
                         toast.tone === 'error'
                             ? 'border border-red-500/30 bg-red-500/10 text-red-200'
+                            : toast.tone === 'info'
+                                ? 'border border-sky-500/25 bg-sky-500/10 text-sky-100'
                             : 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
                         toast.visible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0'
                     )}
                 >
-                    {toast.message}
+                    <div className="font-medium">{toast.message}</div>
+                    {toast.detail && (
+                        <div className="mt-1 line-clamp-2 break-words text-xs opacity-75">{toast.detail}</div>
+                    )}
+                    {typeof toast.progress === 'number' && (
+                        <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
+                            <div
+                                className={cn(
+                                    'h-full rounded-full transition-[width] duration-300',
+                                    toast.tone === 'error'
+                                        ? 'bg-red-300'
+                                        : toast.tone === 'info'
+                                            ? 'bg-sky-300'
+                                            : 'bg-emerald-300'
+                                )}
+                                style={{ width: `${Math.max(0, Math.min(100, toast.progress))}%` }}
+                            />
+                        </div>
+                    )}
                 </div>
             )}
         </>

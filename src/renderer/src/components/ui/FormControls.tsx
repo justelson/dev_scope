@@ -2,6 +2,7 @@
  * Custom Form Controls - Styled checkboxes, radio buttons, and dropdowns
  */
 
+import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -208,44 +209,113 @@ export function Select({
     size = 'md',
     className 
 }: SelectProps) {
+    const [isOpen, setIsOpen] = useState(false)
+    const containerRef = useRef<HTMLDivElement>(null)
     const sizeClasses = {
         sm: 'px-3 py-1.5 text-xs',
         md: 'px-3 py-2 text-sm',
         lg: 'px-4 py-2.5 text-base'
     }
+    const menuSizeClasses = {
+        sm: 'px-3 py-2 text-xs',
+        md: 'px-3 py-2.5 text-sm',
+        lg: 'px-4 py-3 text-base'
+    }
+    const selectedOption = options.find((option) => option.value === value)
+
+    useEffect(() => {
+        const handlePointerDown = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false)
+            }
+        }
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsOpen(false)
+            }
+        }
+
+        document.addEventListener('mousedown', handlePointerDown)
+        document.addEventListener('keydown', handleEscape)
+
+        return () => {
+            document.removeEventListener('mousedown', handlePointerDown)
+            document.removeEventListener('keydown', handleEscape)
+        }
+    }, [])
 
     return (
-        <div className={cn("relative", className)}>
-            <select
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
+        <div ref={containerRef} className={cn("relative", className)}>
+            <button
+                type="button"
+                onClick={() => {
+                    if (!disabled) {
+                        setIsOpen((current) => !current)
+                    }
+                }}
                 disabled={disabled}
                 className={cn(
                     sizeClasses[size],
-                    "w-full appearance-none rounded-lg",
+                    "w-full rounded-lg",
                     "bg-white/5 border-2 border-white/10",
-                    "text-white font-medium",
+                    "text-white font-medium text-left",
                     "transition-all duration-200",
                     "hover:bg-white/10 hover:border-white/20",
                     "focus:outline-none focus:border-[var(--accent-primary)] focus:bg-white/10",
                     "focus:shadow-lg focus:shadow-[var(--accent-primary)]/10",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
-                    "pr-10" // Space for chevron
+                    "pr-10"
                 )}
             >
-                {placeholder && !value && (
-                    <option value="" disabled>{placeholder}</option>
-                )}
-                {options.map(option => (
-                    <option key={option.value} value={option.value} className="bg-[#18181b] text-white">
-                        {option.label}
-                    </option>
-                ))}
-            </select>
+                <span className={cn("block truncate", !selectedOption && "text-white/35")}>
+                    {selectedOption?.label || placeholder}
+                </span>
+            </button>
             <ChevronDown 
                 size={16} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" 
+                className={cn(
+                    "absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none transition-transform",
+                    isOpen && "rotate-180 text-white/60"
+                )}
             />
+            {isOpen && !disabled ? (
+                <div className="absolute left-0 top-full z-50 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-sparkle-card shadow-2xl shadow-black/60">
+                    <div className="max-h-72 overflow-y-auto py-1.5 custom-scrollbar">
+                        {options.length > 0 ? (
+                            options.map((option) => {
+                                const isSelected = option.value === value
+                                return (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => {
+                                            onChange(option.value)
+                                            setIsOpen(false)
+                                        }}
+                                        className={cn(
+                                            "flex w-full items-center gap-2 text-left transition-colors duration-100",
+                                            menuSizeClasses[size],
+                                            isSelected
+                                                ? "bg-[var(--accent-primary)]/14 text-white"
+                                                : "text-white/72 hover:bg-white/[0.05] hover:text-white"
+                                        )}
+                                    >
+                                        <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                                        {isSelected ? (
+                                            <Check size={14} className="shrink-0 text-[var(--accent-primary)]" />
+                                        ) : null}
+                                    </button>
+                                )
+                            })
+                        ) : (
+                            <div className={cn(menuSizeClasses[size], "text-white/35")}>
+                                {placeholder}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : null}
         </div>
     )
 }

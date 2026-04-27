@@ -9,6 +9,10 @@ function shouldKeepHydrated(thread: AssistantThread): boolean {
     return thread.state === 'starting' || thread.state === 'running' || thread.state === 'waiting'
 }
 
+export function shouldKeepHydratedThread(thread: AssistantThread): boolean {
+    return shouldKeepHydrated(thread)
+}
+
 export function summarizeThread(thread: AssistantThread): AssistantThread {
     return {
         ...thread,
@@ -40,20 +44,33 @@ export function hydrateFocusedSessionSnapshot(
     sessionId: string,
     details: AssistantHydratedThreadData | null
 ): AssistantSnapshot {
-    const next = trimSnapshotToFocusedSession(snapshot, sessionId)
-    if (!details) return next
+    const detailsByThreadId = new Map<string, AssistantHydratedThreadData>()
+    const session = snapshot.sessions.find((entry) => entry.id === sessionId)
+    if (details && session?.activeThreadId) {
+        detailsByThreadId.set(session.activeThreadId, details)
+    }
+    return hydrateSnapshotThreads(snapshot, sessionId, detailsByThreadId)
+}
 
-    const session = next.sessions.find((entry) => entry.id === sessionId)
-    if (!session?.activeThreadId) return next
+export function hydrateSnapshotThreads(
+    snapshot: AssistantSnapshot,
+    focusedSessionId: string | null,
+    detailsByThreadId: Map<string, AssistantHydratedThreadData>
+): AssistantSnapshot {
+    const next = trimSnapshotToFocusedSession(snapshot, focusedSessionId)
+    if (detailsByThreadId.size === 0) return next
 
-    const thread = session.threads.find((entry) => entry.id === session.activeThreadId)
-    if (!thread) return next
-
-    thread.activePlan = details.activePlan
-    thread.messages = details.messages
-    thread.proposedPlans = details.proposedPlans
-    thread.activities = details.activities
-    thread.pendingApprovals = details.pendingApprovals
-    thread.pendingUserInputs = details.pendingUserInputs
+    for (const session of next.sessions) {
+        for (const thread of session.threads) {
+            const details = detailsByThreadId.get(thread.id)
+            if (!details) continue
+            thread.activePlan = details.activePlan
+            thread.messages = details.messages
+            thread.proposedPlans = details.proposedPlans
+            thread.activities = details.activities
+            thread.pendingApprovals = details.pendingApprovals
+            thread.pendingUserInputs = details.pendingUserInputs
+        }
+    }
     return next
 }

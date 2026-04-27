@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, GitBranch, GitPullRequest, Layers3, RefreshCw, Sparkles, UserRound } from 'lucide-react'
+import { ArrowLeft, GitBranch, GitPullRequest, RefreshCw, Sparkles, UserRound } from 'lucide-react'
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/FormControls'
 import { useSettings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { SettingsBetaBadge } from './SettingsBetaBadge'
 
-type GitSettingsTab = 'defaults' | 'workflow' | 'pull-requests' | 'identity' | 'related'
+type GitSettingsTab = 'pull-requests' | 'workflow' | 'defaults' | 'identity'
 
-const TABS: Array<{ id: GitSettingsTab; label: string; icon: React.ReactNode }> = [
-    { id: 'pull-requests', label: 'Pull Requests', icon: <GitPullRequest size={14} className="text-violet-300" /> },
-    { id: 'workflow', label: 'Workflow', icon: <RefreshCw size={14} className="text-sky-300" /> },
-    { id: 'defaults', label: 'Defaults', icon: <GitBranch size={14} className="text-orange-300" /> },
-    { id: 'identity', label: 'Identity', icon: <UserRound size={14} className="text-emerald-300" /> },
-    { id: 'related', label: 'Related', icon: <Layers3 size={14} className="text-amber-300" /> }
+const TABS: Array<{ id: GitSettingsTab; label: string }> = [
+    { id: 'pull-requests', label: 'Pull Requests' },
+    { id: 'workflow', label: 'Workflow' },
+    { id: 'defaults', label: 'Defaults' },
+    { id: 'identity', label: 'Identity' }
 ]
 
 export default function GitSettings() {
@@ -21,18 +20,20 @@ export default function GitSettings() {
     const [activeTab, setActiveTab] = useState<GitSettingsTab>('pull-requests')
     const [globalAuthorDraft, setGlobalAuthorDraft] = useState({ name: '', email: '' })
     const [savedGlobalAuthor, setSavedGlobalAuthor] = useState({ name: '', email: '' })
-    const [globalAuthorMessage, setGlobalAuthorMessage] = useState<string>('')
+    const [globalAuthorMessage, setGlobalAuthorMessage] = useState('')
     const [globalAuthorLoading, setGlobalAuthorLoading] = useState(false)
 
     useEffect(() => {
         let cancelled = false
         setGlobalAuthorLoading(true)
+
         void window.devscope.getGlobalGitUser()
             .then((result) => {
                 if (cancelled) return
                 const nextAuthor = result?.success && result.user
                     ? { name: String(result.user.name || ''), email: String(result.user.email || '') }
                     : { name: '', email: '' }
+
                 setGlobalAuthorDraft(nextAuthor)
                 setSavedGlobalAuthor(nextAuthor)
                 setGlobalAuthorMessage(result?.success ? '' : (result?.error || 'Failed to read global Git author.'))
@@ -47,6 +48,7 @@ export default function GitSettings() {
                     setGlobalAuthorLoading(false)
                 }
             })
+
         return () => {
             cancelled = true
         }
@@ -64,6 +66,7 @@ export default function GitSettings() {
             setGlobalAuthorMessage('Name and email are both required.')
             return
         }
+
         setGlobalAuthorLoading(true)
         try {
             const result = await window.devscope.setGlobalGitUser({ name, email })
@@ -101,44 +104,51 @@ export default function GitSettings() {
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-xl font-semibold text-sparkle-text">Git</h1>
-                            <SettingsBetaBadge />
+                            <SettingsBetaBadge compact />
                         </div>
-                        <p className="text-sm text-sparkle-text-secondary">PR defaults, branch behavior, and Git identity live here.</p>
+                        <p className="text-sm text-sparkle-text-secondary">Branch defaults, PR flow, and machine-wide Git identity.</p>
                     </div>
                 </div>
-                <Link
-                    to="/settings"
-                    className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-sparkle-card px-4 py-2 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.04] hover:text-white"
-                >
-                    <ArrowLeft size={16} />
-                    Back to Settings
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                        to="/settings/ai"
+                        className="inline-flex items-center gap-2 rounded-lg border border-transparent bg-white/[0.04] px-4 py-2 text-sm text-sparkle-text transition-all hover:bg-white/[0.07] hover:text-white"
+                    >
+                        <Sparkles size={16} />
+                        Git AI
+                    </Link>
+                    <Link
+                        to="/settings"
+                        className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-sparkle-card px-4 py-2 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.04] hover:text-white"
+                    >
+                        <ArrowLeft size={16} />
+                        Back to Settings
+                    </Link>
+                </div>
             </div>
 
-            <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-5">
+            <div className="mb-6 inline-flex items-center rounded-lg border border-white/10 bg-sparkle-card p-1">
                 {TABS.map((tab) => (
                     <button
                         key={tab.id}
+                        type="button"
                         onClick={() => setActiveTab(tab.id)}
                         className={cn(
-                            'rounded-xl border px-4 py-3 text-left transition-all bg-sparkle-card',
+                            'rounded-md px-3 py-1.5 text-xs transition-colors',
                             activeTab === tab.id
-                                ? 'border-[var(--accent-primary)]/45 bg-white/[0.04]'
-                                : 'border-white/10 hover:border-white/20 hover:bg-white/[0.04]'
+                                ? 'bg-[var(--accent-primary)] text-white'
+                                : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text'
                         )}
                     >
-                        <div className="flex items-center gap-2">
-                            {tab.icon}
-                            <span className="text-sm font-medium text-sparkle-text">{tab.label}</span>
-                        </div>
+                        {tab.label}
                     </button>
                 ))}
             </div>
 
-            {activeTab === 'pull-requests' && (
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.08fr_0.92fr]">
-                    <Section title="Global PR Defaults" description="These values seed the project-level PR flow until a project overrides them.">
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {activeTab === 'pull-requests' ? (
+                <div className="grid gap-4 xl:grid-cols-[1.04fr_0.96fr]">
+                    <Section title="PR defaults" description="Used unless a project stores its own PR settings.">
+                        <div className="grid gap-4 md:grid-cols-2">
                             <Field label="Default guide source">
                                 <Select
                                     value={settings.gitPullRequestDefaultGuideSource}
@@ -151,23 +161,25 @@ export default function GitSettings() {
                                 />
                             </Field>
                             <Field label="Default target branch">
-                                <Input value={settings.gitPullRequestDefaultTargetBranch} onChange={(value) => updateSettings({ gitPullRequestDefaultTargetBranch: value.trim() || 'main' })} />
+                                <Input
+                                    value={settings.gitPullRequestDefaultTargetBranch}
+                                    onChange={(value) => updateSettings({ gitPullRequestDefaultTargetBranch: value.trim() || 'main' })}
+                                />
                             </Field>
-                            <Field label="Default PR state">
-                                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                                    <Checkbox
-                                        checked={settings.gitPullRequestDefaultDraft}
-                                        onChange={(checked) => updateSettings({ gitPullRequestDefaultDraft: checked })}
-                                        label={settings.gitPullRequestDefaultDraft ? 'Create draft PRs by default' : 'Open PRs ready for review by default'}
-                                        description="Projects can still override this in their own PR modal."
-                                        size="sm"
-                                    />
-                                </div>
-                            </Field>
+                        </div>
+
+                        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+                            <Checkbox
+                                checked={settings.gitPullRequestDefaultDraft}
+                                onChange={(checked) => updateSettings({ gitPullRequestDefaultDraft: checked })}
+                                label={settings.gitPullRequestDefaultDraft ? 'Create draft PRs by default' : 'Open PRs ready for review by default'}
+                                description="Project-specific PR flows can still override this."
+                                size="sm"
+                            />
                         </div>
                     </Section>
 
-                    <Section title="Global PR Guide" description="This is the universal fallback guide. Projects can override it in the PR flow.">
+                    <Section title="Global PR guide" description="Fallback instructions for PR bodies when a project does not override them.">
                         <div className="space-y-4">
                             <Field label="Guide mode">
                                 <Select
@@ -179,14 +191,14 @@ export default function GitSettings() {
                                         }
                                     })}
                                     options={[
-                                        { value: 'text', label: 'Write it here' },
-                                        { value: 'file', label: 'Reference a .md file' }
+                                        { value: 'text', label: 'Write here' },
+                                        { value: 'file', label: 'Use markdown file' }
                                     ]}
                                 />
                             </Field>
 
                             {settings.gitPullRequestGlobalGuide.mode === 'text' ? (
-                                <Field label="Global guide note">
+                                <Field label="Guide text">
                                     <Textarea
                                         value={settings.gitPullRequestGlobalGuide.text}
                                         onChange={(value) => updateSettings({
@@ -195,8 +207,8 @@ export default function GitSettings() {
                                                 text: value
                                             }
                                         })}
-                                        rows={12}
-                                        placeholder="Describe the PR format and checklist you want across projects."
+                                        rows={10}
+                                        placeholder="Describe the PR structure, checklist, and tone you want."
                                     />
                                 </Field>
                             ) : (
@@ -207,7 +219,7 @@ export default function GitSettings() {
                                                 {settings.gitPullRequestGlobalGuide.filePath ? tail(settings.gitPullRequestGlobalGuide.filePath) : 'No guide file selected'}
                                             </p>
                                             <p className="mt-1 truncate text-xs text-white/45">
-                                                {settings.gitPullRequestGlobalGuide.filePath || 'Choose a markdown guide to use as the global fallback.'}
+                                                {settings.gitPullRequestGlobalGuide.filePath || 'Choose a markdown file to use as the global PR guide.'}
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2">
@@ -234,30 +246,27 @@ export default function GitSettings() {
                                     </div>
                                 </div>
                             )}
-
-                            <Notice>
-                                Priority: project guide override, then this global guide, then repo template, then DevScope&apos;s built-in draft structure.
-                            </Notice>
                         </div>
                     </Section>
                 </div>
-            )}
+            ) : null}
 
-            {activeTab === 'workflow' && (
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    <Section title="Refresh Behavior" description="Controls how aggressively the app keeps Git data fresh.">
+            {activeTab === 'workflow' ? (
+                <div className="grid gap-4 xl:grid-cols-2">
+                    <Section title="Refresh behavior" description="How aggressively DevScope keeps Git data current.">
                         <ToggleRow
                             title="Auto-refresh Git on project open"
-                            description="Refresh status, history, remotes, and branches when a project details page opens."
+                            description="Refresh status, history, remotes, and branches when a project opens."
                             checked={settings.gitAutoRefreshOnProjectOpen}
                             onChange={(checked) => updateSettings({ gitAutoRefreshOnProjectOpen: checked })}
                         />
                     </Section>
-                    <Section title="Safety" description="Checks that prevent destructive or confusing Git actions.">
+
+                    <Section title="Safety checks" description="Guardrails that stop confusing or destructive Git actions.">
                         <div className="space-y-4">
                             <ToggleRow
                                 title="Warn on author mismatch"
-                                description="Confirm before committing when the current Git user does not match the detected repository owner."
+                                description="Confirm before committing when the repo owner and configured Git author do not line up."
                                 checked={settings.gitWarnOnAuthorMismatch}
                                 onChange={(checked) => updateSettings({ gitWarnOnAuthorMismatch: checked })}
                             />
@@ -269,15 +278,37 @@ export default function GitSettings() {
                             />
                         </div>
                     </Section>
-                </div>
-            )}
 
-            {activeTab === 'defaults' && (
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    <Section title="Init Defaults" description="Used when you initialize Git inside Project Details.">
+                    <Section title="Branch automation" description="Optional helpers for the stacked commit, push, and PR flow.">
+                        <ToggleRow
+                            title="Auto-create branch when target matches current branch"
+                            description="If you are on the target branch, DevScope creates a new branch automatically before running the stacked PR flow."
+                            checked={settings.gitAutoCreateBranchWhenTargetMatches}
+                            onChange={(checked) => updateSettings({ gitAutoCreateBranchWhenTargetMatches: checked })}
+                        />
+                    </Section>
+
+                    <Section title="PR flow runtime" description="How the built-in PR action behaves.">
+                        <Notice>
+                            DevScope pushes the current branch when needed, reuses an existing open PR when one already exists, and creates a new GitHub PR when it does not.
+                        </Notice>
+                        <Notice className="mt-3">
+                            GitHub CLI (`gh`) still needs to be installed and authenticated on this machine.
+                        </Notice>
+                    </Section>
+                </div>
+            ) : null}
+
+            {activeTab === 'defaults' ? (
+                <div className="grid gap-4 xl:grid-cols-2">
+                    <Section title="Repository init" description="Defaults used when you initialize Git inside project details.">
                         <Field label="Default initial branch">
-                            <Input value={settings.gitInitDefaultBranch} onChange={(value) => updateSettings({ gitInitDefaultBranch: value.trim() || 'main' })} />
+                            <Input
+                                value={settings.gitInitDefaultBranch}
+                                onChange={(value) => updateSettings({ gitInitDefaultBranch: value.trim() || 'main' })}
+                            />
                         </Field>
+
                         <div className="mt-4 space-y-4">
                             <ToggleRow
                                 title="Create .gitignore by default"
@@ -293,87 +324,90 @@ export default function GitSettings() {
                             />
                         </div>
                     </Section>
-                    <Section title="Bulk Action Scope" description="Used by stage-all and unstage-all actions.">
-                        <div className="grid grid-cols-1 gap-3">
-                            <ChoiceCard active={settings.gitBulkActionScope === 'project'} title="Project only" description="Affects files inside the current project folder only." onClick={() => updateSettings({ gitBulkActionScope: 'project' })} />
-                            <ChoiceCard active={settings.gitBulkActionScope === 'repo'} title="Whole repository" description="Affects the full repo, even when the project lives in a subfolder." onClick={() => updateSettings({ gitBulkActionScope: 'repo' })} />
+
+                    <Section title="Bulk action scope" description="Used by stage-all and unstage-all actions.">
+                        <div className="grid gap-3">
+                            <ChoiceCard
+                                active={settings.gitBulkActionScope === 'project'}
+                                title="Project only"
+                                description="Affects files inside the current project folder only."
+                                onClick={() => updateSettings({ gitBulkActionScope: 'project' })}
+                            />
+                            <ChoiceCard
+                                active={settings.gitBulkActionScope === 'repo'}
+                                title="Whole repository"
+                                description="Affects the full repo, even when the project lives in a subfolder."
+                                onClick={() => updateSettings({ gitBulkActionScope: 'repo' })}
+                            />
                         </div>
                     </Section>
                 </div>
-            )}
+            ) : null}
 
-            {activeTab === 'identity' && (
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    <Section title="Global Git Author" description="Switch the global commit author used by Git on this machine.">
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {activeTab === 'identity' ? (
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
+                    <Section title="Global Git author" description="Sets the machine-wide `user.name` and `user.email` used by Git.">
+                        <div className="grid gap-4 md:grid-cols-2">
                             <Field label="Name">
-                                <Input value={globalAuthorDraft.name} onChange={(value) => setGlobalAuthorDraft((prev) => ({ ...prev, name: value }))} placeholder="Jane Doe" />
+                                <Input
+                                    value={globalAuthorDraft.name}
+                                    onChange={(value) => setGlobalAuthorDraft((prev) => ({ ...prev, name: value }))}
+                                    placeholder="Jane Doe"
+                                />
                             </Field>
                             <Field label="Email">
-                                <Input value={globalAuthorDraft.email} onChange={(value) => setGlobalAuthorDraft((prev) => ({ ...prev, email: value }))} placeholder="jane@example.com" type="email" />
+                                <Input
+                                    value={globalAuthorDraft.email}
+                                    onChange={(value) => setGlobalAuthorDraft((prev) => ({ ...prev, email: value }))}
+                                    placeholder="jane@example.com"
+                                    type="email"
+                                />
                             </Field>
                         </div>
+
                         {globalAuthorMessage ? <Notice className="mt-4">{globalAuthorMessage}</Notice> : null}
+
                         <div className="mt-4 flex flex-wrap items-center gap-3">
                             <button
-                                onClick={() => void saveGlobalAuthor()}
+                                type="button"
+                                onClick={() => { void saveGlobalAuthor() }}
                                 disabled={globalAuthorLoading || !globalAuthorDirty}
                                 className={cn(
                                     'rounded-xl border px-4 py-2.5 text-sm transition-all',
                                     globalAuthorLoading || !globalAuthorDirty
-                                        ? 'border-white/10 bg-white/5 text-white/35 cursor-not-allowed'
+                                        ? 'cursor-not-allowed border-white/10 bg-white/5 text-white/35'
                                         : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
                                 )}
                             >
-                                {globalAuthorLoading ? 'Saving...' : 'Save Global Author'}
+                                {globalAuthorLoading ? 'Saving...' : 'Save global author'}
                             </button>
                         </div>
                     </Section>
-                    <Section title="Pull Request Flow" description="DevScope now creates or reopens PRs through GitHub CLI.">
-                        <div className="space-y-4">
-                            <Notice>
-                                DevScope uses the current branch, pushes it when needed, reuses an existing open PR when one already exists, and creates a new GitHub PR when it does not. The Changes view also supports a one-click staged commit → push → PR flow.
-                            </Notice>
-                            <div className="space-y-3 text-sm text-sparkle-text-secondary">
-                                <p>GitHub CLI (<code className="text-sparkle-text">gh</code>) must be installed and authenticated for the built-in PR flow.</p>
-                                <p>Fork PRs target the upstream repository automatically when origin points at a fork.</p>
+
+                    <Section title="Auth note" description="Git identity and GitHub PR auth are separate layers.">
+                        <div className="space-y-4 text-sm text-sparkle-text-secondary">
+                            <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                                <UserRound size={16} className="mt-0.5 shrink-0 text-emerald-300" />
+                                <span>
+                                    This page changes Git&apos;s global author. It does not sign you into GitHub or change push credentials.
+                                </span>
+                            </div>
+                            <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                                <GitPullRequest size={16} className="mt-0.5 shrink-0 text-violet-300" />
+                                <span>
+                                    PR creation still depends on your Git remote access plus an authenticated `gh` session.
+                                </span>
+                            </div>
+                            <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                                <RefreshCw size={16} className="mt-0.5 shrink-0 text-sky-300" />
+                                <span>
+                                    Changing the author here affects future commits created by Git on this machine.
+                                </span>
                             </div>
                         </div>
                     </Section>
-                    <Section title="What This Does" description="Git author switching and GitHub auth are separate layers.">
-                        <div className="space-y-3 text-sm text-sparkle-text-secondary">
-                            <p>This updates your global <code className="text-sparkle-text">user.name</code> and <code className="text-sparkle-text">user.email</code>.</p>
-                            <p>The PR flow still relies on your Git credentials for push plus your <code className="text-sparkle-text">gh</code> authentication for PR creation.</p>
-                            <p>The next useful layer after this would be saved author profiles plus more repo-specific drafting presets.</p>
-                        </div>
-                    </Section>
                 </div>
-            )}
-
-            {activeTab === 'related' && (
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    <Section title="Related Settings" description="Git-adjacent controls that live elsewhere.">
-                        <div className="grid grid-cols-1 gap-3">
-                            <Link to="/settings/ai" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.04]">
-                                <Sparkles size={16} className="text-violet-300" />
-                                AI providers, Codex model, and API keys
-                            </Link>
-                            <Link to="/settings/projects" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-sparkle-text transition-all hover:border-white/20 hover:bg-white/[0.04]">
-                                <Layers3 size={16} className="text-indigo-300" />
-                                Projects and indexing
-                            </Link>
-                        </div>
-                    </Section>
-                    <Section title="Next Good Additions" description="Useful follow-on work after this first PR workflow.">
-                        <ul className="space-y-2 text-sm text-sparkle-text-secondary">
-                            <li>Provider-specific PR creation with tokens instead of browser handoff.</li>
-                            <li>Saved author profiles for one-click switching.</li>
-                            <li>Saved branch presets for feature, fix, and chore work.</li>
-                            <li>Per-project repo auth health and provider badges.</li>
-                        </ul>
-                    </Section>
-                </div>
-            )}
+            ) : null}
         </div>
     )
 }
@@ -397,7 +431,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     )
 }
 
-function ToggleRow({ title, description, checked, onChange }: { title: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
+function ToggleRow({
+    title,
+    description,
+    checked,
+    onChange
+}: {
+    title: string
+    description: string
+    checked: boolean
+    onChange: (checked: boolean) => void
+}) {
     return (
         <label className="flex items-start justify-between gap-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
             <div>
@@ -423,9 +467,20 @@ function ToggleRow({ title, description, checked, onChange }: { title: string; d
     )
 }
 
-function ChoiceCard({ active, title, description, onClick }: { active: boolean; title: string; description: string; onClick: () => void }) {
+function ChoiceCard({
+    active,
+    title,
+    description,
+    onClick
+}: {
+    active: boolean
+    title: string
+    description: string
+    onClick: () => void
+}) {
     return (
         <button
+            type="button"
             onClick={onClick}
             className={cn(
                 'rounded-xl border px-4 py-3 text-left transition-all',

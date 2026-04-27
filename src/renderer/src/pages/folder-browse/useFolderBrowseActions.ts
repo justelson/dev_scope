@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
 import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
+import { primeProjectDetailsCache } from '@/lib/projectViewCache'
 import type { FolderItem, Project } from './types'
 import type {
     CreateFileSystemTarget,
@@ -21,7 +22,10 @@ import {
 type ToastState = {
     message: string
     visible: boolean
-    tone?: 'success' | 'error'
+    tone?: 'success' | 'error' | 'info'
+    detail?: string
+    progress?: number
+    persistent?: boolean
 } | null
 
 type OpenPreviewFn = (
@@ -63,6 +67,9 @@ export function useFolderBrowseActions(input: {
     const [createTarget, setCreateTarget] = useState<CreateFileSystemTarget | null>(null)
     const [createDraft, setCreateDraft] = useState('')
     const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null)
+    const [cloneRepoModalOpen, setCloneRepoModalOpen] = useState(false)
+    const [cloneRepoUrl, setCloneRepoUrl] = useState('')
+    const [cloneRepoErrorMessage, setCloneRepoErrorMessage] = useState<string | null>(null)
     const [deleteTarget, setDeleteTarget] = useState<FileSystemClipboardItem | null>(null)
     const [toast, setToast] = useState<ToastState>(null)
 
@@ -93,6 +100,7 @@ export function useFolderBrowseActions(input: {
 
     useEffect(() => {
         if (!toast?.visible) return
+        if (toast.persistent) return
         const hideTimer = window.setTimeout(() => {
             setToast((current) => current ? { ...current, visible: false } : current)
         }, 2200)
@@ -103,9 +111,10 @@ export function useFolderBrowseActions(input: {
             window.clearTimeout(hideTimer)
             window.clearTimeout(removeTimer)
         }
-    }, [toast?.visible])
+    }, [toast?.persistent, toast?.visible])
 
     const handleProjectClick = useCallback((project: Project) => {
+        primeProjectDetailsCache(project)
         navigate(`/projects/${encodeURIComponent(project.path)}`)
     }, [navigate])
 
@@ -114,6 +123,14 @@ export function useFolderBrowseActions(input: {
     }, [browseRoute, navigate])
 
     const handleViewAsProject = useCallback(() => {
+        const fallbackName = String(decodedPath || '').trim().split(/[\\/]/).filter(Boolean).pop() || 'Project'
+        primeProjectDetailsCache({
+            name: fallbackName,
+            path: decodedPath,
+            type: 'unknown',
+            markers: [],
+            frameworks: []
+        })
         navigate(`/projects/${encodeURIComponent(decodedPath)}`)
     }, [decodedPath, navigate])
 
@@ -284,6 +301,47 @@ export function useFolderBrowseActions(input: {
         openCreatePrompt(decodedPath, type, presetExtension)
     }, [decodedPath, openCreatePrompt])
 
+    const openCloneRepoModal = useCallback(() => {
+        if (!decodedPath) return
+        setCloneRepoModalOpen(true)
+        setCloneRepoUrl('')
+        setCloneRepoErrorMessage(null)
+        setError(null)
+    }, [decodedPath, setError])
+
+    const submitCloneRepo = useCallback(async () => {
+        const repoUrl = cloneRepoUrl.trim()
+        if (!repoUrl) {
+            setCloneRepoErrorMessage('Repository URL is required.')
+            return
+        }
+        if (!decodedPath) {
+            setCloneRepoErrorMessage('Destination folder is missing.')
+            return
+        }
+
+        const cloneId = `folder-clone-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+        setCloneRepoModalOpen(false)
+        setCloneRepoUrl('')
+        setCloneRepoErrorMessage(null)
+
+        try {
+            const result = await window.devscope.cloneGitRepository({
+                cloneId,
+                repoUrl,
+                destinationDirectory: decodedPath
+            })
+            if (!result.success) {
+                setError(result.error || 'Failed to clone repository.')
+                return
+            }
+
+            await loadContents(true)
+        } catch (err: any) {
+            setError(err?.message || 'Failed to clone repository.')
+        }
+    }, [cloneRepoUrl, decodedPath, loadContents, setError])
+
     const handleEntryCreateFile = useCallback((entry: FileSystemClipboardItem) => {
         const destinationDirectory = resolveEntryDestinationDirectory(entry)
         if (!destinationDirectory) {
@@ -412,6 +470,9 @@ export function useFolderBrowseActions(input: {
 
     return {
         copiedPath,
+        cloneRepoErrorMessage,
+        cloneRepoModalOpen,
+        cloneRepoUrl,
         createDraft,
         createErrorMessage,
         createTarget,
@@ -420,6 +481,7 @@ export function useFolderBrowseActions(input: {
         handleBack,
         handleCopyPath,
         handleCreateInCurrentFolder,
+        openCloneRepoModal,
         handleEntryCopy,
         handleEntryCopyPath,
         handleEntryCreateFile,
@@ -444,12 +506,16 @@ export function useFolderBrowseActions(input: {
         setCreateDraft,
         setCreateErrorMessage,
         setCreateTarget,
+        setCloneRepoErrorMessage,
+        setCloneRepoModalOpen,
+        setCloneRepoUrl,
         setDeleteTarget,
         setRenameDraft,
         setRenameErrorMessage,
         setRenameExtensionSuffix,
         setRenameTarget,
         submitCreateTarget,
+        submitCloneRepo,
         submitRenameTarget,
         confirmDeleteTarget,
         toast

@@ -8,6 +8,7 @@ import {
     type FrameworkDefinition,
     type ProjectTypeDefinition
 } from '../ipc/project-detection'
+import { indexFilesAcrossFolders } from './file-index-service'
 import { resolveProjectIconPath } from './project-icon-resolver'
 
 export type ScannedProject = {
@@ -57,12 +58,44 @@ type ScanProjectsOptions = {
     forceRefresh?: boolean
 }
 
+type IndexAllFoldersOptions = {
+    forceRefresh?: boolean
+}
+
+type IndexAllFoldersResult = {
+    success: boolean
+    projects: Array<ScannedProject & { sourceFolder: string; depth: number }>
+    totalFolders: number
+    indexedFolders: number
+    indexedFiles: number
+    scannedFolderPaths: string[]
+    indexedCount: number
+    errors?: Array<{ folder: string; error: string }>
+}
+
 const SCAN_PROJECTS_CACHE_TTL_MS = 2 * 60 * 1000
 const scanProjectsCache = new Map<string, { timestamp: number; value: ScanProjectsSuccess }>()
 const scanProjectsInFlight = new Map<string, Promise<ScanProjectsResult>>()
+const indexAllFoldersCache = new Map<string, { timestamp: number; value: IndexAllFoldersResult }>()
+const indexAllFoldersInFlight = new Map<string, Promise<IndexAllFoldersResult>>()
 
 function normalizeScanPathKey(folderPath: string): string {
     return folderPath.replace(/\\/g, '/').toLowerCase()
+}
+
+function normalizeIndexFolders(folders: string[]): string[] {
+    return Array.from(new Set(
+        folders
+            .map((folder) => String(folder || '').trim())
+            .filter(Boolean)
+    ))
+}
+
+function normalizeIndexAllFoldersKey(folders: string[]): string {
+    return normalizeIndexFolders(folders)
+        .map((folder) => normalizeScanPathKey(folder))
+        .sort((left, right) => left.localeCompare(right))
+        .join('||')
 }
 
 function getCachedScanProjects(folderPath: string): ScanProjectsSuccess | null {
@@ -111,6 +144,9 @@ export function invalidateScanProjectsCache(folderPath: string, options?: { incl
         if (normalizeScanPathKey(parentPath) === key) break
         currentPath = parentPath
     }
+
+    indexAllFoldersCache.clear()
+    indexAllFoldersInFlight.clear()
 }
 
 async function scanProjectsUncached(folderPath: string): Promise<ScanProjectsResult> {
@@ -255,55 +291,64 @@ export async function scanProjects(folderPath: string, options?: ScanProjectsOpt
     return await scanPromise
 }
 
-export async function indexAllFolders(folders: string[]) {
-    const maxDepth = Number.POSITIVE_INFINITY
-    const allProjects: Array<ScannedProject & { sourceFolder: string; depth: number }> = []
-    const errors: Array<{ folder: string; error: string }> = []
-    const scannedPaths = new Set<string>()
+function getCachedIndexAllFolders(folders: string[]): IndexAllFoldersResult | null {
+    const key = normalizeIndexAllFoldersKey(folders)
+    const cached = indexAllFoldersCache.get(key)
+    if (!cached) return null
 
-    async function scanRecursively(folderPath: string, sourceFolder: string, depth: number): Promise<void> {
-        if (depth > maxDepth) return
-        if (scannedPaths.has(folderPath)) return
-        scannedPaths.add(folderPath)
+    const ageMs = Date.now() - cached.timestamp
+    if (ageMs > SCAN_PROJECTS_CACHE_TTL_MS) {
+        indexAllFoldersCache.delete(key)
+        return null
+    }
 
-        try {
-            const result = await scanProjects(folderPath)
-            if (result.success) {
-                if (result.projects) {
-                    for (const project of result.projects) {
-                        allProjects.push({ ...project, sourceFolder, depth })
-                    }
-                }
+    return cached.value
+}
 
-                if (result.folders && depth < maxDepth) {
-                    for (const subfolder of result.folders) {
-                        const skipFolders = ['node_modules', '.git', 'dist', 'build', 'target', '__pycache__', '.venv', 'venv', '.next', '.nuxt']
-                        if (skipFolders.includes(subfolder.name)) continue
-                        await scanRecursively(subfolder.path, sourceFolder, depth + 1)
-                    }
-                }
-            }
-        } catch (err: any) {
-            if (depth === 0) {
-                errors.push({ folder: folderPath, error: err.message })
-            }
+function cacheIndexAllFolders(folders: string[], value: IndexAllFoldersResult): void {
+    indexAllFoldersCache.set(normalizeIndexAllFoldersKey(folders), {
+        timestamp: Date.now(),
+        value
+    })
+}
+
+async function indexAllFoldersUncached(
+    folders: string[],
+    _options?: IndexAllFoldersOptions
+): Promise<IndexAllFoldersResult> {
+    return await indexFilesAcrossFolders(folders)
+}
+
+export async function indexAllFolders(
+    folders: string[],
+    options?: IndexAllFoldersOptions
+): Promise<IndexAllFoldersResult> {
+    const normalizedFolders = normalizeIndexFolders(folders)
+    const key = normalizeIndexAllFoldersKey(normalizedFolders)
+
+    if (options?.forceRefresh) {
+        indexAllFoldersCache.delete(key)
+        indexAllFoldersInFlight.delete(key)
+    } else {
+        const cached = getCachedIndexAllFolders(normalizedFolders)
+        if (cached) return cached
+
+        const inFlight = indexAllFoldersInFlight.get(key)
+        if (inFlight) {
+            return await inFlight
         }
     }
 
-    for (const folder of folders) {
-        if (!folder) continue
-        await scanRecursively(folder, folder, 0)
-    }
+    const indexPromise = (async () => {
+        try {
+            const result = await indexAllFoldersUncached(normalizedFolders, options)
+            cacheIndexAllFolders(normalizedFolders, result)
+            return result
+        } finally {
+            indexAllFoldersInFlight.delete(key)
+        }
+    })()
 
-    allProjects.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))
-
-    return {
-        success: errors.length === 0 || allProjects.length > 0,
-        projects: allProjects,
-        totalFolders: folders.length,
-        indexedFolders: scannedPaths.size,
-        scannedFolderPaths: Array.from(scannedPaths).sort((a, b) => a.localeCompare(b)),
-        indexedCount: allProjects.length,
-        errors: errors.length > 0 ? errors : undefined
-    }
+    indexAllFoldersInFlight.set(key, indexPromise)
+    return await indexPromise
 }

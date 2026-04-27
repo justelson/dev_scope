@@ -101,6 +101,22 @@ export function buildAttachmentPath(source: 'paste' | 'manual', name: string): s
     return name
 }
 
+export function isClipboardReferencePath(value: string | null | undefined): boolean {
+    return String(value || '').trim().toLowerCase().startsWith('clipboard://')
+}
+
+export function buildClipboardAttachmentReference(file: Partial<ComposerContextFile>): string {
+    const rawPath = String(file.path || '').trim()
+    if (isClipboardReferencePath(rawPath)) return rawPath
+
+    const rawName = String(file.name || '').trim()
+    const tail = rawPath
+        ? (rawPath.split(/[/\\]/).pop() || rawName || 'attachment')
+        : (rawName || 'attachment')
+
+    return `clipboard://${tail}`
+}
+
 export function inferImageExtensionFromMimeType(mimeType?: string): string {
     const normalized = String(mimeType || '').trim().toLowerCase()
     if (!normalized) return 'png'
@@ -127,14 +143,15 @@ export async function readFileAsDataUrl(file: File): Promise<string> {
 
 export function buildTextAttachmentFromPaste(text: string): ComposerContextFile {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const name = `pasted-snippet-${timestamp}.txt`
+    const name = 'Pasted text'
+    const referenceName = `pasted-text-${timestamp}.txt`
     const trimmed = text.length > MAX_ATTACHMENT_CONTENT_CHARS
         ? `${text.slice(0, MAX_ATTACHMENT_CONTENT_CHARS)}\n\n[truncated]`
         : text
 
     return {
         id: createAttachmentId(),
-        path: buildAttachmentPath('paste', name),
+        path: buildAttachmentPath('paste', referenceName),
         name,
         kind: 'doc',
         mimeType: 'text/plain',
@@ -161,22 +178,60 @@ export function getContentTypeTag(file: ComposerContextFile): string {
     return 'FILE'
 }
 
+function isClipboardOriginAttachment(file: ComposerContextFile): boolean {
+    if (file.source === 'paste') return true
+    const normalizedPath = String(file.path || '').trim().toLowerCase()
+    if (!normalizedPath) return false
+    if (isClipboardReferencePath(normalizedPath)) return true
+    return /[\\/](assistant|codex)[\\/].*?[\\/]attachments[\\/]clipboard[\\/]/i.test(normalizedPath)
+}
+
+function getClipboardAttachmentDisplayName(file: ComposerContextFile, category: ReturnType<typeof getContextFileMeta>['category']): string {
+    const mime = String(file.mimeType || '').toLowerCase()
+    if (category === 'image') return 'Pasted image'
+    if (
+        category === 'code'
+        || isPastedTextAttachment(file)
+        || mime.startsWith('text/')
+        || mime.includes('json')
+        || mime.includes('xml')
+        || mime.includes('yaml')
+    ) {
+        return 'Pasted text'
+    }
+    return 'Pasted file'
+}
+
 export function buildPromptWithContextFiles(prompt: string, contextFiles: ComposerContextFile[]): string {
     const normalizedPrompt = String(prompt || '').trim()
     if (!contextFiles.length) return normalizedPrompt
 
     const attachmentSections = contextFiles.map((file, index) => {
         const meta = getContextFileMeta(file)
+        const isClipboardAttachment = isClipboardOriginAttachment(file)
         const inlineContent = meta.category === 'image' ? '' : String(file.content || '')
-        const header = `${index + 1}. ${meta.name} [${getContentTypeTag(file)}]`
+        const headerLabel = isClipboardAttachment
+            ? getClipboardAttachmentDisplayName(file, meta.category)
+            : meta.name
+        const header = `${index + 1}. ${headerLabel} [${getContentTypeTag(file)}]`
         const details = meta.category === 'image'
             ? [
-                file.path ? `path: ${file.path}` : '',
+                isClipboardAttachment
+                    ? `ref: ${buildClipboardAttachmentReference(file)}`
+                    : (file.path ? `path: ${file.path}` : ''),
+                isClipboardAttachment
+                    ? 'origin: pasted from clipboard; treat this as inline context only, not as a workspace file path or current working directory.'
+                    : '',
                 file.mimeType ? `mime: ${file.mimeType}` : '',
                 Number.isFinite(file.sizeBytes) ? `size: ${Number(file.sizeBytes)} bytes` : ''
             ].filter(Boolean)
             : [
-                file.path ? `path: ${file.path}` : '',
+                isClipboardAttachment
+                    ? `ref: ${buildClipboardAttachmentReference(file)}`
+                    : (file.path ? `path: ${file.path}` : ''),
+                isClipboardAttachment
+                    ? 'origin: pasted from clipboard; treat this as inline context only, not as a workspace file path or current working directory.'
+                    : '',
                 file.mimeType ? `mime: ${file.mimeType}` : '',
                 Number.isFinite(file.sizeBytes) ? `size: ${Number(file.sizeBytes)} bytes` : '',
                 file.previewText ? `preview: ${file.previewText}` : '',

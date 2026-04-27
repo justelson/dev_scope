@@ -10,13 +10,15 @@ import {
     type ScriptIntent,
     type ScriptIntentContext,
     type ScriptIntentPrediction,
-    type ScriptRunDraft
+    type ScriptRunDraft,
+    type PackageScriptRunnerPreference
 } from './scriptRun'
 import type { PendingScriptRun, ProjectDetails } from './types'
 
 interface UseScriptRunModalParams {
     project: ProjectDetails | null
     defaultShell: 'powershell' | 'cmd'
+    packageRuntimePreference: PackageScriptRunnerPreference
     openTerminal: (tool: { id: string; category: string; displayName: string }, cwd: string, command?: string) => void
 }
 
@@ -46,6 +48,7 @@ interface UseScriptRunModalResult {
 export function useScriptRunModal({
     project,
     defaultShell,
+    packageRuntimePreference,
     openTerminal
 }: UseScriptRunModalParams): UseScriptRunModalResult {
     const [pendingScriptRun, setPendingScriptRun] = useState<PendingScriptRun | null>(null)
@@ -57,8 +60,8 @@ export function useScriptRunModal({
     const [scriptRunError, setScriptRunError] = useState<string | null>(null)
 
     const scriptRunner = useMemo(
-        () => detectPackageScriptRunner(project?.markers || []),
-        [project?.markers]
+        () => detectPackageScriptRunner(project?.markers || [], packageRuntimePreference),
+        [packageRuntimePreference, project?.markers]
     )
 
     const scriptIntentContext = useMemo<ScriptIntentContext>(

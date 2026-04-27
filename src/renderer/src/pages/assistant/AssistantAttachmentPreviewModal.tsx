@@ -1,7 +1,11 @@
-import { useEffect } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Check, Copy, X } from 'lucide-react'
+import ImagePreviewContent from '@/components/ui/file-preview/ImagePreviewContent'
 import SyntaxPreview from '@/components/ui/file-preview/SyntaxPreview'
+import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
 import { detectCodeLanguage } from '@/components/ui/file-preview/utils'
+import { useSettings } from '@/lib/settings'
 import type { ComposerContextFile } from './assistant-composer-types'
 
 type AttachmentMeta = {
@@ -16,6 +20,8 @@ interface AssistantAttachmentPreviewModalProps {
     contentType: string
     sizeLabel: string
     showFormattingWarning: boolean
+    readOnly?: boolean
+    onUpdatePastedText?: (fileId: string, nextText: string) => void
     onClose: () => void
 }
 
@@ -71,8 +77,14 @@ export default function AssistantAttachmentPreviewModal({
     contentType,
     sizeLabel,
     showFormattingWarning,
+    readOnly = false,
+    onUpdatePastedText,
     onClose
 }: AssistantAttachmentPreviewModalProps) {
+    const { settings } = useSettings()
+    const iconTheme = settings.theme === 'light' ? 'light' : 'dark'
+    const [copied, setCopied] = useState(false)
+
     useEffect(() => {
         if (!file) return
 
@@ -94,58 +106,103 @@ export default function AssistantAttachmentPreviewModal({
 
     const previewText = String(file.content || file.previewText || '')
     const previewLanguage = resolvePreviewLanguage(file, meta)
+    const isPastedTextPreview = file.source === 'paste' && Boolean(file.content)
+    const isImagePreview = meta.category === 'image'
+    const shouldShowFormattingWarning = showFormattingWarning && !isPastedTextPreview
+    const copyValue = isPastedTextPreview ? previewText : (file.path || previewText || meta.name)
+    const copyTitle = isPastedTextPreview ? 'Copy pasted text' : `Copy path: ${file.path || meta.name}`
+    const attachmentDetails = [contentType, meta.ext || 'file', sizeLabel].filter(Boolean).join(' • ')
 
-    return (
+    const handleCopyPreviewValue = () => {
+        if (!copyValue) return
+        void navigator.clipboard.writeText(copyValue).then(() => {
+            setCopied(true)
+            window.setTimeout(() => setCopied(false), 1500)
+        })
+    }
+
+    const modal = (
         <div
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-md"
+            className="pointer-events-auto fixed inset-0 z-[2147482000] flex items-center justify-center bg-black/70 backdrop-blur-md"
             onClick={onClose}
             onWheel={(event) => event.stopPropagation()}
             style={{ animation: 'fadeIn 0.15s ease-out' }}
         >
             <div
-                className="m-4 flex max-h-[90vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl"
+                className={
+                    isImagePreview
+                        ? 'pointer-events-auto m-4 flex h-[min(82vh,840px)] w-[min(88vw,1180px)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl'
+                        : 'pointer-events-auto m-4 flex h-[min(920px,90vh)] w-[min(1400px,95vw)] max-h-[90vh] max-w-[1400px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-sparkle-card shadow-2xl'
+                }
                 onClick={(event) => event.stopPropagation()}
                 onWheel={(event) => event.stopPropagation()}
                 style={{ animation: 'scaleIn 0.15s ease-out' }}
             >
-                <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
-                    <div className="min-w-0">
-                        <h3 className="truncate text-sm font-semibold text-sparkle-text">{meta.name}</h3>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-sparkle-text-muted">
-                            <span className="rounded border border-white/10 bg-sparkle-bg px-1.5 py-0.5 font-mono uppercase tracking-wide">
-                                {contentType}
-                            </span>
-                            <span className="rounded border border-white/10 bg-sparkle-bg px-1.5 py-0.5 font-mono uppercase tracking-wide">
-                                {meta.ext || 'file'}
-                            </span>
-                            {sizeLabel && (
-                                <span className="rounded border border-white/10 bg-sparkle-bg px-1.5 py-0.5 font-mono tracking-wide">
-                                    {sizeLabel}
-                                </span>
-                            )}
+                <div className="flex shrink-0 items-stretch justify-between gap-2 border-b border-white/5 bg-white/[0.02] py-1 pl-3.5 pr-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <VscodeEntryIcon
+                            pathValue={file.path || meta.name}
+                            kind="file"
+                            theme={iconTheme}
+                            className="size-4 shrink-0"
+                        />
+                        <div className="flex min-w-0 items-center gap-1.5">
+                            <h3
+                                className="truncate text-[13px] font-semibold text-white"
+                                title={attachmentDetails ? `${meta.name} (${attachmentDetails})` : meta.name}
+                            >
+                                {meta.name}
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={handleCopyPreviewValue}
+                                className={
+                                    copied
+                                        ? 'shrink-0 rounded p-1 text-emerald-400 bg-emerald-400/10 transition-colors'
+                                        : 'shrink-0 rounded p-1 text-white/40 transition-colors hover:bg-white/10 hover:text-white'
+                                }
+                                title={copied ? 'Copied!' : copyTitle}
+                                disabled={!copyValue}
+                            >
+                                {copied ? <Check size={14} /> : <Copy size={14} />}
+                            </button>
                         </div>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-md border border-white/10 p-1.5 text-sparkle-text-muted transition-colors hover:bg-white/[0.03] hover:text-sparkle-text"
+                        className="inline-flex -my-1 shrink-0 items-center justify-center self-stretch border-l border-white/5 px-3.5 text-white/42 transition-colors hover:border-red-400/25 hover:bg-red-500/[0.22] hover:text-red-100"
                         title="Close preview"
                     >
-                        <X size={14} />
+                        <X size={16} />
                     </button>
                 </div>
 
-                <div className="custom-scrollbar flex-1 overflow-auto bg-sparkle-bg p-4" style={{ overscrollBehavior: 'contain' }}>
-                    {meta.category === 'image' && file.previewDataUrl ? (
-                        <div className="flex min-h-full items-start justify-center">
-                            <img
-                                src={file.previewDataUrl}
-                                alt={meta.name}
-                                className="max-h-[78vh] max-w-full rounded-lg border border-white/10 object-contain"
+                <div
+                    className={isImagePreview ? 'min-h-0 flex-1 overflow-hidden bg-black/35 p-0' : 'min-h-0 flex-1 overflow-hidden bg-sparkle-bg p-4'}
+                    style={{ overscrollBehavior: 'contain' }}
+                >
+                    {isImagePreview ? (
+                        <ImagePreviewContent
+                            filePath={file.path}
+                            fileName={meta.name}
+                            isExpanded
+                        />
+                    ) : isPastedTextPreview ? (
+                        <div className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-white/5 bg-sparkle-card">
+                            <textarea
+                                value={previewText}
+                                onChange={(event) => {
+                                    if (readOnly || !file?.id || !onUpdatePastedText) return
+                                    onUpdatePastedText(file.id, event.target.value)
+                                }}
+                                readOnly={readOnly}
+                                spellCheck={false}
+                                className="custom-scrollbar min-h-0 w-full flex-1 resize-none overflow-auto bg-transparent px-4 py-4 text-[13px] leading-6 text-sparkle-text outline-none selection:bg-sky-400/25"
                             />
                         </div>
                     ) : previewText ? (
-                        <div className="w-full max-w-[96%] overflow-hidden rounded-xl border border-white/5 bg-sparkle-card">
+                        <div className="h-full w-full overflow-hidden rounded-xl border border-white/5 bg-sparkle-card">
                             <SyntaxPreview
                                 content={previewText}
                                 language={previewLanguage}
@@ -158,7 +215,7 @@ export default function AssistantAttachmentPreviewModal({
                         </div>
                     )}
 
-                    {showFormattingWarning && (
+                    {shouldShowFormattingWarning && (
                         <div className="mt-3 rounded-md border border-amber-400/30 bg-amber-500/10 p-2 text-[11px] text-amber-300/90">
                             Text might have not been properly formatted.
                         </div>
@@ -167,4 +224,6 @@ export default function AssistantAttachmentPreviewModal({
             </div>
         </div>
     )
+
+    return createPortal(modal, document.body)
 }

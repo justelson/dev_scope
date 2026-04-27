@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import {
     readStoredProjectActiveTab,
@@ -59,11 +59,14 @@ export function useProjectDetailsPersistence({
     setCreateGitignore,
     setCreateInitialCommit
 }: UseProjectDetailsPersistenceParams) {
+    const skipNextGitActivityWriteRef = useRef(false)
+
     useEffect(() => {
         if (!decodedPath) return
         const storedTab = readStoredProjectActiveTab(decodedPath)
         const storedGitView = readStoredProjectGitView(decodedPath)
         const storedGitActivity = readStoredProjectGitActivity(decodedPath)
+        skipNextGitActivityWriteRef.current = true
         setActiveTab(storedTab || 'readme')
         setGitView(storedGitView || 'manage')
         setLastFetched(storedGitActivity.lastFetched)
@@ -87,6 +90,10 @@ export function useProjectDetailsPersistence({
 
     useEffect(() => {
         if (!decodedPath || gitActivityHydratedPathRef.current !== decodedPath) return
+        if (skipNextGitActivityWriteRef.current) {
+            skipNextGitActivityWriteRef.current = false
+            return
+        }
         writeStoredProjectGitActivity(decodedPath, { lastFetched, lastPulled })
     }, [decodedPath, gitActivityHydratedPathRef, lastFetched, lastPulled])
 

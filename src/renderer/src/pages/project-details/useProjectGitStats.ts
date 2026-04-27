@@ -272,7 +272,7 @@ export function useProjectGitStats({
     }, [decodedPath, gitStatusStatsLoadedMap, setGitStatusDetails])
 
     useEffect(() => {
-        if (activeTab !== 'git' || gitView !== 'changes' || !decodedPath) return
+        if (!decodedPath || gitStatusDetails.length === 0) return
 
         const missingPaths = gitStatusDetails
             .filter((detail) => detail.statsLoaded !== true)
@@ -307,7 +307,7 @@ export function useProjectGitStats({
                 workingStatsPrefetchVersionRef.current += 1
             }
         }
-    }, [activeTab, decodedPath, ensureWorkingChangeStats, gitStatusDetails, gitView])
+    }, [decodedPath, ensureWorkingChangeStats, gitStatusDetails])
 
     const historyHasMore = gitHistoryTotalCount > gitHistory.length
 

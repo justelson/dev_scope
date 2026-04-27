@@ -149,6 +149,10 @@ function parseStatusEntries(stdout: string, projectRelativeToRepo: string): GitS
     return details
 }
 
+function hasOriginRemote(remotes: Array<{ name: string; refs?: { fetch?: string; push?: string } }>): boolean {
+    return remotes.some((remote) => remote.name === 'origin' && (remote.refs?.fetch || remote.refs?.push))
+}
+
 export async function getGitStatusDetailed(
     projectPath: string,
     options?: GitStatusDetailedOptions
@@ -195,7 +199,7 @@ export async function hasRemoteOrigin(projectPath: string): Promise<boolean> {
     try {
         const git = createGit(projectPath)
         const remotes = await git.getRemotes(true)
-        return remotes.some((remote) => remote.name === 'origin' && (remote.refs.fetch || remote.refs.push))
+        return hasOriginRemote(remotes)
     } catch (err) {
         log.error('Failed to inspect remotes', err)
         throw toError(err, 'Failed to inspect remotes')
@@ -205,17 +209,18 @@ export async function hasRemoteOrigin(projectPath: string): Promise<boolean> {
 export async function getGitSyncStatus(projectPath: string): Promise<GitSyncStatus> {
     try {
         const git = createGit(projectPath)
-        const [currentBranchRaw, headHashRaw, upstreamBranchRaw, workingTreeRaw, hasRemote] = await Promise.all([
+        const [currentBranchRaw, headHashRaw, upstreamBranchRaw, workingTreeRaw, remotes] = await Promise.all([
             git.raw(['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => 'HEAD'),
             git.raw(['rev-parse', 'HEAD']).catch(() => ''),
             git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).catch(() => ''),
             git.raw(['status', '--porcelain=v1', '-uno']).catch(() => ''),
-            hasRemoteOrigin(projectPath).catch(() => false)
+            git.getRemotes(true).catch(() => [])
         ])
 
         const currentBranch = String(currentBranchRaw || '').trim()
         const headHash = String(headHashRaw || '').trim() || null
         const upstreamBranch = String(upstreamBranchRaw || '').trim() || null
+        const hasRemote = hasOriginRemote(remotes)
         const workingTreeLines = String(workingTreeRaw || '')
             .split(/\r?\n/)
             .map((line) => line.trim())
@@ -293,14 +298,19 @@ export async function getIncomingCommits(projectPath: string, limit: number = 10
 export async function getUnpushedCommits(projectPath: string): Promise<GitCommit[]> {
     try {
         const git = createGit(projectPath)
-        const currentBranch = (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
-        const hasRemote = await hasRemoteOrigin(projectPath)
-        const upstreamRef = (await git.raw([
-            'rev-parse',
-            '--abbrev-ref',
-            '--symbolic-full-name',
-            '@{u}'
-        ]).catch(() => '')).trim()
+        const [currentBranchRaw, remotes, upstreamRefRaw] = await Promise.all([
+            git.raw(['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => 'HEAD'),
+            git.getRemotes(true).catch(() => []),
+            git.raw([
+                'rev-parse',
+                '--abbrev-ref',
+                '--symbolic-full-name',
+                '@{u}'
+            ]).catch(() => '')
+        ])
+        const currentBranch = String(currentBranchRaw || '').trim()
+        const hasRemote = hasOriginRemote(remotes)
+        const upstreamRef = String(upstreamRefRaw || '').trim()
 
         let stdout = ''
         if (upstreamRef) {
@@ -348,7 +358,8 @@ export async function checkIsGitRepo(projectPath: string): Promise<boolean> {
 
 export async function getProjectGitOverview(projectPath: string): Promise<ProjectGitOverview> {
     try {
-        const isGitRepo = await checkIsGitRepo(projectPath)
+        const git = createGit(projectPath)
+        const isGitRepo = await git.checkIsRepo()
         if (!isGitRepo) {
             return {
                 path: projectPath,
@@ -359,11 +370,12 @@ export async function getProjectGitOverview(projectPath: string): Promise<Projec
             }
         }
 
-        const [statusMap, unpushedCommits, hasRemote] = await Promise.all([
+        const [statusMap, unpushedCommits, remotes] = await Promise.all([
             getGitStatus(projectPath),
             getUnpushedCommits(projectPath),
-            hasRemoteOrigin(projectPath)
+            git.getRemotes(true).catch(() => [])
         ])
+        const hasRemote = hasOriginRemote(remotes)
 
         return {
             path: projectPath,

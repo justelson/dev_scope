@@ -30,8 +30,8 @@ type ProjectDetailsGitHeaderProps = {
 const tabButtonClass = (active: boolean) => cn(
     'px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border border-transparent whitespace-nowrap',
     active
-        ? 'bg-white/10 text-white border-white/5'
-        : 'text-white/50 hover:text-white hover:bg-white/5'
+        ? 'bg-[color-mix(in_srgb,var(--color-text)_10%,transparent)] text-sparkle-text border-[color-mix(in_srgb,var(--color-text)_8%,transparent)]'
+        : 'text-sparkle-text-secondary hover:text-sparkle-text hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)]'
 )
 
 export function ProjectDetailsGitHeader({
@@ -51,22 +51,22 @@ export function ProjectDetailsGitHeader({
     return (
         <>
             {gitUser ? (
-                <div className="p-4 border-b border-white/5 bg-white/[0.02]">
+                <div className="border-b border-[color-mix(in_srgb,var(--color-text)_8%,transparent)] bg-[color-mix(in_srgb,var(--color-text)_3%,transparent)] p-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-white/5">
-                                <User size={16} className="text-white/60" />
+                            <div className="rounded-lg bg-[color-mix(in_srgb,var(--color-text)_7%,transparent)] p-2">
+                                <User size={16} className="text-sparkle-text-secondary" />
                             </div>
                             <div>
-                                <p className="text-xs text-white/40">Repository Owner</p>
-                                <p className="text-sm font-medium text-white/80">{repoOwner || 'Unknown'}</p>
+                                <p className="text-xs text-sparkle-text-secondary">Repository Owner</p>
+                                <p className="text-sm font-medium text-sparkle-text">{repoOwner || 'Unknown'}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
                             <div className="text-right">
-                                <p className="text-xs text-white/40">Current User</p>
+                                <p className="text-xs text-sparkle-text-secondary">Current User</p>
                                 <div className="flex items-center justify-end gap-2">
-                                    <p className="text-sm font-medium text-white/80">{gitUser.name}</p>
+                                    <p className="text-sm font-medium text-sparkle-text">{gitUser.name}</p>
                                     {pushAccessIndicator.allowed ? (
                                         <span
                                             className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-emerald-400/35 bg-emerald-400/15 text-emerald-200"
@@ -78,7 +78,7 @@ export function ProjectDetailsGitHeader({
                                         </span>
                                     ) : (
                                         <span
-                                            className="h-2.5 w-2.5 rounded-full bg-white/20"
+                                            className="h-2.5 w-2.5 rounded-full bg-[color-mix(in_srgb,var(--color-text)_22%,transparent)]"
                                             title="This account is not matched as a direct pusher for the current remote."
                                         />
                                     )}
@@ -92,7 +92,7 @@ export function ProjectDetailsGitHeader({
                 </div>
             ) : null}
 
-            <div className="flex items-center gap-1 px-4 py-3 border-b border-white/5 overflow-x-auto">
+            <div className="flex items-center gap-1 overflow-x-auto border-b border-[color-mix(in_srgb,var(--color-text)_8%,transparent)] px-4 py-3">
                 <button onClick={() => onGitViewChange('manage')} className={tabButtonClass(gitView === 'manage')}>
                     <span className="flex items-center gap-1.5">
                         <GitBranch size={12} />
@@ -106,7 +106,7 @@ export function ProjectDetailsGitHeader({
                     To Push ({unpushedCommitsCount})
                 </button>
                 <button onClick={() => onGitViewChange('pulls')} className={tabButtonClass(gitView === 'pulls')}>
-                    Pulls ({behindCount})
+                    To Pull ({behindCount})
                 </button>
                 <button onClick={() => onGitViewChange('history')} className={tabButtonClass(gitView === 'history')}>
                     History
@@ -115,14 +115,14 @@ export function ProjectDetailsGitHeader({
                     onClick={onOpenRepoInfo}
                     title="Repo Info"
                     aria-label="Repo Info"
-                    className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+                    className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-sparkle-text-secondary transition-colors hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)] hover:text-sparkle-text"
                 >
                     <Info size={13} />
                 </button>
                 <button
                     onClick={onRefresh}
                     disabled={refreshDisabled}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border border-white/10 text-white/70 hover:text-white hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    className="whitespace-nowrap rounded-lg bg-[color-mix(in_srgb,var(--color-text)_5%,transparent)] px-3 py-1.5 text-xs font-medium text-sparkle-text-secondary transition-colors hover:bg-[color-mix(in_srgb,var(--color-text)_8%,transparent)] hover:text-sparkle-text disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <span className="flex items-center gap-1.5">
                         <RefreshCw size={12} className={cn(refreshLoading && 'animate-spin')} />

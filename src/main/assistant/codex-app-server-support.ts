@@ -17,8 +17,35 @@ import {
     type SessionContext
 } from './codex-runtime-protocol'
 
+const CODEX_AVAILABILITY_SUCCESS_TTL_MS = 20_000
+const CODEX_AVAILABILITY_FAILURE_TTL_MS = 5_000
+
+let availabilityCache:
+    | {
+        binary: string
+        available: boolean
+        reason: string | null
+        checkedAt: number
+    }
+    | null = null
+let availabilityPromise: Promise<{ available: boolean; reason: string | null }> | null = null
+
 export async function checkCodexAvailability(codexBinary: string): Promise<{ available: boolean; reason: string | null }> {
-    return new Promise((resolve) => {
+    if (availabilityCache && availabilityCache.binary === codexBinary) {
+        const ttlMs = availabilityCache.available ? CODEX_AVAILABILITY_SUCCESS_TTL_MS : CODEX_AVAILABILITY_FAILURE_TTL_MS
+        if ((Date.now() - availabilityCache.checkedAt) < ttlMs) {
+            return {
+                available: availabilityCache.available,
+                reason: availabilityCache.reason
+            }
+        }
+    }
+
+    if (availabilityPromise) {
+        return availabilityPromise
+    }
+
+    availabilityPromise = new Promise<{ available: boolean; reason: string | null }>((resolve) => {
         const child = spawn(codexBinary, ['--version'], {
             shell: process.platform === 'win32',
             stdio: ['ignore', 'pipe', 'pipe']
@@ -32,6 +59,11 @@ export async function checkCodexAvailability(codexBinary: string): Promise<{ ava
             if (settled) return
             settled = true
             clearTimeout(timeoutId)
+            availabilityCache = {
+                binary: codexBinary,
+                ...result,
+                checkedAt: Date.now()
+            }
             resolve(result)
         }
 
@@ -66,6 +98,12 @@ export async function checkCodexAvailability(codexBinary: string): Promise<{ ava
             })
         })
     })
+
+    try {
+        return await availabilityPromise
+    } finally {
+        availabilityPromise = null
+    }
 }
 
 export function parseModelList(response: unknown): AssistantModelInfo[] {
@@ -119,6 +157,12 @@ export async function requestFromEphemeralServer<T>(args: {
         thread: {
             id: '__ephemeral-model-list__',
             providerThreadId: null,
+            source: 'root',
+            parentThreadId: null,
+            providerParentThreadId: null,
+            subagentDepth: null,
+            agentNickname: null,
+            agentRole: null,
             model: args.modelId || '',
             cwd: process.cwd(),
             messageCount: 0,

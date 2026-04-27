@@ -2,16 +2,30 @@ import type { Database as SqlDatabase, SqlValue } from 'sql.js/dist/sql-asm.js'
 import type {
     AssistantActivity,
     AssistantDomainEvent,
+    AssistantLatestTurn,
     AssistantMessage,
     AssistantPendingApproval,
     AssistantPendingUserInput,
+    AssistantPlaygroundLab,
     AssistantProposedPlan,
     AssistantSession,
+    AssistantSessionTurnUsageEntry,
     AssistantSnapshot,
     AssistantThread
 } from '../../shared/assistant/contracts'
+import {
+    findAssistantPlaygroundLabByProjectPath,
+    isAssistantProjectInPlayground,
+    sanitizeAssistantProjectPath
+} from '../../shared/assistant/session-routing'
 import { recoverPersistedSnapshot } from './projector'
-import { type AssistantHydratedThreadData, hydrateFocusedSessionSnapshot, summarizeThread } from './persistence-snapshot'
+import {
+    type AssistantHydratedThreadData,
+    hydrateSnapshotThreads,
+    shouldKeepHydratedThread,
+    summarizeThread
+} from './persistence-snapshot'
+import { deriveSessionTitleFromPrompt, isDefaultSessionTitle } from './utils'
 import {
     type AssistantMetaRow,
     PERSISTENCE_VERSION,
@@ -33,7 +47,8 @@ export function readAssistantPersistenceRecord(db: SqlDatabase): { version: numb
 
 export function readAssistantSnapshot(db: SqlDatabase): AssistantSnapshot {
     const meta = readAssistantMeta(db)
-    const sessions = removeInvalidSessions(db, readAssistantSessionSummaries(db))
+    const playground = readAssistantPlaygroundState(db)
+    const sessions = removeInvalidSessions(db, readAssistantSessionSummaries(db, playground))
     let selectedSessionId = meta.selectedSessionId
 
     if (selectedSessionId && !sessions.some((session) => session.id === selectedSessionId)) {
@@ -44,13 +59,12 @@ export function readAssistantSnapshot(db: SqlDatabase): AssistantSnapshot {
         snapshotSequence: meta.snapshotSequence,
         updatedAt: meta.updatedAt,
         selectedSessionId,
+        playground,
         sessions,
         knownModels: meta.knownModels
     }
     snapshot = recoverPersistedSnapshot(snapshot)
-    if (selectedSessionId) {
-        snapshot = hydrateFocusedSessionSnapshot(snapshot, selectedSessionId, readActiveThreadDetails(db, selectedSessionId, snapshot))
-    }
+    snapshot = hydrateSnapshotThreads(snapshot, selectedSessionId, readHydratedThreadDetails(db, snapshot, selectedSessionId))
     if (selectedSessionId !== meta.selectedSessionId) {
         persistAssistantSnapshotMeta(db, snapshot)
     }
@@ -60,6 +74,41 @@ export function readAssistantSnapshot(db: SqlDatabase): AssistantSnapshot {
 export function readActiveThreadDetails(db: SqlDatabase, sessionId: string, snapshot: AssistantSnapshot): AssistantHydratedThreadData | null {
     const session = snapshot.sessions.find((entry) => entry.id === sessionId)
     const threadId = session?.activeThreadId || session?.threadIds[0] || null
+    return threadId ? readThreadDetails(db, threadId) : null
+}
+
+export function readHydratedThreadDetails(
+    db: SqlDatabase,
+    snapshot: AssistantSnapshot,
+    focusedSessionId: string | null
+): Map<string, AssistantHydratedThreadData> {
+    const detailsByThreadId = new Map<string, AssistantHydratedThreadData>()
+    const threadIds = new Set<string>()
+
+    for (const session of snapshot.sessions) {
+        const shouldHydrateActiveThread = session.id === focusedSessionId
+        const activeThreadId = session.activeThreadId || session.threadIds[0] || null
+        if (shouldHydrateActiveThread && activeThreadId) {
+            threadIds.add(activeThreadId)
+        }
+        for (const thread of session.threads) {
+            if (shouldKeepHydratedThread(thread)) {
+                threadIds.add(thread.id)
+            }
+        }
+    }
+
+    for (const threadId of threadIds) {
+        const details = readThreadDetails(db, threadId)
+        if (details) {
+            detailsByThreadId.set(threadId, details)
+        }
+    }
+
+    return detailsByThreadId
+}
+
+function readThreadDetails(db: SqlDatabase, threadId: string): AssistantHydratedThreadData | null {
     if (!threadId) return null
 
     const activePlanRow = db.exec('SELECT active_plan_json FROM assistant_threads WHERE id = ?', [threadId])[0]?.values?.[0] || null
@@ -128,6 +177,45 @@ export function readActiveThreadDetails(db: SqlDatabase, sessionId: string, snap
     }
 }
 
+export function readAssistantSessionTurnUsage(db: SqlDatabase, sessionId: string): AssistantSessionTurnUsageEntry[] {
+    const rows = db.exec(`
+        SELECT
+            assistant_turns.id,
+            assistant_threads.session_id,
+            assistant_turns.thread_id,
+            assistant_turns.model,
+            assistant_turns.state,
+            assistant_turns.requested_at,
+            assistant_turns.started_at,
+            assistant_turns.completed_at,
+            assistant_turns.assistant_message_id,
+            assistant_turns.effort,
+            assistant_turns.service_tier,
+            assistant_turns.usage_json,
+            assistant_turns.updated_at
+        FROM assistant_turns
+        INNER JOIN assistant_threads ON assistant_threads.id = assistant_turns.thread_id
+        WHERE assistant_threads.session_id = ?
+        ORDER BY assistant_turns.requested_at ASC, assistant_turns.id ASC
+    `, [sessionId])[0]?.values || []
+
+    return rows.map((row) => ({
+        id: String(row[0] || ''),
+        sessionId: String(row[1] || ''),
+        threadId: String(row[2] || ''),
+        model: String(row[3] || ''),
+        state: String(row[4] || 'running') as AssistantLatestTurn['state'],
+        requestedAt: String(row[5] || new Date(0).toISOString()),
+        startedAt: toNullableString(row[6]),
+        completedAt: toNullableString(row[7]),
+        assistantMessageId: toNullableString(row[8]),
+        effort: toNullableString(row[9]) as AssistantLatestTurn['effort'],
+        serviceTier: toNullableString(row[10]) as AssistantLatestTurn['serviceTier'],
+        usage: parseJson(row[11], null),
+        updatedAt: String(row[12] || new Date(0).toISOString())
+    }))
+}
+
 function readAssistantMeta(db: SqlDatabase): AssistantMetaRow {
     const rows = db.exec('SELECT key, value FROM assistant_meta')
     const values = new Map<string, string>()
@@ -140,14 +228,31 @@ function readAssistantMeta(db: SqlDatabase): AssistantMetaRow {
         snapshotSequence: Number(values.get('snapshotSequence') || '0') || 0,
         updatedAt: values.get('updatedAt') || new Date(0).toISOString(),
         selectedSessionId: values.get('selectedSessionId') || null,
+        playgroundRootPath: values.get('playgroundRootPath') || null,
         knownModels: parseJson(values.get('knownModels') || '', [])
     }
 }
 
-function readAssistantSessionSummaries(db: SqlDatabase): AssistantSession[] {
+function getPathTerminalLabel(value: string | null | undefined): string | null {
+    const normalized = String(sanitizeAssistantProjectPath(value) || '')
+    if (!normalized) return null
+    const parts = normalized.split(/[\\/]/).filter(Boolean)
+    const label = parts[parts.length - 1] || ''
+    const trimmed = label.trim().toLowerCase()
+    return trimmed || null
+}
+
+function readAssistantSessionSummaries(db: SqlDatabase, playground: AssistantSnapshot['playground']): AssistantSession[] {
     const sessions = new Map<string, AssistantSession>()
+    const labTitleById = new Map(playground.labs.map((lab) => [lab.id, lab.title.trim().toLowerCase()] as const))
+    const sessionRoutePatches: Array<{
+        sessionId: string
+        mode: AssistantSession['mode']
+        projectPath: string | null
+        playgroundLabId: string | null
+    }> = []
     const sessionRows = db.exec(`
-        SELECT id, title, project_path, archived, created_at, updated_at, active_thread_id
+        SELECT id, title, mode, project_path, playground_lab_id, pending_lab_request_json, archived, created_at, updated_at, active_thread_id
         FROM assistant_sessions
         ORDER BY updated_at DESC, id DESC
     `)[0]?.values || []
@@ -156,15 +261,35 @@ function readAssistantSessionSummaries(db: SqlDatabase): AssistantSession[] {
         const session: AssistantSession = {
             id: String(row[0] || ''),
             title: String(row[1] || 'New Session'),
-            projectPath: toNullableString(row[2]),
-            archived: toNumber(row[3]) === 1,
-            createdAt: String(row[4] || new Date(0).toISOString()),
-            updatedAt: String(row[5] || new Date(0).toISOString()),
-            activeThreadId: toNullableString(row[6]),
+            mode: String(row[2] || 'work') === 'playground' ? 'playground' : 'work',
+            projectPath: toNullableString(row[3]),
+            playgroundLabId: toNullableString(row[4]),
+            pendingLabRequest: parseJson(row[5], null),
+            archived: toNumber(row[6]) === 1,
+            createdAt: String(row[7] || new Date(0).toISOString()),
+            updatedAt: String(row[8] || new Date(0).toISOString()),
+            activeThreadId: toNullableString(row[9]),
             threadIds: [],
             threads: []
         }
         sessions.set(session.id, session)
+    }
+
+    const firstUserMessageTextBySessionId = new Map<string, string>()
+    const firstUserMessageRows = db.exec(`
+        SELECT assistant_threads.session_id, assistant_messages.text
+        FROM assistant_messages
+        INNER JOIN assistant_threads ON assistant_threads.id = assistant_messages.thread_id
+        WHERE assistant_messages.role = 'user'
+        ORDER BY assistant_threads.session_id ASC, assistant_messages.created_at ASC, assistant_messages.id ASC
+    `)[0]?.values || []
+
+    for (const row of firstUserMessageRows) {
+        const sessionId = String(row[0] || '')
+        if (!sessionId || firstUserMessageTextBySessionId.has(sessionId)) continue
+        const messageText = String(row[1] || '').trim()
+        if (!messageText) continue
+        firstUserMessageTextBySessionId.set(sessionId, messageText)
     }
 
     const threadRows = db.exec(`
@@ -172,6 +297,12 @@ function readAssistantSessionSummaries(db: SqlDatabase): AssistantSession[] {
             id,
             session_id,
             provider_thread_id,
+            source,
+            parent_thread_id,
+            provider_parent_thread_id,
+            subagent_depth,
+            agent_nickname,
+            agent_role,
             model,
             cwd,
             message_count,
@@ -194,17 +325,23 @@ function readAssistantSessionSummaries(db: SqlDatabase): AssistantSession[] {
         const thread: AssistantThread = summarizeThread({
             id: String(row[0] || ''),
             providerThreadId: toNullableString(row[2]),
-            model: String(row[3] || ''),
-            cwd: toNullableString(row[4]),
-            messageCount: toNumber(row[5]),
-            lastSeenCompletedTurnId: toNullableString(row[6]),
-            runtimeMode: String(row[7] || 'approval-required') as AssistantThread['runtimeMode'],
-            interactionMode: String(row[8] || 'default') as AssistantThread['interactionMode'],
-            state: String(row[9] || 'idle') as AssistantThread['state'],
-            lastError: toNullableString(row[10]),
-            createdAt: String(row[11] || new Date(0).toISOString()),
-            updatedAt: String(row[12] || new Date(0).toISOString()),
-            latestTurn: parseJson(row[13], null),
+            source: String(row[3] || 'root') as AssistantThread['source'],
+            parentThreadId: toNullableString(row[4]),
+            providerParentThreadId: toNullableString(row[5]),
+            subagentDepth: typeof row[6] === 'number' && Number.isFinite(row[6]) ? row[6] : null,
+            agentNickname: toNullableString(row[7]),
+            agentRole: toNullableString(row[8]),
+            model: String(row[9] || ''),
+            cwd: toNullableString(row[10]),
+            messageCount: toNumber(row[11]),
+            lastSeenCompletedTurnId: toNullableString(row[12]),
+            runtimeMode: String(row[13] || 'approval-required') as AssistantThread['runtimeMode'],
+            interactionMode: String(row[14] || 'default') as AssistantThread['interactionMode'],
+            state: String(row[15] || 'idle') as AssistantThread['state'],
+            lastError: toNullableString(row[16]),
+            createdAt: String(row[17] || new Date(0).toISOString()),
+            updatedAt: String(row[18] || new Date(0).toISOString()),
+            latestTurn: parseJson(row[19], null),
             activePlan: null,
             messages: [],
             proposedPlans: [],
@@ -216,7 +353,103 @@ function readAssistantSessionSummaries(db: SqlDatabase): AssistantSession[] {
         session.threadIds.push(thread.id)
     }
 
+    for (const session of sessions.values()) {
+        const originalMode = session.mode
+        const originalProjectPath = session.projectPath
+        const originalPlaygroundLabId = session.playgroundLabId
+        const sanitizedProjectPath = sanitizeAssistantProjectPath(session.projectPath)
+        const firstUserMessageText = firstUserMessageTextBySessionId.get(session.id) || ''
+        const normalizedTitle = session.title.trim().toLowerCase()
+        const matchedLabById = session.playgroundLabId ? (playground.labs.find((lab) => lab.id === session.playgroundLabId) || null) : null
+        const matchedLabByPath = findAssistantPlaygroundLabByProjectPath(sanitizedProjectPath, playground)
+        const matchedLab = matchedLabById || matchedLabByPath
+        const matchedLabTitle = matchedLab?.title.trim().toLowerCase()
+            || (session.playgroundLabId ? labTitleById.get(session.playgroundLabId) || null : null)
+        const matchedProjectPathTitle = getPathTerminalLabel(sanitizedProjectPath)
+        const detachedPlaygroundSession = session.mode === 'playground'
+            && !sanitizedProjectPath
+            && !session.playgroundLabId
+        const inferredPlaygroundSession = detachedPlaygroundSession
+            || Boolean(matchedLab)
+            || isAssistantProjectInPlayground(sanitizedProjectPath, playground)
+
+        session.mode = inferredPlaygroundSession ? 'playground' : 'work'
+        session.projectPath = detachedPlaygroundSession
+            ? null
+            : (inferredPlaygroundSession
+                ? (
+                    isAssistantProjectInPlayground(sanitizedProjectPath, playground)
+                        ? sanitizedProjectPath
+                        : (matchedLab?.rootPath || sanitizedProjectPath || null)
+                )
+                : sanitizedProjectPath)
+        session.playgroundLabId = inferredPlaygroundSession && !detachedPlaygroundSession
+            ? (matchedLab?.id || null)
+            : null
+
+        if (
+            session.mode !== originalMode
+            || session.projectPath !== originalProjectPath
+            || session.playgroundLabId !== originalPlaygroundLabId
+        ) {
+            sessionRoutePatches.push({
+                sessionId: session.id,
+                mode: session.mode,
+                projectPath: session.projectPath,
+                playgroundLabId: session.playgroundLabId
+            })
+        }
+
+        const titleLooksLikeLabTitle = inferredPlaygroundSession && Boolean(
+            normalizedTitle
+            && (
+                normalizedTitle === matchedLabTitle
+                || normalizedTitle === matchedProjectPathTitle
+            )
+        )
+        if (!firstUserMessageText) continue
+        if (!isDefaultSessionTitle(session.title) && !titleLooksLikeLabTitle) continue
+
+        session.title = deriveSessionTitleFromPrompt(firstUserMessageText)
+    }
+
+    if (sessionRoutePatches.length > 0) {
+        runSqlTransaction(db, () => {
+            for (const patch of sessionRoutePatches) {
+                db.run(`
+                    UPDATE assistant_sessions
+                    SET mode = ?, project_path = ?, playground_lab_id = ?
+                    WHERE id = ?
+                `, [patch.mode, patch.projectPath, patch.playgroundLabId, patch.sessionId])
+            }
+        })
+    }
+
     return [...sessions.values()]
+}
+
+function readAssistantPlaygroundState(db: SqlDatabase): AssistantSnapshot['playground'] {
+    const rootPath = readAssistantMeta(db).playgroundRootPath
+    const labRows = db.exec(`
+        SELECT id, title, root_path, source, repo_url, created_at, updated_at
+        FROM assistant_playground_labs
+        ORDER BY updated_at DESC, id DESC
+    `)[0]?.values || []
+
+    const labs: AssistantPlaygroundLab[] = labRows.map((row) => ({
+        id: String(row[0] || ''),
+        title: String(row[1] || 'Lab'),
+        rootPath: String(row[2] || ''),
+        source: String(row[3] || 'empty') as AssistantPlaygroundLab['source'],
+        repoUrl: toNullableString(row[4]),
+        createdAt: String(row[5] || new Date(0).toISOString()),
+        updatedAt: String(row[6] || new Date(0).toISOString())
+    }))
+
+    return {
+        rootPath,
+        labs
+    }
 }
 
 function removeInvalidSessions(db: SqlDatabase, sessions: AssistantSession[]): AssistantSession[] {

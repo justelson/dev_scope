@@ -6,15 +6,22 @@ import log from 'electron-log'
 import initSqlJs, { type Database as SqlDatabase } from 'sql.js/dist/sql-asm.js'
 import type {
     AssistantDomainEvent,
+    AssistantSessionTurnUsageEntry,
     AssistantSnapshot
 } from '../../shared/assistant/contracts'
+import { is } from '../utils'
 import { createDefaultSnapshot, recoverPersistedSnapshot } from './projector'
-import { hydrateFocusedSessionSnapshot } from './persistence-snapshot'
-import { readActiveThreadDetails, readAssistantPersistenceRecord } from './persistence-read'
+import { hydrateSnapshotThreads } from './persistence-snapshot'
+import {
+    readHydratedThreadDetails,
+    readAssistantPersistenceRecord,
+    readAssistantSessionTurnUsage
+} from './persistence-read'
 import {
     initializeAssistantPersistenceSchema,
     PERSISTENCE_FLUSH_DEBOUNCE_MS,
-    PERSISTENCE_VERSION
+    PERSISTENCE_VERSION,
+    readAssistantPersistenceVersion
 } from './persistence-utils'
 import {
     persistAssistantEvent,
@@ -24,6 +31,7 @@ import {
 } from './persistence-write'
 
 const PERSISTENCE_EVENT_BATCH_DELAY_MS = 96
+const FORCE_ASSISTANT_DB_RESET_ENV = 'DEVSCOPE_RESET_ASSISTANT_DB'
 
 type PendingPersistenceEvent = {
     event: AssistantDomainEvent
@@ -37,6 +45,10 @@ function isRecoverableSqlitePersistenceError(error: unknown): boolean {
         || normalized.includes('file is not a database')
         || normalized.includes('malformed')
         || normalized.includes('not a database')
+}
+
+function shouldForceAssistantDbReset(): boolean {
+    return is.dev && process.env[FORCE_ASSISTANT_DB_RESET_ENV] === '1'
 }
 
 export class AssistantPersistence {
@@ -90,11 +102,18 @@ export class AssistantPersistence {
 
     async hydrateSelectedSession(snapshot: AssistantSnapshot, sessionId: string): Promise<AssistantSnapshot> {
         await this.ensureInitialized()
-        return this.enqueue(() => hydrateFocusedSessionSnapshot(
+        this.clearPendingEventTimer()
+        await this.processPendingEvents()
+        return this.enqueue(() => hydrateSnapshotThreads(
             snapshot,
             sessionId,
-            readActiveThreadDetails(this.requireDb(), sessionId, snapshot)
+            readHydratedThreadDetails(this.requireDb(), snapshot, sessionId)
         ))
+    }
+
+    async readSessionTurnUsage(sessionId: string): Promise<AssistantSessionTurnUsageEntry[]> {
+        await this.ensureInitialized()
+        return this.enqueue(() => readAssistantSessionTurnUsage(this.requireDb(), sessionId))
     }
 
     async flush(): Promise<void> {
@@ -122,6 +141,30 @@ export class AssistantPersistence {
             const dbBytes = existsSync(this.filePath) ? readFileSync(this.filePath) : null
             this.db = dbBytes ? new SQL.Database(dbBytes) : new SQL.Database()
             initializeAssistantPersistenceSchema(this.requireDb())
+
+            const storedVersion = dbBytes ? readAssistantPersistenceVersion(this.requireDb()) : PERSISTENCE_VERSION
+            if (shouldForceAssistantDbReset()) {
+                log.warn('[AssistantPersistence] Forced dev assistant DB reset requested.')
+                await this.rebuildDatabase({
+                    sql: SQL,
+                    backupReason: 'forced-reset',
+                    importLegacyJson: false,
+                    backupLegacyJson: true
+                })
+                return
+            }
+
+            if (dbBytes && is.dev && storedVersion !== PERSISTENCE_VERSION) {
+                log.warn(`[AssistantPersistence] Dev assistant DB version mismatch (${storedVersion ?? 'unknown'} -> ${PERSISTENCE_VERSION}). Resetting dev assistant database.`)
+                await this.rebuildDatabase({
+                    sql: SQL,
+                    backupReason: `dev-v${storedVersion ?? 'unknown'}-to-v${PERSISTENCE_VERSION}`,
+                    importLegacyJson: false,
+                    backupLegacyJson: true
+                })
+                return
+            }
+
             upsertAssistantMeta(this.requireDb(), 'persistenceVersion', String(PERSISTENCE_VERSION))
 
             if (!dbBytes && existsSync(this.legacyFilePath)) {
@@ -132,7 +175,11 @@ export class AssistantPersistence {
             if (existsSync(this.filePath) && isRecoverableSqlitePersistenceError(error)) {
                 log.warn('[AssistantPersistence] Corrupt SQLite persistence detected. Rebuilding assistant database.')
                 log.debug('[AssistantPersistence] Corrupt SQLite initialize error:', error)
-                await this.rebuildFromCorruptDatabase()
+                await this.rebuildDatabase({
+                    backupReason: 'corrupt',
+                    importLegacyJson: true,
+                    backupLegacyJson: false
+                })
                 return
             }
             log.error('[AssistantPersistence] Failed to initialize SQLite persistence.', error)
@@ -151,7 +198,12 @@ export class AssistantPersistence {
         }
     }
 
-    private async rebuildFromCorruptDatabase(): Promise<void> {
+    private async rebuildDatabase(options: {
+        sql?: Awaited<ReturnType<typeof initSqlJs>>
+        backupReason: string
+        importLegacyJson: boolean
+        backupLegacyJson: boolean
+    }): Promise<void> {
         try {
             this.db?.close()
         } catch {
@@ -159,21 +211,35 @@ export class AssistantPersistence {
         }
         this.db = null
 
-        const backupPath = `${this.filePath}.corrupt-${Date.now()}.bak`
-        try {
-            renameSync(this.filePath, backupPath)
-            log.warn(`[AssistantPersistence] Backed up corrupt assistant database to ${backupPath}`)
-        } catch (backupError) {
-            log.error('[AssistantPersistence] Failed to back up corrupt assistant database.', backupError)
-            throw backupError
+        const timestamp = Date.now()
+        if (existsSync(this.filePath)) {
+            const backupPath = `${this.filePath}.${options.backupReason}-${timestamp}.bak`
+            try {
+                renameSync(this.filePath, backupPath)
+                log.warn(`[AssistantPersistence] Backed up assistant database to ${backupPath}`)
+            } catch (backupError) {
+                log.error('[AssistantPersistence] Failed to back up assistant database.', backupError)
+                throw backupError
+            }
         }
 
-        const SQL = await initSqlJs()
+        if (options.backupLegacyJson && existsSync(this.legacyFilePath)) {
+            const legacyBackupPath = `${this.legacyFilePath}.${options.backupReason}-${timestamp}.bak`
+            try {
+                renameSync(this.legacyFilePath, legacyBackupPath)
+                log.warn(`[AssistantPersistence] Backed up assistant JSON snapshot to ${legacyBackupPath}`)
+            } catch (backupError) {
+                log.error('[AssistantPersistence] Failed to back up assistant JSON snapshot.', backupError)
+                throw backupError
+            }
+        }
+
+        const SQL = options.sql || await initSqlJs()
         this.db = new SQL.Database()
         initializeAssistantPersistenceSchema(this.requireDb())
         upsertAssistantMeta(this.requireDb(), 'persistenceVersion', String(PERSISTENCE_VERSION))
 
-        if (existsSync(this.legacyFilePath)) {
+        if (options.importLegacyJson && existsSync(this.legacyFilePath)) {
             this.importLegacyJson()
         }
 

@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import MarkdownRenderer from '../MarkdownRenderer'
 import { HIGHLIGHT_MAX_CHARS, HIGHLIGHT_MAX_LINES } from './constants'
 import type { PreviewFile, PreviewMeta } from './types'
@@ -30,6 +31,7 @@ function TextPreviewContent({
     focusLine,
     isExpanded = false
 }: TextPreviewContentProps) {
+    const isMarkdown = file.type === 'md'
     const isLargeTextPreview = useMemo(() => {
         const lineCount = content.split(/\r?\n/).length
         return content.length > HIGHLIGHT_MAX_CHARS || lineCount > HIGHLIGHT_MAX_LINES
@@ -46,6 +48,8 @@ function TextPreviewContent({
         isFormatting: false,
         fallbackReason: null
     })
+
+    const useLightweightMarkdown = isLargeTextPreview || meta.truncated
 
     useEffect(() => {
         if (file.type !== 'json') {
@@ -103,9 +107,17 @@ function TextPreviewContent({
 
     const previewSize = formatPreviewBytes(meta.previewBytes)
     const totalSize = formatPreviewBytes(meta.size)
+    const markdownContainerClassName = isExpanded
+        ? 'w-full min-h-full bg-sparkle-card p-6'
+        : 'w-full max-w-4xl min-h-full bg-sparkle-card rounded-xl p-6 border border-white/5'
 
     return (
-        <div className={isExpanded ? 'w-full h-full min-h-0 flex flex-col items-stretch gap-0' : 'w-full h-full min-h-0 flex flex-col items-center gap-3'}>
+        <div className={cn(
+            isExpanded
+                ? 'w-full flex flex-col items-stretch gap-0'
+                : 'w-full h-full min-h-0 flex flex-col items-center gap-3',
+            isMarkdown && isExpanded && 'bg-sparkle-card'
+        )}>
             {meta.truncated && (
                 <div className={isExpanded ? 'w-full px-3 py-2 text-xs text-amber-200 bg-amber-500/10 border-y border-amber-500/20' : 'w-full max-w-5xl px-3 py-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-lg'}>
                     Preview truncated for stability.
@@ -115,13 +127,18 @@ function TextPreviewContent({
             )}
 
             {file.type === 'md' && (
-                <div className={isExpanded ? 'w-full h-full bg-sparkle-card p-6 overflow-auto' : 'w-full max-w-4xl bg-sparkle-card rounded-xl p-6 border border-white/5'}>
-                    <MarkdownRenderer content={content} filePath={file.path} onInternalLinkClick={onInternalLinkClick} />
+                <div className={markdownContainerClassName}>
+                    <MarkdownRenderer
+                        content={content}
+                        filePath={file.path}
+                        onInternalLinkClick={onInternalLinkClick}
+                        lightweight={useLightweightMarkdown}
+                    />
                 </div>
             )}
 
             {file.type === 'json' && (
-                <div className={isExpanded ? 'w-full h-full min-h-0 bg-sparkle-card overflow-hidden' : 'w-full h-full min-h-0 max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden'}>
+                <div className={isExpanded ? 'w-full h-full min-h-0 bg-sparkle-card overflow-hidden' : 'w-full h-full min-h-0 max-w-[96%] bg-sparkle-card border border-white/5 overflow-hidden'}>
                     {jsonState.formatted ? (
                         <SyntaxPreview content={jsonState.formatted} language="json" filePath={file.path} focusLine={focusLine} height={isExpanded ? '100%' : undefined} />
                     ) : jsonState.isFormatting ? (
@@ -158,13 +175,13 @@ function TextPreviewContent({
             )}
 
             {file.type === 'code' && (
-                <div className={isExpanded ? 'w-full h-full min-h-0 bg-sparkle-card overflow-hidden' : 'w-full h-full min-h-0 max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden'}>
+                <div className={isExpanded ? 'w-full h-full min-h-0 bg-sparkle-card overflow-hidden' : 'w-full h-full min-h-0 max-w-[96%] bg-sparkle-card border border-white/5 overflow-hidden'}>
                     <SyntaxPreview content={content} language={file.language || 'text'} filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} focusLine={focusLine} height={isExpanded ? '100%' : undefined} />
                 </div>
             )}
 
             {file.type === 'text' && (
-                <div className={isExpanded ? 'w-full h-full min-h-0 bg-sparkle-card overflow-hidden' : 'w-full h-full min-h-0 max-w-[96%] bg-sparkle-card rounded-xl border border-white/5 overflow-hidden'}>
+                <div className={isExpanded ? 'w-full h-full min-h-0 bg-sparkle-card overflow-hidden' : 'w-full h-full min-h-0 max-w-[96%] bg-sparkle-card border border-white/5 overflow-hidden'}>
                     <SyntaxPreview content={content} language="text" filePath={file.path} projectPath={projectPath} gitDiffText={gitDiffText} focusLine={focusLine} height={isExpanded ? '100%' : undefined} />
                 </div>
             )}
@@ -172,18 +189,29 @@ function TextPreviewContent({
     )
 }
 
-export default memo(TextPreviewContent, (previous, next) => (
-    previous.file.path === next.file.path
-    && previous.file.type === next.file.type
-    && previous.file.language === next.file.language
-    && previous.content === next.content
-    && previous.meta.previewBytes === next.meta.previewBytes
-    && previous.meta.size === next.meta.size
-    && previous.meta.truncated === next.meta.truncated
-    && previous.projectPath === next.projectPath
-    && previous.onInternalLinkClick === next.onInternalLinkClick
-    && previous.gitDiffText === next.gitDiffText
-    && previous.csvDistinctColorsEnabled === next.csvDistinctColorsEnabled
-    && previous.focusLine === next.focusLine
-    && previous.isExpanded === next.isExpanded
-))
+export default memo(TextPreviewContent, (previous, next) => {
+    const sameBasePreview = (
+        previous.file.path === next.file.path
+        && previous.file.type === next.file.type
+        && previous.file.language === next.file.language
+        && previous.content === next.content
+        && previous.meta.previewBytes === next.meta.previewBytes
+        && previous.meta.size === next.meta.size
+        && previous.meta.truncated === next.meta.truncated
+        && previous.isExpanded === next.isExpanded
+    )
+
+    if (!sameBasePreview) return false
+
+    if (previous.file.type === 'md' && next.file.type === 'md') {
+        return previous.onInternalLinkClick === next.onInternalLinkClick
+    }
+
+    return (
+        previous.projectPath === next.projectPath
+        && previous.onInternalLinkClick === next.onInternalLinkClick
+        && previous.gitDiffText === next.gitDiffText
+        && previous.csvDistinctColorsEnabled === next.csvDistinctColorsEnabled
+        && previous.focusLine === next.focusLine
+    )
+})

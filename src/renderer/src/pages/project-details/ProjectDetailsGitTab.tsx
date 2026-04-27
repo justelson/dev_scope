@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useSettings } from '@/lib/settings'
 import { WorkingChangesView } from './WorkingChangesView'
 import { ProjectDetailsGitHeader } from './ProjectDetailsGitHeader'
 import { ProjectDetailsGitManageView } from './ProjectDetailsGitManageView'
 import { PullRequestModal } from './PullRequestModal'
+import { useCurrentBranchPullRequest } from './pull-request/useCurrentBranchPullRequest'
 import { useProjectDetailsGitViewModel } from './useProjectDetailsGitViewModel'
 import { getRefreshModeForGitView } from './projectDataLifecycle/gitLifecycleUtils'
 import {
@@ -98,14 +99,12 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         showFetchUpstreamButton,
         canSyncFromUpstream,
         pushAccessIndicator,
-        compactPushSummaryLines,
         currentBranchNeedsPublish,
         showPushAction,
         visibleHistorySource,
         visibleHistoryCommits,
         effectiveHistoryTotalCount,
         totalHistoryPages,
-        unpushedStatsLoading,
         incomingStatsLoading,
         historyLoading,
         shouldHighlightPull,
@@ -113,10 +112,12 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         pagedIncomingCommits,
         localOnlyCommitHashes,
         activeFetchTarget,
+        activeUpdateTarget,
         remoteHeadCommitHash,
         handleNextHistoryPage,
         handleFetchOrigin,
         handleFetchUpstream,
+        handlePullFromOrigin,
         handleSyncFromUpstream,
         originRemoteUrl,
         upstreamRemoteUrl,
@@ -154,6 +155,50 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         refreshGitData,
         showToast
     })
+    const {
+        pullRequest: currentBranchPullRequest,
+        loading: loadingCurrentBranchPullRequest,
+        setPullRequest: setCurrentBranchPullRequest
+    } = useCurrentBranchPullRequest({
+        projectPath: decodedPath,
+        currentBranch,
+        enabled: hasGitHubRemote === true
+    })
+    const pullRequestActionLabel = loadingCurrentBranchPullRequest
+        ? 'Checking PR...'
+        : currentBranchPullRequest?.state === 'open'
+            ? 'View PR'
+            : 'Open PR'
+    const pullRequestActionHint = (() => {
+        if (loadingCurrentBranchPullRequest) {
+            return 'Checking whether this branch already has an open pull request.'
+        }
+        if (currentBranchPullRequest?.state === 'open') {
+            return `PR #${currentBranchPullRequest.number} is already open for this branch.`
+        }
+        if (currentBranchPullRequest?.state === 'merged') {
+            return `Latest PR #${currentBranchPullRequest.number} is already merged. Opening the PR flow will create a fresh one if needed.`
+        }
+        if (currentBranchPullRequest?.state === 'closed') {
+            return `Latest PR #${currentBranchPullRequest.number} is closed. Opening the PR flow will create a fresh one if needed.`
+        }
+        if (currentBranchNeedsPublish) {
+            return `DevScope will publish "${currentBranch || 'current'}" before creating the pull request.`
+        }
+        if (unpushedCommits.length > 0) {
+            return 'DevScope will push this branch before creating the pull request.'
+        }
+        return 'Create or reopen the pull request for the current branch.'
+    })()
+    const handlePrimaryPullRequestAction = useCallback(() => {
+        if (currentBranchPullRequest?.state === 'open' && currentBranchPullRequest.url) {
+            window.open(currentBranchPullRequest.url, '_blank', 'noopener,noreferrer')
+            showToast(`Opened PR #${currentBranchPullRequest.number}.`)
+            return
+        }
+        setShowPullRequestModal(true)
+    }, [currentBranchPullRequest, showToast])
+
     return (
         <div className="flex flex-col h-full">
             {gitError && (
@@ -188,7 +233,10 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         loadingGitHubPublishContext={loadingGitHubPublishContext}
                         gitHubPublishContextError={gitHubPublishContextError}
                         hasGitHubRemote={hasGitHubRemote}
-                        onOpenCreatePullRequest={() => setShowPullRequestModal(true)}
+                        pullRequestActionLabel={pullRequestActionLabel}
+                        pullRequestActionHint={pullRequestActionHint}
+                        pullRequestActionDisabled={!hasGitHubRemote || loadingCurrentBranchPullRequest}
+                        onOpenCreatePullRequest={handlePrimaryPullRequestAction}
                     />
                 ) : gitView === 'changes' ? (
                     <WorkingChangesView
@@ -217,6 +265,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         handleDiscardUnstagedFile={handleDiscardUnstagedFile}
                         handleDiscardUnstagedAll={handleDiscardUnstagedAll}
                         ensureStatsForPaths={ensureStatsForPaths}
+                        refreshGitData={refreshGitData}
                     />
                 ) : gitView === 'unpushed' ? (
                     <ProjectDetailsGitUnpushedView
@@ -224,11 +273,15 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         setInitStep={setInitStep}
                         setShowInitModal={setShowInitModal}
                         showPushAction={showPushAction}
-                        unpushedStatsLoading={unpushedStatsLoading}
-                        currentBranchNeedsPublish={currentBranchNeedsPublish}
-                        compactPushSummaryLines={compactPushSummaryLines}
+                        currentBranch={currentBranch}
+                        branches={branches}
+                        remotes={remotes}
                         hasGitHubRemote={hasGitHubRemote}
-                        onOpenCreatePullRequest={() => setShowPullRequestModal(true)}
+                        pullRequestActionLabel={pullRequestActionLabel}
+                        pullRequestActionDisabled={!hasGitHubRemote || loadingCurrentBranchPullRequest}
+                        onPushCommits={handlePush}
+                        isPushing={isPushing}
+                        onOpenCreatePullRequest={handlePrimaryPullRequestAction}
                         unpushedCommits={unpushedCommits}
                         onCommitClick={handleCommitClick}
                         localOnlyCommitHashes={localOnlyCommitHashes}
@@ -243,6 +296,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         upstreamRepoDisplay={upstreamRepoDisplay}
                         isFetching={isFetching}
                         activeFetchTarget={activeFetchTarget}
+                        activeUpdateTarget={activeUpdateTarget}
                         canFetchOrigin={canFetchOrigin}
                         showFetchUpstreamButton={showFetchUpstreamButton}
                         canSyncFromUpstream={canSyncFromUpstream}
@@ -259,6 +313,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         ITEMS_PER_PAGE={ITEMS_PER_PAGE}
                         handleFetchOrigin={handleFetchOrigin}
                         handleFetchUpstream={handleFetchUpstream}
+                        handlePullFromOrigin={handlePullFromOrigin}
                         handleSyncFromUpstream={handleSyncFromUpstream}
                         handlePull={handlePull}
                         handleCommitClick={handleCommitClick}
@@ -295,9 +350,11 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                 stagedFiles={stagedFiles}
                 unpushedCommits={unpushedCommits}
                 githubPublishContext={githubPublishContext}
+                initialPullRequest={currentBranchPullRequest}
                 settings={settings}
                 updateSettings={updateSettings}
                 showToast={showToast}
+                onPullRequestResolved={setCurrentBranchPullRequest}
                 onCommitClick={handleCommitClick}
             />
             <ProjectDetailsRepoInfoModal

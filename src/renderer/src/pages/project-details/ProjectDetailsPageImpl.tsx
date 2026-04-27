@@ -45,6 +45,7 @@ export default function ProjectDetailsPage() {
     const scriptModal = useScriptRunModal({
         project: state.project,
         defaultShell: settings.defaultShell,
+        packageRuntimePreference: settings.packageRuntimePreference,
         openTerminal
     })
 
@@ -55,10 +56,7 @@ export default function ProjectDetailsPage() {
         projectRootPath: derived.projectRootPath,
         toast: state.toast,
         setToast: state.setToast,
-        setCopiedPath: state.setCopiedPath,
-        setInstalledIdes: state.setInstalledIdes,
-        setLoadingInstalledIdes: state.setLoadingInstalledIdes,
-        setOpeningIdeId: state.setOpeningIdeId
+        setCopiedPath: state.setCopiedPath
     })
 
     useProjectDetailsPersistence({
@@ -159,6 +157,7 @@ export default function ProjectDetailsPage() {
     }, [derived.currentBranch, state.setTargetBranch])
 
     const fileView = useProjectFileView({
+        projectRootPath: derived.projectRootPath,
         fileTree: state.fileTree,
         gitStatusMap: state.gitStatusMap,
         showHidden: state.showHidden,

@@ -93,35 +93,44 @@ function looksLikePatchText(value: string): boolean {
         || (value.includes('--- ') && value.includes('+++ '))
 }
 
-function readPatchText(value: unknown, seen = new WeakSet<object>(), depth = 0): string | undefined {
-    if (depth > 6) return undefined
+function collectPatchTexts(
+    value: unknown,
+    target: Set<string>,
+    seen = new WeakSet<object>(),
+    depth = 0
+): void {
+    if (depth > 6) return
     if (typeof value === 'string') {
         const trimmed = value.trim()
-        return looksLikePatchText(trimmed) ? trimmed : undefined
+        if (looksLikePatchText(trimmed)) target.add(trimmed)
+        return
     }
-    if (!value || typeof value !== 'object') return undefined
-    if (seen.has(value)) return undefined
+    if (!value || typeof value !== 'object') return
+    if (seen.has(value)) return
     seen.add(value)
     if (Array.isArray(value)) {
         for (const entry of value) {
-            const nested = readPatchText(entry, seen, depth + 1)
-            if (nested) return nested
+            collectPatchTexts(entry, target, seen, depth + 1)
         }
-        return undefined
+        return
     }
 
     const record = asRecord(value)
-    if (!record) return undefined
+    if (!record) return
     for (const [key, entry] of Object.entries(record)) {
         if (!PATCH_TEXT_KEYS.has(key)) continue
-        const nested = readPatchText(entry, seen, depth + 1)
-        if (nested) return nested
+        collectPatchTexts(entry, target, seen, depth + 1)
     }
     for (const entry of Object.values(record)) {
-        const nested = readPatchText(entry, seen, depth + 1)
-        if (nested) return nested
+        collectPatchTexts(entry, target, seen, depth + 1)
     }
-    return undefined
+}
+
+function readPatchText(value: unknown): string | undefined {
+    const texts = new Set<string>()
+    collectPatchTexts(value, texts)
+    const combined = [...texts].join('\n\n').trim()
+    return combined || undefined
 }
 
 function readNestedNumericStat(
@@ -283,16 +292,48 @@ export function extractItemPaths(item: Record<string, unknown>): string[] {
     return [...candidates]
 }
 
+function hasDisplayValue(value: unknown): boolean {
+    if (value === null || value === undefined) return false
+    if (typeof value === 'string') return value.trim().length > 0
+    if (Array.isArray(value)) return value.length > 0
+    if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0
+    return true
+}
+
+function stringifyJsonValue(value: unknown, pretty = true): string | undefined {
+    if (!hasDisplayValue(value)) return undefined
+    if (typeof value === 'string') return value.trim() || undefined
+    try {
+        return JSON.stringify(value, null, pretty ? 2 : 0)
+    } catch {
+        return undefined
+    }
+}
+
+function readDisplayValue(value: unknown): string | undefined {
+    return readTextValue(value) || stringifyJsonValue(value)
+}
+
 export function readToolOutput(item: Record<string, unknown>): string | undefined {
     return readTextValue(item['stdout'])
         || readTextValue(item['stderr'])
         || readTextValue(item['output'])
+        || readTextValue(item['aggregatedOutput'])
+        || readTextValue(item['aggregated_output'])
+        || readTextValue(item['formattedOutput'])
+        || readTextValue(item['formatted_output'])
         || readTextValue(item['result'])
         || readTextValue(asRecord(item['result'])?.['output'])
         || readTextValue(asRecord(item['result'])?.['stdout'])
         || readTextValue(asRecord(item['result'])?.['stderr'])
         || readTextValue(asRecord(item['response'])?.['output'])
         || readTextValue(asRecord(item['response'])?.['result'])
+        || readDisplayValue(item['structuredContent'])
+        || readDisplayValue(asRecord(item['result'])?.['structuredContent'])
+        || readDisplayValue(item['contentItems'])
+        || readDisplayValue(item['tools'])
+        || readDisplayValue(item['result'])
+        || readDisplayValue(item['response'])
 }
 
 export function readNumericValue(value: unknown): number | undefined {
@@ -314,6 +355,93 @@ export function readToolTiming(item: Record<string, unknown>) {
         completedAt,
         durationMs
     }
+}
+
+function readToolArguments(item: Record<string, unknown>): unknown {
+    const inputRecord = asRecord(item['input'])
+    const actionRecord = asRecord(item['action'])
+    return item['arguments']
+        ?? inputRecord?.['arguments']
+        ?? inputRecord
+        ?? item['input']
+        ?? item['params']
+        ?? actionRecord
+}
+
+function readCommandValue(item: Record<string, unknown>): string | undefined {
+    const inputRecord = asRecord(item['input'])
+    const actionRecord = asRecord(item['action'])
+    const actionCommand = actionRecord?.['command']
+    if (Array.isArray(actionCommand)) {
+        const command = actionCommand
+            .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+            .join(' ')
+            .trim()
+        if (command) return command
+    }
+
+    return readTextValue(item['command'])
+        || readTextValue(inputRecord?.['command'])
+        || readTextValue(actionCommand)
+}
+
+function readActionQuery(item: Record<string, unknown>): string | undefined {
+    const action = asRecord(item['action'])
+    const queries = Array.isArray(action?.['queries'])
+        ? action?.['queries'].filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        : []
+    return readTextValue(action?.['query'])
+        || (queries.length > 0 ? queries.join(', ') : undefined)
+}
+
+function readToolErrorText(value: unknown): string | undefined {
+    const errorRecord = asRecord(value)
+    return readTextValue(value)
+        || readTextValue(errorRecord?.['message'])
+        || readTextValue(errorRecord?.['error'])
+        || stringifyJsonValue(value)
+}
+
+function isRunningStatus(status: string | undefined): boolean {
+    const normalized = normalizeItemType(status)
+    return normalized === 'in progress'
+        || normalized === 'running'
+        || normalized === 'pending'
+        || normalized === 'started'
+}
+
+function isFailedStatus(status: string | undefined): boolean {
+    const normalized = normalizeItemType(status)
+    return normalized === 'failed'
+        || normalized === 'error'
+        || normalized === 'cancelled'
+        || normalized === 'declined'
+}
+
+function formatToolTranscript(input: {
+    invocation: string
+    argumentsValue?: unknown
+    output?: string
+    error?: string
+    status?: string
+}): string {
+    const compactArguments = stringifyJsonValue(input.argumentsValue, false)
+    const lines = [`$ ${input.invocation}${compactArguments ? ` ${compactArguments}` : ''}`]
+    const output = input.error
+        ? `! ${input.error}`
+        : input.output
+            ? input.output
+            : isRunningStatus(input.status)
+                ? 'waiting for output...'
+                : 'no output'
+
+    return [...lines, '', output].join('\n')
+}
+
+function buildToolSummary(input: { running: string; completed: string; failed: string; status?: string; hasError?: boolean }): string {
+    if (input.hasError || isFailedStatus(input.status)) return input.failed
+    if (isRunningStatus(input.status)) return input.running
+    return input.completed
 }
 
 function readPatchSummary(value: unknown): { additions: number; deletions: number; fileCount: number } | null {
@@ -384,13 +512,17 @@ export function buildToolActivity(item: Record<string, unknown>, itemType: strin
         kind: string
         summary: string
         detail?: string
-        tone: 'tool'
+        tone: 'info' | 'tool' | 'warning' | 'error'
         data: Record<string, unknown>
     }
     | null {
-    const command = readTextValue(item['command']) || readTextValue(asRecord(item['input'])?.['command'])
-    const query = readTextValue(item['query']) || readTextValue(item['pattern']) || readTextValue(item['url'])
-    const toolName = readTextValue(item['tool']) || readTextValue(item['name'])
+    const command = readCommandValue(item)
+    const query = readTextValue(item['query']) || readTextValue(item['pattern']) || readTextValue(item['url']) || readActionQuery(item)
+    const serverName = readTextValue(item['server']) || readTextValue(item['namespace'])
+    const rawToolName = readTextValue(item['tool']) || readTextValue(item['name']) || readTextValue(item['execution'])
+    const toolName = serverName && rawToolName ? `${serverName}.${rawToolName}` : rawToolName
+    const status = readTextValue(item['status']) || readTextValue(item['state']) || readTextValue(item['phase'])
+    const argumentsValue = readToolArguments(item)
     const paths = extractItemPaths(item)
     const output = readToolOutput(item)
     const timing = readToolTiming(item)
@@ -408,7 +540,7 @@ export function buildToolActivity(item: Record<string, unknown>, itemType: strin
             summary: paths.length > 1 ? 'Read files' : 'Read file',
             detail: paths.join('\n') || detail,
             tone: 'tool',
-            data: { itemType, paths, startedAt: timing.startedAt, completedAt: timing.completedAt, durationMs: timing.durationMs }
+            data: { itemType, status, paths, startedAt: timing.startedAt, completedAt: timing.completedAt, durationMs: timing.durationMs }
         }
     }
 
@@ -426,6 +558,7 @@ export function buildToolActivity(item: Record<string, unknown>, itemType: strin
             tone: 'tool',
             data: {
                 itemType,
+                status,
                 paths,
                 createdPaths,
                 patch,
@@ -439,16 +572,43 @@ export function buildToolActivity(item: Record<string, unknown>, itemType: strin
         }
     }
 
-    if (itemType.includes('search') || itemType.includes('web') || query) {
+    if (itemType.includes('mcp tool call')) {
+        const result = item['result']
+        const resultRecord = asRecord(result)
+        const error = item['error']
+        const errorText = readToolErrorText(error)
+        const resultOutput = output || readDisplayValue(resultRecord?.['content']) || readDisplayValue(resultRecord?.['structuredContent'])
+        const invocation = toolName || rawToolName || 'mcp.tool'
         return {
-            kind: 'search',
-            summary: 'Searched',
-            detail: query || detail,
-            tone: 'tool',
+            kind: 'tool',
+            summary: buildToolSummary({
+                running: 'Running MCP tool',
+                completed: 'Ran MCP tool',
+                failed: 'MCP tool failed',
+                status,
+                hasError: Boolean(errorText)
+            }),
+            detail: invocation,
+            tone: errorText ? 'error' : 'tool',
             data: {
+                category: 'mcp-tool',
                 itemType,
-                query,
-                output: output && output !== query ? output : detail && detail !== query ? detail : undefined,
+                status: errorText ? 'failed' : status,
+                server: serverName,
+                tool: rawToolName,
+                toolName: invocation,
+                arguments: argumentsValue,
+                input: stringifyJsonValue(argumentsValue),
+                result,
+                structuredContent: resultRecord?.['structuredContent'],
+                error,
+                output: formatToolTranscript({
+                    invocation,
+                    argumentsValue,
+                    output: resultOutput,
+                    error: errorText,
+                    status
+                }),
                 startedAt: timing.startedAt,
                 completedAt: timing.completedAt,
                 durationMs: timing.durationMs
@@ -456,16 +616,144 @@ export function buildToolActivity(item: Record<string, unknown>, itemType: strin
         }
     }
 
-    if (itemType.includes('command') || command) {
+    if (itemType.includes('dynamic tool call')) {
+        const successValue = item['success']
+        const effectiveStatus = status || (successValue === false ? 'failed' : successValue === true ? 'completed' : undefined)
+        const contentItems = item['contentItems']
+        const contentOutput = output || readDisplayValue(contentItems)
+        const invocation = toolName || rawToolName || 'tool.call'
+        return {
+            kind: 'tool',
+            summary: buildToolSummary({
+                running: 'Running tool',
+                completed: 'Ran tool',
+                failed: 'Tool failed',
+                status: effectiveStatus,
+                hasError: successValue === false
+            }),
+            detail: invocation,
+            tone: successValue === false ? 'error' : 'tool',
+            data: {
+                category: 'dynamic-tool',
+                itemType,
+                status: effectiveStatus,
+                tool: rawToolName,
+                toolName: invocation,
+                arguments: argumentsValue,
+                input: stringifyJsonValue(argumentsValue),
+                contentItems,
+                success: successValue,
+                output: formatToolTranscript({
+                    invocation,
+                    argumentsValue,
+                    output: contentOutput,
+                    error: successValue === false && !contentOutput ? 'Tool returned failure.' : undefined,
+                    status: effectiveStatus
+                }),
+                startedAt: timing.startedAt,
+                completedAt: timing.completedAt,
+                durationMs: timing.durationMs
+            }
+        }
+    }
+
+    if (itemType.includes('web search')) {
+        const action = item['action']
+        const invocation = 'web.search'
+        return {
+            kind: 'search',
+            summary: buildToolSummary({
+                running: 'Searching web',
+                completed: 'Searched web',
+                failed: 'Web search failed',
+                status
+            }),
+            detail: query || detail,
+            tone: 'tool',
+            data: {
+                category: 'web-search',
+                itemType,
+                status,
+                query,
+                action,
+                arguments: action || argumentsValue,
+                input: stringifyJsonValue(action || argumentsValue),
+                output: formatToolTranscript({
+                    invocation,
+                    argumentsValue: action || argumentsValue || (query ? { query } : undefined),
+                    output,
+                    status
+                }),
+                startedAt: timing.startedAt,
+                completedAt: timing.completedAt,
+                durationMs: timing.durationMs
+            }
+        }
+    }
+
+    if (itemType.includes('search') || itemType.includes('web') || query) {
+        const invocation = toolName || (itemType.includes('tool search') ? 'tool.search' : 'search')
+        return {
+            kind: 'search',
+            summary: buildToolSummary({
+                running: 'Searching',
+                completed: 'Searched',
+                failed: 'Search failed',
+                status
+            }),
+            detail: query || invocation || detail,
+            tone: 'tool',
+            data: {
+                itemType,
+                status,
+                toolName: invocation,
+                query,
+                arguments: argumentsValue,
+                input: stringifyJsonValue(argumentsValue),
+                output: formatToolTranscript({
+                    invocation,
+                    argumentsValue: argumentsValue || (query ? { query } : undefined),
+                    output: output && output !== query ? output : detail && detail !== query ? detail : undefined,
+                    status
+                }),
+                startedAt: timing.startedAt,
+                completedAt: timing.completedAt,
+                durationMs: timing.durationMs
+            }
+        }
+    }
+
+    if (itemType.includes('command') || itemType.includes('shell call') || itemType.includes('local shell') || command) {
+        const exitCode = readNumericValue(item['exitCode']) ?? readNumericValue(item['exit_code'])
+        const actionRecord = asRecord(item['action'])
+        const cwd = readTextValue(item['cwd'])
+            || readTextValue(item['workingDirectory'])
+            || readTextValue(item['working_directory'])
+            || readTextValue(actionRecord?.['working_directory'])
+        const source = readTextValue(item['source'])
+        const processId = readTextValue(item['processId']) || readTextValue(item['process_id'])
+        const normalizedStatus = normalizeItemType(status)
+        const summary = normalizedStatus === 'in progress'
+            ? 'Running command'
+            : normalizedStatus === 'failed'
+                ? 'Command failed'
+                : normalizedStatus === 'declined'
+                    ? 'Command declined'
+                    : 'Ran command'
         return {
             kind: 'command',
-            summary: 'Ran command',
+            summary,
             detail: command || detail,
             tone: 'tool',
             data: {
                 itemType,
+                status,
                 command,
+                cwd,
+                source,
+                processId,
                 paths,
+                exitCode,
                 output: output && output !== command ? output : detail && detail !== command ? detail : undefined,
                 startedAt: timing.startedAt,
                 completedAt: timing.completedAt,
@@ -475,16 +763,40 @@ export function buildToolActivity(item: Record<string, unknown>, itemType: strin
     }
 
     if (itemType.includes('tool') || itemType.includes('function') || toolName) {
+        const invocation = toolName || rawToolName || (itemType.includes('output') ? 'tool.output' : 'tool.call')
+        const errorText = readToolErrorText(item['error'])
+        const toolOutput = output && output !== toolName ? output : detail && detail !== toolName ? detail : undefined
+        const isOutputOnly = itemType.includes('output') && !toolName && !rawToolName
         return {
             kind: 'tool',
-            summary: 'Ran tool',
-            detail: toolName || detail,
-            tone: 'tool',
+            summary: buildToolSummary({
+                running: 'Running tool',
+                completed: 'Ran tool',
+                failed: 'Tool failed',
+                status,
+                hasError: Boolean(errorText)
+            }),
+            detail: toolName || rawToolName || (isOutputOnly ? undefined : detail),
+            tone: errorText ? 'error' : 'tool',
             data: {
                 itemType,
+                status: errorText ? 'failed' : status,
                 toolName,
+                tool: rawToolName,
+                server: serverName,
                 paths,
-                output: output && output !== toolName ? output : detail && detail !== toolName ? detail : undefined,
+                arguments: argumentsValue,
+                input: stringifyJsonValue(argumentsValue),
+                result: item['result'],
+                response: item['response'],
+                error: item['error'],
+                output: formatToolTranscript({
+                    invocation,
+                    argumentsValue,
+                    output: toolOutput,
+                    error: errorText,
+                    status
+                }),
                 startedAt: timing.startedAt,
                 completedAt: timing.completedAt,
                 durationMs: timing.durationMs

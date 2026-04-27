@@ -1,5 +1,6 @@
 import { spawnSync } from 'child_process'
 import log from 'electron-log'
+import { existsSync, readdirSync } from 'fs'
 import { stat, unlink } from 'fs/promises'
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from 'path'
 import { simpleGit, type SimpleGit } from 'simple-git'
@@ -11,12 +12,96 @@ const AI_PATCH_MAX_FILES = 16
 const AI_PATCH_MAX_LINES_PER_FILE = 120
 const AI_PATCH_MAX_LINES_TOTAL = 900
 
-type GitRuntime = {
+export type GitRuntime = {
     binary: string
     env: NodeJS.ProcessEnv
 }
 
 let cachedGitRuntime: GitRuntime | null = null
+
+function getGitHubDesktopGitCandidates(localAppData: string): string[] {
+    const desktopRoot = join(localAppData, 'GitHubDesktop')
+    if (!existsSync(desktopRoot)) return []
+
+    try {
+        return readdirSync(desktopRoot, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory() && /^app-/i.test(entry.name))
+            .sort((left, right) => right.name.localeCompare(left.name))
+            .flatMap((entry) => {
+                const appRoot = join(desktopRoot, entry.name)
+                return [
+                    join(appRoot, 'resources', 'app', 'git', 'cmd', 'git.exe'),
+                    join(appRoot, 'resources', 'app', 'git', 'bin', 'git.exe'),
+                    join(appRoot, 'resources', 'app.asar.unpacked', 'git', 'cmd', 'git.exe'),
+                    join(appRoot, 'resources', 'app.asar.unpacked', 'git', 'bin', 'git.exe')
+                ]
+            })
+    } catch {
+        return []
+    }
+}
+
+function resolveGitBinaryPath(env: NodeJS.ProcessEnv): string {
+    const locateCommand = process.platform === 'win32' ? 'where' : 'which'
+    const locateResult = spawnSync(locateCommand, ['git'], {
+        encoding: 'utf8',
+        windowsHide: true,
+        env
+    })
+
+    const resolvedFromPath = locateResult.status === 0
+        ? (locateResult.stdout || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .find((line) => Boolean(line) && existsSync(line))
+        : ''
+
+    if (resolvedFromPath) return resolvedFromPath
+
+    if (process.platform !== 'win32') {
+        return ''
+    }
+
+    const programFiles = [
+        env.ProgramFiles,
+        env['ProgramFiles(x86)'],
+        process.env.ProgramFiles,
+        process.env['ProgramFiles(x86)']
+    ].filter((value): value is string => typeof value === 'string' && value.length > 0)
+    const localAppData = [
+        env.LOCALAPPDATA,
+        process.env.LOCALAPPDATA
+    ].find((value): value is string => typeof value === 'string' && value.length > 0)
+    const userProfile = [
+        env.USERPROFILE,
+        process.env.USERPROFILE
+    ].find((value): value is string => typeof value === 'string' && value.length > 0)
+    const chocolateyInstall = [
+        env.ChocolateyInstall,
+        process.env.ChocolateyInstall
+    ].find((value): value is string => typeof value === 'string' && value.length > 0)
+
+    const candidates = [
+        ...programFiles.flatMap((root) => [
+            join(root, 'Git', 'cmd', 'git.exe'),
+            join(root, 'Git', 'bin', 'git.exe')
+        ]),
+        ...(localAppData ? [
+            join(localAppData, 'Programs', 'Git', 'cmd', 'git.exe'),
+            join(localAppData, 'Programs', 'Git', 'bin', 'git.exe'),
+            ...getGitHubDesktopGitCandidates(localAppData)
+        ] : []),
+        ...(userProfile ? [
+            join(userProfile, 'scoop', 'apps', 'git', 'current', 'cmd', 'git.exe'),
+            join(userProfile, 'scoop', 'apps', 'git', 'current', 'bin', 'git.exe')
+        ] : []),
+        ...(chocolateyInstall ? [
+            join(chocolateyInstall, 'bin', 'git.exe')
+        ] : [])
+    ]
+
+    return candidates.find((candidate) => existsSync(candidate)) || ''
+}
 
 function normalizeFsPath(input: string): string {
     const trimmed = String(input || '').trim()
@@ -36,33 +121,22 @@ function resolveGitRuntime(): GitRuntime {
     if (cachedGitRuntime) return cachedGitRuntime
 
     const env = getAugmentedEnv()
-    const locateCommand = process.platform === 'win32' ? 'where' : 'which'
-    const locateResult = spawnSync(locateCommand, ['git'], {
-        encoding: 'utf8',
-        windowsHide: true,
-        env
-    })
-
-    const resolvedPath = locateResult.status === 0
-        ? (locateResult.stdout || '')
-            .split(/\r?\n/)
-            .map((line) => line.trim())
-            .find(Boolean)
-        : ''
+    const resolvedPath = resolveGitBinaryPath(env)
 
     if (!resolvedPath) {
-        log.warn('[Git] Falling back to `git` from PATH. Could not resolve binary path via where/which.')
-    } else {
-        const gitDir = dirname(resolvedPath)
-        const pathCandidates = [env.Path, env.PATH].filter((value): value is string => typeof value === 'string' && value.length > 0)
-        const allSegments = pathCandidates.flatMap((value) => value.split(delimiter))
-        const alreadyPresent = allSegments.some((segment) => segment.trim().toLowerCase() === gitDir.toLowerCase())
-        if (!alreadyPresent) {
-            const currentPath = env.Path || env.PATH || ''
-            const nextPath = currentPath ? `${gitDir}${delimiter}${currentPath}` : gitDir
-            env.Path = nextPath
-            env.PATH = nextPath
-        }
+        log.warn('[Git] Falling back to `git` from PATH. Could not resolve a Git binary from PATH or common install locations.')
+        return { binary: 'git', env }
+    }
+
+    const gitDir = dirname(resolvedPath)
+    const pathCandidates = [env.Path, env.PATH].filter((value): value is string => typeof value === 'string' && value.length > 0)
+    const allSegments = pathCandidates.flatMap((value) => value.split(delimiter))
+    const alreadyPresent = allSegments.some((segment) => segment.trim().toLowerCase() === gitDir.toLowerCase())
+    if (!alreadyPresent) {
+        const currentPath = env.Path || env.PATH || ''
+        const nextPath = currentPath ? `${gitDir}${delimiter}${currentPath}` : gitDir
+        env.Path = nextPath
+        env.PATH = nextPath
     }
 
     // Use plain `git` so simple-git can apply its own command safety checks.
@@ -98,6 +172,10 @@ export function createGit(projectPath: string): SimpleGit {
     git.env('GIT_OPTIONAL_LOCKS', '0')
 
     return git
+}
+
+export function getGitRuntime(): GitRuntime {
+    return resolveGitRuntime()
 }
 
 export function normalizeGitPath(path: string): string {

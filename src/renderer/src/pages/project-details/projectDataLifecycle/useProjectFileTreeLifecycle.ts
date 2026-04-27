@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { getCachedFileTree, setCachedFileTree } from '@/lib/projectViewCache'
-import { isFileTreeFullyLoaded, mergeDirectoryChildren } from '../fileTreeUtils'
+import { mergeDirectoryChildren } from '../fileTreeUtils'
 import type { FileTreeNode } from '../types'
 import type { UseProjectDataLifecycleParams } from './types'
 
@@ -70,13 +70,10 @@ export function useProjectFileTreeLifecycle({
         if (cachedTree) {
             setFileTree(cachedTree as any)
             setLoadingFiles(false)
-            if (!isFileTreeFullyLoaded(cachedTree as FileTreeNode[])) {
-                void refreshFileTree({ deep: true })
-            }
             return
         }
 
-        void refreshFileTree({ deep: true })
+        void refreshFileTree({ deep: false })
     }, [decodedPath, refreshFileTree, setFileTree, setLoadingFiles])
 
     return { refreshFileTree }

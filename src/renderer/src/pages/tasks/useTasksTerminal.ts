@@ -10,8 +10,6 @@ import { TASKS_TERMINAL_PANEL_ANIMATION_MS } from './tasks-types'
 import type { PreviewTerminalSessionGroup } from './tasks-types'
 
 export function useTasksTerminal(input: {
-    activeView: 'operations' | 'terminals' | 'runningApps'
-    setActiveView: Dispatch<SetStateAction<'operations' | 'terminals' | 'runningApps'>>
     terminalSessions: DevScopePreviewTerminalSessionSummary[]
     setTerminalSessions: Dispatch<SetStateAction<DevScopePreviewTerminalSessionSummary[]>>
     defaultShell: Shell
@@ -20,8 +18,6 @@ export function useTasksTerminal(input: {
     refresh: (options?: { quiet?: boolean }) => Promise<void>
 }) {
     const {
-        activeView,
-        setActiveView,
         terminalSessions,
         setTerminalSessions,
         defaultShell,
@@ -81,16 +77,6 @@ export function useTasksTerminal(input: {
         [terminalSessions]
     )
 
-    const sortedTerminalSessions = useMemo(
-        () => [...terminalSessions].sort((a, b) => {
-            if (a.status === 'running' && b.status !== 'running') return -1
-            if (a.status !== 'running' && b.status === 'running') return 1
-            if (b.startedAt !== a.startedAt) return b.startedAt - a.startedAt
-            return b.lastActivityAt - a.lastActivityAt
-        }),
-        [terminalSessions]
-    )
-
     const selectedTerminalSession = useMemo(
         () => terminalSessions.find((session) => session.sessionId === selectedTerminalSessionId) || null,
         [selectedTerminalSessionId, terminalSessions]
@@ -125,11 +111,6 @@ export function useTasksTerminal(input: {
     }, [])
 
     useEffect(() => {
-        if (activeView !== 'terminals') {
-            disposeTasksTerminal()
-            return
-        }
-
         const activeSession = selectedTerminalSessionRef.current
         if (!activeSession) {
             disposeTasksTerminal()
@@ -152,9 +133,8 @@ export function useTasksTerminal(input: {
                 theme: terminalTheme
             })
             fitAddon = new FitAddon()
-            const webLinksAddon = new WebLinksAddon()
             terminal.loadAddon(fitAddon)
-            terminal.loadAddon(webLinksAddon)
+            terminal.loadAddon(new WebLinksAddon())
             terminal.open(host)
             terminal.focus()
             tasksXtermRef.current = terminal
@@ -164,6 +144,15 @@ export function useTasksTerminal(input: {
                 void window.devscope.writePreviewTerminal({
                     sessionId: selectedTerminalSessionIdRef.current,
                     data
+                }).catch(() => undefined)
+            })
+            terminal.onTitleChange((title) => {
+                const normalizedTitle = String(title || '').trim()
+                const activeSessionId = selectedTerminalSessionIdRef.current
+                if (!normalizedTitle || !activeSessionId) return
+                void window.devscope.setPreviewTerminalTitle({
+                    sessionId: activeSessionId,
+                    title: normalizedTitle
                 }).catch(() => undefined)
             })
         } else {
@@ -208,7 +197,7 @@ export function useTasksTerminal(input: {
             window.clearTimeout(initialSyncTimer)
             window.clearTimeout(settleSyncTimer)
         }
-    }, [activeView, disposeTasksTerminal, selectedTerminalSessionId, terminalTheme])
+    }, [disposeTasksTerminal, selectedTerminalSessionId, terminalTheme])
 
     useEffect(() => {
         const unsubscribe = window.devscope.onPreviewTerminalEvent((event) => {
@@ -230,9 +219,26 @@ export function useTasksTerminal(input: {
                     }
                 }))
 
-                if (activeView === 'terminals' && event.sessionId === selectedTerminalSessionIdRef.current) {
+                if (event.sessionId === selectedTerminalSessionIdRef.current) {
                     tasksXtermRef.current?.write(outputChunk)
                 }
+                return
+            }
+
+            if (event.type === 'title') {
+                setTerminalSessions((current) => current.map((session) => (
+                    session.sessionId === event.sessionId
+                        ? {
+                            ...session,
+                            title: event.title || session.title,
+                            shell: event.shell || session.shell,
+                            cwd: event.cwd || session.cwd,
+                            groupKey: event.groupKey || session.groupKey,
+                            status: event.status || session.status,
+                            lastActivityAt: Date.now()
+                        }
+                        : session
+                )))
                 return
             }
 
@@ -242,7 +248,7 @@ export function useTasksTerminal(input: {
         return () => {
             unsubscribe()
         }
-    }, [activeView, refresh, setTerminalSessions])
+    }, [refresh, setTerminalSessions])
 
     useEffect(() => {
         return () => {
@@ -276,16 +282,14 @@ export function useTasksTerminal(input: {
         }
 
         setSelectedTerminalSessionId(sessionId)
-        setActiveView('terminals')
         void refresh({ quiet: true })
-    }, [defaultShell, refresh, setActiveView, setError])
+    }, [defaultShell, refresh, setError])
 
     const handleOpenTerminalSession = useCallback((sessionId: string) => {
         const normalizedSessionId = String(sessionId || '').trim()
         if (!normalizedSessionId) return
         setSelectedTerminalSessionId(normalizedSessionId)
-        setActiveView('terminals')
-    }, [setActiveView])
+    }, [])
 
     return {
         tasksTerminalHostRef,
@@ -294,7 +298,6 @@ export function useTasksTerminal(input: {
         selectedTerminalSession,
         terminalSessionGroups,
         runningTerminalCount,
-        sortedTerminalSessions,
         handleStopPreviewTerminal,
         handleCreateTerminalForPath,
         handleOpenTerminalSession

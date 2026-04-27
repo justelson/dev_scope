@@ -16,22 +16,29 @@ export interface FileActionsMenuItem {
 interface FileActionsMenuProps {
     items: FileActionsMenuItem[]
     buttonClassName?: string
+    openButtonClassName?: string
     menuClassName?: string
     title?: string
     triggerIcon?: React.ReactNode
+    presentation?: 'portal' | 'inline'
+    preferredDirection?: 'up' | 'down'
 }
 
 export function FileActionsMenu({
     items,
     buttonClassName,
+    openButtonClassName,
     menuClassName,
     title = 'Actions',
-    triggerIcon
+    triggerIcon,
+    presentation = 'portal',
+    preferredDirection
 }: FileActionsMenuProps) {
     const [open, setOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement | null>(null)
     const buttonRef = useRef<HTMLButtonElement | null>(null)
     const menuRef = useRef<HTMLDivElement | null>(null)
+    const [inlineDirection, setInlineDirection] = useState<'up' | 'down'>('down')
     const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; originClassName: string } | null>(null)
 
     const updatePosition = (menuWidth = 180, menuHeight = 220) => {
@@ -43,7 +50,17 @@ export function FileActionsMenu({
         const rect = button.getBoundingClientRect()
         const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
         const spaceAbove = rect.top - viewportPadding
-        const shouldOpenUpward = spaceBelow < menuHeight && spaceAbove > spaceBelow
+        const shouldOpenUpward = preferredDirection
+            ? preferredDirection === 'up'
+            : (spaceBelow < menuHeight && spaceAbove > spaceBelow)
+        const originClassName = shouldOpenUpward ? 'origin-bottom-right animate-scaleIn' : 'origin-top-right animate-scaleIn'
+
+        if (presentation === 'inline') {
+            setInlineDirection(shouldOpenUpward ? 'up' : 'down')
+            setMenuPosition(null)
+            return
+        }
+
         const maxTop = Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding)
         const top = shouldOpenUpward
             ? Math.max(viewportPadding, rect.top - menuHeight - gap)
@@ -54,7 +71,7 @@ export function FileActionsMenu({
         setMenuPosition({
             top,
             left,
-            originClassName: shouldOpenUpward ? 'origin-bottom-right animate-scaleIn' : 'origin-top-right animate-scaleIn'
+            originClassName
         })
     }
 
@@ -74,16 +91,16 @@ export function FileActionsMenu({
             window.cancelAnimationFrame(rafId)
             window.removeEventListener('resize', handleResize)
         }
-    }, [open])
+    }, [open, preferredDirection, presentation])
 
     useEffect(() => {
-        if (!open) return
+        if (!open || presentation !== 'portal') return
 
         const handleScroll = () => setOpen(false)
 
         window.addEventListener('scroll', handleScroll, true)
         return () => window.removeEventListener('scroll', handleScroll, true)
-    }, [open])
+    }, [open, presentation])
 
     useEffect(() => {
         if (!open) return
@@ -109,6 +126,42 @@ export function FileActionsMenu({
 
     if (items.length === 0) return null
 
+    const menuBody = (
+        <AnimatedHeight isOpen={open} duration={220}>
+            <div className={cn(
+                'rounded-xl border border-white/10 bg-sparkle-card p-1 shadow-2xl shadow-black/60',
+                presentation === 'inline'
+                    ? inlineDirection === 'up'
+                        ? 'origin-bottom-right animate-scaleIn'
+                        : 'origin-top-right animate-scaleIn'
+                    : menuPosition?.originClassName
+            )}>
+                {items.map((item) => (
+                    <button
+                        key={item.id}
+                        type="button"
+                        disabled={item.disabled}
+                        onClick={() => {
+                            setOpen(false)
+                            void item.onSelect()
+                        }}
+                        className={cn(
+                            'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
+                            item.disabled
+                                ? 'cursor-not-allowed text-white/20'
+                                : item.danger
+                                    ? 'text-red-200 hover:bg-red-500/15 hover:text-red-100'
+                                    : 'text-white/75 hover:bg-white/10 hover:text-white'
+                        )}
+                    >
+                        {item.icon && <span className="shrink-0">{item.icon}</span>}
+                        <span>{item.label}</span>
+                    </button>
+                ))}
+            </div>
+        </AnimatedHeight>
+    )
+
     return (
         <div ref={rootRef} className="relative">
             <button
@@ -119,16 +172,30 @@ export function FileActionsMenu({
                     setOpen((current) => !current)
                 }}
                 className={cn(
-                    'h-7 w-7 inline-flex items-center justify-center rounded-md border border-transparent text-white/40 transition-colors hover:border-white/10 hover:bg-white/10 hover:text-white',
+                    'h-7 w-7 inline-flex items-center justify-center rounded-[4px] border-0 text-white/45 transition-colors hover:bg-white/10 hover:text-white',
                     buttonClassName,
-                    open && 'border-white/10 bg-white/10 text-white opacity-100'
+                    open && (openButtonClassName || 'border-0 bg-white/10 text-white opacity-100')
                 )}
                 title={title}
             >
                 {triggerIcon || <MoreVertical size={15} className="mx-auto" />}
             </button>
 
-            {open && menuPosition && typeof document !== 'undefined' && createPortal(
+            {open && presentation === 'inline' ? (
+                <div
+                    ref={menuRef}
+                    className={cn(
+                        'absolute right-0 z-[140] min-w-[180px] overflow-hidden',
+                        inlineDirection === 'up' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
+                        menuClassName
+                    )}
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    {menuBody}
+                </div>
+            ) : null}
+
+            {open && presentation === 'portal' && menuPosition && typeof document !== 'undefined' && createPortal(
                 <div
                     ref={menuRef}
                     className={cn(
@@ -141,35 +208,7 @@ export function FileActionsMenu({
                     }}
                     onClick={(event) => event.stopPropagation()}
                 >
-                    <AnimatedHeight isOpen={open} duration={220}>
-                        <div className={cn(
-                            'rounded-xl border border-white/10 bg-sparkle-card p-1 shadow-2xl shadow-black/60',
-                            menuPosition.originClassName
-                        )}>
-                            {items.map((item) => (
-                                <button
-                                    key={item.id}
-                                    type="button"
-                                    disabled={item.disabled}
-                                    onClick={() => {
-                                        setOpen(false)
-                                        void item.onSelect()
-                                    }}
-                                    className={cn(
-                                        'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
-                                        item.disabled
-                                            ? 'cursor-not-allowed text-white/20'
-                                            : item.danger
-                                                ? 'text-red-200 hover:bg-red-500/15 hover:text-red-100'
-                                                : 'text-white/75 hover:bg-white/10 hover:text-white'
-                                    )}
-                                >
-                                    {item.icon && <span className="shrink-0">{item.icon}</span>}
-                                    <span>{item.label}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </AnimatedHeight>
+                    {menuBody}
                 </div>,
                 document.body
             )}

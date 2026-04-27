@@ -6,8 +6,8 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { readProjectGitOverview } from '@/lib/projectGitOverview'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
-import { useTerminal } from '@/App'
 import { useFilePreview } from '@/components/ui/FilePreviewModal'
 import { LoadingSpinner } from '@/components/ui/LoadingState'
 import type { PreviewMediaSource } from '@/components/ui/file-preview/types'
@@ -21,8 +21,9 @@ import { FolderBrowseHeader } from './folder-browse/FolderBrowseHeader'
 import { FolderBrowseOverlays } from './folder-browse/FolderBrowseOverlays'
 import { FolderBrowseToolbar } from './folder-browse/FolderBrowseToolbar'
 import {
-    FILES_PAGE_SIZE,
+    BROWSE_ITEMS_PAGE_SIZE,
     FolderBrowseMode,
+    buildBrowseRoute,
     getParentFolderPathWithinRoot,
     normalizePath,
     resolveNavigationRoot,
@@ -40,7 +41,6 @@ type FolderBrowseProps = {
 
 export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProps) {
     const { settings, updateSettings } = useSettings()
-    const { openTerminal } = useTerminal()
     const { folderPath } = useParams<{ folderPath: string }>()
     const navigate = useNavigate()
     const isExplorerMode = mode === 'explorer'
@@ -87,12 +87,27 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
     const [error, setError] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
     const deferredSearchQuery = useDeferredValue(searchQuery)
+    const [indexedSearchEntries, setIndexedSearchEntries] = useState<Array<{
+        path: string
+        name: string
+        type: 'file' | 'directory'
+        extension: string
+        size?: number
+        lastModified?: number
+        isProject: boolean
+        projectType?: string | null
+        projectIconPath?: string | null
+        markers: string[]
+        frameworks: string[]
+    }> | null>(null)
     const [filterType, setFilterType] = useState('all')
     const [isCurrentFolderGitRepo, setIsCurrentFolderGitRepo] = useState(false)
-    const [visibleFileCount, setVisibleFileCount] = useState(FILES_PAGE_SIZE)
+    const [visibleItemCount, setVisibleItemCount] = useState(BROWSE_ITEMS_PAGE_SIZE)
     const [indexedTotals, setIndexedTotals] = useState<IndexedTotals | null>(null)
     const [indexedInventory, setIndexedInventory] = useState<IndexedInventory | null>(null)
     const indexTotalsRunRef = useRef(0)
+    const loadContentsRequestRef = useRef(0)
+    const gitOverviewRequestRef = useRef(0)
     const {
         previewFile,
         previewMediaItems,
@@ -109,12 +124,15 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
     const loadContents = useCallback(async (forceRefresh: boolean = false) => {
         if (!decodedPath) return
 
+        const requestId = ++loadContentsRequestRef.current
+        const isStaleRequest = () => requestId !== loadContentsRequestRef.current
         setLoading(true)
         setError(null)
         await yieldToBrowserPaint()
 
         try {
             const result = await window.devscope.scanProjects(decodedPath, { forceRefresh })
+            if (isStaleRequest()) return
             if (!result.success) {
                 setError(result.error || 'Failed to scan folder')
                 return
@@ -124,24 +142,33 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
             setFolders(result.folders || [])
             setFiles(result.files || [])
         } catch (scanError: any) {
-            setError(scanError.message || 'Failed to scan folder')
+            if (!isStaleRequest()) {
+                setError(scanError.message || 'Failed to scan folder')
+            }
         } finally {
-            setLoading(false)
+            if (!isStaleRequest()) {
+                setLoading(false)
+            }
         }
     }, [decodedPath])
 
     useEffect(() => {
         const checkGitRepo = async () => {
             if (!decodedPath) return
+            const requestId = ++gitOverviewRequestRef.current
+            setIsCurrentFolderGitRepo(false)
             try {
-                const result = await window.devscope.checkIsGitRepo(decodedPath)
-                const isRepo = result?.success ? result.isGitRepo === true : false
+                const overview = await readProjectGitOverview(decodedPath)
+                if (requestId !== gitOverviewRequestRef.current) return
+                const isRepo = overview?.isGitRepo === true
                 setIsCurrentFolderGitRepo(isRepo)
                 if (isRepo) {
                     trackRecentProject(decodedPath, 'folder')
                 }
             } catch {
-                setIsCurrentFolderGitRepo(false)
+                if (requestId === gitOverviewRequestRef.current) {
+                    setIsCurrentFolderGitRepo(false)
+                }
             }
         }
 
@@ -156,8 +183,53 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
         () => parseFileSearchQuery(deferredSearchQuery),
         [deferredSearchQuery]
     )
+    const hasIndexedFolderSearch = deferredSearchQuery.trim().length > 0
 
-    const projectTypes = useMemo(() => getProjectTypes(projects), [projects])
+    useEffect(() => {
+        if (!decodedPath || !hasIndexedFolderSearch) {
+            setIndexedSearchEntries(null)
+            return
+        }
+
+        let cancelled = false
+        void window.devscope.searchIndexedPaths({
+            scopePath: decodedPath,
+            term: parsedSearchQuery.term,
+            extensionFilters: parsedSearchQuery.extension ? [parsedSearchQuery.extension] : [],
+            limit: 320,
+            includeFiles: true,
+            includeDirectories: true,
+            showHidden: false
+        }).then((result) => {
+            if (cancelled) return
+            if (!result?.success) {
+                setIndexedSearchEntries([])
+                return
+            }
+            setIndexedSearchEntries((result.entries || []).map((entry) => ({
+                path: entry.path,
+                name: entry.name,
+                type: entry.type,
+                extension: entry.extension,
+                size: entry.size,
+                lastModified: entry.lastModified,
+                isProject: entry.isProject,
+                projectType: entry.projectType,
+                projectIconPath: entry.projectIconPath,
+                markers: entry.markers || [],
+                frameworks: entry.frameworks || []
+            })))
+        }).catch(() => {
+            if (!cancelled) {
+                setIndexedSearchEntries([])
+            }
+        })
+
+        return () => {
+            cancelled = true
+        }
+    }, [decodedPath, hasIndexedFolderSearch, parsedSearchQuery.extension, parsedSearchQuery.term])
+
     const isProjectsRootView = useMemo(() => {
         if (isExplorerMode) return false
         const normalizedCurrent = normalizePath(decodedPath)
@@ -171,6 +243,49 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
         frameworks: statsModalController.frameworkCount,
         types: statsModalController.typeCount
     }), [statsModalController.frameworkCount, statsModalController.totalProjects, statsModalController.typeCount])
+    const indexedProjectsSource = useMemo<Project[]>(() => projects, [projects])
+    const indexedSearchProjects = useMemo<Project[]>(() => {
+        if (!hasIndexedFolderSearch || !indexedSearchEntries) return []
+        return indexedSearchEntries
+            .filter((entry) => entry.type === 'directory' && entry.isProject)
+            .map((entry) => ({
+                name: entry.name,
+                path: entry.path,
+                type: entry.projectType || 'unknown',
+                projectIconPath: entry.projectIconPath ?? null,
+                markers: entry.markers,
+                frameworks: entry.frameworks,
+                lastModified: entry.lastModified,
+                isProject: true
+            }))
+    }, [hasIndexedFolderSearch, indexedSearchEntries])
+    const indexedSearchFolders = useMemo<FolderItem[]>(() => {
+        if (!hasIndexedFolderSearch || !indexedSearchEntries) return []
+        return indexedSearchEntries
+            .filter((entry) => entry.type === 'directory' && !entry.isProject)
+            .map((entry) => ({
+                name: entry.name,
+                path: entry.path,
+                lastModified: entry.lastModified,
+                isProject: false
+            }))
+    }, [hasIndexedFolderSearch, indexedSearchEntries])
+    const indexedSearchFiles = useMemo<FileItem[]>(() => {
+        if (!hasIndexedFolderSearch || !indexedSearchEntries) return []
+        return indexedSearchEntries
+            .filter((entry) => entry.type === 'file')
+            .map((entry) => ({
+                name: entry.name,
+                path: entry.path,
+                size: entry.size || 0,
+                lastModified: entry.lastModified,
+                extension: entry.extension
+            }))
+    }, [hasIndexedFolderSearch, indexedSearchEntries])
+    const projectTypes = useMemo(
+        () => getProjectTypes(hasIndexedFolderSearch ? indexedSearchProjects : indexedProjectsSource),
+        [hasIndexedFolderSearch, indexedProjectsSource, indexedSearchProjects]
+    )
 
     useEffect(() => {
         if (!decodedPath || !isProjectsRootView) {
@@ -180,9 +295,10 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
         }
 
         const currentRunId = ++indexTotalsRunRef.current
+        const foldersForTotals = configuredBrowseRoots.length > 0 ? configuredBrowseRoots : [decodedPath]
         void (async () => {
             try {
-                const indexResult = await window.devscope.indexAllFolders([decodedPath]) as IndexAllFoldersResult
+                const indexResult = await window.devscope.indexAllFolders(foldersForTotals) as IndexAllFoldersResult
                 if (currentRunId !== indexTotalsRunRef.current) return
                 if (!indexResult?.success || !Array.isArray(indexResult.projects)) {
                     setIndexedTotals(null)
@@ -226,30 +342,37 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
                 setIndexedInventory(null)
             }
         })()
-    }, [decodedPath, isProjectsRootView, projects, statsScanKey])
+    }, [configuredBrowseRoots, decodedPath, isProjectsRootView, projects, statsScanKey])
 
     const filteredProjects = useMemo(() => {
-        if (parsedSearchQuery.hasExtensionFilter) return []
+        const sourceProjects = hasIndexedFolderSearch ? indexedSearchProjects : indexedProjectsSource
+        if (parsedSearchQuery.hasExtensionFilter && !hasIndexedFolderSearch) return []
 
-        return projects.filter((project) => {
+        return sourceProjects.filter((project) => {
             if (project.type === 'git') return false
-            const matchesSearch = !parsedSearchQuery.term || project.name.toLowerCase().includes(parsedSearchQuery.term)
+            const matchesSearch = hasIndexedFolderSearch
+                ? true
+                : (!parsedSearchQuery.term || project.name.toLowerCase().includes(parsedSearchQuery.term))
             const matchesType = filterType === 'all' || project.type === filterType
             return matchesSearch && matchesType
         })
-    }, [projects, parsedSearchQuery, filterType])
+    }, [filterType, hasIndexedFolderSearch, indexedProjectsSource, indexedSearchProjects, parsedSearchQuery])
 
     const filteredFolders = useMemo(() => {
-        if (deferredSearchQuery) return []
-        return [...folders].sort((left, right) => left.name.localeCompare(right.name))
-    }, [folders, deferredSearchQuery])
+        const sourceFolders = hasIndexedFolderSearch ? indexedSearchFolders : folders
+        return [...sourceFolders].sort((left, right) => left.name.localeCompare(right.name))
+    }, [folders, hasIndexedFolderSearch, indexedSearchFolders])
 
-    const gitRepos = useMemo(() => projects.filter((project) => project.type === 'git'), [projects])
+    const gitRepos = useMemo(() => {
+        const sourceProjects = hasIndexedFolderSearch ? indexedSearchProjects : indexedProjectsSource
+        return sourceProjects.filter((project) => project.type === 'git')
+    }, [hasIndexedFolderSearch, indexedProjectsSource, indexedSearchProjects])
 
     const filteredFiles = useMemo(() => {
-        const matchingFiles = !deferredSearchQuery
-            ? files
-            : files.filter((file) => fileNameMatchesQuery(file.name, parsedSearchQuery))
+        const sourceFiles = hasIndexedFolderSearch ? indexedSearchFiles : files
+        const matchingFiles = !deferredSearchQuery || hasIndexedFolderSearch
+            ? sourceFiles
+            : sourceFiles.filter((file) => fileNameMatchesQuery(file.name, parsedSearchQuery))
 
         const mediaSources = buildMediaPreviewSources(matchingFiles.map((file) => ({
             name: file.name,
@@ -289,24 +412,41 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
 
                 return file
             })
-    }, [deferredSearchQuery, files, parsedSearchQuery])
+    }, [deferredSearchQuery, files, hasIndexedFolderSearch, indexedSearchFiles, parsedSearchQuery])
 
     useEffect(() => {
-        setVisibleFileCount(FILES_PAGE_SIZE)
-    }, [decodedPath, deferredSearchQuery, files.length])
+        setVisibleItemCount(BROWSE_ITEMS_PAGE_SIZE)
+    }, [decodedPath, deferredSearchQuery, files.length, filterType, folders.length, projects.length])
 
-    const displayedFiles = useMemo(
-        () => filteredFiles.slice(0, visibleFileCount),
-        [filteredFiles, visibleFileCount]
+    const displayedFolders = useMemo(
+        () => filteredFolders.slice(0, visibleItemCount),
+        [filteredFolders, visibleItemCount]
     )
-    const hasMoreFiles = displayedFiles.length < filteredFiles.length
+    const displayedGitRepos = useMemo(
+        () => gitRepos.slice(0, visibleItemCount),
+        [gitRepos, visibleItemCount]
+    )
+    const displayedProjects = useMemo(
+        () => filteredProjects.slice(0, visibleItemCount),
+        [filteredProjects, visibleItemCount]
+    )
+    const displayedFiles = useMemo(
+        () => filteredFiles.slice(0, visibleItemCount),
+        [filteredFiles, visibleItemCount]
+    )
+    const hasMoreItems = (
+        displayedFolders.length < filteredFolders.length
+        || displayedGitRepos.length < gitRepos.length
+        || displayedProjects.length < filteredProjects.length
+        || displayedFiles.length < filteredFiles.length
+    )
     const mediaPreviewSources = useMemo<PreviewMediaSource[]>(() => buildMediaPreviewSources(displayedFiles.map((file) => ({
         name: file.name,
         path: file.path,
         extension: file.extension
     }))), [displayedFiles])
-    const loadMoreFiles = useCallback(() => {
-        setVisibleFileCount((current) => current + FILES_PAGE_SIZE)
+    const loadMoreItems = useCallback(() => {
+        setVisibleItemCount((current) => current + BROWSE_ITEMS_PAGE_SIZE)
     }, [])
 
     const actions = useFolderBrowseActions({
@@ -319,6 +459,9 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
         openPreview,
         setError
     })
+    const handleNavigateToPath = useCallback((path: string) => {
+        navigate(buildBrowseRoute(mode, path))
+    }, [mode, navigate])
 
     if (!decodedPath) {
         return (
@@ -336,10 +479,11 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
     }
 
     return (
-        <div className="project-surface-scrollbar mx-auto min-w-0 max-w-[1600px] animate-fadeIn overflow-x-hidden overflow-y-auto pb-20 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]">
+        <div className="project-surface-scrollbar mx-auto min-w-0 max-w-[1600px] animate-fadeIn [overflow-x:clip] pb-20 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]">
             <FolderBrowseHeader
                 folderName={folderName}
                 decodedPath={decodedPath}
+                displayRootPath={navigationRoot ?? browseRootPath}
                 totalProjects={projects.length}
                 isProjectsRootView={isProjectsRootView}
                 rootStats={rootStats}
@@ -348,16 +492,17 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
                 onBack={actions.handleBack}
                 onNavigateUp={actions.handleNavigateUp}
                 canNavigateUp={canNavigateUp}
+                onNavigateToPath={handleNavigateToPath}
                 onViewAsProject={actions.handleViewAsProject}
-                onOpenTerminal={() => openTerminal({ displayName: folderName, id: 'main', category: 'folder' }, decodedPath)}
+                preferredShell={settings.defaultShell}
                 onCopyPath={actions.handleCopyPath}
                 copiedPath={actions.copiedPath}
                 onOpenStats={(key) => statsModalController.setStatsModal(key)}
                 onOpenProjectsSettings={isExplorerMode ? undefined : () => navigate('/settings/projects')}
-                onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}
                 onRefresh={() => { void loadContents(true) }}
                 onCreateFile={(presetExtension) => actions.handleCreateInCurrentFolder('file', presetExtension)}
                 onCreateFolder={() => actions.handleCreateInCurrentFolder('directory')}
+                onCloneRepository={actions.openCloneRepoModal}
             />
 
             <FolderBrowseToolbar
@@ -391,13 +536,16 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
                 <FolderBrowseContent
                     currentDirectoryPath={decodedPath}
                     currentDirectoryName={folderName}
-                    filteredFolders={filteredFolders}
-                    gitRepos={gitRepos}
+                    filteredFolders={displayedFolders}
+                    totalFilteredFolders={filteredFolders.length}
+                    gitRepos={displayedGitRepos}
+                    totalGitRepos={gitRepos.length}
                     visibleFiles={displayedFiles}
                     totalFilteredFiles={filteredFiles.length}
-                    hasMoreFiles={hasMoreFiles}
-                    onLoadMoreFiles={loadMoreFiles}
-                    displayedProjects={filteredProjects}
+                    hasMoreItems={hasMoreItems}
+                    onLoadMoreItems={loadMoreItems}
+                    displayedProjects={displayedProjects}
+                    totalDisplayedProjects={filteredProjects.length}
                     viewMode={settings.browserViewMode}
                     contentLayout={settings.browserContentLayout}
                     isCondensedLayout={false}
@@ -429,6 +577,9 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
 
             <FolderBrowseOverlays
                 closePreview={closePreview}
+                cloneRepoErrorMessage={actions.cloneRepoErrorMessage}
+                cloneRepoModalOpen={actions.cloneRepoModalOpen}
+                cloneRepoUrl={actions.cloneRepoUrl}
                 confirmDeleteTarget={actions.confirmDeleteTarget}
                 createDraft={actions.createDraft}
                 createErrorMessage={actions.createErrorMessage}
@@ -455,12 +606,16 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
                 setCreateDraft={actions.setCreateDraft}
                 setCreateErrorMessage={actions.setCreateErrorMessage}
                 setCreateTarget={actions.setCreateTarget}
+                setCloneRepoErrorMessage={actions.setCloneRepoErrorMessage}
+                setCloneRepoModalOpen={actions.setCloneRepoModalOpen}
+                setCloneRepoUrl={actions.setCloneRepoUrl}
                 setDeleteTarget={actions.setDeleteTarget}
                 setRenameDraft={actions.setRenameDraft}
                 setRenameErrorMessage={actions.setRenameErrorMessage}
                 setRenameExtensionSuffix={actions.setRenameExtensionSuffix}
                 setRenameTarget={actions.setRenameTarget}
                 statsModalController={statsModalController}
+                submitCloneRepo={actions.submitCloneRepo}
                 submitCreateTarget={actions.submitCreateTarget}
                 submitRenameTarget={actions.submitRenameTarget}
                 toast={actions.toast}

@@ -2,77 +2,93 @@ import { memo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { AnimatedHeight } from '@/components/ui/AnimatedHeight'
 import { VscodeEntryIcon } from '@/components/ui/VscodeEntryIcon'
 import { cn } from '@/lib/utils'
-import { Check, ChevronDown, ChevronUp, FileCode2, FileImage, FileText, GitBranch, ListTodo, Loader2, Lock, LockOpen, MessageSquare, SendHorizontal, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, GitBranch, ListTodo, Loader2, Lock, LockOpen, MessageSquare, Mic, RefreshCw, SendHorizontal, Square } from 'lucide-react'
+import type { PreviewOpenOptions } from '@/components/ui/file-preview/types'
 import { formatAssistantModelLabel } from './assistant-model-labels'
 import { OpenAILogo } from './assistant-composer-inline-mentions'
-import { getContentTypeTag, getContextFileMeta } from './assistant-composer-utils'
+import { getContentTypeTag, getContextFileMeta, isPastedTextAttachment } from './assistant-composer-utils'
 import type { ComposerContextFile } from './assistant-composer-types'
 import type { MentionCandidate } from './assistant-composer-mentions'
+import { AssistantFileAttachmentCard, AssistantPastedTextCard } from './AssistantAttachmentCards'
+import { AssistantAttachmentImageCard } from './AssistantAttachmentImageCard'
 
 export const ComposerAttachmentsShelf = memo(({
     contextFiles,
     compact,
     removingAttachmentIds,
+    onOpenAttachmentPreview,
     onPreview,
     onRemove
 }: {
     contextFiles: ComposerContextFile[]
     compact: boolean
     removingAttachmentIds: string[]
+    onOpenAttachmentPreview?: (
+        file: { name: string; path: string },
+        ext: string,
+        options?: PreviewOpenOptions
+    ) => Promise<void> | void
     onPreview: (file: ComposerContextFile) => void
     onRemove: (id: string) => void
 }) => (
     <AnimatedHeight isOpen={contextFiles.length > 0} duration={220}>
-        <div className={cn('pointer-events-auto flex flex-wrap items-center', compact ? 'gap-1.5 pb-1' : 'gap-2 pb-1.5')}>
+        <div className={cn('pointer-events-auto flex flex-wrap items-start', compact ? 'gap-1.5 pb-1' : 'gap-2 pb-1.5')}>
             {contextFiles.map((file) => {
                 const meta = getContextFileMeta(file)
                 const contentType = getContentTypeTag(file)
                 const isRemoving = removingAttachmentIds.includes(file.id)
                 const isEntering = Boolean(file.animateIn)
+                const isImageAttachment = meta.category === 'image' && Boolean(file.previewDataUrl)
+                const isPastedText = isPastedTextAttachment(file)
+                const cardWidthClass = isPastedText ? 'w-[92px]' : 'w-[116px]'
+                const handleOpenImagePreview = () => {
+                    if (onOpenAttachmentPreview) {
+                        void onOpenAttachmentPreview({ name: meta.name, path: file.path }, meta.ext)
+                        return
+                    }
+                    onPreview(file)
+                }
+                const handleOpenPastedTextPreview = () => {
+                    onPreview(file)
+                }
 
                 return (
-                    <article
-                        key={file.id}
-                        className={cn('group relative overflow-hidden rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 transition-colors hover:bg-white/[0.05]', compact ? 'w-[220px]' : 'w-[280px]')}
-                        style={{
-                            transition: 'transform 190ms ease, opacity 190ms ease, filter 190ms ease',
-                            transform: isRemoving ? 'translateY(6px) scale(0.82)' : isEntering ? 'translateY(-8px) scale(0.86)' : 'translateY(0) scale(1)',
-                            opacity: isRemoving || isEntering ? 0 : 1,
-                            filter: isRemoving ? 'blur(1px)' : 'blur(0)'
-                        }}
-                    >
-                        <button
-                            type="button"
+                    isImageAttachment ? (
+                            <AssistantAttachmentImageCard
+                                key={file.id}
+                                name={meta.name}
+                                src={file.previewDataUrl || ''}
+                                widthClassName={cardWidthClass}
+                                heightClassName="h-[84px]"
+                                onClick={handleOpenImagePreview}
+                                onRemove={() => onRemove(file.id)}
+                                removable
+                                removing={isRemoving || isEntering}
+                            />
+                    ) : isPastedText ? (
+                        <AssistantPastedTextCard
+                            key={file.id}
+                            widthClassName={cardWidthClass}
+                            onClick={handleOpenPastedTextPreview}
+                            onRemove={() => onRemove(file.id)}
+                            removable
+                            removing={isRemoving || isEntering}
+                            previewText={file.content || file.previewText}
+                        />
+                    ) : (
+                        <AssistantFileAttachmentCard
+                            key={file.id}
+                            widthClassName={cardWidthClass}
+                            name={meta.name}
+                            contentType={contentType}
+                            category={meta.category}
+                            pathLabel={file.path}
                             onClick={() => onPreview(file)}
-                            className="relative flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md"
-                            disabled={isRemoving}
-                            title="Open preview"
-                        >
-                            {meta.category === 'image' && file.previewDataUrl ? (
-                                <img src={file.previewDataUrl} alt={meta.name} className="h-7 w-7 rounded object-cover" />
-                            ) : (
-                                <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded border', meta.category === 'image' ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-300' : meta.category === 'code' ? 'border-indigo-400/30 bg-indigo-500/10 text-indigo-300' : 'border-white/10 bg-sparkle-bg text-sparkle-text-secondary')}>
-                                    {meta.category === 'image' ? <FileImage size={24} /> : meta.category === 'code' ? <FileCode2 size={24} /> : <FileText size={24} />}
-                                </div>
-                            )}
-                            <span className="min-w-0 flex-1 text-left">
-                                <span className="block truncate text-[11px] font-medium text-sparkle-text">{meta.name}</span>
-                                <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-sparkle-text-muted">{contentType}</span>
-                            </span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={(event) => {
-                                event.stopPropagation()
-                                onRemove(file.id)
-                            }}
-                            className="ml-1 shrink-0 rounded p-1 text-sparkle-text-muted transition-colors hover:bg-rose-500/10 hover:text-rose-300"
-                            disabled={isRemoving}
-                            title="Remove attachment"
-                        >
-                            <X size={11} />
-                        </button>
-                    </article>
+                            onRemove={() => onRemove(file.id)}
+                            removable
+                            removing={isRemoving || isEntering}
+                        />
+                    )
                 )
             })}
         </div>
@@ -102,7 +118,7 @@ export const ComposerMentionMenu = memo(({
     onScroll: (element: HTMLDivElement) => void
     onApplyMention: (candidate: MentionCandidate) => void
 }) => (
-    <div className={cn('pointer-events-none absolute inset-x-0 bottom-full z-30 mb-1 overflow-hidden', isOpen ? 'pointer-events-auto' : 'pointer-events-none')}>
+    <div className={cn('pointer-events-none absolute inset-x-0 bottom-full z-[170] mb-1 overflow-hidden', isOpen ? 'pointer-events-auto' : 'pointer-events-none')}>
         <AnimatedHeight isOpen={isOpen} duration={220}>
             <div className="overflow-hidden rounded-xl border border-white/10 bg-sparkle-card shadow-2xl shadow-black/70 backdrop-blur-xl">
                 <div className="relative">
@@ -131,18 +147,102 @@ export const ComposerSendButton = memo(({
     isConnected,
     isThinking,
     canSend,
+    label = 'Send',
+    onStop,
     onSend
 }: {
     disabled: boolean
     isConnected: boolean
     isThinking: boolean
     canSend: boolean
+    label?: string
+    onStop?: () => Promise<void> | void
     onSend: () => void
-}) => (
-    <button type="button" disabled={disabled || !isConnected || isThinking || !canSend} onClick={onSend} className={cn('inline-flex h-[36px] w-[36px] items-center justify-center rounded-full transition-all duration-150', disabled || !isConnected || isThinking || !canSend ? 'cursor-not-allowed bg-[#1f3873] text-white/45' : 'bg-[#2246a8] text-white hover:scale-[1.03] hover:bg-[#2955ca]')}>
-        {isThinking ? <Loader2 size={18} className="animate-spin" /> : <SendHorizontal size={18} />}
-    </button>
-))
+}) => {
+    const canStop = isThinking && Boolean(onStop) && isConnected && !disabled
+    const isEmptyState = !canStop && !disabled && isConnected && !canSend
+    const isDisabled = canStop ? false : disabled || !isConnected || !canSend
+
+    return (
+        <button
+            type="button"
+            disabled={isDisabled}
+            onClick={() => {
+                if (canStop) {
+                    void onStop?.()
+                    return
+                }
+                onSend()
+            }}
+            className={cn(
+                'relative inline-flex h-[36px] items-center justify-center overflow-hidden rounded-full border transition-all duration-150',
+                label === 'Send' ? 'w-[36px]' : 'gap-1.5 px-3.5',
+                canStop
+                    ? 'border-white/10 bg-[#2246a8] text-white hover:scale-[1.03] hover:border-white/20 hover:bg-[#2955ca]'
+                    : isEmptyState
+                        ? 'border-transparent bg-white/[0.02] text-sparkle-text-muted/80 hover:border-transparent hover:bg-white/[0.03]'
+                        : isDisabled
+                        ? 'border-transparent bg-white/[0.015] text-sparkle-text-muted/45 opacity-70'
+                        : 'border-white/10 bg-[#2246a8] text-white hover:scale-[1.03] hover:border-white/20 hover:bg-[#2955ca]'
+            )}
+        >
+            {canStop ? <span className="absolute inset-0 animate-shimmer opacity-60" aria-hidden="true" /> : null}
+            <span className="relative z-10 inline-flex items-center justify-center gap-1.5">
+                {canStop ? (
+                    <Square size={15} fill="currentColor" />
+                ) : label === 'Send' ? (
+                    <SendHorizontal size={18} className={isEmptyState ? 'opacity-35' : undefined} />
+                ) : (
+                    <>
+                        <Check size={16} />
+                        <span className="text-[12px] font-semibold">{label}</span>
+                    </>
+                )}
+            </span>
+        </button>
+    )
+})
+
+export const ComposerVoiceButton = memo(({
+    supported,
+    isRecording,
+    disabled,
+    onToggle
+}: {
+    supported: boolean
+    isRecording: boolean
+    disabled: boolean
+    onToggle: () => void
+}) => {
+    if (!supported) return null
+
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={onToggle}
+            className={cn(
+                'relative inline-flex h-[36px] w-[36px] items-center justify-center overflow-visible rounded-full border transition-all duration-150',
+                isRecording
+                    ? 'border-transparent bg-rose-500 text-white hover:scale-[1.03] hover:bg-rose-400'
+                    : disabled
+                        ? 'border-transparent bg-white/[0.02] text-sparkle-text-muted/45'
+                        : 'border-transparent bg-white/[0.03] text-sparkle-text-secondary hover:bg-white/[0.06] hover:text-sparkle-text'
+            )}
+            title={isRecording ? 'Stop recording' : 'Start voice input'}
+        >
+            {isRecording ? (
+                <>
+                    <span className="pointer-events-none absolute inset-0 rounded-full border border-rose-300/28 animate-subtle-recording-ripple" aria-hidden="true" />
+                    <span className="pointer-events-none absolute inset-0 rounded-full border border-rose-300/16 animate-subtle-recording-ripple-delayed" aria-hidden="true" />
+                    <Square size={14} fill="currentColor" className="relative z-10" />
+                </>
+            ) : (
+                <Mic size={17} className="relative z-10" />
+            )}
+        </button>
+    )
+})
 
 function syncScrollAffordanceState(element: HTMLDivElement | null, setCanScrollUp: Dispatch<SetStateAction<boolean>>, setCanScrollDown: Dispatch<SetStateAction<boolean>>) {
     if (!element) {
@@ -157,6 +257,7 @@ function syncScrollAffordanceState(element: HTMLDivElement | null, setCanScrollU
 
 export const ComposerFooterControls = memo(({
     isCompactFooter,
+    controlsLocked = false,
     modelDropdownRef,
     showModelDropdown,
     setShowModelDropdown,
@@ -194,6 +295,7 @@ export const ComposerFooterControls = memo(({
     setShowFullAccessConfirm
 }: {
     isCompactFooter: boolean
+    controlsLocked?: boolean
     modelDropdownRef: RefObject<HTMLDivElement | null>
     showModelDropdown: boolean
     setShowModelDropdown: Dispatch<SetStateAction<boolean>>
@@ -230,43 +332,45 @@ export const ComposerFooterControls = memo(({
     displayedProfile: string
     setShowFullAccessConfirm: Dispatch<SetStateAction<boolean>>
 }) => (
-    <div className={cn('flex min-w-0 flex-1 items-center text-[11px]', isCompactFooter ? 'gap-0.5 overflow-hidden' : 'gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:min-w-max sm:overflow-visible')}>
+    <div className={cn('flex min-w-0 flex-1 items-center text-[11px]', isCompactFooter ? 'gap-0.5 overflow-visible' : 'gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:min-w-max sm:overflow-visible')}>
         <div className="relative min-w-0" ref={modelDropdownRef}>
-            <div className={cn('pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-[22rem] overflow-hidden', showModelDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
+            <div className={cn('pointer-events-none absolute bottom-full left-0 z-[170] mb-2 w-72 overflow-hidden', showModelDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
                 <AnimatedHeight isOpen={showModelDropdown} duration={220}>
                     <div className="overflow-hidden rounded-xl border border-white/10 bg-sparkle-card shadow-2xl shadow-black/70 backdrop-blur-xl">
-                        <div className="flex items-center justify-between border-b border-white/5 px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sparkle-text-muted"><span>Models</span>{modelsLoading ? <Loader2 size={11} className="animate-spin" /> : null}</div>
-                        <div className="px-2.5 py-2"><input value={modelQuery} onChange={(event) => { setModelQuery(event.target.value); setActiveModelIndex(0) }} placeholder="Search models..." className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.03] px-2.5 text-[11px] text-sparkle-text outline-none placeholder:text-sparkle-text-muted/60 focus:border-white/20" /></div>
+                        <div className="flex items-center justify-between border-b border-white/5 px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sparkle-text-muted"><span>Models</span></div>
+                        <div className="px-2.5 py-2"><input value={modelQuery} onChange={(event) => { setModelQuery(event.target.value); setActiveModelIndex(0) }} placeholder="Search models..." className="h-7 w-full rounded-md border border-white/10 bg-white/[0.03] px-2 text-[10px] text-sparkle-text outline-none placeholder:text-sparkle-text-muted/60 focus:border-white/20" /></div>
                         <div className="relative">
-                            {modelCanScrollUp ? <div className="pointer-events-none absolute inset-x-1.5 top-0 z-10 flex h-8 items-start justify-center before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[200%] before:rounded-t-[10px] before:bg-gradient-to-b before:from-sparkle-card before:from-50% before:to-transparent"><ChevronUp size={13} className="relative mt-1 text-sparkle-text-muted/85" /></div> : null}
-                            <div ref={modelListRef} onScroll={(event) => syncScrollAffordanceState(event.currentTarget, setModelCanScrollUp, setModelCanScrollDown)} className="max-h-64 overflow-y-auto px-1.5 pb-6 pt-6">
+                            {modelCanScrollUp ? <div className="pointer-events-none absolute inset-x-1.5 top-0 z-10 flex h-7 items-start justify-center before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[180%] before:rounded-t-[10px] before:bg-gradient-to-b before:from-sparkle-card before:from-50% before:to-transparent"><ChevronUp size={12} className="relative mt-1 text-sparkle-text-muted/85" /></div> : null}
+                            <div ref={modelListRef} onScroll={(event) => syncScrollAffordanceState(event.currentTarget, setModelCanScrollUp, setModelCanScrollDown)} className="max-h-56 overflow-y-auto px-1.5 pb-5 pt-5">
                                 {filteredModelOptions.length === 0 ? <div className="px-2 py-2.5 text-[11px] text-sparkle-text-secondary">No models found.</div> : filteredModelOptions.map((model, index) => {
                                     const isActive = model.id === selectedModel
                                     const isHighlighted = index === activeModelIndex
                                     const isLatestModel = model.id === latestModelId
                                     return (
-                                        <button key={model.id} type="button" data-model-index={index} onClick={() => { setSelectedModel(model.id); setShowModelDropdown(false) }} className={cn('grid min-h-8 w-full grid-cols-[1rem_auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors', isLatestModel ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15' : isActive ? 'bg-white/[0.06] text-sparkle-text' : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text', isHighlighted && !isActive && !isLatestModel && 'bg-white/[0.04] text-sparkle-text')}>
-                                            <span className="flex items-center justify-center">{isActive ? <Check size={13} className="text-sparkle-text" /> : <span className="h-[13px] w-[13px]" />}</span>
-                                            <OpenAILogo className="h-3 w-3 shrink-0 text-current opacity-70" />
-                                            <span className="min-w-0 truncate text-[12px] font-medium">{formatAssistantModelLabel(model.label || model.id)}</span>
-                                            {isLatestModel ? <span className="truncate text-[10px] text-emerald-400/80">Latest</span> : null}
+                                        <button key={model.id} type="button" data-model-index={index} onClick={() => { setSelectedModel(model.id); setShowModelDropdown(false) }} className={cn('grid min-h-7 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 rounded-lg px-2 py-1 text-left transition-colors', isLatestModel ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15' : isActive ? 'bg-white/[0.06] text-sparkle-text' : 'text-sparkle-text-secondary hover:bg-white/[0.03] hover:text-sparkle-text', isHighlighted && !isActive && !isLatestModel && 'bg-white/[0.04] text-sparkle-text')}>
+                                            <OpenAILogo className="h-2.5 w-2.5 shrink-0 text-current opacity-70" />
+                                            <span className="min-w-0 truncate text-[11px] font-medium leading-none">{formatAssistantModelLabel(model.label || model.id)}</span>
+                                            <span className="ml-2 flex items-center gap-1">
+                                                {isActive ? <span className="rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[8px] font-medium leading-none text-sparkle-text">Selected</span> : null}
+                                                {isLatestModel ? <span className="rounded border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-medium leading-none text-emerald-300">Latest</span> : null}
+                                            </span>
                                         </button>
                                     )
                                 })}
                             </div>
-                            {modelCanScrollDown ? <div className="pointer-events-none absolute inset-x-1.5 bottom-0 z-10 flex h-8 items-end justify-center before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-[200%] before:rounded-b-[10px] before:bg-gradient-to-t before:from-sparkle-card before:from-50% before:to-transparent"><ChevronDown size={13} className="relative mb-1 text-sparkle-text-muted/85" /></div> : null}
+                            {modelCanScrollDown ? <div className="pointer-events-none absolute inset-x-1.5 bottom-0 z-10 flex h-7 items-end justify-center before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-[180%] before:rounded-b-[10px] before:bg-gradient-to-t before:from-sparkle-card before:from-50% before:to-transparent"><ChevronDown size={12} className="relative mb-1 text-sparkle-text-muted/85" /></div> : null}
                         </div>
                         {modelsError ? <div className="px-3 pb-2"><p className="text-[10px] font-medium text-rose-400">{modelsError}</p></div> : null}
                     </div>
                 </AnimatedHeight>
             </div>
-            <button type="button" onClick={() => setShowModelDropdown((prev) => { const next = !prev; if (next && onRefreshModels) onRefreshModels(); return next })} title={modelsError || 'Select model'} className={cn('min-w-0 shrink-0 whitespace-nowrap px-1.5 text-[13px] font-medium text-sparkle-text-secondary transition-colors hover:text-sparkle-text', isCompactFooter ? 'max-w-40' : 'sm:px-2.5')}><span className={cn('flex min-w-0 items-center gap-2', isCompactFooter && 'max-w-32')}><OpenAILogo className="h-3.5 w-3.5 shrink-0 text-current opacity-80" /><span className="truncate text-[13px] font-medium">{formatAssistantModelLabel(selectedModelLabel)}</span><ChevronDown size={10} className="-mr-0.5 ml-0.5 shrink-0 opacity-60" /></span></button>
+            <button type="button" disabled={controlsLocked} onClick={() => setShowModelDropdown((prev) => { if (controlsLocked) return prev; const next = !prev; if (next && onRefreshModels) onRefreshModels(); return next })} title={modelsLoading ? 'Refreshing models...' : modelsError || 'Select model'} className={cn('min-w-0 shrink-0 whitespace-nowrap px-1.5 text-[13px] font-medium text-sparkle-text-secondary transition-colors hover:text-sparkle-text', isCompactFooter ? 'max-w-40' : 'sm:px-2.5', controlsLocked && 'cursor-not-allowed opacity-45 hover:text-sparkle-text-secondary')}><span className={cn('flex min-w-0 items-center gap-2', isCompactFooter && 'max-w-32')}>{modelsLoading ? <RefreshCw size={14} className="shrink-0 animate-spin text-current opacity-80" /> : <OpenAILogo className="h-3.5 w-3.5 shrink-0 text-current opacity-80" />}<span className="truncate text-[13px] font-medium">{formatAssistantModelLabel(selectedModelLabel)}</span><ChevronDown size={10} className="-mr-0.5 ml-0.5 shrink-0 opacity-60" /></span></button>
         </div>
 
         <span className="mx-0.5 hidden h-4 w-px bg-white/10 sm:block" />
 
         <div className="relative min-w-0" ref={traitsDropdownRef}>
-            <div className={cn('pointer-events-none absolute bottom-full left-0 z-30 mb-2 w-56 overflow-hidden', showTraitsDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
+            <div className={cn('pointer-events-none absolute bottom-full left-0 z-[170] mb-2 w-56 overflow-hidden', showTraitsDropdown ? 'pointer-events-auto' : 'pointer-events-none')}>
                 <AnimatedHeight isOpen={showTraitsDropdown} duration={220}>
                     <div className="space-y-2 rounded-xl border border-white/10 bg-sparkle-card p-2 shadow-lg">
                         <div className="px-2 pt-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-sparkle-text-muted">Reasoning</div>
@@ -276,14 +380,14 @@ export const ComposerFooterControls = memo(({
                     </div>
                 </AnimatedHeight>
             </div>
-            <button type="button" onClick={() => setShowTraitsDropdown((prev) => !prev)} className="shrink-0 whitespace-nowrap px-1.5 text-[13px] font-medium text-sparkle-text-secondary transition-colors hover:text-sparkle-text sm:px-2.5" title="Reasoning and speed"><span className="inline-flex items-center gap-1.5"><span className="text-[13px] font-medium text-amber-200">{EFFORT_LABELS[selectedEffort]}</span><ChevronDown size={10} className="-mr-0.5 ml-0.5 opacity-60" /></span></button>
+            <button type="button" disabled={controlsLocked} onClick={() => setShowTraitsDropdown((prev) => controlsLocked ? prev : !prev)} className={cn('shrink-0 whitespace-nowrap px-1.5 text-[13px] font-medium text-sparkle-text-secondary transition-colors hover:text-sparkle-text sm:px-2.5', controlsLocked && 'cursor-not-allowed opacity-45 hover:text-sparkle-text-secondary')} title="Reasoning and speed"><span className="inline-flex items-center gap-1.5"><span className="text-[13px] font-medium text-amber-200">{EFFORT_LABELS[selectedEffort]}</span>{fastModeEnabled ? <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-200"><span className="h-1 w-1 rounded-full bg-emerald-300/90" /><span>Fast</span></span> : null}<ChevronDown size={10} className="-mr-0.5 ml-0.5 opacity-60" /></span></button>
         </div>
 
         <span className="mx-0.5 hidden h-4 w-px bg-white/10 sm:block" />
 
-        <button type="button" onClick={() => setSelectedInteractionMode((current: string) => current === 'plan' ? 'default' : 'plan')} className={cn('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-[13px] font-medium transition-colors sm:px-3', selectedInteractionMode === 'plan' ? 'border-white/10 bg-violet-500/10 text-violet-200 hover:border-white/20 hover:bg-violet-500/14 hover:text-violet-100' : 'border-white/10 bg-sky-500/10 text-sky-200 hover:border-white/20 hover:bg-sky-500/14 hover:text-sky-100')} title={selectedInteractionMode === 'plan' ? 'Plan mode - click to return to normal chat mode' : 'Default mode - click to enter plan mode'}>{selectedInteractionMode === 'plan' ? <ListTodo size={14} /> : <MessageSquare size={14} />}<span>{selectedInteractionMode === 'plan' ? 'Plan' : 'Chat'}</span></button>
+        <button type="button" disabled={controlsLocked} onClick={() => setSelectedInteractionMode((current: string) => controlsLocked ? current : current === 'plan' ? 'default' : 'plan')} className={cn('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-[13px] font-medium transition-colors sm:px-3', selectedInteractionMode === 'plan' ? 'border-white/10 bg-violet-500/10 text-violet-200 hover:border-white/20 hover:bg-violet-500/14 hover:text-violet-100' : 'border-white/10 bg-sky-500/10 text-sky-200 hover:border-white/20 hover:bg-sky-500/14 hover:text-sky-100', controlsLocked && 'cursor-not-allowed opacity-45 hover:border-white/10 hover:bg-violet-500/10 hover:text-violet-200')} title={selectedInteractionMode === 'plan' ? 'Plan mode - click to return to normal chat mode' : 'Default mode - click to enter plan mode'}>{selectedInteractionMode === 'plan' ? <ListTodo size={14} /> : <MessageSquare size={14} />}<span>{selectedInteractionMode === 'plan' ? 'Plan' : 'Chat'}</span></button>
         <span className="mx-0.5 hidden h-4 w-px bg-white/10 sm:block" />
-        <button type="button" onClick={() => { if (selectedRuntimeMode === 'full-access') { setSelectedRuntimeMode('approval-required'); return } setShowFullAccessConfirm(true) }} className={cn('shrink-0 whitespace-nowrap px-1.5 text-[13px] font-medium transition-colors sm:px-2.5', selectedRuntimeMode === 'full-access' ? 'text-amber-200 hover:text-amber-100' : 'text-emerald-200 hover:text-emerald-100')} title={displayedProfile}><span className="inline-flex items-center gap-1.5">{selectedRuntimeMode === 'full-access' ? <LockOpen size={14} /> : <Lock size={14} />}<span className="text-[13px] font-medium">{selectedRuntimeMode === 'full-access' ? 'Full access' : 'Supervised'}</span></span></button>
+        <button type="button" disabled={controlsLocked} onClick={() => { if (controlsLocked) return; if (selectedRuntimeMode === 'full-access') { setSelectedRuntimeMode('approval-required'); return } setShowFullAccessConfirm(true) }} className={cn('shrink-0 whitespace-nowrap px-1.5 text-[13px] font-medium transition-colors sm:px-2.5', selectedRuntimeMode === 'full-access' ? 'text-amber-200 hover:text-amber-100' : 'text-emerald-200 hover:text-emerald-100', controlsLocked && 'cursor-not-allowed opacity-45 hover:text-emerald-200')} title={displayedProfile}><span className="inline-flex items-center gap-1.5">{selectedRuntimeMode === 'full-access' ? <LockOpen size={14} /> : <Lock size={14} />}<span className="text-[13px] font-medium">{selectedRuntimeMode === 'full-access' ? 'Full access' : 'Supervised'}</span></span></button>
     </div>
 ))
 
@@ -293,6 +397,7 @@ export const ComposerStatusBar = memo(({
     modelsLoading,
     branchesLoading,
     thinkingLabel,
+    fastModeEnabled,
     branchDropdownRef,
     showBranchDropdown,
     setShowBranchDropdown,
@@ -305,6 +410,7 @@ export const ComposerStatusBar = memo(({
     modelsLoading: boolean
     branchesLoading: boolean
     thinkingLabel: string
+    fastModeEnabled: boolean
     branchDropdownRef: RefObject<HTMLDivElement | null>
     showBranchDropdown: boolean
     setShowBranchDropdown: Dispatch<SetStateAction<boolean>>
@@ -315,10 +421,10 @@ export const ComposerStatusBar = memo(({
     <div className="flex items-center justify-between px-1 pt-2 text-[11px] font-medium text-sparkle-text-secondary">
         <div className="flex items-center gap-2">
             <span>Local</span>
-            {(isThinking || mentionLoading || modelsLoading || branchesLoading) ? (
+            {(isThinking || mentionLoading || branchesLoading) ? (
                 <span className="inline-flex items-center gap-1 text-[10px] text-sparkle-text-muted">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/35" />
-                    {isThinking ? thinkingLabel : mentionLoading ? 'Indexing...' : modelsLoading ? 'Loading models...' : 'Loading...'}
+                    <span>{isThinking ? thinkingLabel : mentionLoading ? 'Indexing...' : 'Loading...'}</span>
                 </span>
             ) : null}
         </div>
