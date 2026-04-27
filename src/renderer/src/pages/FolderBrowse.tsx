@@ -8,7 +8,6 @@ import { AlertCircle } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { readProjectGitOverview } from '@/lib/projectGitOverview'
 import { fileNameMatchesQuery, parseFileSearchQuery } from '@/lib/utils'
-import { useTerminal } from '@/App'
 import { useFilePreview } from '@/components/ui/FilePreviewModal'
 import { LoadingSpinner } from '@/components/ui/LoadingState'
 import type { PreviewMediaSource } from '@/components/ui/file-preview/types'
@@ -22,8 +21,9 @@ import { FolderBrowseHeader } from './folder-browse/FolderBrowseHeader'
 import { FolderBrowseOverlays } from './folder-browse/FolderBrowseOverlays'
 import { FolderBrowseToolbar } from './folder-browse/FolderBrowseToolbar'
 import {
-    FILES_PAGE_SIZE,
+    BROWSE_ITEMS_PAGE_SIZE,
     FolderBrowseMode,
+    buildBrowseRoute,
     getParentFolderPathWithinRoot,
     normalizePath,
     resolveNavigationRoot,
@@ -41,7 +41,6 @@ type FolderBrowseProps = {
 
 export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProps) {
     const { settings, updateSettings } = useSettings()
-    const { openTerminal } = useTerminal()
     const { folderPath } = useParams<{ folderPath: string }>()
     const navigate = useNavigate()
     const isExplorerMode = mode === 'explorer'
@@ -103,7 +102,7 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
     }> | null>(null)
     const [filterType, setFilterType] = useState('all')
     const [isCurrentFolderGitRepo, setIsCurrentFolderGitRepo] = useState(false)
-    const [visibleFileCount, setVisibleFileCount] = useState(FILES_PAGE_SIZE)
+    const [visibleItemCount, setVisibleItemCount] = useState(BROWSE_ITEMS_PAGE_SIZE)
     const [indexedTotals, setIndexedTotals] = useState<IndexedTotals | null>(null)
     const [indexedInventory, setIndexedInventory] = useState<IndexedInventory | null>(null)
     const indexTotalsRunRef = useRef(0)
@@ -244,12 +243,7 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
         frameworks: statsModalController.frameworkCount,
         types: statsModalController.typeCount
     }), [statsModalController.frameworkCount, statsModalController.totalProjects, statsModalController.typeCount])
-    const indexedProjectsSource = useMemo<Project[]>(() => {
-        if (!isProjectsRootView || !indexedInventory?.projects?.length) {
-            return projects
-        }
-        return indexedInventory.projects
-    }, [indexedInventory?.projects, isProjectsRootView, projects])
+    const indexedProjectsSource = useMemo<Project[]>(() => projects, [projects])
     const indexedSearchProjects = useMemo<Project[]>(() => {
         if (!hasIndexedFolderSearch || !indexedSearchEntries) return []
         return indexedSearchEntries
@@ -421,21 +415,38 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
     }, [deferredSearchQuery, files, hasIndexedFolderSearch, indexedSearchFiles, parsedSearchQuery])
 
     useEffect(() => {
-        setVisibleFileCount(FILES_PAGE_SIZE)
-    }, [decodedPath, deferredSearchQuery, files.length])
+        setVisibleItemCount(BROWSE_ITEMS_PAGE_SIZE)
+    }, [decodedPath, deferredSearchQuery, files.length, filterType, folders.length, projects.length])
 
-    const displayedFiles = useMemo(
-        () => filteredFiles.slice(0, visibleFileCount),
-        [filteredFiles, visibleFileCount]
+    const displayedFolders = useMemo(
+        () => filteredFolders.slice(0, visibleItemCount),
+        [filteredFolders, visibleItemCount]
     )
-    const hasMoreFiles = displayedFiles.length < filteredFiles.length
+    const displayedGitRepos = useMemo(
+        () => gitRepos.slice(0, visibleItemCount),
+        [gitRepos, visibleItemCount]
+    )
+    const displayedProjects = useMemo(
+        () => filteredProjects.slice(0, visibleItemCount),
+        [filteredProjects, visibleItemCount]
+    )
+    const displayedFiles = useMemo(
+        () => filteredFiles.slice(0, visibleItemCount),
+        [filteredFiles, visibleItemCount]
+    )
+    const hasMoreItems = (
+        displayedFolders.length < filteredFolders.length
+        || displayedGitRepos.length < gitRepos.length
+        || displayedProjects.length < filteredProjects.length
+        || displayedFiles.length < filteredFiles.length
+    )
     const mediaPreviewSources = useMemo<PreviewMediaSource[]>(() => buildMediaPreviewSources(displayedFiles.map((file) => ({
         name: file.name,
         path: file.path,
         extension: file.extension
     }))), [displayedFiles])
-    const loadMoreFiles = useCallback(() => {
-        setVisibleFileCount((current) => current + FILES_PAGE_SIZE)
+    const loadMoreItems = useCallback(() => {
+        setVisibleItemCount((current) => current + BROWSE_ITEMS_PAGE_SIZE)
     }, [])
 
     const actions = useFolderBrowseActions({
@@ -448,6 +459,9 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
         openPreview,
         setError
     })
+    const handleNavigateToPath = useCallback((path: string) => {
+        navigate(buildBrowseRoute(mode, path))
+    }, [mode, navigate])
 
     if (!decodedPath) {
         return (
@@ -465,10 +479,11 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
     }
 
     return (
-        <div className="project-surface-scrollbar mx-auto min-w-0 max-w-[1600px] animate-fadeIn overflow-x-hidden overflow-y-auto pb-20 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]">
+        <div className="project-surface-scrollbar mx-auto min-w-0 max-w-[1600px] animate-fadeIn [overflow-x:clip] pb-20 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]">
             <FolderBrowseHeader
                 folderName={folderName}
                 decodedPath={decodedPath}
+                displayRootPath={navigationRoot ?? browseRootPath}
                 totalProjects={projects.length}
                 isProjectsRootView={isProjectsRootView}
                 rootStats={rootStats}
@@ -477,16 +492,17 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
                 onBack={actions.handleBack}
                 onNavigateUp={actions.handleNavigateUp}
                 canNavigateUp={canNavigateUp}
+                onNavigateToPath={handleNavigateToPath}
                 onViewAsProject={actions.handleViewAsProject}
-                onOpenTerminal={() => openTerminal({ displayName: folderName, id: 'main', category: 'folder' }, decodedPath)}
+                preferredShell={settings.defaultShell}
                 onCopyPath={actions.handleCopyPath}
                 copiedPath={actions.copiedPath}
                 onOpenStats={(key) => statsModalController.setStatsModal(key)}
                 onOpenProjectsSettings={isExplorerMode ? undefined : () => navigate('/settings/projects')}
-                onOpenInExplorer={() => window.devscope.openInExplorer?.(decodedPath)}
                 onRefresh={() => { void loadContents(true) }}
                 onCreateFile={(presetExtension) => actions.handleCreateInCurrentFolder('file', presetExtension)}
                 onCreateFolder={() => actions.handleCreateInCurrentFolder('directory')}
+                onCloneRepository={actions.openCloneRepoModal}
             />
 
             <FolderBrowseToolbar
@@ -520,13 +536,16 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
                 <FolderBrowseContent
                     currentDirectoryPath={decodedPath}
                     currentDirectoryName={folderName}
-                    filteredFolders={filteredFolders}
-                    gitRepos={gitRepos}
+                    filteredFolders={displayedFolders}
+                    totalFilteredFolders={filteredFolders.length}
+                    gitRepos={displayedGitRepos}
+                    totalGitRepos={gitRepos.length}
                     visibleFiles={displayedFiles}
                     totalFilteredFiles={filteredFiles.length}
-                    hasMoreFiles={hasMoreFiles}
-                    onLoadMoreFiles={loadMoreFiles}
-                    displayedProjects={filteredProjects}
+                    hasMoreItems={hasMoreItems}
+                    onLoadMoreItems={loadMoreItems}
+                    displayedProjects={displayedProjects}
+                    totalDisplayedProjects={filteredProjects.length}
                     viewMode={settings.browserViewMode}
                     contentLayout={settings.browserContentLayout}
                     isCondensedLayout={false}
@@ -558,6 +577,9 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
 
             <FolderBrowseOverlays
                 closePreview={closePreview}
+                cloneRepoErrorMessage={actions.cloneRepoErrorMessage}
+                cloneRepoModalOpen={actions.cloneRepoModalOpen}
+                cloneRepoUrl={actions.cloneRepoUrl}
                 confirmDeleteTarget={actions.confirmDeleteTarget}
                 createDraft={actions.createDraft}
                 createErrorMessage={actions.createErrorMessage}
@@ -584,12 +606,16 @@ export default function FolderBrowsePage({ mode = 'projects' }: FolderBrowseProp
                 setCreateDraft={actions.setCreateDraft}
                 setCreateErrorMessage={actions.setCreateErrorMessage}
                 setCreateTarget={actions.setCreateTarget}
+                setCloneRepoErrorMessage={actions.setCloneRepoErrorMessage}
+                setCloneRepoModalOpen={actions.setCloneRepoModalOpen}
+                setCloneRepoUrl={actions.setCloneRepoUrl}
                 setDeleteTarget={actions.setDeleteTarget}
                 setRenameDraft={actions.setRenameDraft}
                 setRenameErrorMessage={actions.setRenameErrorMessage}
                 setRenameExtensionSuffix={actions.setRenameExtensionSuffix}
                 setRenameTarget={actions.setRenameTarget}
                 statsModalController={statsModalController}
+                submitCloneRepo={actions.submitCloneRepo}
                 submitCreateTarget={actions.submitCreateTarget}
                 submitRenameTarget={actions.submitRenameTarget}
                 toast={actions.toast}

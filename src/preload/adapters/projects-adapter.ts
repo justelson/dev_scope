@@ -1,8 +1,11 @@
 import { ipcRenderer } from 'electron'
 import type {
+    DevScopeGitCloneInput,
+    DevScopeGitCloneProgressEvent,
     DevScopePreviewTerminalEvent,
     DevScopePythonPreviewEvent
 } from '../../shared/contracts/devscope-api'
+import { GIT_CLONE_PROGRESS_CHANNEL } from '../../shared/contracts/devscope-api'
 
 export function createProjectsAdapter() {
     const PYTHON_PREVIEW_EVENT_CHANNEL = 'devscope:pythonPreview:event'
@@ -12,6 +15,7 @@ export function createProjectsAdapter() {
         selectFolder: () => ipcRenderer.invoke('devscope:selectFolder'),
         selectMarkdownFile: () => ipcRenderer.invoke('devscope:selectMarkdownFile'),
         getUserHomePath: () => ipcRenderer.invoke('devscope:getUserHomePath'),
+        listInstalledPackageRuntimes: () => ipcRenderer.invoke('devscope:listInstalledPackageRuntimes'),
         scanProjects: (folderPath: string, options?: { forceRefresh?: boolean }) =>
             ipcRenderer.invoke('devscope:scanProjects', folderPath, options),
         openInExplorer: (path: string) => ipcRenderer.invoke('devscope:openInExplorer', path),
@@ -151,6 +155,16 @@ export function createProjectsAdapter() {
             ipcRenderer.invoke('devscope:initGitRepo', projectPath, branchName, createGitignore, gitignoreTemplate),
         createInitialCommit: (projectPath: string, message: string) => ipcRenderer.invoke('devscope:createInitialCommit', projectPath, message),
         addRemoteOrigin: (projectPath: string, remoteUrl: string) => ipcRenderer.invoke('devscope:addRemoteOrigin', projectPath, remoteUrl),
+        cloneGitRepository: (input: DevScopeGitCloneInput) => ipcRenderer.invoke('devscope:cloneGitRepository', input),
+        onGitCloneProgress: (callback: (event: DevScopeGitCloneProgressEvent) => void) => {
+            const listener = (_event: Electron.IpcRendererEvent, payload: DevScopeGitCloneProgressEvent) => {
+                callback(payload)
+            }
+            ipcRenderer.on(GIT_CLONE_PROGRESS_CHANNEL, listener)
+            return () => {
+                ipcRenderer.removeListener(GIT_CLONE_PROGRESS_CHANNEL, listener)
+            }
+        },
         getGitignoreTemplates: () => ipcRenderer.invoke('devscope:getGitignoreTemplates'),
         generateGitignoreContent: (template: string) => ipcRenderer.invoke('devscope:generateGitignoreContent', template),
         getGitignorePatterns: () => ipcRenderer.invoke('devscope:getGitignorePatterns'),

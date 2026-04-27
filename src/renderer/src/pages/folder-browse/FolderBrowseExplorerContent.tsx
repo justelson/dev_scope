@@ -18,7 +18,7 @@ export function MediaFilePreview({ file, compact = false }: { file: FileItem; co
     if (file.previewType === 'video') {
         return (
             <div className={cn(frameClassName, 'relative overflow-hidden bg-black')}>
-                <video src={getFileUrl(file.path)} muted preload="metadata" playsInline className="h-full w-full object-cover" />
+                <video src={getFileUrl(file.path)} muted preload="none" playsInline className="h-full w-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                 <div className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white shadow-lg">
                     <Play size={11} className="translate-x-[1px]" />
@@ -52,12 +52,15 @@ export function MediaFilePreview({ file, compact = false }: { file: FileItem; co
 
 export function FolderBrowseExplorerContent({
     filteredFolders,
+    totalFilteredFolders,
     gitRepos,
+    totalGitRepos,
     displayedProjects,
+    totalDisplayedProjects,
     visibleFiles,
     totalFilteredFiles,
-    hasMoreFiles,
-    onLoadMoreFiles,
+    hasMoreItems,
+    onLoadMoreItems,
     viewMode,
     isCondensedLayout,
     searchQuery,
@@ -74,12 +77,15 @@ export function FolderBrowseExplorerContent({
     formatRelativeTime
 }: {
     filteredFolders: FolderItem[]
+    totalFilteredFolders: number
     gitRepos: Project[]
+    totalGitRepos: number
     displayedProjects: Project[]
+    totalDisplayedProjects: number
     visibleFiles: FileItem[]
     totalFilteredFiles: number
-    hasMoreFiles: boolean
-    onLoadMoreFiles: () => void
+    hasMoreItems: boolean
+    onLoadMoreItems: () => void
     viewMode: ViewMode
     isCondensedLayout: boolean
     searchQuery: string
@@ -107,7 +113,7 @@ export function FolderBrowseExplorerContent({
         return left.name.localeCompare(right.name)
     })
 
-    const totalExplorerCount = filteredFolders.length + gitRepos.length + displayedProjects.length + totalFilteredFiles
+    const totalExplorerCount = totalFilteredFolders + totalGitRepos + totalDisplayedProjects + totalFilteredFiles
     const pressuredFinderGridStyle = isCondensedLayout ? { gridTemplateColumns: 'repeat(auto-fit, minmax(92px, 108px))' } : undefined
     const pressuredExplorerGridStyle = isCondensedLayout ? { gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' } : undefined
     const isFinderMode = viewMode === 'finder'
@@ -161,7 +167,7 @@ export function FolderBrowseExplorerContent({
                                                 onProjectClick(project)
                                             }
                                         }}
-                                        className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15"
+                                        className="group h-full min-h-[136px] rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-colors hover:border-white/15"
                                     >
                                         <div className="mb-2 flex items-center justify-between gap-2">
                                             <div className="rounded-lg border border-white/5 bg-sparkle-bg p-2">
@@ -197,7 +203,7 @@ export function FolderBrowseExplorerContent({
                                 ) : (
                                     <div
                                         key={entry.id}
-                                        className="group relative flex h-full min-h-[136px] cursor-pointer flex-col rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-blue-400/30 hover:bg-blue-400/5"
+                                        className="group relative flex h-full min-h-[136px] cursor-pointer flex-col rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-colors hover:border-blue-400/30 hover:bg-blue-400/5"
                                         onClick={() => onOpenFilePreview(file)}
                                         onContextMenu={(event) => openEntryContextMenu(event, entryTarget)}
                                     >
@@ -231,7 +237,7 @@ export function FolderBrowseExplorerContent({
                                     key={entry.id}
                                     onClick={() => onFolderClick(folder)}
                                     onContextMenu={(event) => openEntryContextMenu(event, entryTarget)}
-                                    className="group relative flex h-full min-h-[136px] cursor-pointer flex-col rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-all hover:-translate-y-1 hover:border-white/15"
+                                    className="group relative flex h-full min-h-[136px] cursor-pointer flex-col rounded-xl border border-white/5 bg-sparkle-card p-3 text-left transition-colors hover:border-white/15"
                                 >
                                     <div className="mb-2 inline-flex w-fit rounded-lg border border-white/5 bg-sparkle-bg p-2">
                                         {isGit ? <Github size={16} className="text-white/80 transition-colors group-hover:text-white" /> : <Folder size={16} className="text-yellow-400/70 transition-colors group-hover:text-yellow-400" />}
@@ -245,10 +251,10 @@ export function FolderBrowseExplorerContent({
                             )
                         })}
                     </div>
-                    {hasMoreFiles && (
+                    {hasMoreItems && (
                         <div className="mt-4 flex justify-center">
-                            <button onClick={onLoadMoreFiles} className="rounded-lg border border-white/15 bg-sparkle-card/60 px-4 py-2 text-sm text-white/80 transition-colors hover:border-white/30 hover:bg-sparkle-card hover:text-white">
-                                Show more files
+                            <button onClick={onLoadMoreItems} className="rounded-lg border border-white/15 bg-sparkle-card/60 px-4 py-2 text-sm text-white/80 transition-colors hover:border-white/30 hover:bg-sparkle-card hover:text-white">
+                                Show more items
                             </button>
                         </div>
                     )}

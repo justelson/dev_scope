@@ -12,7 +12,7 @@ const AI_PATCH_MAX_FILES = 16
 const AI_PATCH_MAX_LINES_PER_FILE = 120
 const AI_PATCH_MAX_LINES_TOTAL = 900
 
-type GitRuntime = {
+export type GitRuntime = {
     binary: string
     env: NodeJS.ProcessEnv
 }
@@ -172,6 +172,10 @@ export function createGit(projectPath: string): SimpleGit {
     git.env('GIT_OPTIONAL_LOCKS', '0')
 
     return git
+}
+
+export function getGitRuntime(): GitRuntime {
+    return resolveGitRuntime()
 }
 
 export function normalizeGitPath(path: string): string {

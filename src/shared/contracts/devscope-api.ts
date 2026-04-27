@@ -81,6 +81,34 @@ export type DevScopePreviewTerminalEvent = {
     exitCode?: number
 }
 
+export const GIT_CLONE_PROGRESS_CHANNEL = 'devscope:gitClone:progress'
+
+export type DevScopeGitCloneStatus = 'running' | 'success' | 'error'
+
+export type DevScopeGitCloneInput = {
+    cloneId: string
+    repoUrl: string
+    destinationDirectory: string
+    targetName?: string
+}
+
+export type DevScopeGitCloneProgressEvent = {
+    cloneId: string
+    status: DevScopeGitCloneStatus
+    message: string
+    repoName?: string
+    clonePath?: string
+    phase?: string
+    percent?: number
+    error?: string
+}
+
+export type DevScopeGitCloneResult = {
+    cloneId: string
+    repoName: string
+    clonePath: string
+}
+
 export type DevScopePreviewTerminalSessionSummary = {
     sessionId: string
     title: string
@@ -201,6 +229,7 @@ export interface DevScopeApi {
     // Settings + AI
     setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) => Promise<DevScopeResult>
     getStartupSettings: () => Promise<DevScopeResult>
+    listInstalledPackageRuntimes: () => Promise<DevScopeResult<{ runtimes: DevScopeInstalledPackageRuntime[] }>>
     getAiDebugLogs: (limit?: number) => Promise<DevScopeResult>
     clearAiDebugLogs: () => Promise<DevScopeResult>
     testGroqConnection: (apiKey: string) => Promise<DevScopeResult>
@@ -364,6 +393,8 @@ export interface DevScopeApi {
     initGitRepo: (projectPath: string, branchName: string, createGitignore: boolean, gitignoreTemplate?: string) => Promise<DevScopeResult>
     createInitialCommit: (projectPath: string, message: string) => Promise<DevScopeResult>
     addRemoteOrigin: (projectPath: string, remoteUrl: string) => Promise<DevScopeResult>
+    cloneGitRepository: (input: DevScopeGitCloneInput) => Promise<DevScopeResult<DevScopeGitCloneResult>>
+    onGitCloneProgress: (callback: (event: DevScopeGitCloneProgressEvent) => void) => () => void
     getGitignoreTemplates: () => Promise<DevScopeResult<{ templates: string[] }>>
     generateGitignoreContent: (template: string) => Promise<DevScopeResult<{ content: string }>>
     getGitignorePatterns: () => Promise<DevScopeResult<{ patterns: Array<{ id: string; label: string; description: string; category: string; patterns: string[] }> }>>
@@ -423,4 +454,15 @@ export interface DevScopeApi {
     agentscope: DevScopeAgentScopeApi
     updates: DevScopeUpdatesApi
     window: DevScopeWindowApi
+}
+
+export type DevScopePackageRuntimeId = 'node' | 'npm' | 'pnpm' | 'yarn' | 'bun'
+
+export interface DevScopeInstalledPackageRuntime {
+    id: DevScopePackageRuntimeId
+    name: string
+    command: string
+    installed: boolean
+    version?: string
+    path?: string
 }

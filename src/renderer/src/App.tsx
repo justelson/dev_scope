@@ -11,6 +11,7 @@ import { SettingsProvider, useSettings } from './lib/settings'
 import { CommandPaletteProvider } from './lib/commandPalette'
 import CommandPalette from './components/CommandPalette'
 import LinkHoverStatus from './components/ui/LinkHoverStatus'
+import { GitCloneProgressToast } from './components/ui/GitCloneProgressToast'
 
 const Settings = lazy(() => import('./pages/Settings'))
 const Home = lazy(() => import('./pages/Home'))
@@ -383,6 +384,7 @@ function AppContent() {
             </SidebarProvider>
             <UpdatePromptCenter />
             <LinkHoverStatus />
+            <GitCloneProgressToast />
         </div>
     )
 }

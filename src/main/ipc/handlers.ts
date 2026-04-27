@@ -12,6 +12,7 @@ import {
     handleGenerateCommitMessage,
     handleGetAiDebugLogs,
     handleGetStartupSettings,
+    handleListInstalledPackageRuntimes,
     handleSetStartupSettings,
     handleTestCodexConnection,
     handleTestGeminiConnection,
@@ -136,6 +137,7 @@ import {
     handleAddRemoteOrigin,
     handleApplyStash,
     handleCheckoutBranch,
+    handleCloneGitRepository,
     handleCreateBranch,
     handleCreateCommit,
     handleCreateOrOpenPullRequest,
@@ -180,6 +182,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
     ipcMain.handle('devscope:setStartupSettings', handleSetStartupSettings)
     ipcMain.handle('devscope:getStartupSettings', handleGetStartupSettings)
+    ipcMain.handle('devscope:listInstalledPackageRuntimes', handleListInstalledPackageRuntimes)
     ipcMain.handle('devscope:testGroqConnection', handleTestGroqConnection)
     ipcMain.handle('devscope:testGeminiConnection', handleTestGeminiConnection)
     ipcMain.handle('devscope:testCodexConnection', handleTestCodexConnection)
@@ -309,6 +312,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ipcMain.handle('devscope:initGitRepo', handleInitGitRepo)
     ipcMain.handle('devscope:createInitialCommit', handleCreateInitialCommit)
     ipcMain.handle('devscope:addRemoteOrigin', handleAddRemoteOrigin)
+    ipcMain.handle('devscope:cloneGitRepository', handleCloneGitRepository)
     ipcMain.handle('devscope:getGitignoreTemplates', handleGetGitignoreTemplates)
     ipcMain.handle('devscope:generateGitignoreContent', handleGenerateGitignoreContent)
     ipcMain.handle('devscope:getGitignorePatterns', handleGetGitignorePatterns)

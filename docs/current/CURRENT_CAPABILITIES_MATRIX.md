@@ -28,7 +28,7 @@ Last validated against code on April 27, 2026. Current coverage includes assista
 - File preview reads across text/media/image content: `Implemented`
 - Rendered HTML file preview loads the actual on-disk HTML document through the app file protocol, so relative local JS/CSS/assets referenced by that file resolve in preview mode: `Implemented`
 - Fullscreen file preview uses an IDE-style workspace shell with a full-height left navigation rail, tab-like top file bar, right-aligned action chrome, streamlined edit/save menus, Python run-mode controls, and integrated folder/file-map navigation: `Implemented`
-- File writes, rename, move, paste, and delete flows: `Implemented`
+- File writes, rename, move, paste, delete, and clone-repository-into-current-folder flows with streamed clone progress: `Implemented`
 - Preview terminal sessions: `Implemented`
 - Project script buttons support a Behavior setting for package runtime selection, with main-process installed-runtime detection for Node.js, npm, pnpm, Yarn, and Bun plus auto mode that follows project lockfiles: `Implemented`
 - File preview terminal opens as a bottom overlay panel inside the preview workspace instead of consuming sidebar/layout height, uses panel-style in/out motion, and live session titles now sync from terminal output and command submissions even while sessions continue in the background: `Implemented`

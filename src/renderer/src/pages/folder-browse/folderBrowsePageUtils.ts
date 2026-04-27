@@ -4,7 +4,7 @@ import {
     validateCreateName
 } from '@/lib/filesystem/fileSystemPaths'
 
-export const FILES_PAGE_SIZE = 300
+export const BROWSE_ITEMS_PAGE_SIZE = 180
 export {
     getFileExtensionFromName,
     getParentFolderPath,
@@ -17,6 +17,11 @@ export type FileSystemClipboardItem = {
     path: string
     name: string
     type: 'file' | 'directory'
+}
+
+export type FolderBrowseBreadcrumbSegment = {
+    label: string
+    path: string
 }
 
 export type CreateFileSystemTarget = {
@@ -61,6 +66,50 @@ export function isPathWithinRoot(path: string, root: string): boolean {
     if (!normalizedPath || !normalizedRoot) return false
     if (normalizedPath === normalizedRoot) return true
     return normalizedPath.startsWith(`${normalizedRoot}\\`)
+}
+
+export function formatRootRelativePath(path: string, root: string | null | undefined): string {
+    const normalizedPath = normalizePath(path)
+    const normalizedRoot = normalizePath(root || '')
+    if (!normalizedPath || !normalizedRoot || !isPathWithinRoot(normalizedPath, normalizedRoot)) {
+        return path
+    }
+
+    const rootName = normalizedRoot.split('\\').filter(Boolean).pop() || normalizedRoot
+    const relativeSuffix = normalizedPath.slice(normalizedRoot.length).replace(/^\\+/, '')
+    return relativeSuffix ? `~\\${rootName}\\${relativeSuffix}` : `~\\${rootName}`
+}
+
+export function buildRootRelativeBreadcrumbSegments(
+    path: string,
+    root: string | null | undefined
+): FolderBrowseBreadcrumbSegment[] {
+    const normalizedPath = normalizePath(path)
+    const normalizedRoot = normalizePath(root || '')
+    if (!normalizedPath) return []
+
+    if (!normalizedRoot || !isPathWithinRoot(normalizedPath, normalizedRoot)) {
+        const parts = normalizedPath.split('\\').filter(Boolean)
+        return parts.map((part, index) => ({
+            label: index === 0 && /^[A-Za-z]:$/.test(part) ? `${part}\\` : part,
+            path: parts.slice(0, index + 1).join('\\')
+        }))
+    }
+
+    const rootName = normalizedRoot.split('\\').filter(Boolean).pop() || normalizedRoot
+    const relativeParts = normalizedPath.slice(normalizedRoot.length).replace(/^\\+/, '').split('\\').filter(Boolean)
+    const segments: FolderBrowseBreadcrumbSegment[] = [{
+        label: `~\\${rootName}`,
+        path: normalizedRoot
+    }]
+
+    let currentPath = normalizedRoot
+    for (const part of relativeParts) {
+        currentPath = `${currentPath}\\${part}`
+        segments.push({ label: part, path: currentPath })
+    }
+
+    return segments
 }
 
 export function resolveNavigationRoot(path: string, roots: string[]): string | null {

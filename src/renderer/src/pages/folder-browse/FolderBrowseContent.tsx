@@ -11,12 +11,15 @@ interface FolderBrowseContentProps {
     currentDirectoryPath: string
     currentDirectoryName: string
     filteredFolders: FolderItem[]
+    totalFilteredFolders: number
     gitRepos: Project[]
+    totalGitRepos: number
     visibleFiles: FileItem[]
     totalFilteredFiles: number
-    hasMoreFiles: boolean
-    onLoadMoreFiles: () => void
+    hasMoreItems: boolean
+    onLoadMoreItems: () => void
     displayedProjects: Project[]
+    totalDisplayedProjects: number
     viewMode: ViewMode
     contentLayout: ContentLayout
     isCondensedLayout?: boolean
@@ -49,12 +52,15 @@ export function FolderBrowseContent({
     currentDirectoryPath,
     currentDirectoryName,
     filteredFolders,
+    totalFilteredFolders,
     gitRepos,
+    totalGitRepos,
     visibleFiles,
     totalFilteredFiles,
-    hasMoreFiles,
-    onLoadMoreFiles,
+    hasMoreItems,
+    onLoadMoreItems,
     displayedProjects,
+    totalDisplayedProjects,
     viewMode,
     contentLayout,
     isCondensedLayout = false,
@@ -109,12 +115,15 @@ export function FolderBrowseContent({
             <>
                 <FolderBrowseExplorerContent
                     filteredFolders={filteredFolders}
+                    totalFilteredFolders={totalFilteredFolders}
                     gitRepos={gitRepos}
+                    totalGitRepos={totalGitRepos}
                     displayedProjects={displayedProjects}
+                    totalDisplayedProjects={totalDisplayedProjects}
                     visibleFiles={visibleFiles}
                     totalFilteredFiles={totalFilteredFiles}
-                    hasMoreFiles={hasMoreFiles}
-                    onLoadMoreFiles={onLoadMoreFiles}
+                    hasMoreItems={hasMoreItems}
+                    onLoadMoreItems={onLoadMoreItems}
                     viewMode={viewMode}
                     isCondensedLayout={isCondensedLayout}
                     searchQuery={searchQuery}
@@ -140,7 +149,7 @@ export function FolderBrowseContent({
             <div className="space-y-8" onContextMenu={openEmptySpaceContextMenu}>
                 {filteredFolders.length > 0 && (
                     <div onContextMenu={openEmptySpaceContextMenu}>
-                        <SectionHeader icon={Folder} iconClassName="text-yellow-400/70" title="Folders" count={filteredFolders.length} />
+                        <SectionHeader icon={Folder} iconClassName="text-yellow-400/70" title="Folders" count={totalFilteredFolders} />
                         <div
                             className={cn(
                                 'grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
@@ -176,7 +185,7 @@ export function FolderBrowseContent({
 
                 {gitRepos.length > 0 && (
                     <div onContextMenu={openEmptySpaceContextMenu}>
-                        <SectionHeader icon={Github} iconClassName="text-white/70" title="Git Repositories" count={gitRepos.length} />
+                        <SectionHeader icon={Github} iconClassName="text-white/70" title="Git Repositories" count={totalGitRepos} />
                         <div
                             className={cn(
                                 'grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
@@ -272,19 +281,12 @@ export function FolderBrowseContent({
                                 )
                             })}
                         </div>
-                        {hasMoreFiles && (
-                            <div className="mt-4 flex justify-center">
-                                <button onClick={onLoadMoreFiles} className="rounded-lg border border-white/15 bg-sparkle-card/60 px-4 py-2 text-sm text-white/80 transition-colors hover:border-white/30 hover:bg-sparkle-card hover:text-white">
-                                    Show more files
-                                </button>
-                            </div>
-                        )}
                     </div>
                 )}
 
                 {displayedProjects.length > 0 && (
                     <div onContextMenu={openEmptySpaceContextMenu}>
-                        <SectionHeader icon={Code} iconClassName="text-sparkle-accent" title="Projects" count={displayedProjects.length} />
+                        <SectionHeader icon={Code} iconClassName="text-sparkle-accent" title="Projects" count={totalDisplayedProjects} />
                         <div
                             className={cn(
                                 'grid gap-4 transition-[grid-template-columns,gap] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
@@ -310,7 +312,15 @@ export function FolderBrowseContent({
                     </div>
                 )}
 
-                {displayedProjects.length === 0 && filteredFolders.length === 0 && gitRepos.length === 0 && totalFilteredFiles === 0 && !error && (
+                {hasMoreItems && (
+                    <div className="flex justify-center">
+                        <button onClick={onLoadMoreItems} className="rounded-lg border border-white/15 bg-sparkle-card/60 px-4 py-2 text-sm text-white/80 transition-colors hover:border-white/30 hover:bg-sparkle-card hover:text-white">
+                            Show more items
+                        </button>
+                    </div>
+                )}
+
+                {totalDisplayedProjects === 0 && totalFilteredFolders === 0 && totalGitRepos === 0 && totalFilteredFiles === 0 && !error && (
                     <div className="flex flex-col items-center justify-center rounded-xl border border-sparkle-border bg-sparkle-card py-16" onContextMenu={openEmptySpaceContextMenu}>
                         <FileCode size={48} className="mb-4 text-sparkle-text-muted" />
                         <h3 className="mb-2 text-lg font-medium text-sparkle-text">

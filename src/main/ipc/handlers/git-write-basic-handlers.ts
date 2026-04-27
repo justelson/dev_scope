@@ -1,5 +1,11 @@
 import log from 'electron-log'
 import {
+    GIT_CLONE_PROGRESS_CHANNEL,
+    type DevScopeGitCloneInput,
+    type DevScopeGitCloneProgressEvent
+} from '../../../shared/contracts/devscope-api'
+import { cloneGitRepository } from '../../services/git-clone-service'
+import {
     applyStash,
     checkoutBranch,
     createBranch,
@@ -260,5 +266,36 @@ export async function handleCreateInitialCommit(_event: Electron.IpcMainInvokeEv
     } catch (err: any) {
         log.error('Failed to create initial commit:', err)
         return { success: false, error: err.message }
+    }
+}
+
+export async function handleCloneGitRepository(
+    event: Electron.IpcMainInvokeEvent,
+    input: DevScopeGitCloneInput
+) {
+    const cloneId = String(input?.cloneId || '').trim()
+    const sendProgress = (update: Omit<DevScopeGitCloneProgressEvent, 'cloneId'>) => {
+        if (event.sender.isDestroyed()) return
+        event.sender.send(GIT_CLONE_PROGRESS_CHANNEL, {
+            cloneId,
+            ...update
+        })
+    }
+
+    try {
+        const result = await cloneGitRepository(input, (update) => {
+            sendProgress(update)
+        })
+        return { success: true, ...result }
+    } catch (err: any) {
+        log.error('Failed to clone git repository:', err)
+        if (cloneId) {
+            sendProgress({
+                status: 'error',
+                message: err.message || 'Failed to clone repository.',
+                error: err.message || 'Failed to clone repository.'
+            })
+        }
+        return { success: false, error: err.message || 'Failed to clone repository.' }
     }
 }

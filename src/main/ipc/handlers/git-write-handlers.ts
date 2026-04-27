@@ -17,7 +17,8 @@ export {
     handleCreateStash,
     handleApplyStash,
     handleDropStash,
-    handleCreateInitialCommit
+    handleCreateInitialCommit,
+    handleCloneGitRepository
 } from './git-write-basic-handlers'
 
 export {

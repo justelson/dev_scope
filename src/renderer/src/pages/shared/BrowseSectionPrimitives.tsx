@@ -39,13 +39,13 @@ export function FinderItem({ icon: Icon, title, subtitle, tag, tagColor, onClick
             onClick={onClick}
             title={subtitle ? `${title} - ${subtitle}` : title}
             className={cn(
-                'group flex w-full max-w-[120px] flex-col items-center gap-2 rounded-xl p-3 transition-all duration-300',
-                'hover:-translate-y-1 hover:bg-sparkle-card/80 hover:shadow-lg',
+                'group flex w-full max-w-[120px] flex-col items-center gap-2 rounded-xl p-3 transition-colors duration-150',
+                'hover:bg-sparkle-card/80',
                 className
             )}
         >
-            <div className="relative flex h-16 w-16 items-center justify-center overflow-visible rounded-2xl border border-white/5 bg-sparkle-bg shadow-inner transition-all group-hover:border-white/20">
-                {visual || <Icon size={32} className={cn('transition-transform duration-300 group-hover:scale-110', iconClassName)} />}
+            <div className="relative flex h-16 w-16 items-center justify-center overflow-visible rounded-2xl border border-white/5 bg-sparkle-bg shadow-inner transition-colors group-hover:border-white/14">
+                {visual || <Icon size={32} className={cn('transition-colors duration-150', iconClassName)} />}
 
                 {tag && (
                     <div
