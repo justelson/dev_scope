@@ -1,4 +1,4 @@
-import { ipcRenderer } from 'electron'
+import { ipcRenderer, webUtils } from 'electron'
 import type {
     AssistantApprovalResponseInput,
     AssistantApprovePendingPlaygroundLabRequestInput,
@@ -59,6 +59,7 @@ export function createAssistantAdapter() {
                 ipcRenderer.invoke(ASSISTANT_IPC.approvePendingPlaygroundLabRequest, input),
             declinePendingPlaygroundLabRequest: (input: AssistantDeclinePendingPlaygroundLabRequestInput) =>
                 ipcRenderer.invoke(ASSISTANT_IPC.declinePendingPlaygroundLabRequest, input),
+            getPathForFile: (file: File) => webUtils.getPathForFile(file),
             persistClipboardImage: (input: AssistantPersistClipboardImageInput) =>
                 ipcRenderer.invoke(ASSISTANT_IPC.persistClipboardImage, input),
             resolveClipboardAttachment: (input: AssistantResolveClipboardAttachmentInput) =>

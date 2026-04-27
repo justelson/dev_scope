@@ -146,6 +146,7 @@ export interface AssistantPersistClipboardImageInput {
     dataUrl: string
     fileName?: string
     mimeType?: string
+    source?: 'paste' | 'manual'
 }
 
 export interface AssistantResolveClipboardAttachmentInput {

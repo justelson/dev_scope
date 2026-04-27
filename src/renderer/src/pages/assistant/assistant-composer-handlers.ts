@@ -139,11 +139,35 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         })
     }
 
+    const getReadableFilePath = (file: File): string => {
+        try {
+            const resolvedPath = window.devscope.assistant.getPathForFile(file)
+            if (String(resolvedPath || '').trim()) return String(resolvedPath).trim()
+        } catch {}
+
+        return String((file as File & { path?: string }).path || '').trim()
+    }
+
+    const persistAttachmentFile = async (file: File, name: string, source: 'paste' | 'manual', mimeType: string): Promise<string> => {
+        const dataUrl = await readFileAsDataUrl(file)
+        const saveResult = await window.devscope.assistant.persistClipboardImage({
+            dataUrl,
+            fileName: name,
+            mimeType,
+            source
+        })
+        if (!saveResult.success || !saveResult.path) {
+            const errorMessage = saveResult.success ? 'Attachment path was not returned.' : saveResult.error
+            throw new Error(errorMessage || 'Failed to save attachment.')
+        }
+        return saveResult.path
+    }
+
     const attachFile = async (file: File, source: 'paste' | 'manual') => {
         const declaredMimeType = String(file.type || '').trim().toLowerCase()
         const fallbackName = declaredMimeType.startsWith('image/') ? `${source}-image-${Date.now()}.${inferImageExtensionFromMimeType(declaredMimeType)}` : `${source}-file-${Date.now()}`
         const name = file.name || fallbackName
-        const electronPath = String((file as File & { path?: string }).path || '').trim()
+        const electronPath = getReadableFilePath(file)
         const metaPath = electronPath || buildAttachmentPath(source, name)
         const mimeType = declaredMimeType || 'application/octet-stream'
         const looksLikeImageByName = /\.(png|jpe?g|gif|webp|svg|bmp|ico|tiff?|avif|apng|heic|heif|jfif|jxl)$/i.test(name)
@@ -151,11 +175,12 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
 
         const addImageAttachment = async (dataUrl: string, resolvedMimeType: string) => {
             let attachmentPath = metaPath
-            if (source === 'paste') {
+            if (source === 'paste' || !electronPath) {
                 const saveResult = await window.devscope.assistant.persistClipboardImage({
                     dataUrl,
                     fileName: name,
-                    mimeType: resolvedMimeType
+                    mimeType: resolvedMimeType,
+                    source
                 })
                 if (!saveResult.success || !saveResult.path) {
                     const errorMessage = saveResult.success ? 'Clipboard image path was not returned.' : saveResult.error
@@ -171,7 +196,7 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
                 sizeBytes: file.size,
                 kind: 'image',
                 previewDataUrl: dataUrl,
-                content: needsInlineImageContent && source !== 'paste' ? dataUrl : undefined,
+                content: needsInlineImageContent && source !== 'paste' && !attachmentPath ? dataUrl : undefined,
                 previewText: source === 'paste' ? 'Pasted image from clipboard.' : 'Attached image file.',
                 source,
                 animateIn: source === 'paste' ? false : true
@@ -179,12 +204,14 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         }
 
         if (mimeType.startsWith('image/') || looksLikeImageByName) {
+            let imageAttached = false
             try {
                 const dataUrl = await readFileAsDataUrl(file)
                 const dataUrlMimeMatch = dataUrl.match(/^data:([^;,]+)[;,]/i)
                 await addImageAttachment(dataUrl, String(dataUrlMimeMatch?.[1] || '').trim().toLowerCase() || (mimeType.startsWith('image/') ? mimeType : 'image/png'))
+                imageAttached = true
             } catch {}
-            return
+            if (imageAttached) return
         }
 
         if (source === 'paste' && !declaredMimeType) {
@@ -202,10 +229,11 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
         try {
             const rawText = await file.text()
             const trimmed = rawText.length > MAX_ATTACHMENT_CONTENT_CHARS ? `${rawText.slice(0, MAX_ATTACHMENT_CONTENT_CHARS)}\n\n[truncated]` : rawText
-            const meta = getContextFileMeta({ path: metaPath, name, mimeType })
+            const attachmentPath = electronPath || await persistAttachmentFile(file, name, source, mimeType)
+            const meta = getContextFileMeta({ path: attachmentPath, name, mimeType })
             upsertAttachment({
                 id: createAttachmentId(),
-                path: metaPath,
+                path: attachmentPath,
                 name,
                 mimeType,
                 sizeBytes: file.size,
@@ -216,9 +244,15 @@ export function createAssistantComposerHandlers(args: AssistantComposerHandlersA
                 animateIn: true
             })
         } catch {
+            let attachmentPath = metaPath
+            if (!electronPath) {
+                try {
+                    attachmentPath = await persistAttachmentFile(file, name, source, mimeType)
+                } catch {}
+            }
             upsertAttachment({
                 id: createAttachmentId(),
-                path: metaPath,
+                path: attachmentPath,
                 name,
                 mimeType,
                 sizeBytes: file.size,
