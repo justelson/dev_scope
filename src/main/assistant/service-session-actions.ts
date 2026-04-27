@@ -14,6 +14,7 @@ import {
     parseDevContextCompactionTestCommand,
     type AssistantDevContextCompactionTestCommand
 } from '../../shared/assistant/dev-context-compaction-test'
+import { PLAYGROUND_TERMINAL_ACCESS_DECISION_QUESTION_ID } from '../../shared/assistant/playground-terminal-access'
 import { is } from '../utils'
 import { buildDeleteMessagePlan } from './service-history'
 import { createAssistantSessionRecord, createAssistantUserMessage, createRunningLatestTurn } from './service-records'
@@ -37,13 +38,18 @@ import {
     buildPlaygroundLabContinuationAnswer,
     buildPlaygroundLabCreatedAnswer,
     buildPlaygroundNoLabRuntimePrompt,
-    buildPendingPlaygroundLabRequest,
+    buildPlaygroundTerminalAccessContinuationAnswer,
+    buildPlaygroundTerminalAccessRuntimePrompt,
     isPlaygroundLabUserInputRequest,
     isPlaygroundNoLabSession,
+    isPlaygroundTerminalAccessUserInputRequest,
     PLAYGROUND_LAB_DECISION_QUESTION_ID,
     PLAYGROUND_LAB_NAME_QUESTION_ID,
     PLAYGROUND_REPO_URL_QUESTION_ID,
-    resolvePlaygroundLabGuidedAnswers
+    resolvePlaygroundLabGuidedAnswers,
+    resolvePlaygroundTerminalAccessAnswer,
+    shouldUsePlaygroundLabSetupPrompt,
+    shouldUsePlaygroundTerminalAccessPrompt
 } from './playground-guided-lab'
 import { buildSessionHistoryMutationResult } from './session-mutation-utils'
 import {
@@ -54,7 +60,8 @@ import {
     createAssistantId,
     deriveSessionTitleFromPrompt,
     isDefaultSessionTitle,
-    nowIso
+    nowIso,
+    sanitizeOptionalPath
 } from './utils'
 
 export async function connectAssistantSession(deps: AssistantServiceActionDeps, options?: AssistantConnectOptions) {
@@ -427,29 +434,34 @@ export async function sendAssistantPromptAction(
         }, session.id, thread.id)
     }
 
-    const pendingLabRequest = buildPendingPlaygroundLabRequest(session, input)
-    if (pendingLabRequest) {
-        deps.appendEvent('session.updated', occurredAt, {
-            sessionId: session.id,
-            patch: {
-                pendingLabRequest,
-                updatedAt: occurredAt
-            }
-        }, session.id, thread.id)
-        deps.appendEvent('thread.updated', occurredAt, {
-            threadId: thread.id,
-            patch: {
-                state: 'ready',
-                lastError: null,
-                updatedAt: occurredAt
-            }
-        }, session.id, thread.id)
-        return { success: true as const, sessionId: session.id, threadId: thread.id, turnId: pendingLabRequest.id }
-    }
-
-    const runtimeCwd = deps.getSessionRuntimeCwd(session, thread)
+    const playgroundTerminalAccess = options?.playgroundTerminalAccess === true
+    const terminalAccessRequestSuppressed = options?.playgroundTerminalAccessRequestSuppressed === true
+    const terminalAccessRequestApplies = isPlaygroundNoLabSession(session)
+        && !playgroundTerminalAccess
+        && shouldUsePlaygroundTerminalAccessPrompt(input)
+    const shouldRouteTerminalAccessTurn = terminalAccessRequestApplies
+        && !terminalAccessRequestSuppressed
+        && !options?.skipPlaygroundTerminalAccessRequest
+    const shouldRouteLabSetupTurn = isPlaygroundNoLabSession(session)
+        && !playgroundTerminalAccess
+        && !shouldRouteTerminalAccessTurn
+        && !((terminalAccessRequestSuppressed || options?.skipPlaygroundTerminalAccessRequest) && terminalAccessRequestApplies)
+        && !options?.skipPlaygroundLabSetup
+        && shouldUsePlaygroundLabSetupPrompt(input)
+    const runtimeInteractionMode = shouldRouteTerminalAccessTurn || shouldRouteLabSetupTurn ? 'plan' : options?.interactionMode
+    const runtimeCwd = deps.getSessionRuntimeCwd(session, thread, { playgroundTerminalAccess })
     const runtimeThreadId = thread.providerThreadId || thread.id
-    const hasLiveRuntimeSession = deps.runtime.hasSession(runtimeThreadId)
+    let hasLiveRuntimeSession = deps.runtime.hasSession(runtimeThreadId)
+    const previousRuntimeCwd = sanitizeOptionalPath(thread.cwd)
+    if (
+        hasLiveRuntimeSession
+        && isPlaygroundNoLabSession(session)
+        && previousRuntimeCwd
+        && previousRuntimeCwd !== runtimeCwd
+    ) {
+        deps.runtime.disconnect(runtimeThreadId)
+        hasLiveRuntimeSession = false
+    }
     const updatedThreadPatch: Partial<AssistantThread> & Pick<AssistantThread, 'model' | 'runtimeMode' | 'interactionMode' | 'cwd' | 'state' | 'lastError' | 'activePlan' | 'updatedAt'> = {
         model: options?.model || thread.model,
         runtimeMode: options?.runtimeMode || thread.runtimeMode,
@@ -463,18 +475,26 @@ export async function sendAssistantPromptAction(
     deps.appendEvent('thread.updated', occurredAt, { threadId: thread.id, patch: updatedThreadPatch }, session.id, thread.id)
 
     try {
-        const userMessage = createAssistantUserMessage(input, occurredAt, createAssistantId('assistant-message'))
-        deps.appendEvent('thread.message.user', occurredAt, { threadId: thread.id, message: userMessage }, session.id, thread.id)
+        if (!options?.suppressUserMessage) {
+            const userMessage = createAssistantUserMessage(input, occurredAt, createAssistantId('assistant-message'))
+            deps.appendEvent('thread.message.user', occurredAt, { threadId: thread.id, message: userMessage }, session.id, thread.id)
+        }
         if (!hasLiveRuntimeSession) {
             await deps.runtime.connect({ ...thread, ...updatedThreadPatch }, runtimeCwd)
         }
-        const runtimePrompt = isPlaygroundNoLabSession(session)
-            ? buildPlaygroundNoLabRuntimePrompt(input)
+        const runtimePrompt = shouldRouteTerminalAccessTurn
+            ? buildPlaygroundTerminalAccessRuntimePrompt(input)
+            : isPlaygroundNoLabSession(session)
+            ? buildPlaygroundNoLabRuntimePrompt(input, {
+                labSetupDeclined: options?.skipPlaygroundLabSetup === true,
+                terminalAccess: playgroundTerminalAccess,
+                terminalAccessRequestSuppressed
+            })
             : input
         const result = await deps.runtime.sendPrompt(runtimeThreadId, runtimePrompt, {
             model: options?.model,
             runtimeMode: options?.runtimeMode,
-            interactionMode: options?.interactionMode,
+            interactionMode: runtimeInteractionMode,
             effort: options?.effort,
             serviceTier: options?.serviceTier
         })
@@ -555,6 +575,13 @@ export async function respondAssistantUserInputAction(
     if (!target) throw new Error(`Unknown user-input request ${input.requestId}.`)
     const pendingInput = target.thread.pendingUserInputs.find((entry) => entry.requestId === input.requestId && entry.status === 'pending') || null
     const forwardedAnswers: Record<string, string | string[]> = { ...input.answers }
+    let followUpPrompt: {
+        prompt: string
+        labSetupDeclined?: boolean
+        terminalAccess?: boolean
+        terminalAccessDeclined?: boolean
+    } | null = null
+    let setupTurnIdToInterrupt: string | undefined
 
     if (
         target.session.mode === 'playground'
@@ -562,10 +589,13 @@ export async function respondAssistantUserInputAction(
         && isPlaygroundLabUserInputRequest(pendingInput)
     ) {
         const resolved = resolvePlaygroundLabGuidedAnswers(input.answers)
+        const originalPrompt = findLatestUserMessageText(target.thread, pendingInput?.createdAt)
         if (resolved?.decision === 'continue-without-lab') {
             forwardedAnswers[PLAYGROUND_LAB_DECISION_QUESTION_ID] = buildPlaygroundLabContinuationAnswer(
                 String(input.answers[PLAYGROUND_LAB_DECISION_QUESTION_ID] || '')
             )
+            if (originalPrompt) followUpPrompt = { prompt: originalPrompt, labSetupDeclined: true }
+            setupTurnIdToInterrupt = pendingInput?.turnId || undefined
         } else if (resolved) {
             const result = await deps.createPlaygroundLab({
                 title: resolved.title,
@@ -601,12 +631,67 @@ export async function respondAssistantUserInputAction(
                 })
                 if (lab.title) forwardedAnswers[PLAYGROUND_LAB_NAME_QUESTION_ID] = lab.title
                 if (resolved.repoUrl) forwardedAnswers[PLAYGROUND_REPO_URL_QUESTION_ID] = resolved.repoUrl
+                if (originalPrompt) followUpPrompt = { prompt: originalPrompt, labSetupDeclined: false }
+                setupTurnIdToInterrupt = pendingInput?.turnId || undefined
             }
         }
     }
 
+    if (
+        target.session.mode === 'playground'
+        && !target.session.playgroundLabId
+        && isPlaygroundTerminalAccessUserInputRequest(pendingInput)
+    ) {
+        const resolved = resolvePlaygroundTerminalAccessAnswer(input.answers)
+        const originalPrompt = findLatestUserMessageText(target.thread, pendingInput?.createdAt)
+        if (resolved) {
+            forwardedAnswers[PLAYGROUND_TERMINAL_ACCESS_DECISION_QUESTION_ID] = buildPlaygroundTerminalAccessContinuationAnswer(resolved.enabled)
+            if (originalPrompt) {
+                followUpPrompt = {
+                    prompt: originalPrompt,
+                    terminalAccess: resolved.enabled,
+                    terminalAccessDeclined: !resolved.enabled,
+                    labSetupDeclined: !resolved.enabled
+                }
+            }
+            setupTurnIdToInterrupt = pendingInput?.turnId || undefined
+        }
+    }
+
+    if (followUpPrompt) {
+        if (setupTurnIdToInterrupt) {
+            deps.suppressAssistantTextForTurn(target.thread.id, setupTurnIdToInterrupt)
+        }
+    }
+
     await deps.runtime.respondUserInput(target.thread.providerThreadId || target.thread.id, input.requestId, forwardedAnswers)
+    if (followUpPrompt) {
+        if (setupTurnIdToInterrupt) {
+            try {
+                await deps.runtime.interruptTurn(target.thread.providerThreadId || target.thread.id, setupTurnIdToInterrupt)
+            } catch {
+                // The setup turn may have already ended after receiving the guided answer.
+            }
+        }
+        await deps.sendPrompt(followUpPrompt.prompt, {
+            sessionId: target.session.id,
+            interactionMode: 'default',
+            playgroundTerminalAccess: followUpPrompt.terminalAccess,
+            skipPlaygroundTerminalAccessRequest: followUpPrompt.terminalAccessDeclined,
+            skipPlaygroundLabSetup: followUpPrompt.labSetupDeclined,
+            suppressUserMessage: true
+        })
+    }
     return { success: true as const }
+}
+
+function findLatestUserMessageText(thread: AssistantThread, beforeCreatedAt?: string): string | null {
+    const message = [...thread.messages].reverse().find((entry) => {
+        if (entry.role !== 'user') return false
+        if (beforeCreatedAt && entry.createdAt > beforeCreatedAt) return false
+        return entry.text.trim().length > 0
+    })
+    return message?.text.trim() || null
 }
 
 export async function getAssistantRuntimeStatusAction(deps: AssistantServiceActionDeps): Promise<AssistantRuntimeStatus> {

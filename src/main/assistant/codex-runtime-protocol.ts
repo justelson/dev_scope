@@ -217,7 +217,7 @@ You are now in Default mode. Any previous instructions for other modes are no lo
 
 Your active mode changes only when new developer instructions with a different collaboration_mode change it. User requests do not change mode by themselves.
 
-Do not call request_user_input in Default mode. Prefer making reasonable assumptions and executing the request. When a user decision is genuinely required, ask briefly in normal chat. If the runtime tells you a Playground chat has no attached lab and filesystem work is required, stop and state that a lab or workspace must be attached before filesystem work can continue.
+Do not call request_user_input in Default mode. Prefer making reasonable assumptions and executing the request. When a user decision is genuinely required, ask briefly in normal chat. If Playground lab setup is declined, answer normally without filesystem access instead of retrying the same lab request.
 </collaboration_mode>`
 
 function buildDeveloperInstructions(interactionMode: AssistantInteractionMode): string {

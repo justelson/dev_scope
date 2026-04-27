@@ -83,6 +83,7 @@ export class AssistantService {
     })
     private readonly subscribers = new Set<number>()
     private readonly planBuffers = new Map<string, string>()
+    private readonly suppressedAssistantTextTurns = new Set<string>()
     private readonly readyPromise: Promise<void>
     private readonly actionDeps: AssistantServiceActionDeps
 
@@ -105,10 +106,13 @@ export class AssistantService {
             appendEvent: (type, occurredAt, payload, sessionId, threadId) => {
                 this.appendEvent(type, occurredAt, payload, sessionId, threadId)
             },
-            getSessionRuntimeCwd: (session, thread) => this.getSessionRuntimeCwd(session, thread),
+            getSessionRuntimeCwd: (session, thread, options) => this.getSessionRuntimeCwd(session, thread, options),
             createSession: (input?: AssistantCreateSessionInput) => this.createSession(input),
             createPlaygroundLab: (input: AssistantCreatePlaygroundLabInput) => this.createPlaygroundLab(input),
-            sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) => this.sendPrompt(prompt, options)
+            sendPrompt: (prompt: string, options?: AssistantSendPromptOptions) => this.sendPrompt(prompt, options),
+            suppressAssistantTextForTurn: (threadId: string, turnId: string) => {
+                this.suppressedAssistantTextTurns.add(`${threadId}:${turnId}`)
+            }
         }
         this.runtime.on('runtime', (event) => {
             this.handleRuntimeEvent(event)
@@ -295,13 +299,26 @@ export class AssistantService {
         await this.readyPromise
     }
 
-    private getSessionRuntimeCwd(session: AssistantSession, thread: AssistantThread): string {
+    private getSessionRuntimeCwd(
+        session: AssistantSession,
+        thread: AssistantThread,
+        options?: { playgroundTerminalAccess?: boolean }
+    ): string {
         if (session.mode === 'playground') {
-            return sanitizeOptionalPath(session.projectPath)
-                || sanitizeOptionalPath(thread.cwd)
-                || this.getDetachedPlaygroundChatRoot()
+            const projectPath = sanitizeOptionalPath(session.projectPath)
+            if (projectPath) return projectPath
+            if (!session.playgroundLabId) {
+                return options?.playgroundTerminalAccess
+                    ? this.getDetachedPlaygroundTerminalRoot()
+                    : this.getDetachedPlaygroundChatRoot()
+            }
+            return sanitizeOptionalPath(thread.cwd) || this.getDetachedPlaygroundChatRoot()
         }
         return session.projectPath || thread.cwd || process.cwd()
+    }
+
+    private getDetachedPlaygroundTerminalRoot(): string {
+        return app.getPath('home') || process.cwd()
     }
 
     private getDetachedPlaygroundChatRoot(): string {
@@ -345,6 +362,7 @@ export class AssistantService {
     private handleRuntimeEvent(event: Parameters<typeof handleAssistantRuntimeEvent>[0]) {
         handleAssistantRuntimeEvent(event, {
             planBuffers: this.planBuffers,
+            isAssistantTextSuppressed: (threadId, turnId) => Boolean(turnId && this.suppressedAssistantTextTurns.has(`${threadId}:${turnId}`)),
             findSessionByThreadId: (threadId) => findSessionByThreadId(this.state.snapshot, threadId),
             requireThread: (threadId) => requireThread(this.state.snapshot, threadId),
             findThreadRecord: (threadId) => findThreadRecord(this.state.snapshot, threadId),

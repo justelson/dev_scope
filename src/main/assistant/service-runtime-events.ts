@@ -1,4 +1,5 @@
 import type {
+    AssistantActivity,
     AssistantDomainEvent,
     AssistantLatestTurn,
     AssistantPendingApproval,
@@ -11,6 +12,7 @@ import { createAssistantId, extractProposedPlanMarkdown } from './utils'
 
 interface AssistantRuntimeEventHandlerDeps {
     planBuffers: Map<string, string>
+    isAssistantTextSuppressed: (threadId: string, turnId?: string | null) => boolean
     findSessionByThreadId: (threadId: string) => AssistantSession | null
     requireThread: (threadId: string) => AssistantThread
     findThreadRecord: (threadId: string) => { session: AssistantSession; thread: AssistantThread } | null
@@ -31,6 +33,135 @@ interface AssistantRuntimeEventHandlerDeps {
         threadId?: string
     ) => void
     updateLatestTurnAssistantMessage: (sessionId: string, threadId: string, assistantMessageId: string, occurredAt: string) => void
+}
+
+type RuntimeActivityPayload = Extract<AssistantRuntimeEvent, { type: 'activity' }>['payload']
+
+function buildCodexItemActivityId(itemId?: string): string | null {
+    return itemId ? `codex-item-${itemId}` : null
+}
+
+function readRuntimePayloadString(value: unknown): string {
+    return typeof value === 'string' ? value : ''
+}
+
+function hasOwnPayloadKey(payload: Record<string, unknown>, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(payload, key)
+}
+
+function hasPayloadValue(payload: Record<string, unknown>, key: string): boolean {
+    return hasOwnPayloadKey(payload, key) && payload[key] !== undefined && payload[key] !== null
+}
+
+function mergeActivityPayloads(
+    previousPayload: Record<string, unknown>,
+    incomingPayload: Record<string, unknown>
+): Record<string, unknown> {
+    const payload = { ...previousPayload }
+    for (const [key, value] of Object.entries(incomingPayload)) {
+        if (value === undefined) continue
+        payload[key] = value
+    }
+    return payload
+}
+
+function appendOrReplaceOutput(previousOutput: unknown, delta: string): string {
+    return `${typeof previousOutput === 'string' ? previousOutput : ''}${delta}`
+}
+
+function mergeRuntimeActivity(
+    existing: AssistantActivity | null,
+    incoming: RuntimeActivityPayload,
+    turnId: string | null,
+    occurredAt: string
+): AssistantActivity {
+    const incomingPayload = { ...(incoming.data || {}) }
+    const previousPayload = { ...(existing?.payload || {}) }
+    const payload = mergeActivityPayloads(previousPayload, incomingPayload)
+
+    if (!hasPayloadValue(incomingPayload, 'output') && hasOwnPayloadKey(previousPayload, 'output')) {
+        payload['output'] = previousPayload['output']
+    }
+    if (!hasPayloadValue(incomingPayload, 'patch') && hasOwnPayloadKey(previousPayload, 'patch')) {
+        payload['patch'] = previousPayload['patch']
+    }
+
+    return {
+        id: incoming.activityId || existing?.id || createAssistantId('assistant-activity'),
+        kind: incoming.kind || existing?.kind || 'tool',
+        tone: incoming.tone || existing?.tone || 'tool',
+        summary: incoming.summary || existing?.summary || 'Tool activity',
+        detail: incoming.detail ?? existing?.detail,
+        turnId: turnId || existing?.turnId || null,
+        createdAt: existing?.createdAt || occurredAt,
+        payload
+    }
+}
+
+function mergeRuntimeFileChangeActivity(
+    existing: AssistantActivity | null,
+    incoming: RuntimeActivityPayload,
+    turnId: string | null,
+    occurredAt: string
+): AssistantActivity {
+    const activity = mergeRuntimeActivity(existing, incoming, turnId, occurredAt)
+    if (!existing || existing.kind !== 'file-change') return activity
+
+    const incomingPayload = { ...(incoming.data || {}) }
+    if (readRuntimePayloadString(incomingPayload['category']) !== 'turn-diff') return activity
+
+    return {
+        ...activity,
+        summary: existing.summary,
+        detail: existing.detail,
+        payload: {
+            ...activity.payload,
+            paths: existing.payload?.['paths'],
+            createdPaths: existing.payload?.['createdPaths'],
+            fileCount: existing.payload?.['fileCount'],
+            patch: existing.payload?.['patch']
+        }
+    }
+}
+
+function buildStreamingToolActivity(input: {
+    existing: AssistantActivity | null
+    activityId: string
+    kind: 'command' | 'file-change'
+    delta: string
+    turnId: string | null
+    itemId?: string
+    occurredAt: string
+}): AssistantActivity {
+    const previousPayload = input.existing?.payload || {}
+    const output = appendOrReplaceOutput(previousPayload['output'], input.delta)
+
+    return {
+        id: input.activityId,
+        kind: input.existing?.kind || input.kind,
+        tone: input.existing?.tone || 'tool',
+        summary: input.existing?.summary || (input.kind === 'command' ? 'Running command' : 'Applying file changes'),
+        detail: input.existing?.detail,
+        turnId: input.turnId || input.existing?.turnId || null,
+        createdAt: input.existing?.createdAt || input.occurredAt,
+        payload: {
+            ...previousPayload,
+            itemId: input.itemId || readRuntimePayloadString(previousPayload['itemId']) || undefined,
+            status: readRuntimePayloadString(previousPayload['status']) || 'inProgress',
+            output
+        }
+    }
+}
+
+function findLatestFileChangeActivity(thread: AssistantThread, turnId: string | null): AssistantActivity | null {
+    for (let index = thread.activities.length - 1; index >= 0; index -= 1) {
+        const activity = thread.activities[index]
+        if (!activity || activity.kind !== 'file-change') continue
+        if (turnId && activity.turnId !== turnId) continue
+        if (readRuntimePayloadString(activity.payload?.['category']) === 'turn-diff') continue
+        return activity
+    }
+    return null
 }
 
 export function handleAssistantRuntimeEvent(event: AssistantRuntimeEvent, deps: AssistantRuntimeEventHandlerDeps): void {
@@ -216,6 +347,7 @@ export function handleAssistantRuntimeEvent(event: AssistantRuntimeEvent, deps: 
 
     if (event.type === 'content.delta' && event.payload.streamKind === 'assistant_text') {
         if (!eventSession) return
+        if (deps.isAssistantTextSuppressed(eventThreadId, event.turnId || null)) return
         const messageId = `assistant-message-${event.itemId || event.turnId || event.eventId}`
         deps.queueAssistantTextDelta({
             sessionId: eventSession.id,
@@ -231,6 +363,7 @@ export function handleAssistantRuntimeEvent(event: AssistantRuntimeEvent, deps: 
 
     if (event.type === 'content.completed' && event.payload.streamKind === 'assistant_text') {
         if (!eventSession) return
+        if (deps.isAssistantTextSuppressed(eventThreadId, event.turnId || null)) return
         const messageId = `assistant-message-${event.itemId || event.turnId || event.eventId}`
         deps.flushAssistantTextDelta({ threadId: eventThreadId, messageId })
         const existing = (eventThreadRecord?.thread || deps.requireThread(event.threadId)).messages.find((message) => message.id === messageId)
@@ -285,6 +418,24 @@ export function handleAssistantRuntimeEvent(event: AssistantRuntimeEvent, deps: 
                 }
             }, eventSession.id, eventThreadId)
         }
+        return
+    }
+
+    if (event.type === 'content.delta' && (event.payload.streamKind === 'command_output' || event.payload.streamKind === 'file_change_output')) {
+        if (!eventSession) return
+        const activityId = buildCodexItemActivityId(event.itemId) || createAssistantId('assistant-activity')
+        const existingThread = eventThreadRecord?.thread || deps.requireThread(event.threadId)
+        const existingActivity = existingThread.activities.find((activity) => activity.id === activityId) || null
+        const activity = buildStreamingToolActivity({
+            existing: existingActivity,
+            activityId,
+            kind: event.payload.streamKind === 'command_output' ? 'command' : 'file-change',
+            delta: event.payload.delta,
+            turnId: event.turnId || null,
+            itemId: event.itemId,
+            occurredAt: event.createdAt
+        })
+        deps.appendEvent('thread.activity.appended', event.createdAt, { threadId: eventThreadId, activity }, eventSession.id, eventThreadId)
         return
     }
 
@@ -406,6 +557,7 @@ export function handleAssistantRuntimeEvent(event: AssistantRuntimeEvent, deps: 
 
     if (event.type === 'activity') {
         if (!eventSession) return
+        const existingThread = eventThreadRecord?.thread || deps.requireThread(event.threadId)
         const payload = { ...(event.payload.data || {}) }
         const senderRecord = typeof payload['senderThreadId'] === 'string' ? deps.findThreadRecord(String(payload['senderThreadId'])) : null
         const receiverProviderThreadIds = Array.isArray(payload['receiverThreadIds'])
@@ -428,18 +580,30 @@ export function handleAssistantRuntimeEvent(event: AssistantRuntimeEvent, deps: 
                 state: entry.thread.state
             }))
         }
+        const turnId = event.turnId || null
+        const turnDiffTargetActivity = readRuntimePayloadString(payload['category']) === 'turn-diff'
+            ? findLatestFileChangeActivity(existingThread, turnId)
+            : null
+        if (turnDiffTargetActivity) {
+            payload['category'] = readRuntimePayloadString(turnDiffTargetActivity.payload?.['category']) || 'file-change'
+        }
+        const targetActivityId = turnDiffTargetActivity?.id || event.payload.activityId
+        const existingActivity = targetActivityId
+            ? existingThread.activities.find((activity) => activity.id === targetActivityId) || null
+            : null
+        const activity = mergeRuntimeFileChangeActivity(
+            existingActivity,
+            {
+                ...event.payload,
+                activityId: targetActivityId,
+                data: payload
+            },
+            turnId,
+            event.createdAt
+        )
         deps.appendEvent('thread.activity.appended', event.createdAt, {
             threadId: eventThreadId,
-            activity: {
-                id: event.payload.activityId || createAssistantId('assistant-activity'),
-                kind: event.payload.kind,
-                tone: event.payload.tone,
-                summary: event.payload.summary,
-                detail: event.payload.detail,
-                turnId: event.turnId || null,
-                createdAt: event.createdAt,
-                payload
-            }
+            activity
         }, eventSession.id, eventThreadId)
     }
 }

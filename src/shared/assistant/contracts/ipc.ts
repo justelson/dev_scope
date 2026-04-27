@@ -82,6 +82,11 @@ export interface AssistantSendPromptOptions {
     interactionMode?: AssistantInteractionMode
     effort?: 'low' | 'medium' | 'high' | 'xhigh'
     serviceTier?: 'fast'
+    skipPlaygroundLabSetup?: boolean
+    playgroundTerminalAccess?: boolean
+    skipPlaygroundTerminalAccessRequest?: boolean
+    playgroundTerminalAccessRequestSuppressed?: boolean
+    suppressUserMessage?: boolean
 }
 
 export interface AssistantDeleteMessageInput {

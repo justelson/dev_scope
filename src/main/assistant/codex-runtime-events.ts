@@ -179,6 +179,103 @@ function buildContextCompactionActivity(input: {
     }
 }
 
+function buildCodexItemActivityId(itemId?: string): string | undefined {
+    return itemId ? `codex-item-${itemId}` : undefined
+}
+
+function readToolActivityItemId(item: Record<string, unknown>, fallbackItemId?: string): string | undefined {
+    return asString(item['id'])
+        || asString(item['itemId'])
+        || asString(item['call_id'])
+        || asString(item['callId'])
+        || fallbackItemId
+}
+
+function buildCodexTurnDiffActivityId(turnId?: string): string | undefined {
+    return turnId ? `codex-turn-diff-${turnId}` : undefined
+}
+
+function withCodexItemActivityId(
+    activity: ActivityRuntimePayload,
+    itemId?: string
+): ActivityRuntimePayload {
+    const activityId = buildCodexItemActivityId(itemId)
+    if (!activityId) return activity
+    return {
+        ...activity,
+        activityId,
+        data: {
+            ...(activity.data || {}),
+            itemId
+        }
+    }
+}
+
+function isLiveToolItemType(itemType: string): boolean {
+    return itemType.includes('command')
+        || itemType.includes('file change')
+        || itemType.includes('edit')
+        || itemType.includes('mcp tool call')
+        || itemType.includes('dynamic tool call')
+        || itemType.includes('web search')
+        || itemType.includes('tool search')
+        || itemType.includes('function call')
+}
+
+function readFuzzySearchFiles(value: unknown): Record<string, unknown>[] {
+    if (!Array.isArray(value)) return []
+    return value.filter((entry): entry is Record<string, unknown> => Boolean(asRecord(entry)))
+}
+
+function formatFuzzySearchFile(file: Record<string, unknown>): string {
+    const path = asString(file['path']) || asString(file['fileName']) || asString(file['file_name']) || 'unknown'
+    const root = asString(file['root'])
+    const matchType = asString(file['matchType']) || asString(file['match_type'])
+    const score = typeof file['score'] === 'number' && Number.isFinite(file['score'])
+        ? `score=${file['score'].toFixed(3)}`
+        : undefined
+    const suffix = [matchType, score].filter(Boolean).join(', ')
+    const displayPath = root && !path.startsWith(root) ? `${root}\\${path}` : path
+    return suffix ? `${displayPath}  (${suffix})` : displayPath
+}
+
+function buildFuzzySearchOutput(query: string | undefined, files: Record<string, unknown>[]): string {
+    const args = query ? ` ${JSON.stringify({ query })}` : ''
+    const body = files.length > 0
+        ? files.map(formatFuzzySearchFile).join('\n')
+        : 'no matches yet'
+
+    return [`$ file.search${args}`, '', body].join('\n')
+}
+
+function buildFuzzySearchActivity(input: {
+    sessionId?: string
+    query?: string
+    files?: Record<string, unknown>[]
+    completed: boolean
+}): ActivityRuntimePayload {
+    const data: Record<string, unknown> = {
+        category: 'fuzzy-file-search',
+        itemType: 'fuzzy file search',
+        status: input.completed ? 'completed' : 'inProgress'
+    }
+    if (input.sessionId) data['sessionId'] = input.sessionId
+    if (input.query) data['query'] = input.query
+    if (input.files) {
+        data['files'] = input.files
+        data['output'] = buildFuzzySearchOutput(input.query, input.files)
+    }
+
+    return {
+        activityId: input.sessionId ? `fuzzy-file-search-${input.sessionId}` : undefined,
+        kind: 'search',
+        summary: input.completed ? 'Searched files' : 'Searching files',
+        detail: input.query || 'File search',
+        tone: 'tool',
+        data
+    }
+}
+
 function readResolvedUserInputAnswers(value: unknown): Record<string, string | string[]> {
     const rawAnswers = asRecord(value) || {}
     return Object.fromEntries(
@@ -424,6 +521,34 @@ function handleNotification(
         return
     }
 
+    if (method === 'turn/diff/updated') {
+        const diff = asString(payload['diff'])
+        if (!diff) return
+
+        const activity = buildToolActivity({
+            type: 'fileChange',
+            status: 'inProgress',
+            diff
+        }, 'file change')
+        if (!activity) return
+
+        deps.emitRuntime({
+            ...eventBase,
+            type: 'activity',
+            payload: {
+                ...activity,
+                activityId: buildCodexTurnDiffActivityId(turnId),
+                summary: 'Updated diff',
+                data: {
+                    ...(activity.data || {}),
+                    category: 'turn-diff',
+                    status: 'inProgress'
+                }
+            }
+        })
+        return
+    }
+
     if (method === 'thread/compacted') {
         deps.emitRuntime({
             ...eventBase,
@@ -438,6 +563,21 @@ function handleNotification(
                 itemId,
                 sourceMethod: method
             })
+        })
+        return
+    }
+
+    if (method === 'item/commandExecution/outputDelta' || method === 'item/fileChange/outputDelta') {
+        const delta = asString(payload['delta']) || asString(payload['text']) || asString(asRecord(payload['content'])?.['text'])
+        if (!delta) return
+
+        deps.emitRuntime({
+            ...eventBase,
+            type: 'content.delta',
+            payload: {
+                streamKind: method === 'item/commandExecution/outputDelta' ? 'command_output' : 'file_change_output',
+                delta
+            }
         })
         return
     }
@@ -458,8 +598,73 @@ function handleNotification(
         return
     }
 
+    if (method === 'fuzzyFileSearch/sessionUpdated' || method === 'fuzzyFileSearch/sessionCompleted') {
+        const sessionId = asString(payload['sessionId'])
+        const files = method === 'fuzzyFileSearch/sessionUpdated'
+            ? readFuzzySearchFiles(payload['files'])
+            : undefined
+        deps.emitRuntime({
+            ...eventBase,
+            type: 'activity',
+            payload: buildFuzzySearchActivity({
+                sessionId,
+                query: asString(payload['query']),
+                files,
+                completed: method === 'fuzzyFileSearch/sessionCompleted'
+            })
+        })
+        return
+    }
+
+    if (method === 'item/mcpToolCall/progress') {
+        const progressItemId = asString(payload['itemId']) || itemId
+        const message = asString(payload['message'])
+        if (!progressItemId || !message) return
+
+        deps.emitRuntime({
+            ...eventBase,
+            itemId: progressItemId,
+            type: 'activity',
+            payload: {
+                activityId: buildCodexItemActivityId(progressItemId),
+                kind: 'tool',
+                summary: 'MCP tool progress',
+                detail: message,
+                tone: 'tool',
+                data: {
+                    category: 'mcp-tool',
+                    itemType: 'mcp tool call',
+                    itemId: progressItemId,
+                    status: 'inProgress',
+                    progress: message
+                }
+            }
+        })
+        return
+    }
+
+    if (method === 'rawResponseItem/completed') {
+        const item = asRecord(payload['item'])
+        if (!item) return
+        const itemType = normalizeItemType(item['type'] || item['kind'])
+        const activity = buildToolActivity(item, itemType)
+        if (!activity) return
+
+        deps.emitRuntime({
+            ...eventBase,
+            itemId: readToolActivityItemId(item, itemId),
+            type: 'activity',
+            payload: withCodexItemActivityId(activity, readToolActivityItemId(item, itemId))
+        })
+        return
+    }
+
     if (method === 'item/started' || method === 'item/completed') {
-        const item = asRecord(payload['item']) || payload
+        const rawItem = asRecord(payload['item']) || payload
+        const item: Record<string, unknown> = {
+            ...rawItem,
+            status: asString(rawItem['status']) || asString(rawItem['state']) || asString(rawItem['phase']) || (method === 'item/started' ? 'inProgress' : 'completed')
+        }
         const itemType = normalizeItemType(item['type'] || item['kind'])
         if (isContextCompactionItemType(itemType)) {
             deps.emitRuntime({
@@ -487,6 +692,17 @@ function handleNotification(
             })
             return
         }
+        const startedActivity = method === 'item/started' && isLiveToolItemType(itemType)
+            ? buildToolActivity(item, itemType)
+            : null
+        if (startedActivity) {
+            deps.emitRuntime({
+                ...eventBase,
+                type: 'activity',
+                payload: withCodexItemActivityId(startedActivity, readToolActivityItemId(item, itemId))
+            })
+            return
+        }
         if (method === 'item/started') {
             return
         }
@@ -503,7 +719,11 @@ function handleNotification(
 
         const activity = buildToolActivity(item, itemType)
         if (activity) {
-            deps.emitRuntime({ ...eventBase, type: 'activity', payload: activity })
+            deps.emitRuntime({
+                ...eventBase,
+                type: 'activity',
+                payload: withCodexItemActivityId(activity, readToolActivityItemId(item, itemId))
+            })
         }
         return
     }

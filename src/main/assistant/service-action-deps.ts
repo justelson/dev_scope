@@ -25,7 +25,11 @@ export interface AssistantServiceActionDeps {
         sessionId?: string,
         threadId?: string
     ): void
-    getSessionRuntimeCwd(session: AssistantSession, thread: AssistantThread): string
+    getSessionRuntimeCwd(
+        session: AssistantSession,
+        thread: AssistantThread,
+        options?: { playgroundTerminalAccess?: boolean }
+    ): string
     createSession(input?: AssistantCreateSessionInput): Promise<{ success: true; sessionId: string }>
     createPlaygroundLab(
         input: AssistantCreatePlaygroundLabInput
@@ -34,6 +38,7 @@ export interface AssistantServiceActionDeps {
         prompt: string,
         options?: AssistantSendPromptOptions
     ): Promise<{ success: true; sessionId: string; threadId: string; turnId?: string }>
+    suppressAssistantTextForTurn(threadId: string, turnId: string): void
 }
 
 export type AssistantServicePlaygroundApprovalInput =

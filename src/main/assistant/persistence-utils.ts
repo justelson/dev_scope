@@ -81,8 +81,6 @@ function hasSessionMessages(session: AssistantSession): boolean {
 
 export function shouldPersistAssistantSession(session: AssistantSession): boolean {
     if (session.mode !== 'playground') return true
-    if (session.playgroundLabId) return true
-    if (resolveSessionProjectPath(session)) return true
     return hasSessionMessages(session)
 }
 
