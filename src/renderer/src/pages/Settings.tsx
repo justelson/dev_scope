@@ -17,7 +17,7 @@ import {
     ShieldCheck
 } from 'lucide-react'
 import { useAppUpdateState } from '@/lib/app-updates'
-import { getAssistantDefaultsPreview, useSettings } from '@/lib/settings'
+import { getAssistantDefaultsPreview, useSettings, type Settings } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { SettingsBetaBadge } from './settings/SettingsBetaBadge'
 
@@ -131,7 +131,7 @@ export default function Settings() {
                     iconBg="bg-blue-500/10"
                     title="Behavior"
                     description="Startup, preview, and terminal defaults"
-                    preview={`${settings.startWithWindows ? 'Startup enabled' : 'Startup disabled'} - ${settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell'} - ${settings.scrollMode === 'smooth' ? 'Buttery scroll' : 'Native scroll'}`}
+                    preview={`${settings.startWithWindows ? 'Startup enabled' : 'Startup disabled'} - ${settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell'} - ${settings.packageRuntimePreference === 'auto' ? 'Auto runtime' : settings.packageRuntimePreference} - ${settings.scrollMode === 'smooth' ? 'Buttery scroll' : 'Native scroll'}`}
                 />
 
                 <SettingsCard
@@ -160,12 +160,8 @@ export default function Settings() {
                     icon={<Sparkles className="text-violet-400" size={24} />}
                     iconBg="bg-violet-500/10"
                     title="Git AI"
-                    description="Provider routing, visible connection status, and dedicated Codex model roles"
-                    preview={
-                        settings.commitAIProvider === 'codex'
-                            ? `CODEX - ${settings.gitCommitCodexModel || settings.gitPullRequestCodexModel || settings.assistantDefaultModel || 'default model'}`
-                            : `${settings.commitAIProvider.toUpperCase()}${settings.groqApiKey || settings.geminiApiKey ? ' - Key set' : ' - No key'}`
-                    }
+                    description="Commit and PR AI provider defaults"
+                    preview={getGitAiSettingsPreview(settings)}
                 />
 
                 {settings.betaSettingsEnabled ? (
@@ -204,6 +200,16 @@ export default function Settings() {
             </div>
         </div>
     )
+}
+
+function getGitAiSettingsPreview(settings: Settings): string {
+    if (settings.commitAIProvider === 'codex') {
+        return `CODEX - ${settings.gitCommitCodexModel || settings.gitPullRequestCodexModel || settings.assistantDefaultModel || 'default model'}`
+    }
+    if (settings.commitAIProvider === 'gemini') {
+        return `GEMINI - ${settings.geminiApiKey ? 'Key set' : 'No key'}`
+    }
+    return `GROQ - ${settings.groqApiKey ? 'Key set' : 'No key'}`
 }
 
 function getPathTail(path: string): string {

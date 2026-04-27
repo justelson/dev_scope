@@ -8,6 +8,7 @@ type AssistantModelPricing = {
     inputUsdPerMillion: number
     cachedInputUsdPerMillion: number
     outputUsdPerMillion: number
+    fastUsdMultiplier?: number
 }
 
 type AssistantPricingServiceTier = AssistantSessionTurnUsageEntry['serviceTier'] | null | undefined
@@ -20,6 +21,12 @@ export type AssistantSessionCostEstimate = {
 }
 
 const MODEL_PRICING: Record<string, AssistantModelPricing> = {
+    'gpt-5.5': {
+        inputUsdPerMillion: 5,
+        cachedInputUsdPerMillion: 0.5,
+        outputUsdPerMillion: 30,
+        fastUsdMultiplier: 2.5
+    },
     'gpt-5.4': {
         inputUsdPerMillion: 2.5,
         cachedInputUsdPerMillion: 0.25,
@@ -79,9 +86,9 @@ function getUsageNumber(value: number | null | undefined): number {
     return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
 }
 
-function getServiceTierMultiplier(serviceTier: AssistantPricingServiceTier): number {
+function getServiceTierMultiplier(pricing: AssistantModelPricing, serviceTier: AssistantPricingServiceTier): number {
     if (serviceTier === 'flex') return 0.5
-    if (serviceTier === 'fast') return 2
+    if (serviceTier === 'fast') return pricing.fastUsdMultiplier ?? 2
     return 1
 }
 
@@ -109,7 +116,7 @@ export function estimateAssistantTurnCostUsd(
         + (cachedInputTokens / 1_000_000) * pricing.cachedInputUsdPerMillion
         + (outputTokens / 1_000_000) * pricing.outputUsdPerMillion
 
-    return subtotal * getServiceTierMultiplier(serviceTier)
+    return subtotal * getServiceTierMultiplier(pricing, serviceTier)
 }
 
 export function estimateAssistantSessionCostUsd(turns: AssistantSessionTurnUsageEntry[]): AssistantSessionCostEstimate {

@@ -31,11 +31,13 @@ export type BrowserContentLayout = 'grouped' | 'explorer'
 export type GitBulkActionScope = 'project' | 'repo'
 export type FilePreviewDefaultMode = 'preview' | 'edit'
 export type FilePreviewPythonRunMode = 'terminal' | 'output'
+export type PackageRuntimePreference = 'auto' | 'node' | 'npm' | 'pnpm' | 'yarn' | 'bun'
 export type PullRequestGuideSource = 'project' | 'global' | 'repo-template' | 'none'
 export type PullRequestGuideMode = 'text' | 'file'
 export type PullRequestChangeSource = 'unstaged' | 'staged' | 'local-commits' | 'all-local-work'
 export type AssistantUsageDisplayMode = 'remaining' | 'used'
 export type AssistantTextStreamingMode = 'stream' | 'chunks'
+export type AssistantToolOutputDefaultMode = 'expanded' | 'minimized'
 export type AssistantDefaultRuntimeMode = 'approval-required' | 'full-access'
 export type AssistantDefaultInteractionMode = 'default' | 'plan'
 export type AssistantDefaultEffort = 'low' | 'medium' | 'high' | 'xhigh'
@@ -101,6 +103,7 @@ export interface Settings {
     filePreviewFullscreenShowRightPanel: boolean
     filePreviewDefaultMode: FilePreviewDefaultMode
     filePreviewPythonRunMode: FilePreviewPythonRunMode
+    packageRuntimePreference: PackageRuntimePreference
     filePreviewTerminalPanelHeight: number
     projectsFolder: string
     additionalFolders: string[]
@@ -125,6 +128,7 @@ export interface Settings {
     commitAIProvider: CommitAIProvider
     assistantUsageDisplayMode: AssistantUsageDisplayMode
     assistantTextStreamingMode: AssistantTextStreamingMode
+    assistantToolOutputDefaultMode: AssistantToolOutputDefaultMode
     assistantDefaultModel: string
     assistantDefaultPromptTemplate: string
     assistantDefaultRuntimeMode: AssistantDefaultRuntimeMode
@@ -132,6 +136,7 @@ export interface Settings {
     assistantDefaultEffort: AssistantDefaultEffort
     assistantDefaultFastMode: boolean
     assistantBusyMessageMode: AssistantBusyMessageMode
+    assistantPlaygroundTerminalAccessDefault: boolean
     assistantTranscriptionEnabled: boolean
     assistantTranscriptionEngine: AssistantTranscriptionEngine
 }
@@ -156,6 +161,7 @@ const DEFAULT_SETTINGS: Settings = {
     filePreviewFullscreenShowRightPanel: false,
     filePreviewDefaultMode: 'preview',
     filePreviewPythonRunMode: 'terminal',
+    packageRuntimePreference: 'auto',
     filePreviewTerminalPanelHeight: 220,
     projectsFolder: '',
     additionalFolders: [],
@@ -184,6 +190,7 @@ const DEFAULT_SETTINGS: Settings = {
     commitAIProvider: 'groq',
     assistantUsageDisplayMode: 'remaining',
     assistantTextStreamingMode: 'stream',
+    assistantToolOutputDefaultMode: 'expanded',
     assistantDefaultModel: '',
     assistantDefaultPromptTemplate: '',
     assistantDefaultRuntimeMode: 'approval-required',
@@ -191,6 +198,7 @@ const DEFAULT_SETTINGS: Settings = {
     assistantDefaultEffort: 'high',
     assistantDefaultFastMode: false,
     assistantBusyMessageMode: 'queue',
+    assistantPlaygroundTerminalAccessDefault: false,
     assistantTranscriptionEnabled: false,
     assistantTranscriptionEngine: 'browser'
 }
@@ -279,6 +287,14 @@ function loadSettings(): Settings {
                 filePreviewFullscreenShowRightPanel: !!candidate.filePreviewFullscreenShowRightPanel,
                 filePreviewDefaultMode: candidate.filePreviewDefaultMode === 'edit' ? 'edit' : 'preview',
                 filePreviewPythonRunMode: candidate.filePreviewPythonRunMode === 'output' ? 'output' : 'terminal',
+                packageRuntimePreference:
+                    candidate.packageRuntimePreference === 'npm'
+                    || candidate.packageRuntimePreference === 'node'
+                    || candidate.packageRuntimePreference === 'pnpm'
+                    || candidate.packageRuntimePreference === 'yarn'
+                    || candidate.packageRuntimePreference === 'bun'
+                        ? candidate.packageRuntimePreference
+                        : 'auto',
                 filePreviewTerminalPanelHeight: Number.isFinite(Number(candidate.filePreviewTerminalPanelHeight))
                     ? Math.max(140, Math.min(720, Math.round(Number(candidate.filePreviewTerminalPanelHeight))))
                     : 220,
@@ -326,6 +342,7 @@ function loadSettings(): Settings {
                 commitAIProvider: candidate.commitAIProvider === 'gemini' || candidate.commitAIProvider === 'codex' ? candidate.commitAIProvider : 'groq',
                 assistantUsageDisplayMode: candidate.assistantUsageDisplayMode === 'used' ? 'used' : 'remaining',
                 assistantTextStreamingMode: candidate.assistantTextStreamingMode === 'chunks' ? 'chunks' : 'stream',
+                assistantToolOutputDefaultMode: candidate.assistantToolOutputDefaultMode === 'minimized' ? 'minimized' : 'expanded',
                 assistantDefaultModel: typeof candidate.assistantDefaultModel === 'string' ? candidate.assistantDefaultModel.trim() : '',
                 assistantDefaultPromptTemplate: typeof candidate.assistantDefaultPromptTemplate === 'string'
                     ? candidate.assistantDefaultPromptTemplate
@@ -335,6 +352,7 @@ function loadSettings(): Settings {
                 assistantDefaultEffort: sanitizeAssistantDefaultEffort(candidate.assistantDefaultEffort),
                 assistantDefaultFastMode: !!candidate.assistantDefaultFastMode,
                 assistantBusyMessageMode: candidate.assistantBusyMessageMode === 'force' ? 'force' : 'queue',
+                assistantPlaygroundTerminalAccessDefault: candidate.assistantPlaygroundTerminalAccessDefault === true,
                 assistantTranscriptionEnabled: candidate.assistantTranscriptionEnabled === true,
                 assistantTranscriptionEngine: candidate.assistantTranscriptionEngine === 'vosk' ? 'vosk' : 'browser'
             }

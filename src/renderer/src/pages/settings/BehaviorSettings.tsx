@@ -16,18 +16,46 @@ import {
     PanelRight,
     Play,
     Power,
-    SquareTerminal,
+    RefreshCw,
     TerminalSquare
 } from 'lucide-react'
-import { useSettings } from '@/lib/settings'
+import nodeIconUrl from '@/assets/runtime-icons/nodejs.svg'
+import npmIconUrl from '@/assets/runtime-icons/npm.svg'
+import pnpmIconUrl from '@/assets/runtime-icons/pnpm.svg'
+import yarnIconUrl from '@/assets/runtime-icons/yarn.svg'
+import bunIconUrl from '@/assets/runtime-icons/bun.svg'
+import { useSettings, type PackageRuntimePreference } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { ScrollPreviewModal } from './ScrollPreviewModal'
+import type { DevScopeInstalledPackageRuntime, DevScopePackageRuntimeId } from '@shared/contracts/devscope-api'
 
 type BehaviorTab = 'startup' | 'preview' | 'terminal'
+type PackageRuntimeOption = {
+    key: PackageRuntimePreference
+    runtimeId?: DevScopePackageRuntimeId
+    label: string
+    caption: string
+    iconUrl: string
+    toneClassName: string
+    iconClassName: string
+    pillClassName: string
+}
+
+const PACKAGE_RUNTIME_OPTIONS: PackageRuntimeOption[] = [
+    { key: 'auto', label: 'Auto', caption: 'Use project lockfiles', iconUrl: nodeIconUrl, toneClassName: 'border-sky-400/40 bg-sky-500/10', iconClassName: 'bg-sky-400/10 ring-sky-300/20', pillClassName: 'bg-sky-400/15 text-sky-100 ring-sky-300/25' },
+    { key: 'node', runtimeId: 'node', label: 'Node.js', caption: 'node --run scripts', iconUrl: nodeIconUrl, toneClassName: 'border-emerald-400/40 bg-emerald-500/10', iconClassName: 'bg-emerald-400/10 ring-emerald-300/20', pillClassName: 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/25' },
+    { key: 'npm', runtimeId: 'npm', label: 'npm', caption: 'npm run scripts', iconUrl: npmIconUrl, toneClassName: 'border-red-400/40 bg-red-500/10', iconClassName: 'bg-red-400/10 ring-red-300/20', pillClassName: 'bg-red-400/15 text-red-100 ring-red-300/25' },
+    { key: 'pnpm', runtimeId: 'pnpm', label: 'pnpm', caption: 'pnpm run scripts', iconUrl: pnpmIconUrl, toneClassName: 'border-amber-400/40 bg-amber-500/10', iconClassName: 'bg-amber-400/10 ring-amber-300/20', pillClassName: 'bg-amber-400/15 text-amber-100 ring-amber-300/25' },
+    { key: 'yarn', runtimeId: 'yarn', label: 'Yarn', caption: 'yarn scripts', iconUrl: yarnIconUrl, toneClassName: 'border-cyan-400/40 bg-cyan-500/10', iconClassName: 'bg-cyan-400/10 ring-cyan-300/20', pillClassName: 'bg-cyan-400/15 text-cyan-100 ring-cyan-300/25' },
+    { key: 'bun', runtimeId: 'bun', label: 'Bun', caption: 'bun run scripts', iconUrl: bunIconUrl, toneClassName: 'border-orange-300/45 bg-orange-400/10', iconClassName: 'bg-orange-300/10 ring-orange-200/20', pillClassName: 'bg-orange-300/15 text-orange-100 ring-orange-200/25' }
+]
 
 export default function BehaviorSettings() {
     const { settings, updateSettings } = useSettings()
     const [startupStatus, setStartupStatus] = useState<string | null>(null)
+    const [packageRuntimes, setPackageRuntimes] = useState<DevScopeInstalledPackageRuntime[]>([])
+    const [packageRuntimesLoading, setPackageRuntimesLoading] = useState(false)
+    const [packageRuntimesError, setPackageRuntimesError] = useState<string | null>(null)
     const [showScrollPreview, setShowScrollPreview] = useState(false)
     const [searchParams, setSearchParams] = useSearchParams()
     const activeTab = useMemo<BehaviorTab>(() => {
@@ -52,6 +80,31 @@ export default function BehaviorSettings() {
             isMounted = false
         }
     }, [updateSettings])
+
+    const refreshPackageRuntimes = async () => {
+        setPackageRuntimesLoading(true)
+        setPackageRuntimesError(null)
+        try {
+            const result = await window.devscope.listInstalledPackageRuntimes()
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to detect package runtimes.')
+            }
+            setPackageRuntimes(result.runtimes)
+        } catch (error) {
+            setPackageRuntimesError(error instanceof Error ? error.message : 'Failed to detect package runtimes.')
+        } finally {
+            setPackageRuntimesLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        void refreshPackageRuntimes()
+    }, [])
+
+    const runtimeById = useMemo(
+        () => new Map(packageRuntimes.map((runtime) => [runtime.id, runtime])),
+        [packageRuntimes]
+    )
 
     const handleStartupToggle = async (enabled: boolean) => {
         try {
@@ -266,20 +319,54 @@ export default function BehaviorSettings() {
                             </div>
                         </SettingsSection>
 
-                        <SettingsSection title="Terminal Usage" description="How this shell choice is applied across the app.">
+                        <SettingsSection title="Package Runtime" description="Choose the runner used by project script buttons.">
                             <div className="space-y-4">
-                                <SettingRow
-                                    icon={<SquareTerminal size={20} className="text-sparkle-text-secondary" />}
-                                    title={`Current default: ${settings.defaultShell === 'cmd' ? 'Command Prompt' : 'PowerShell'}`}
-                                    description="Used whenever DevScope opens a terminal from projects, terminals, previews, or assistant actions."
-                                    control={(
-                                        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-sparkle-text">
-                                            {settings.defaultShell === 'cmd' ? 'CMD' : 'PowerShell'}
-                                        </span>
-                                    )}
-                                />
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    {PACKAGE_RUNTIME_OPTIONS.map((option) => {
+                                        const runtime = option.runtimeId ? runtimeById.get(option.runtimeId) : null
+                                        const installed = option.key === 'auto' || runtime?.installed === true
+                                        const active = settings.packageRuntimePreference === option.key
+                                        return (
+                                            <PackageRuntimeChoiceCard
+                                                key={option.key}
+                                                active={active}
+                                                disabled={!installed}
+                                                iconUrl={option.iconUrl}
+                                                toneClassName={option.toneClassName}
+                                                iconClassName={option.iconClassName}
+                                                pillClassName={option.pillClassName}
+                                                label={option.label}
+                                                caption={option.key === 'auto'
+                                                    ? option.caption
+                                                    : runtime?.version
+                                                        ? `${option.caption} · ${runtime.version}`
+                                                        : installed
+                                                            ? option.caption
+                                                            : 'Not installed'}
+                                                onClick={() => {
+                                                    if (!installed) return
+                                                    updateSettings({ packageRuntimePreference: option.key })
+                                                }}
+                                            />
+                                        )
+                                    })}
+                                </div>
+                                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                                    <span className="text-xs text-sparkle-text-secondary">
+                                        {packageRuntimesError || (packageRuntimesLoading ? 'Detecting installed runtimes...' : 'Auto follows lockfiles: pnpm, Yarn, Bun, then npm.')}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => void refreshPackageRuntimes()}
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-xs text-sparkle-text-secondary transition-colors hover:bg-white/[0.07] hover:text-sparkle-text"
+                                    >
+                                        <RefreshCw size={13} className={cn(packageRuntimesLoading && 'animate-spin')} />
+                                        Refresh
+                                    </button>
+                                </div>
                             </div>
                         </SettingsSection>
+
                     </div>
                 )}
             </div>
@@ -295,6 +382,63 @@ export default function BehaviorSettings() {
                 />
             )}
         </div>
+    )
+}
+
+function PackageRuntimeChoiceCard({
+    active,
+    disabled,
+    iconUrl,
+    toneClassName,
+    iconClassName,
+    pillClassName,
+    label,
+    caption,
+    onClick
+}: {
+    active: boolean
+    disabled: boolean
+    iconUrl: string
+    toneClassName: string
+    iconClassName: string
+    pillClassName: string
+    label: string
+    caption: string
+    onClick: () => void
+}) {
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={onClick}
+            className={cn(
+                'relative overflow-hidden rounded-xl border p-4 text-left transition-all',
+                active
+                    ? toneClassName
+                    : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]',
+                disabled && 'cursor-not-allowed opacity-45 hover:border-white/10 hover:bg-white/[0.03]'
+            )}
+        >
+            <div className="flex items-start gap-3">
+                <span className={cn(
+                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1',
+                    active ? iconClassName : 'bg-white/[0.05] ring-white/10'
+                )}>
+                    <img src={iconUrl} alt="" className="h-6 w-6 object-contain" />
+                </span>
+                <span className="min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-sm font-medium text-sparkle-text">{label}</span>
+                        {active ? (
+                            <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1', pillClassName)}>
+                                Selected
+                            </span>
+                        ) : null}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-sparkle-text-secondary">{caption}</span>
+                </span>
+            </div>
+        </button>
     )
 }
 

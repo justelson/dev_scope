@@ -234,7 +234,7 @@ export function AssistantDefaultsPanel() {
                     {modelsError ? <p className="mt-2 text-xs text-rose-300">{modelsError}</p> : null}
                 </section>
 
-                <div className="grid gap-4 xl:h-full xl:grid-rows-2">
+                <div className="grid gap-4 xl:h-full xl:grid-rows-4">
                     <section className="flex h-full flex-col rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
                         <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                             <div>
@@ -259,6 +259,27 @@ export function AssistantDefaultsPanel() {
                     <section className="flex h-full flex-col rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
                         <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                             <div>
+                                <h2 className="text-sm font-semibold text-sparkle-text">Command Output</h2>
+                                <p className="mt-1 text-sm text-sparkle-text-secondary">
+                                    Choose whether live tool output opens automatically.
+                                </p>
+                            </div>
+                            <ConnectedDropdownButton
+                                className="justify-self-end self-center"
+                                value={settings.assistantToolOutputDefaultMode}
+                                options={[
+                                    { id: 'expanded', label: 'Expand live', tone: 'sky' },
+                                    { id: 'minimized', label: 'Keep minimized', tone: 'amber' }
+                                ]}
+                                menuLabel="Choose command output mode"
+                                onChange={(value) => updateSettings({ assistantToolOutputDefaultMode: value as 'expanded' | 'minimized' })}
+                            />
+                        </div>
+                    </section>
+
+                    <section className="flex h-full flex-col rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
+                        <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                            <div>
                                 <h2 className="text-sm font-semibold text-sparkle-text">Busy Send</h2>
                                 <p className="mt-1 text-sm text-sparkle-text-secondary">
                                     Set the default send action during an active turn.
@@ -274,6 +295,37 @@ export function AssistantDefaultsPanel() {
                                 menuLabel="Choose busy send mode"
                                 onChange={(value) => updateSettings({ assistantBusyMessageMode: value as 'queue' | 'force' })}
                             />
+                        </div>
+                    </section>
+
+                    <section className="flex h-full flex-col rounded-2xl border border-white/10 bg-sparkle-card p-4 sm:p-5">
+                        <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                            <div>
+                                <h2 className="text-sm font-semibold text-sparkle-text">Playground Terminal</h2>
+                                <p className="mt-1 text-sm text-sparkle-text-secondary">
+                                    Default access for no-lab Playground chats.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={settings.assistantPlaygroundTerminalAccessDefault}
+                                aria-label={settings.assistantPlaygroundTerminalAccessDefault ? 'Disable Playground terminal access by default' : 'Enable Playground terminal access by default'}
+                                onClick={() => updateSettings({ assistantPlaygroundTerminalAccessDefault: !settings.assistantPlaygroundTerminalAccessDefault })}
+                                className={cn(
+                                    'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-[border-color,background-color,box-shadow] duration-200 justify-self-end',
+                                    settings.assistantPlaygroundTerminalAccessDefault
+                                        ? 'border-emerald-400/55 bg-emerald-500/30 shadow-[0_0_0_1px_rgba(16,185,129,0.08)]'
+                                        : 'border-white/10 bg-white/5 hover:border-white/20'
+                                )}
+                            >
+                                <span
+                                    className={cn(
+                                        'inline-block h-4 w-4 translate-x-1 rounded-full bg-white shadow-[0_1px_6px_rgba(0,0,0,0.28)] transition-transform',
+                                        settings.assistantPlaygroundTerminalAccessDefault ? 'translate-x-6' : 'translate-x-1'
+                                    )}
+                                />
+                            </button>
                         </div>
                     </section>
                 </div>
