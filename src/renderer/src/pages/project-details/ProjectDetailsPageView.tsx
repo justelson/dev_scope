@@ -256,8 +256,8 @@ export function ProjectDetailsPageView(props: any) {
     return (
         <div
             className={isCondensedLayout
-                ? 'animate-fadeIn pb-24 pl-6 pt-6 pr-6 transition-[width,margin-right,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'
-                : 'mx-auto animate-fadeIn pb-24 px-6 pt-6 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'}
+                ? 'animate-fadeIn pb-24 transition-[width,margin-right,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'
+                : 'mx-auto animate-fadeIn pb-24 transition-[max-width,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]'}
             style={{
                 maxWidth: isCondensedLayout ? undefined : '1600px'
             }}

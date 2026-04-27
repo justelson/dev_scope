@@ -119,7 +119,7 @@ export function WorkingChangesView({
                     throw new Error(createResult?.error || 'Failed to create branch.')
                 }
                 invalidateProjectGitOverview(projectPath)
-                await refreshGitData(false, { quiet: true, mode: 'full' }).catch(() => undefined)
+                void refreshGitData(false, { quiet: true, mode: 'full' }).catch(() => undefined)
                 showToast(`Created branch ${proposed}.`, undefined, undefined, 'success')
                 await runStackedActionByMode(mode)
             } catch (err: any) {
@@ -152,7 +152,7 @@ export function WorkingChangesView({
                 throw new Error(createResult?.error || 'Failed to create branch.')
             }
             invalidateProjectGitOverview(projectPath)
-            await refreshGitData(false, { quiet: true, mode: 'full' }).catch(() => undefined)
+            void refreshGitData(false, { quiet: true, mode: 'full' }).catch(() => undefined)
 
             if (autoCreateNextTime) {
                 updateSettings({ gitAutoCreateBranchWhenTargetMatches: true })

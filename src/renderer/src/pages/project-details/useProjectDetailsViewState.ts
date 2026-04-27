@@ -13,6 +13,7 @@ import type {
 import type { CreateFileSystemTarget, FileSystemClipboardItem } from './projectDetailsPageHelpers'
 import {
     readStoredProjectActiveTab,
+    readStoredProjectGitActivity,
     readStoredProjectGitView,
     resolveBranchState
 } from './projectDetailsPageHelpers'
@@ -64,8 +65,12 @@ export function useProjectDetailsViewState(decodedPath: string, settings: any) {
     const [isPushing, setIsPushing] = useState(false)
     const [isFetching, setIsFetching] = useState(false)
     const [isPulling, setIsPulling] = useState(false)
-    const [lastFetched, setLastFetched] = useState<number | undefined>(undefined)
-    const [lastPulled, setLastPulled] = useState<number | undefined>(undefined)
+    const initialGitActivity = useMemo(
+        () => readStoredProjectGitActivity(decodedPath),
+        [decodedPath]
+    )
+    const [lastFetched, setLastFetched] = useState<number | undefined>(() => initialGitActivity.lastFetched)
+    const [lastPulled, setLastPulled] = useState<number | undefined>(() => initialGitActivity.lastPulled)
     const [toast, setToast] = useState<{
         message: string
         visible: boolean

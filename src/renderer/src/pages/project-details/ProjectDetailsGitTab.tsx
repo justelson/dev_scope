@@ -112,10 +112,12 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
         pagedIncomingCommits,
         localOnlyCommitHashes,
         activeFetchTarget,
+        activeUpdateTarget,
         remoteHeadCommitHash,
         handleNextHistoryPage,
         handleFetchOrigin,
         handleFetchUpstream,
+        handlePullFromOrigin,
         handleSyncFromUpstream,
         originRemoteUrl,
         upstreamRemoteUrl,
@@ -294,6 +296,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         upstreamRepoDisplay={upstreamRepoDisplay}
                         isFetching={isFetching}
                         activeFetchTarget={activeFetchTarget}
+                        activeUpdateTarget={activeUpdateTarget}
                         canFetchOrigin={canFetchOrigin}
                         showFetchUpstreamButton={showFetchUpstreamButton}
                         canSyncFromUpstream={canSyncFromUpstream}
@@ -310,6 +313,7 @@ export function ProjectDetailsGitTab(props: ProjectDetailsGitTabProps) {
                         ITEMS_PER_PAGE={ITEMS_PER_PAGE}
                         handleFetchOrigin={handleFetchOrigin}
                         handleFetchUpstream={handleFetchUpstream}
+                        handlePullFromOrigin={handlePullFromOrigin}
                         handleSyncFromUpstream={handleSyncFromUpstream}
                         handlePull={handlePull}
                         handleCommitClick={handleCommitClick}

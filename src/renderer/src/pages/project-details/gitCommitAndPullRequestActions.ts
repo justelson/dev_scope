@@ -8,6 +8,7 @@ import {
 import type { DevScopeCommitPushPullRequestInput } from '@shared/contracts/devscope-api'
 import type { GitCommit } from './types'
 import type { GitActionParams } from './gitActionTypes'
+import { refreshGitInBackground } from './gitActionRefresh'
 
 export function createGitCommitAndPullRequestActions(params: GitActionParams) {
     const performCommit = async () => {
@@ -26,8 +27,9 @@ export function createGitCommitAndPullRequestActions(params: GitActionParams) {
 
             params.setCommitMessage('')
             invalidateProjectGitOverview(params.decodedPath)
-            await params.refreshGitData(false, { mode: 'full' })
             params.showToast('Commit created successfully.')
+            params.setIsCommitting(false)
+            refreshGitInBackground(params, false, 'unpushed')
         } catch (err: any) {
             params.showToast(`Failed to commit: ${err.message}`, undefined, undefined, 'error')
         } finally {
@@ -124,7 +126,6 @@ export function createGitCommitAndPullRequestActions(params: GitActionParams) {
 
             params.setCommitMessage('')
             invalidateProjectGitOverview(params.decodedPath)
-            await params.refreshGitData(false, { mode: 'full' })
             window.open(result.pullRequest.url, '_blank', 'noopener,noreferrer')
             const prNumberLabel = result.pullRequest.number > 0 ? ` #${result.pullRequest.number}` : ''
             params.showToast(
@@ -136,6 +137,8 @@ export function createGitCommitAndPullRequestActions(params: GitActionParams) {
                         ? `Committed changes and opened PR${prNumberLabel}.`
                         : `Committed changes and created PR${prNumberLabel}.`
             )
+            params.setIsStackedActionRunning(false)
+            refreshGitInBackground(params, false, 'unpushed')
         } catch (err: any) {
             params.showToast(
                 autoStageAll

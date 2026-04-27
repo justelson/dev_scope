@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildGitPublishPlan } from '@/lib/gitPublishPlanner'
 import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import { useGitHubPublishContext } from './useGitHubPublishContext'
@@ -243,7 +243,13 @@ export function useProjectDetailsGitViewModel({
     )
 
     const [activeFetchTarget, setActiveFetchTarget] = useState<'origin' | 'upstream' | null>(null)
+    const [activeUpdateTarget, setActiveUpdateTarget] = useState<'origin' | 'upstream' | null>(null)
     const upstreamLinkAttemptRef = useRef<string | null>(null)
+    const refreshLinkedUpstreamInBackground = useCallback(() => {
+        void refreshGitData(false, { quiet: true, mode: 'full' }).catch((error: any) => {
+            console.error('[GitTab] Failed to refresh linked upstream state', error)
+        })
+    }, [refreshGitData])
 
     const remoteHeadCommitHash = useMemo(() => {
         if (hasRemote !== true) return null
@@ -293,12 +299,12 @@ export function useProjectDetailsGitViewModel({
                     throw new Error(result?.error || 'Failed to link upstream remote.')
                 }
                 invalidateProjectGitOverview(decodedPath)
-                await refreshGitData(false, { quiet: true, mode: 'full' })
+                refreshLinkedUpstreamInBackground()
             } catch (error) {
                 console.error('[GitTab] Failed to link upstream remote automatically', error)
             }
         })()
-    }, [decodedPath, githubPublishContext?.upstream?.cloneUrl, githubPublishContext?.upstream?.fullName, refreshGitData, remotes, repoUsesForkOrigin])
+    }, [decodedPath, githubPublishContext?.upstream?.cloneUrl, githubPublishContext?.upstream?.fullName, refreshLinkedUpstreamInBackground, remotes, repoUsesForkOrigin])
 
     const ensureUpstreamRemote = async () => {
         if (effectiveUpstreamRemoteName) {
@@ -320,7 +326,7 @@ export function useProjectDetailsGitViewModel({
                     throw new Error(updateResult?.error || 'Failed to update upstream remote.')
                 }
                 invalidateProjectGitOverview(decodedPath)
-                await refreshGitData(false, { quiet: true, mode: 'full' })
+                refreshLinkedUpstreamInBackground()
             }
             return 'upstream'
         }
@@ -331,7 +337,7 @@ export function useProjectDetailsGitViewModel({
         }
 
         invalidateProjectGitOverview(decodedPath)
-        await refreshGitData(false, { quiet: true, mode: 'full' })
+        refreshLinkedUpstreamInBackground()
         return 'upstream'
     }
 
@@ -360,7 +366,22 @@ export function useProjectDetailsGitViewModel({
         }
     }
 
+    const handlePullFromOrigin = async () => {
+        if (!originRemote?.name) return
+        setActiveUpdateTarget('origin')
+        try {
+            await handlePull({
+                remoteName: originRemote.name,
+                branchName: currentBranch,
+                successLabel: `Updated ${currentBranch || 'current branch'} from ${originRemote.name}.`
+            })
+        } finally {
+            setActiveUpdateTarget(null)
+        }
+    }
+
     const handleSyncFromUpstream = async () => {
+        setActiveUpdateTarget('upstream')
         try {
             const upstreamRemoteName = await ensureUpstreamRemote()
             if (!upstreamRemoteName || !originRemote?.name) {
@@ -375,6 +396,8 @@ export function useProjectDetailsGitViewModel({
             })
         } catch (error: any) {
             showToast(`Failed to sync upstream: ${error.message}`, undefined, undefined, 'error')
+        } finally {
+            setActiveUpdateTarget(null)
         }
     }
 
@@ -423,10 +446,12 @@ export function useProjectDetailsGitViewModel({
         pagedIncomingCommits,
         localOnlyCommitHashes,
         activeFetchTarget,
+        activeUpdateTarget,
         remoteHeadCommitHash,
         handleNextHistoryPage,
         handleFetchOrigin,
         handleFetchUpstream,
+        handlePullFromOrigin,
         handleSyncFromUpstream,
         originRemoteUrl,
         upstreamRemoteUrl,

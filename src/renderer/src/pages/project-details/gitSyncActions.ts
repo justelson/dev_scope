@@ -2,6 +2,8 @@ import { buildGitPublishPlan, describeGitPublishSuccess, type GitPublishPlan } f
 import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import type { GitActionParams } from './gitActionTypes'
 import { isNonFastForwardPushError, isTransientPushError, summarizePushError } from './gitActionHelpers'
+import { readStoredProjectGitActivity, writeStoredProjectGitActivity } from './projectDetailsPageHelpers'
+import { refreshGitInBackground } from './gitActionRefresh'
 
 export function createGitSyncActions(params: GitActionParams) {
     const handlePush = async (
@@ -48,18 +50,19 @@ export function createGitSyncActions(params: GitActionParams) {
             }
 
             invalidateProjectGitOverview(params.decodedPath)
-            await params.refreshGitData(false, { mode: 'full' })
             if (!retriedAfterTransientError) {
                 params.showToast(describeGitPublishSuccess(
                     publishPlan,
                     { commitHash: targetCommitHash || undefined, currentBranch: params.currentBranch }
                 ))
             }
+            params.setIsPushing(false)
+            refreshGitInBackground(params, false, 'unpushed')
         } catch (err: any) {
             const rawMessage = String(err?.message || err || 'Failed to push commits')
             if (isNonFastForwardPushError(rawMessage)) {
                 invalidateProjectGitOverview(params.decodedPath)
-                await params.refreshGitData(false, { mode: 'full' }).catch(() => {})
+                refreshGitInBackground(params, false, 'unpushed')
             }
             params.showToast(`Failed to push: ${summarizePushError(rawMessage)}`, undefined, undefined, 'error')
         } finally {
@@ -78,10 +81,16 @@ export function createGitSyncActions(params: GitActionParams) {
                     throw new Error(result?.error || 'Failed to fetch updates')
                 }
 
-                params.setLastFetched(Date.now())
+                const lastFetched = Date.now()
+                params.setLastFetched(lastFetched)
+                writeStoredProjectGitActivity(params.decodedPath, {
+                    ...readStoredProjectGitActivity(params.decodedPath),
+                    lastFetched
+                })
                 invalidateProjectGitOverview(params.decodedPath)
-                await params.refreshGitData(false, { mode: 'full' })
                 params.showToast(successLabel || (remoteName ? `Fetched ${remoteName}.` : 'Fetched remote updates.'))
+                params.setIsFetching(false)
+                refreshGitInBackground(params, false, 'pulls')
             } catch (err: any) {
                 params.showToast(`Failed to fetch: ${err.message}`, undefined, undefined, 'error')
             } finally {
@@ -99,10 +108,16 @@ export function createGitSyncActions(params: GitActionParams) {
                     throw new Error(result?.error || 'Failed to pull updates')
                 }
 
-                params.setLastPulled(Date.now())
+                const lastPulled = Date.now()
+                params.setLastPulled(lastPulled)
+                writeStoredProjectGitActivity(params.decodedPath, {
+                    ...readStoredProjectGitActivity(params.decodedPath),
+                    lastPulled
+                })
                 invalidateProjectGitOverview(params.decodedPath)
-                await params.refreshGitData(true, { mode: 'full' })
                 params.showToast(options?.successLabel || 'Pulled remote updates successfully.')
+                params.setIsPulling(false)
+                refreshGitInBackground(params, true, 'pulls')
             } catch (err: any) {
                 params.showToast(`Failed to pull: ${err.message}`, undefined, undefined, 'error')
             } finally {
@@ -123,7 +138,6 @@ export function createGitSyncActions(params: GitActionParams) {
                 }
 
                 invalidateProjectGitOverview(params.decodedPath)
-                await params.refreshGitData(true)
                 if (checkoutResult?.cleanedLock && checkoutResult?.stashed) {
                     params.showToast(`Recovered stale Git lock and auto-stashed changes (${checkoutResult.stashRef || 'stash@{0}'}).`)
                 } else if (checkoutResult?.cleanedLock) {
@@ -131,6 +145,8 @@ export function createGitSyncActions(params: GitActionParams) {
                 } else if (checkoutResult?.stashed) {
                     params.showToast(`Switched branch after auto-stashing local changes (${checkoutResult.stashRef || 'stash@{0}'}).`)
                 }
+                params.setIsSwitchingBranch(false)
+                refreshGitInBackground(params, true, 'full')
             } catch (err: any) {
                 params.showToast(`Failed to switch branch: ${err.message}`, undefined, undefined, 'error')
             } finally {

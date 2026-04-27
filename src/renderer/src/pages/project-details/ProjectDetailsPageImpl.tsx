@@ -45,6 +45,7 @@ export default function ProjectDetailsPage() {
     const scriptModal = useScriptRunModal({
         project: state.project,
         defaultShell: settings.defaultShell,
+        packageRuntimePreference: settings.packageRuntimePreference,
         openTerminal
     })
 

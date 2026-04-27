@@ -1,5 +1,6 @@
 import { invalidateProjectGitOverview } from '@/lib/projectGitOverview'
 import type { GitActionParams } from './gitActionTypes'
+import { refreshGitInBackground } from './gitActionRefresh'
 
 export function createGitProjectSetupActions(params: GitActionParams) {
     return {
@@ -51,8 +52,9 @@ export function createGitProjectSetupActions(params: GitActionParams) {
                 }
 
                 invalidateProjectGitOverview(params.decodedPath)
-                await params.refreshGitData(true)
                 params.setInitStep('remote')
+                params.setIsInitializing(false)
+                refreshGitInBackground(params, true, 'full')
             } catch (err: any) {
                 params.showToast(`Failed to initialize git: ${err.message}`, undefined, undefined, 'error')
             } finally {
@@ -77,7 +79,8 @@ export function createGitProjectSetupActions(params: GitActionParams) {
                 params.setIsGitRepo(true)
                 params.setHasRemote(true)
                 invalidateProjectGitOverview(params.decodedPath)
-                await params.refreshGitData(true)
+                params.setIsAddingRemote(false)
+                refreshGitInBackground(params, true, 'full')
             } catch (err: any) {
                 params.showToast(`Failed to add remote: ${err.message}`, undefined, undefined, 'error')
             } finally {
@@ -91,7 +94,7 @@ export function createGitProjectSetupActions(params: GitActionParams) {
             params.setIsGitRepo(true)
             params.setHasRemote(false)
             invalidateProjectGitOverview(params.decodedPath)
-            await params.refreshGitData(true)
+            refreshGitInBackground(params, true, 'full')
         },
         handleOpenInExplorer: async () => {
             if (params.projectPath) {
