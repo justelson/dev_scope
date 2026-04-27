@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on April 26, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, stable streaming command/file-change activity updates, compact path-aware preview links, installed package-runtime detection, and the terminal-only `/tasks` redirect.
+Last validated against code on April 27, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, stable streaming command/file-change activity updates, MCP progress/fuzzy-search activity rows, compact path-aware preview links, installed package-runtime detection, and the terminal-only `/tasks` redirect.
 
 ## Status Legend
 
@@ -21,12 +21,13 @@ Last validated against code on April 26, 2026. Current coverage includes assista
 - Persistent file and folder indexing across multiple roots with cached rebuilds and indexed search reuse: `Implemented`
 - Project details read model: `Implemented`
 - Project details progressive shell rendering with inline loading states for README, files, metadata, and refresh hydration, including shallow-first file tree loading plus indexed search for deep matches: `Implemented`
+- Project and folder headers use compact root-relative path display, inline open-in-terminal/project actions, and Git change summaries that can show addition/deletion counts instead of only file counts: `Implemented`
 - Installed IDE listing and open-in-IDE flows: `Implemented`
 - File tree reads and path info: `Implemented`
 - Indexed file search reused by command palette, folder browse, and project file-tree search surfaces: `Implemented`
 - File preview reads across text/media/image content: `Implemented`
 - Rendered HTML file preview loads the actual on-disk HTML document through the app file protocol, so relative local JS/CSS/assets referenced by that file resolve in preview mode: `Implemented`
-- Fullscreen file preview uses an IDE-style workspace shell with a full-height left navigation rail, tab-like top file bar, right-aligned action chrome, and integrated folder/file-map navigation: `Implemented`
+- Fullscreen file preview uses an IDE-style workspace shell with a full-height left navigation rail, tab-like top file bar, right-aligned action chrome, streamlined edit/save menus, Python run-mode controls, and integrated folder/file-map navigation: `Implemented`
 - File writes, rename, move, paste, and delete flows: `Implemented`
 - Preview terminal sessions: `Implemented`
 - Project script buttons support a Behavior setting for package runtime selection, with main-process installed-runtime detection for Node.js, npm, pnpm, Yarn, and Bun plus auto mode that follows project lockfiles: `Implemented`
@@ -63,7 +64,7 @@ Last validated against code on April 26, 2026. Current coverage includes assista
 - Session project-path routing auto-classifies folders under the configured Playground root into Playground sessions/labs, and the assistant rail auto-switches to the selected session mode when opening or switching into those chats: `Implemented`
 - Playground mode now requires a configured Playground root before creating labs or starting new Playground chats, with a dedicated root-selection onboarding overlay and disabled new-chat entry points until the root is set: `Implemented`
 - Playground chats can start without an attached lab; in that no-lab state the assistant is instructed to treat the chat as non-filesystem by default, while prompts that need local files, folders, repos, or workspace access route through a tool-enabled setup turn so Codex can request lab setup with its reason and suggested lab title before any workspace work starts: `Implemented`
-- No-lab Playground chats expose per-chat terminal access in the assistant header plus a default in Assistant settings; terminal-shaped prompts can request neutral home-directory terminal access through a dedicated permission modal with a "don't ask again" path, and approved/declined answers rerun the original prompt without duplicating the user message: `Implemented`
+- No-lab Playground chats expose per-chat terminal access in the assistant header plus a default in Assistant settings; terminal-shaped prompts can request neutral home-directory terminal access through a dedicated permission modal with a "don't ask again" path, approved/declined answers rerun the original prompt without duplicating the user message, and cwd changes force runtime reconnect before the rerun: `Implemented`
 - Assistant connection recovery banner and retry flow for dropped runtime sessions: `Implemented`
 - Event subscription and snapshot/status reads: `Implemented`
 - Session switching with cached selected-thread hydration: `Implemented`
@@ -75,7 +76,7 @@ Last validated against code on April 26, 2026. Current coverage includes assista
 - Assistant composer supports busy-turn queueing and force-send controls, clears queued items as soon as a resend is accepted, pauses failed re-dispatches instead of endlessly re-looping them, exposes per-message force-send/edit/delete actions, supports grip-handle queue reordering, and keeps queued attachments attached to their prompt through reorder/edit/send; dev builds also support `/queue-test` and `/queue-preview` prompt flags with optional `--count=N` and `--force` to create local preview-only queued items, plus `/compact-test` for local context-compaction marker testing, without dispatching to the assistant runtime: `Implemented`
 - Assistant composer derives a shared capability state for typing, attachments, send/stop, and control locking, and surfaces contextual composer status/explanations for disconnected, unavailable, busy, and guided-input states: `Implemented`
 - Force-pushed assistant turns keep the conversation in a working state when the runtime session is still live, and assistant turn footers show per-turn elapsed time on the last assistant message when timing data is available: `Implemented`
-- Assistant timeline tool-call cards keep live command and file-change output deltas in sync, preserve app-server raw response tool calls by stable item/call id, show MCP/dynamic/search call arguments and results in terminal-style rows, render completed-without-output as a compact first-class state, render edited-file outputs as compact path-first rows with explicit open/diff actions while suppressing duplicated file-list spill below them, preserve long command lines with horizontal scrolling, respect the assistant default for expanding or minimizing live command/tool output, and auto-collapse completed command/tool runs after the stream settles: `Implemented`
+- Assistant timeline tool-call cards keep live command and file-change output deltas in sync, preserve app-server raw response tool calls by stable item/call id, show MCP/dynamic/search call arguments and structured results in terminal-style rows, render completed-without-output as a compact first-class state, render edited-file outputs as compact path-first rows with explicit open/diff actions while suppressing duplicated file-list spill below them, preserve long command lines with horizontal scrolling, respect the assistant default for expanding or minimizing live command/tool output, and auto-collapse completed command/tool runs after the stream settles: `Implemented`
 - Assistant event bridging now keeps turn-diff updates, fuzzy file-search result rows, MCP progress, raw response tool completions, live command/file-change output deltas, and stable tool-item IDs pinned to the correct history row: `Implemented`
 - Assistant composer image attachments open the file preview renderer directly from the shelf while non-image attachments keep the local attachment preview flow: `Implemented`
 - Assistant composer pasted text attachments render as compact paper-card previews and open a dedicated text preview modal: `Implemented`
@@ -90,7 +91,7 @@ Last validated against code on April 26, 2026. Current coverage includes assista
 
 - Home page: `Implemented`
 - Projects page: `Implemented`
-- Settings pages, including a paginated dark-theme appearance library with imported Codex, DP Code, Linear, Vercel, Notion, Raycast, Solarized, Sentry, Matrix, Temple, Oscurange, Lobster, Absolutely, VS Code Plus, and Material presets plus behavior controls for package runtime selection: `Implemented`
+- Settings pages, including a paginated dark-theme appearance library with imported Codex, DP Code, Linear, Vercel, Notion, Raycast, Solarized, Sentry, Matrix, Temple, Oscurange, Lobster, Absolutely, VS Code Plus, and Material presets plus behavior controls for package runtime selection with installed-state cards and official runtime icons: `Implemented`
 - Terminals page: `Implemented`
 - Legacy `/tasks` route redirects to `Terminals`, which is now the sole live terminal-management surface: `Implemented`
 - Explorer page: `Implemented (setting-gated)`

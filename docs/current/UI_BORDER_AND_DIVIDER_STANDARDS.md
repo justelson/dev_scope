@@ -1,6 +1,6 @@
 # UI Border And Divider Standards
 
-Last updated: April 19, 2026
+Last updated: April 27, 2026
 
 This document defines the default border and subtle-separator treatment for the current DevScope UI.
 
@@ -29,6 +29,7 @@ Use visible white borders only when the surrounding surface already relies on th
 Reference component:
 
 - `src/renderer/src/pages/project-details/ProjectDetailsHeaderSection.tsx`
+- `src/renderer/src/components/ui/file-preview/PreviewModalHeader.tsx`
 
 Canonical values for cases where a visible border is actually needed:
 
@@ -76,6 +77,7 @@ When touching these surfaces:
 4. keep state styling consistent across default, hover, active, collapsed, and expanded states
 5. verify compact and non-compact modes
 6. verify hover and active states
+7. for preview/header chrome, prefer compact icon controls, attached dropdown/action groups, and full-height edge targets over duplicated inline text actions
 
 ## When To Update This Doc
 

@@ -1,6 +1,6 @@
 # Change Validation Checklist
 
-Last updated: April 26, 2026
+Last updated: April 27, 2026
 
 Use this checklist for PRs/patches in the current DevScope desktop codebase.
 
@@ -15,6 +15,8 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 - Validate loading/error/empty states do not conflict.
 - Validate stale requests cannot reset active request state.
 - Validate metadata updates are not rendered as chat content.
+- Validate guided Playground setup turns do not duplicate the original user message when the prompt is rerun.
+- Validate terminal-access declines do not immediately retry the same terminal-access request.
 
 ## 3) UX Regression Check
 
@@ -32,6 +34,9 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 - Verify copy/open/refresh actions continue working for path-based flows.
 - Verify markdown/file-reference links still resolve Windows absolute paths, `file://` links, relative links, and line anchors into the shared preview flow.
 - Verify compatibility redirects still resolve cleanly instead of throwing renderer errors.
+- Verify no-lab Playground terminal-access prompts show the dedicated modal, honor the per-chat/default setting, and reconnect the runtime when cwd mode changes.
+- Verify file-preview header controls remain compact at narrow widths, including edit/save menus, Python run-mode controls, and close-button hit area.
+- Verify package-runtime settings show installed/uninstalled state for Node.js, npm, pnpm, Yarn, and Bun after refresh.
 
 ## 4) Data + Indexing Check
 
@@ -39,6 +44,7 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 - Ensure search uses index data rather than repeated full scans.
 - Ensure repeated user actions do not trigger unnecessary re-indexing.
 - Ensure assistant streaming updates with repeated activity IDs collapse instead of causing timeline churn.
+- Ensure raw response items, MCP progress, fuzzy file-search updates, turn diffs, and command/file-change deltas keep stable activity IDs.
 
 ## 5) Validation Execution
 

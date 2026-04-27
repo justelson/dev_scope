@@ -1,6 +1,6 @@
 # Engineering Quality Standards
 
-Last updated: March 8, 2026
+Last updated: April 27, 2026
 
 This document defines engineering quality expectations for the current DevScope desktop codebase.
 
@@ -19,6 +19,7 @@ This document defines engineering quality expectations for the current DevScope 
 - Prefer additive changes over breaking shape changes.
 - Keep operation names stable and explicit.
 - Ensure success/error envelope consistency (`success: true|false` pattern).
+- When renderer behavior depends on native/runtime discovery, add the shared contract first and keep detection out of renderer code.
 
 ### Preload Adapters (`src/preload/*`)
 
@@ -58,12 +59,14 @@ This document defines engineering quality expectations for the current DevScope 
 - Prefer cache + in-flight dedupe over repeated expensive calls.
 - Keep startup work deferred/background where possible.
 - Avoid repeated indexing/scans from UI interactions when index exists.
+- Preserve stable activity IDs for streamed assistant tool work so command output, file-change output, MCP progress, raw response completions, and fuzzy-search updates merge instead of remounting rows.
 
 ## Observability Standards
 
 - Log important transitions at service/handler boundaries.
 - Log error paths with enough context to diagnose route/capability.
 - Avoid noisy logs inside hot render paths.
+- Suppress setup-turn assistant text only for guided rerun flows where the original user prompt is replayed intentionally.
 
 ## Definition Of Done (Engineering Quality)
 
