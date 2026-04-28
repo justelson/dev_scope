@@ -4,6 +4,7 @@ import https from 'node:https'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { buildReleaseNotes } from './release-notes.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..', '..')
@@ -310,13 +311,24 @@ async function getReleaseByTag(token) {
 
 async function ensureRelease(token) {
     const existing = await getReleaseByTag(token)
+    const releaseNotes = await buildReleaseNotes({
+        rootDir,
+        owner,
+        repo,
+        version,
+        currentTag: tagName
+    })
+    const previousReleaseLabel = releaseNotes.previousTag || 'no previous release tag'
+    log(`Release notes compare: ${previousReleaseLabel} -> ${tagName} (${releaseNotes.commitCount} commits)`)
+
     const releasePayload = JSON.stringify({
         tag_name: tagName,
         target_commitish: 'main',
         name: releaseName,
         prerelease: version.includes('-alpha.') || version.includes('-beta.'),
         draft: false,
-        generate_release_notes: true
+        body: releaseNotes.body,
+        generate_release_notes: false
     })
 
     if (existing) {

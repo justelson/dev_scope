@@ -249,6 +249,8 @@ export function UpdatePromptCenter() {
         installUpdate,
         remindLater,
         skipAvailableVersion,
+        updateSuccessToast,
+        dismissUpdateSuccessToast,
         statusTone
     } = useAppUpdates()
 
@@ -361,6 +363,39 @@ export function UpdatePromptCenter() {
                         </div>
                     )}
                 </div>
+            </div>
+        </div>
+    ) : null
+
+    const successToast = updateSuccessToast ? (
+        <div
+            className={cn(
+                'fixed bottom-4 right-4 z-[145] w-full max-w-sm rounded-xl border border-emerald-400/20 bg-sparkle-card/95 p-3 shadow-2xl backdrop-blur-xl transition-all duration-150',
+                updateSuccessToast.isVisible
+                    ? 'translate-y-0 opacity-100'
+                    : 'translate-y-2 opacity-0'
+            )}
+        >
+            <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-400/20 bg-emerald-500/12 text-emerald-200">
+                    <CheckCircle2 size={17} />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-sparkle-text">
+                        Update successful
+                    </p>
+                    <p className="mt-0.5 truncate text-sm text-sparkle-text-secondary">
+                        Running {updateSuccessToast.versionLabel}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={dismissUpdateSuccessToast}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/[0.05] hover:text-white"
+                    aria-label="Dismiss update success"
+                >
+                    <X size={15} />
+                </button>
             </div>
         </div>
     ) : null
@@ -489,6 +524,7 @@ export function UpdatePromptCenter() {
 
     return (
         <>
+            {successToast}
             {prompt}
             {modal}
         </>
