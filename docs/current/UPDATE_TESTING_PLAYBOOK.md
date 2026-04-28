@@ -51,12 +51,25 @@ Prefer one of these:
 
 - a dedicated test repository used only for updater verification
 - a dedicated prerelease channel/tag pattern that is clearly non-production
+- a local packaged-app feed served from `dist/releases/v<version>/`
 
 Point test builds at that lane with:
 
 - `DEVSCOPE_DESKTOP_UPDATE_REPOSITORY`
+- `DEVSCOPE_DESKTOP_UPDATE_FEED_URL`
 
 That lets packaged test builds exercise the full updater path without polluting the main release history.
+
+For local feed testing:
+
+1. Build or keep release artifacts in `dist/releases/v<version>/`.
+2. Start the local feed server:
+   `npm run update:serve-feed -- --dir dist/releases/v<version>`
+3. Launch an older packaged build from PowerShell with:
+   `$env:DEVSCOPE_DESKTOP_UPDATE_FEED_URL='http://127.0.0.1:45841/'`
+4. Use the app update UI to check, download, and install.
+
+Keep the feed server running until the packaged app finishes downloading.
 
 Updater behavior to verify in packaged tests:
 

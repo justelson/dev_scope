@@ -13,15 +13,22 @@ import type {
 
 type UpdatePendingAction = 'check' | 'download' | 'install' | null
 
+interface UpdateSuccessToastState {
+    versionLabel: string
+    isVisible: boolean
+}
+
 interface AppUpdatesContextValue {
     updateState: DevScopeUpdateState | null
     pendingAction: UpdatePendingAction
     isModalOpen: boolean
     shouldShowPrompt: boolean
     skippedVersion: string | null
+    updateSuccessToast: UpdateSuccessToastState | null
     statusTone: 'neutral' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
     openModal: () => void
     closeModal: () => void
+    dismissUpdateSuccessToast: () => void
     checkForUpdates: () => Promise<DevScopeUpdateActionResult | null>
     downloadUpdate: () => Promise<DevScopeUpdateActionResult | null>
     installUpdate: () => Promise<DevScopeUpdateActionResult | null>
@@ -31,6 +38,7 @@ interface AppUpdatesContextValue {
 }
 
 const UPDATE_SKIPPED_VERSION_KEY = 'devscope:update-skipped-version:v1'
+const UPDATE_SUCCESS_SEEN_PREFIX = 'devscope:update-success-seen:'
 
 const AppUpdatesContext = createContext<AppUpdatesContextValue | null>(null)
 
@@ -50,6 +58,22 @@ function writeSkippedVersion(version: string | null): void {
             return
         }
         localStorage.setItem(UPDATE_SKIPPED_VERSION_KEY, version)
+    } catch {
+        // Ignore storage write failures.
+    }
+}
+
+function hasSeenUpdateSuccess(version: string): boolean {
+    try {
+        return localStorage.getItem(`${UPDATE_SUCCESS_SEEN_PREFIX}${version}`) === '1'
+    } catch {
+        return true
+    }
+}
+
+function writeSeenUpdateSuccess(version: string): void {
+    try {
+        localStorage.setItem(`${UPDATE_SUCCESS_SEEN_PREFIX}${version}`, '1')
     } catch {
         // Ignore storage write failures.
     }
@@ -82,6 +106,7 @@ export function AppUpdatesProvider({ children }: { children: ReactNode }) {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [skippedVersion, setSkippedVersion] = useState<string | null>(() => readSkippedVersion())
     const [laterDownloadedVersion, setLaterDownloadedVersion] = useState<string | null>(null)
+    const [updateSuccessToast, setUpdateSuccessToast] = useState<UpdateSuccessToastState | null>(null)
 
     useEffect(() => {
         let mounted = true
@@ -118,6 +143,35 @@ export function AppUpdatesProvider({ children }: { children: ReactNode }) {
             setLaterDownloadedVersion(null)
         }
     }, [laterDownloadedVersion, updateState?.downloadedVersion])
+
+    useEffect(() => {
+        if (!updateState?.enabled || !updateState.currentVersion) return
+        if (hasSeenUpdateSuccess(updateState.currentVersion)) return
+
+        writeSeenUpdateSuccess(updateState.currentVersion)
+        setUpdateSuccessToast({
+            versionLabel: updateState.currentDisplayVersion || `v${updateState.currentVersion}`,
+            isVisible: true
+        })
+    }, [updateState?.currentDisplayVersion, updateState?.currentVersion, updateState?.enabled])
+
+    useEffect(() => {
+        if (!updateSuccessToast?.isVisible) return
+        const timeoutId = window.setTimeout(() => {
+            setUpdateSuccessToast((current) => current ? { ...current, isVisible: false } : current)
+        }, 5200)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [updateSuccessToast?.isVisible])
+
+    useEffect(() => {
+        if (!updateSuccessToast || updateSuccessToast.isVisible) return
+        const timeoutId = window.setTimeout(() => {
+            setUpdateSuccessToast(null)
+        }, 180)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [updateSuccessToast])
 
     const runAction = async (
         action: Exclude<UpdatePendingAction, null>,
@@ -156,6 +210,10 @@ export function AppUpdatesProvider({ children }: { children: ReactNode }) {
     const clearSkippedVersion = () => {
         writeSkippedVersion(null)
         setSkippedVersion(null)
+    }
+
+    const dismissUpdateSuccessToast = () => {
+        setUpdateSuccessToast((current) => current ? { ...current, isVisible: false } : current)
     }
 
     const remindLater = () => {
@@ -199,9 +257,11 @@ export function AppUpdatesProvider({ children }: { children: ReactNode }) {
         isModalOpen,
         shouldShowPrompt,
         skippedVersion,
+        updateSuccessToast,
         statusTone: resolveUpdateTone(updateState),
         openModal: () => setIsModalOpen(true),
         closeModal: () => setIsModalOpen(false),
+        dismissUpdateSuccessToast,
         checkForUpdates,
         downloadUpdate,
         installUpdate,

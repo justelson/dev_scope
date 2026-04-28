@@ -23,9 +23,12 @@ Every desktop release should leave the repo and GitHub in a state that is:
 1. Update package version in `package.json`.
 2. Keep release-facing UI/documentation in sync with that version when needed.
    Human-facing app labels should use the simplified display format, for example `v1.5.0 beta`, while package/tag versions remain full SemVer.
-3. Create and push tag `v<package-version>`.
-4. Verify GitHub Actions release workflow status or use the local publisher path when intentionally doing a local publish.
-5. Verify GitHub release exists, has the correct title, and expected assets are attached.
+3. Generate release notes from the previous published tag to the upcoming tag:
+   - `npm run release:notes`
+   - use the same compare range for the GitHub release body
+4. Create and push tag `v<package-version>`.
+5. Verify GitHub Actions release workflow status or use the local publisher path when intentionally doing a local publish.
+6. Verify GitHub release exists, has the correct title, changelog body, and expected assets are attached.
 
 ## Required GitHub Release Name
 
@@ -78,10 +81,12 @@ Current packaging scripts:
   - writes unpacked bundle to `dist/unpacked/v<package-version>/`
 - `npm run dist:organize`
   - moves older flat `dist` artifacts into the versioned layout when possible
+- `npm run release:notes`
+  - prints the GitHub release changelog generated from the previous release tag to the upcoming package version tag
 - `npm run release:publish:local`
   - local-only GitHub release publisher
   - requires a clean `main` branch checkout, a local tag `v<package-version>`, and release assets already built in `dist/releases/v<package-version>/`
-  - pushes `main` and the version tag, creates or updates the GitHub release directly, and uploads `.exe`, `.blockmap`, and `latest.yml` without relying on GitHub Actions
+  - pushes `main` and the version tag, creates or updates the GitHub release directly with the generated changelog body, and uploads `.exe`, `.blockmap`, and `latest.yml` without relying on GitHub Actions
 
 ## Release Verification Checklist
 
@@ -93,9 +98,10 @@ After any release task:
    - prerelease for `-alpha.*` and `-beta.*`
    - normal release for plain stable tags
 4. Confirm the release title matches the expected human-facing format for that version.
-5. Confirm expected Windows assets exist.
-6. Confirm `latest.yml` points at the actual uploaded installer filename.
-7. If the landing page download button is meant to target the newest release, verify it still resolves correctly.
+5. Confirm the release body contains the changelog generated from the previous release tag.
+6. Confirm expected Windows assets exist.
+7. Confirm `latest.yml` points at the actual uploaded installer filename.
+8. If the landing page download button is meant to target the newest release, verify it still resolves correctly.
 
 ## Remote Failure Handling
 
