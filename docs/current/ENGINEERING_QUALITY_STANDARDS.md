@@ -1,6 +1,6 @@
 # Engineering Quality Standards
 
-Last updated: April 27, 2026
+Last updated: April 28, 2026
 
 This document defines engineering quality expectations for the current DevScope desktop codebase.
 
@@ -20,6 +20,7 @@ This document defines engineering quality expectations for the current DevScope 
 - Keep operation names stable and explicit.
 - Ensure success/error envelope consistency (`success: true|false` pattern).
 - When renderer behavior depends on native/runtime discovery, add the shared contract first and keep detection out of renderer code.
+- When renderer behavior depends on filesystem-backed attachment resolution, expose safe references through the assistant contract rather than prompt-visible local storage paths.
 
 ### Preload Adapters (`src/preload/*`)
 
@@ -39,6 +40,7 @@ This document defines engineering quality expectations for the current DevScope 
 - Place domain rules and orchestration here.
 - Use deterministic input/output contracts.
 - Centralize caching and deduping logic at service boundaries.
+- Keep repository clone, Git stats, runtime detection, and clipboard attachment persistence/resolution in services or IPC-adjacent modules, not renderer-only helpers.
 
 ### Renderer (`src/renderer/src/*`)
 
@@ -60,6 +62,7 @@ This document defines engineering quality expectations for the current DevScope 
 - Keep startup work deferred/background where possible.
 - Avoid repeated indexing/scans from UI interactions when index exists.
 - Preserve stable activity IDs for streamed assistant tool work so command output, file-change output, MCP progress, raw response completions, and fuzzy-search updates merge instead of remounting rows.
+- Chunk expensive Git status/stat reads and cancel stale renderer requests when project path, branch, or selection changes.
 
 ## Observability Standards
 
@@ -67,6 +70,7 @@ This document defines engineering quality expectations for the current DevScope 
 - Log error paths with enough context to diagnose route/capability.
 - Avoid noisy logs inside hot render paths.
 - Suppress setup-turn assistant text only for guided rerun flows where the original user prompt is replayed intentionally.
+- Keep attachment safety and clone/progress failures observable at service boundaries without logging private clipboard payload content.
 
 ## Definition Of Done (Engineering Quality)
 

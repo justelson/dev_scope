@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on April 27, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, stable streaming command/file-change activity updates, MCP progress/fuzzy-search activity rows, compact path-aware preview links, installed package-runtime detection, and the terminal-only `/tasks` redirect.
+Last validated against code on April 28, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, safe clipboard attachment references, stable streaming command/file-change activity updates, MCP progress/fuzzy-search activity rows, compact path-aware preview links, installed package-runtime detection, Git clone/progress events, and the terminal-only `/tasks` redirect.
 
 ## Status Legend
 
@@ -25,10 +25,10 @@ Last validated against code on April 27, 2026. Current coverage includes assista
 - Installed IDE listing and open-in-IDE flows: `Implemented`
 - File tree reads and path info: `Implemented`
 - Indexed file search reused by command palette, folder browse, and project file-tree search surfaces: `Implemented`
-- File preview reads across text/media/image content: `Implemented`
+- File preview reads across text/media/image content, including sibling media navigation for image/video/audio browsing: `Implemented`
 - Rendered HTML file preview loads the actual on-disk HTML document through the app file protocol, so relative local JS/CSS/assets referenced by that file resolve in preview mode: `Implemented`
-- Fullscreen file preview uses an IDE-style workspace shell with a full-height left navigation rail, tab-like top file bar, right-aligned action chrome, streamlined edit/save menus, Python run-mode controls, and integrated folder/file-map navigation: `Implemented`
-- File writes, rename, move, paste, delete, and clone-repository-into-current-folder flows with streamed clone progress: `Implemented`
+- Fullscreen file preview uses an IDE-style workspace shell with a full-height left navigation rail, tab-like top file bar, right-aligned action chrome, streamlined edit/save menus, Python run-mode controls, line-focus navigation, and integrated folder/file-map navigation: `Implemented`
+- File writes, rename, move, paste, delete, and clone-repository-into-current-folder flows with streamed clone progress and completion/error toasts: `Implemented`
 - Preview terminal sessions: `Implemented`
 - Project script buttons support a Behavior setting for package runtime selection, with main-process installed-runtime detection for Node.js, npm, pnpm, Yarn, and Bun plus auto mode that follows project lockfiles: `Implemented`
 - File preview terminal opens as a bottom overlay panel inside the preview workspace instead of consuming sidebar/layout height, uses panel-style in/out motion, and live session titles now sync from terminal output and command submissions even while sessions continue in the background: `Implemented`
@@ -37,11 +37,11 @@ Last validated against code on April 27, 2026. Current coverage includes assista
 
 ## Git Workflows
 
-- Read flows for status, history, sync, remotes, tags, stashes, repo owner, publish context, and working diff: `Implemented`
-- Write flows for stage, unstage, discard, branch/tag actions, stash actions, fetch, pull, push, and repo init/setup: `Implemented`
+- Read flows for status, history, commit stats, sync, remotes, tags, stashes, repo owner, publish context, current-branch PR lookup, and working diff: `Implemented`
+- Write flows for stage, unstage, discard, branch/tag actions, stash actions, fetch, pull, push, clone, and repo init/setup: `Implemented`
 - AI-generated commit message flow with Groq, Gemini, or dedicated Codex Git models for commit/PR work: `Implemented`
 - One-click staged `commit -> push -> create/open PR` flow for GitHub remotes: `Implemented`
-- GitHub CLI-backed pull request create/open flow with AI-or-template draft generation: `Implemented`
+- GitHub CLI-backed pull request create/open flow with AI-or-template draft generation, current-branch PR reuse, and commit-push-PR orchestration: `Implemented`
 
 ## Assistant
 
@@ -80,9 +80,8 @@ Last validated against code on April 27, 2026. Current coverage includes assista
 - Assistant event bridging now keeps turn-diff updates, fuzzy file-search result rows, MCP progress, raw response tool completions, live command/file-change output deltas, and stable tool-item IDs pinned to the correct history row: `Implemented`
 - Assistant composer image attachments open the file preview renderer directly from the shelf while non-image attachments keep the local attachment preview flow: `Implemented`
 - Assistant composer pasted text attachments render as compact paper-card previews and open a dedicated text preview modal: `Implemented`
-- Sent clipboard attachments in assistant history now hide generated paste filenames behind generic pasted labels, reuse the composer-style attachment cards inside user bubbles, switch to a sideways attachment rail when many files are attached, open pasted text in a read-only preview modal from chat history, and derive auto-titled chats from the typed body or generic attachment labels instead of serialized attachment metadata: `Implemented`
+- Sent clipboard attachments in assistant history now hide generated paste filenames behind generic pasted labels, reuse the composer-style attachment cards inside user bubbles, switch to a sideways attachment rail when many files are attached, open pasted text in a read-only preview modal from chat history, derive auto-titled chats from the typed body or generic attachment labels instead of serialized attachment metadata, and serialize prompt context as safe `clipboard://` references that resolve through assistant IPC for preview/open actions without being treated as the active repo root or cwd: `Implemented`
 - Assistant composer inline `@` mention highlighting currently uses a mirrored overlay on top of a native textarea; pending follow-up is to replace that hack with either plain-text mentions or a true inline-styled editor surface: `Implemented with follow-up`
-- Clipboard-origin assistant attachments keep local previews while prompts serialize a safe `clipboard://` reference instead of the local storage path, and explicitly mark those attachments as not being the active repo/project root or current working directory: `Implemented`
 - Assistant defaults/settings page exposes transcription enablement, browser-vs-local engine selection, local Vosk model download/install prep, and highlight-targeted deep linking from assistant error recovery flows: `Implemented`
 - App-level assistant defaults for starter prompt template, model, chat/plan mode, supervised/full-access mode, reasoning level, and fast mode: `Implemented`
 - Assistant account overview surface with auth mode, plan, and rate-limit reads: `Implemented`
@@ -91,7 +90,7 @@ Last validated against code on April 27, 2026. Current coverage includes assista
 
 - Home page: `Implemented`
 - Projects page: `Implemented`
-- Settings pages, including a paginated dark-theme appearance library with imported Codex, DP Code, Linear, Vercel, Notion, Raycast, Solarized, Sentry, Matrix, Temple, Oscurange, Lobster, Absolutely, VS Code Plus, and Material presets plus behavior controls for package runtime selection with installed-state cards and official runtime icons: `Implemented`
+- Settings pages, including a paginated dark-theme appearance library with imported Codex, DP Code, Linear, Vercel, Notion, Raycast, Solarized, Sentry, Matrix, Temple, Oscurange, Lobster, Absolutely, VS Code Plus, and Material presets plus behavior controls for package runtime selection with installed-state cards, official runtime icons, assistant service-tier/pricing metadata, and live command/tool-output defaults: `Implemented`
 - Terminals page: `Implemented`
 - Legacy `/tasks` route redirects to `Terminals`, which is now the sole live terminal-management surface: `Implemented`
 - Explorer page: `Implemented (setting-gated)`

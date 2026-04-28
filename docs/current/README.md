@@ -4,7 +4,7 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
-Snapshot alignment: April 27, 2026 current-state pass.
+Snapshot alignment: April 28, 2026 current-state pass.
 
 ## Core References
 
@@ -39,11 +39,12 @@ Snapshot alignment: April 27, 2026 current-state pass.
 
 ## Current App State
 
-- Assistant session hydration, deletion fallback, connection recovery, streaming tool cards, stable raw-response activity IDs, MCP progress, fuzzy file-search activity, turn-diff updates, and live command/file-change output deltas are part of the live runtime.
+- Assistant session hydration, deletion fallback, connection recovery, streaming tool cards, stable raw-response activity IDs, MCP progress, fuzzy file-search activity, turn-diff updates, live command/file-change output deltas, and safe clipboard attachment references are part of the live runtime.
 - Playground chats can start detached from a lab, then use per-chat terminal access or escalate into terminal-access/lab-setup guided turns only when the prompt actually needs command or workspace access.
-- File preview now includes the IDE-style full-screen shell, HTML preview loading through the app file protocol, compact file-link chips, streamlined header/edit actions, Python run-mode controls, and an overlay terminal panel.
-- Folder/project browsing emphasizes compact headers, root-relative paths, indexed deep search, and project Git summaries that show actual addition/deletion counts where available.
-- Settings include installed package-runtime detection for project scripts, official runtime icons, imported dark theme presets, live tool-output defaults, no-lab Playground terminal defaults, and the current assistant defaults/behavior surfaces.
+- File preview now includes the IDE-style full-screen shell, HTML preview loading through the app file protocol, compact file-link chips, line-focused markdown/file-reference navigation, sibling media navigation, streamlined header/edit actions, Python run-mode controls, and an overlay terminal panel.
+- Folder/project browsing emphasizes compact headers, root-relative paths, indexed deep search, folder-level repository cloning with streamed progress, and project Git summaries that show actual addition/deletion counts where available.
+- Git surfaces include status/diff/history stats, pull/push refresh flows, current-branch PR lookup, and one-click commit/push/create-or-open PR actions backed by shared contracts.
+- Settings include installed package-runtime detection for project scripts, official runtime icons, imported dark theme presets, assistant pricing/service-tier display, live tool-output defaults, no-lab Playground terminal defaults, and the current assistant defaults/behavior surfaces.
 
 ## Task-Specific Skills
 

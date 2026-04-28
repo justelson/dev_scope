@@ -1,6 +1,6 @@
 # Change Scope Guidelines
 
-Last updated: March 9, 2026
+Last updated: April 28, 2026
 
 This document defines how changes should be shaped before implementation and how they should be reported afterward.
 
@@ -27,12 +27,14 @@ Good scope examples:
 - one release-flow fix plus the minimal supporting script changes
 - one UI bug fix plus the shared utility extraction it genuinely needs
 - one data-flow correctness fix plus the contract update it depends on
+- one filesystem-backed UI flow plus the shared contract and service update it depends on
 
 Bad scope examples:
 
 - fixing a release link and also redesigning unrelated UI
 - changing app state flow and also refactoring unrelated settings pages
 - bundling cleanup work with unrelated product features
+- pushing prompt-visible local file paths into model context when a scoped reference/resolution path is enough
 
 ## Architecture Guardrails
 
@@ -43,6 +45,12 @@ Before expanding a change, check whether the logic belongs in:
 - `src/preload` for narrow transport adapters only
 - `src/renderer/src` for UI and view state only
 - `apps/landing/devscope-web` for marketing/release download behavior only
+
+For clone, attachment, Git, and preview flows, keep the owning layer explicit:
+
+- clone and filesystem mutation orchestration belongs in `src/main`
+- prompt-safe attachment references belong in shared assistant contracts plus main/preload adapters
+- preview rendering and Git action UI belongs in `src/renderer/src`
 
 If a change crosses layers, the reason should be clear.
 

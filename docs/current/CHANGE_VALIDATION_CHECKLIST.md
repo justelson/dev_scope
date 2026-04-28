@@ -1,6 +1,6 @@
 # Change Validation Checklist
 
-Last updated: April 27, 2026
+Last updated: April 28, 2026
 
 Use this checklist for PRs/patches in the current DevScope desktop codebase.
 
@@ -17,6 +17,7 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 - Validate metadata updates are not rendered as chat content.
 - Validate guided Playground setup turns do not duplicate the original user message when the prompt is rerun.
 - Validate terminal-access declines do not immediately retry the same terminal-access request.
+- Validate clipboard-origin assistant attachments serialize as `clipboard://` references and still resolve for preview/open actions.
 
 ## 3) UX Regression Check
 
@@ -33,10 +34,14 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 - Verify buttons/controls are aligned and responsive after UI changes.
 - Verify copy/open/refresh actions continue working for path-based flows.
 - Verify markdown/file-reference links still resolve Windows absolute paths, `file://` links, relative links, and line anchors into the shared preview flow.
+- Verify markdown inline-code file references still respect text selection, hover/click behavior, and exact line focusing in preview.
 - Verify compatibility redirects still resolve cleanly instead of throwing renderer errors.
 - Verify no-lab Playground terminal-access prompts show the dedicated modal, honor the per-chat/default setting, and reconnect the runtime when cwd mode changes.
 - Verify file-preview header controls remain compact at narrow widths, including edit/save menus, Python run-mode controls, and close-button hit area.
+- Verify sibling media navigation works without breaking image/media fit and zoom controls.
 - Verify package-runtime settings show installed/uninstalled state for Node.js, npm, pnpm, Yarn, and Bun after refresh.
+- Verify folder-browse repository clone shows progress, success, and error states without freezing the browser.
+- Verify project Git pull/push/PR actions refresh status and reuse an existing current-branch PR when available.
 
 ## 4) Data + Indexing Check
 
@@ -45,6 +50,7 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 - Ensure repeated user actions do not trigger unnecessary re-indexing.
 - Ensure assistant streaming updates with repeated activity IDs collapse instead of causing timeline churn.
 - Ensure raw response items, MCP progress, fuzzy file-search updates, turn diffs, and command/file-change deltas keep stable activity IDs.
+- Ensure Git status-entry stats load in chunks and stale stats requests do not overwrite a newer project/branch view.
 
 ## 5) Validation Execution
 
