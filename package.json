@@ -1,6 +1,6 @@
 {
     "name": "devscope-air-win",
-    "version": "1.6.0-beta.1",
+    "version": "1.6.1-beta.1",
     "description": "DevScope primary Windows desktop app for project scanning, Git workflows, and desktop updates",
     "main": "./out/main/index.js",
     "author": "DevScope",
@@ -19,7 +19,8 @@
         "dist:organize": "node scripts/maint/organize-dist.mjs",
         "brand:assets": "python scripts/maint/generate_branding_assets.py",
         "release:publish:local": "node scripts/maint/publish-local-release.mjs",
-        "update:test-feed": "node --experimental-strip-types scripts/maint/check-github-update-feed.mjs"
+        "update:test-feed": "node --experimental-strip-types scripts/maint/check-github-update-feed.mjs",
+        "update:serve-feed": "node scripts/maint/serve-update-feed.mjs"
     },
     "dependencies": {
         "@chenglou/pretext": "^0.0.5",

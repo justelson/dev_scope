@@ -33,11 +33,13 @@ export const UPDATE_INSTALL_CHANNEL = 'devscope:updates:installUpdate'
 const DEFAULT_RELEASE_REPOSITORY = 'justelson/dev_scope'
 const AUTO_UPDATE_STARTUP_DELAY_MS = 15_000
 const AUTO_UPDATE_POLL_INTERVAL_MS = 4 * 60 * 60 * 1000
+const AUTO_UPDATE_CHECK_TIMEOUT_MS = 45 * 1000
 
 const releaseRepository =
     process.env.DEVSCOPE_DESKTOP_UPDATE_REPOSITORY?.trim()
     || process.env.GITHUB_REPOSITORY?.trim()
     || DEFAULT_RELEASE_REPOSITORY
+const releaseFeedUrlOverride = process.env.DEVSCOPE_DESKTOP_UPDATE_FEED_URL?.trim() || ''
 const releasePageUrl = `https://github.com/${releaseRepository}/releases`
 
 type ElectronUpdaterModule = typeof import('electron-updater')
@@ -50,6 +52,7 @@ let updaterInitializationPromise: Promise<void> | null = null
 let trackedWindowIds = new Set<number>()
 let updatePollTimer: ReturnType<typeof setInterval> | null = null
 let updateStartupTimer: ReturnType<typeof setTimeout> | null = null
+let updateCheckTimeoutTimer: ReturnType<typeof setTimeout> | null = null
 let updateCheckInFlight = false
 let updateDownloadInFlight = false
 let isInstallingUpdate = false
@@ -91,6 +94,35 @@ function clearUpdateTimers(): void {
         clearInterval(updatePollTimer)
         updatePollTimer = null
     }
+    clearUpdateCheckTimeoutTimer()
+}
+
+function clearUpdateCheckTimeoutTimer(): void {
+    if (updateCheckTimeoutTimer) {
+        clearTimeout(updateCheckTimeoutTimer)
+        updateCheckTimeoutTimer = null
+    }
+}
+
+function armUpdateCheckTimeout(reason: string): void {
+    clearUpdateCheckTimeoutTimer()
+    updateCheckTimeoutTimer = setTimeout(() => {
+        updateCheckTimeoutTimer = null
+        if (updateState.status !== 'checking') {
+            return
+        }
+
+        updateCheckInFlight = false
+        setUpdateState(
+            reduceUpdateStateOnCheckFailure(
+                updateState,
+                'Timed out while checking for updates. Try again.',
+                nowIso()
+            )
+        )
+        log.error(`[updater] update check timed out (${reason})`)
+    }, AUTO_UPDATE_CHECK_TIMEOUT_MS)
+    updateCheckTimeoutTimer.unref()
 }
 
 function resolveUpdaterErrorContext(): DevScopeUpdateErrorContext {
@@ -137,7 +169,40 @@ function getUpdaterUnavailableMessage(): string {
     return updateState.disabledReason || updateState.message || 'Updater is not ready in this build yet.'
 }
 
+function normalizeGenericFeedUrl(feedUrl: string): string {
+    const parsed = new URL(feedUrl)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('DEVSCOPE_DESKTOP_UPDATE_FEED_URL must use http or https.')
+    }
+    if (!parsed.pathname.endsWith('/')) {
+        parsed.pathname = `${parsed.pathname}/`
+    }
+    return parsed.toString()
+}
+
 async function configureAutoUpdaterFeed(autoUpdater: AutoUpdater): Promise<void> {
+    if (releaseFeedUrlOverride) {
+        const normalizedFeedUrl = normalizeGenericFeedUrl(releaseFeedUrlOverride)
+        const overrideFeedKey = `env:${normalizedFeedUrl}`
+        if (configuredFeedTagName !== overrideFeedKey) {
+            autoUpdater.setFeedURL({
+                provider: 'generic',
+                url: normalizedFeedUrl
+            })
+            configuredFeedTagName = overrideFeedKey
+            log.info(`[updater] using override update feed ${normalizedFeedUrl}`)
+        }
+
+        autoUpdater.previousBlockmapBaseUrlOverride = normalizedFeedUrl
+        if (updateState.releasePageUrl !== normalizedFeedUrl) {
+            updateState = {
+                ...updateState,
+                releasePageUrl: normalizedFeedUrl
+            }
+        }
+        return
+    }
+
     const allowPrerelease = resolveReleaseChannel(app.getVersion()) !== 'stable'
     const feed = await resolveGitHubReleaseFeed({
         repository: releaseRepository,
@@ -232,6 +297,8 @@ async function performUpdaterInitialization(): Promise<void> {
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false
     autoUpdater.allowPrerelease = resolveReleaseChannel(app.getVersion()) !== 'stable'
+    autoUpdater.allowDowngrade = false
+    autoUpdater.disableDifferentialDownload = true
 
     try {
         await configureAutoUpdaterFeed(autoUpdater)
@@ -254,16 +321,19 @@ async function performUpdaterInitialization(): Promise<void> {
     })
 
     autoUpdater.on('update-available', (info) => {
+        clearUpdateCheckTimeoutTimer()
         setUpdateState(reduceUpdateStateOnUpdateAvailable(updateState, info.version, nowIso()))
         log.info(`[updater] update available: ${info.version}`)
     })
 
     autoUpdater.on('update-not-available', () => {
+        clearUpdateCheckTimeoutTimer()
         setUpdateState(reduceUpdateStateOnNoUpdate(updateState, nowIso()))
         log.info('[updater] no updates available')
     })
 
     autoUpdater.on('error', (error) => {
+        clearUpdateCheckTimeoutTimer()
         const message = error instanceof Error ? error.message : String(error)
         if (!updateCheckInFlight && !updateDownloadInFlight) {
             setUpdateState({
@@ -315,7 +385,7 @@ export function initializeUpdater(): Promise<void> {
 export async function checkForAppUpdates(_reason: string = 'manual'): Promise<DevScopeUpdateActionResult> {
     await initializeUpdater()
 
-    if (!updaterConfigured || !autoUpdaterRef || updateCheckInFlight) {
+    if (!updaterConfigured || !autoUpdaterRef || updateCheckInFlight || updateState.status === 'checking') {
         if (!updaterConfigured || !autoUpdaterRef) {
             return rejectAction(getUpdaterUnavailableMessage())
         }
@@ -331,12 +401,14 @@ export async function checkForAppUpdates(_reason: string = 'manual'): Promise<De
 
     updateCheckInFlight = true
     setUpdateState(reduceUpdateStateOnCheckStart(updateState, nowIso()))
+    armUpdateCheckTimeout(_reason)
 
     try {
         await configureAutoUpdaterFeed(autoUpdaterRef)
         await autoUpdaterRef.checkForUpdates()
         return buildActionResult(true, true)
     } catch (error) {
+        clearUpdateCheckTimeoutTimer()
         const message = error instanceof Error ? error.message : String(error)
         setUpdateState(reduceUpdateStateOnCheckFailure(updateState, message, nowIso()))
         log.error('[updater] failed to check for updates', error)
@@ -370,6 +442,7 @@ export async function downloadAppUpdate(): Promise<DevScopeUpdateActionResult> {
 
     updateDownloadInFlight = true
     setUpdateState(reduceUpdateStateOnDownloadStart(updateState))
+    autoUpdaterRef.disableDifferentialDownload = true
 
     try {
         await autoUpdaterRef.downloadUpdate()
