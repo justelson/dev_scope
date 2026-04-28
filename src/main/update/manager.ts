@@ -43,6 +43,9 @@ const releaseFeedUrlOverride = process.env.DEVSCOPE_DESKTOP_UPDATE_FEED_URL?.tri
 const releasePageUrl = `https://github.com/${releaseRepository}/releases`
 
 type ElectronUpdaterModule = typeof import('electron-updater')
+type ElectronUpdaterModuleShape = ElectronUpdaterModule & {
+    default?: Partial<ElectronUpdaterModule>
+}
 type AutoUpdater = ElectronUpdaterModule['autoUpdater']
 
 let autoUpdaterRef: AutoUpdater | null = null
@@ -73,8 +76,13 @@ let updateState: DevScopeUpdateState = createInitialUpdateState(
 async function loadAutoUpdater(): Promise<AutoUpdater> {
     if (autoUpdaterRef) return autoUpdaterRef
     if (!autoUpdaterLoadPromise) {
-        autoUpdaterLoadPromise = import('electron-updater').then((module) => {
-            autoUpdaterRef = module.autoUpdater
+        autoUpdaterLoadPromise = import('electron-updater').then((rawModule) => {
+            const module = rawModule as ElectronUpdaterModuleShape
+            const autoUpdater = module.autoUpdater ?? module.default?.autoUpdater
+            if (!autoUpdater) {
+                throw new Error('electron-updater did not expose autoUpdater.')
+            }
+            autoUpdaterRef = autoUpdater
             return autoUpdaterRef
         })
     }
