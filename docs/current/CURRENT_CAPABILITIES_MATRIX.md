@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on April 28, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, safe clipboard attachment references, stable streaming command/file-change activity updates, MCP progress/fuzzy-search activity rows, compact path-aware preview links, installed package-runtime detection, Git clone/progress events, and the terminal-only `/tasks` redirect.
+Last validated against code on April 29, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, safe clipboard attachment references, stable streaming command/file-change activity updates, MCP progress/fuzzy-search activity rows, compact path-aware preview links, installed package-runtime detection, Git clone/progress events, release-note generation/local publishing helpers, update-success toast state, resilient updater loading, and the terminal-only `/tasks` redirect.
 
 ## Status Legend
 
@@ -100,8 +100,11 @@ Last validated against code on April 28, 2026. Current coverage includes assista
 
 - Current version and update state surface: `Implemented`
 - Check, download, and install update actions: `Implemented`
+- Update success toast after a newly installed packaged version is first seen by the renderer, with per-version local dismissal tracking: `Implemented`
 - GitHub Releases-based packaged update flow: `Implemented`
+- Dynamic `electron-updater` loading supports both named and default module shapes before wiring the shared update state machine: `Implemented`
 - Versioned release output organization under `dist/releases` and `dist/unpacked`: `Implemented`
+- Generated GitHub release notes and local release publishing from the current package version/tag with required asset verification: `Implemented`
 
 ## Separate Repo Packages and Archived Material
 

@@ -4,7 +4,7 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
-Snapshot alignment: April 28, 2026 current-state pass.
+Snapshot alignment: April 29, 2026 current-state pass.
 
 ## Core References
 
@@ -44,6 +44,7 @@ Snapshot alignment: April 28, 2026 current-state pass.
 - File preview now includes the IDE-style full-screen shell, HTML preview loading through the app file protocol, compact file-link chips, line-focused markdown/file-reference navigation, sibling media navigation, streamlined header/edit actions, Python run-mode controls, and an overlay terminal panel.
 - Folder/project browsing emphasizes compact headers, root-relative paths, indexed deep search, folder-level repository cloning with streamed progress, and project Git summaries that show actual addition/deletion counts where available.
 - Git surfaces include status/diff/history stats, pull/push refresh flows, current-branch PR lookup, and one-click commit/push/create-or-open PR actions backed by shared contracts.
+- Desktop update and release flows now cover the `1.6.5-beta.1` package line, resilient `electron-updater` loading, update-success toast state, generated release-note bodies, and local GitHub release publishing from versioned assets.
 - Settings include installed package-runtime detection for project scripts, official runtime icons, imported dark theme presets, assistant pricing/service-tier display, live tool-output defaults, no-lab Playground terminal defaults, and the current assistant defaults/behavior surfaces.
 
 ## Task-Specific Skills

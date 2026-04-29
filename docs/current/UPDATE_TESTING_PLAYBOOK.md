@@ -1,6 +1,6 @@
 # Update Testing Playbook
 
-Last updated: March 9, 2026
+Last updated: April 29, 2026
 
 Use this flow to validate updater and release behavior without spamming real releases.
 
@@ -76,6 +76,8 @@ Updater behavior to verify in packaged tests:
 - stable builds resolve the newest stable GitHub release feed
 - prerelease builds resolve the newest prerelease-capable GitHub release feed
 - the resolved release still contains `latest.yml`, the installer `.exe`, and the installer `.blockmap`
+- dynamic `electron-updater` import exposes `autoUpdater` in the packaged runtime
+- first launch after installing a newer packaged version shows one update-success toast, then stores that version as seen
 
 ### 4. Real Release
 
@@ -91,4 +93,5 @@ Only release from `main` after:
 - local packaged app: Windows branding correct
 - updater fallback link works
 - updater check/download/install logic tested on a packaged build
+- generated release notes match the tag compare range used in the GitHub release body
 - real release only after those pass

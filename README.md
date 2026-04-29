@@ -55,7 +55,7 @@ Current package version:
 | **Git Productivity** | View status, diffs, history, branches, remotes, stashes, tags, commits, push state, and repository setup actions. |
 | **Assistant Workflows** | Run assistant sessions with approvals, user input, attachments, Playground labs, no-lab terminal access, auto-generated chat titles, and project-aware context. |
 | **Terminal Workspace** | Manage live terminal sessions and preview-terminal runs from the dedicated terminals surface; the legacy `/tasks` route now redirects there. |
-| **Desktop Updates** | Check, download, and install release updates through the built-in updater flow. |
+| **Desktop Updates** | Check, download, and install release updates through the built-in updater flow, with GitHub release feeds, generated release notes, and install-success state. |
 | **Settings Surface** | Configure appearance, behavior, package runtimes, projects, assistant defaults, Git, terminal preferences, logs, and app metadata. |
 
 ## Capability Map
@@ -150,6 +150,7 @@ bun run build:win
 Packaged installers and update metadata are written to `dist/releases/v<package-version>/`.
 Unpacked desktop bundles are written to `dist/unpacked/v<package-version>/win-unpacked/`.
 Use `bun run dist:organize` to move older flat `dist` artifacts into that versioned layout.
+Use `bun run release:notes` to generate the GitHub release body for the current package version.
 
 ## Project Structure
 

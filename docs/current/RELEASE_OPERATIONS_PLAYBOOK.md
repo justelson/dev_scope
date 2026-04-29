@@ -1,6 +1,6 @@
 # Release Operations Playbook
 
-Last updated: March 18, 2026
+Last updated: April 29, 2026
 
 This document explains how DevScope desktop releases should be prepared, verified, recovered, and organized.
 
@@ -39,8 +39,8 @@ GitHub release names must follow the human-facing title format derived from the 
 
 Examples:
 
-- `DevScope Air 1.5.1-alpha.5`
-- `DevScope Air 1.5.1`
+- `DevScope Air v1.6.5 beta`
+- `DevScope Air v1.5.1`
 
 ## Expected Windows Release Assets
 
@@ -82,11 +82,13 @@ Current packaging scripts:
 - `npm run dist:organize`
   - moves older flat `dist` artifacts into the versioned layout when possible
 - `npm run release:notes`
-  - prints the GitHub release changelog generated from the previous release tag to the upcoming package version tag
+  - prints the GitHub release changelog generated from the previous merged release tag to the upcoming package version tag
+  - groups commits into fixes, updates/release, UI/workflow, docs, and maintenance sections
 - `npm run release:publish:local`
   - local-only GitHub release publisher
   - requires a clean `main` branch checkout, a local tag `v<package-version>`, and release assets already built in `dist/releases/v<package-version>/`
   - pushes `main` and the version tag, creates or updates the GitHub release directly with the generated changelog body, and uploads `.exe`, `.blockmap`, and `latest.yml` without relying on GitHub Actions
+  - deletes and replaces conflicting release assets, then verifies the required uploaded assets are present
 
 ## Release Verification Checklist
 
