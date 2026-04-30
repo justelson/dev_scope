@@ -151,6 +151,7 @@ Packaged installers and update metadata are written to `dist/releases/v<package-
 Unpacked desktop bundles are written to `dist/unpacked/v<package-version>/win-unpacked/`.
 Use `bun run dist:organize` to move older flat `dist` artifacts into that versioned layout.
 Use `bun run release:notes` to generate the GitHub release body for the current package version.
+Use `bun run update:serve-feed -- --dir dist/releases/v<package-version>` to serve a local packaged update feed for updater smoke tests.
 
 ## Project Structure
 

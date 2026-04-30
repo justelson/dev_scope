@@ -1,6 +1,6 @@
 # Current Codebase Architecture
 
-Last validated against code on April 29, 2026.
+Last validated against code on April 30, 2026.
 
 ## Runtime Layers
 
@@ -98,6 +98,8 @@ The intended architecture direction remains contract-first: define shared contra
 - Assistant streaming batches text deltas before projection and broadcast, coalesces renderer event application behind a short delta-flush window plus animation-frame delivery for non-delta events, collapses repeated activity updates by stable activity ID, batches main-to-renderer assistant event IPC, merges command/file-change output deltas into stable tool activities, keeps hot persistence writes off the immediate UI interaction path, applies session and thread selection locally in the renderer before requesting uncached thread hydration as a background refresh, preserves hydrated renderer thread bodies when focused snapshots summarize inactive chats for warm switching, avoids deep-cloning hydrated thread history on every renderer store update, splits renderer subscriptions so the assistant page shell, conversation pane, and right-side panels do not all rerender on live timeline churn, relies on a sliding tail history window plus bounded source-window entry construction and per-row deferred rendering to keep long conversations responsive while still allowing explicit older-history expansion, uses a Pretext-backed text measurement pipeline for assistant row-height estimation and user-message collapse decisions, virtualizes large markdown file previews by parsed block instead of mounting the entire document body at once, conditionally skips raw-HTML markdown parsing unless a message actually contains HTML-like tags, persists per-turn usage in a dedicated `assistant_turns` ledger that the thread-details panel fetches on demand instead of inflating the hot assistant snapshot, rehydrates the selected thread plus hot running and waiting threads on restore, suppresses setup-turn assistant text when a guided Playground answer reruns the original prompt, and in the dev runtime resets incompatible assistant persistence versions instead of carrying stale schema forward.
 
 The current assistant event path also now recognizes turn-diff updates, live command/file-change output deltas, fuzzy file-search result activity, and stable item IDs for long-running tool cards so the renderer can keep those streams pinned to the correct history row.
+
+April 30 verification note: current route, IPC, assistant, file-preview, Git, and update boundaries still match the April 29 architecture snapshot. The only newly rechecked release/update helper surface is the local update-feed server script, which serves a versioned `dist/releases/v<package-version>/` folder and validates `latest.yml`, installer, and installer blockmap assets before starting.
 
 ## Current Boundary Rules
 

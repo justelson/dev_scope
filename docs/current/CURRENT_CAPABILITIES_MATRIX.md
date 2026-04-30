@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on April 29, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, safe clipboard attachment references, stable streaming command/file-change activity updates, MCP progress/fuzzy-search activity rows, compact path-aware preview links, installed package-runtime detection, Git clone/progress events, release-note generation/local publishing helpers, update-success toast state, resilient updater loading, and the terminal-only `/tasks` redirect.
+Last validated against code on April 30, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, safe clipboard attachment references, stable streaming command/file-change activity updates, MCP progress/fuzzy-search activity rows, compact path-aware preview links, installed package-runtime detection, Git clone/progress events, release-note generation/local publishing helpers, local update-feed testing, update-success toast state, resilient updater loading, and the terminal-only `/tasks` redirect.
 
 ## Status Legend
 
@@ -105,6 +105,7 @@ Last validated against code on April 29, 2026. Current coverage includes assista
 - Dynamic `electron-updater` loading supports both named and default module shapes before wiring the shared update state machine: `Implemented`
 - Versioned release output organization under `dist/releases` and `dist/unpacked`: `Implemented`
 - Generated GitHub release notes and local release publishing from the current package version/tag with required asset verification: `Implemented`
+- Local update-feed serving from `dist/releases/v<package-version>/`, with required asset validation before serving `latest.yml` and installer assets to packaged test builds: `Implemented`
 
 ## Separate Repo Packages and Archived Material
 
@@ -126,3 +127,8 @@ For exact operation signatures and current surface area, use:
 - `src/shared/assistant/contracts/*`
 - `src/main/ipc/handlers.ts`
 - `src/renderer/src/App.tsx`
+
+## April 30 Current-State Additions
+
+- Revalidated: no additional desktop runtime surface changes landed after the April 29 release/update docs sync.
+- Implemented: `npm run update:serve-feed` can serve a local packaged update feed from `dist/releases/v<package-version>/` after checking for `latest.yml`, the installer `.exe`, and the installer `.exe.blockmap`.

@@ -1,6 +1,6 @@
 # Update Testing Playbook
 
-Last updated: April 29, 2026
+Last updated: April 30, 2026
 
 Use this flow to validate updater and release behavior without spamming real releases.
 
@@ -70,6 +70,8 @@ For local feed testing:
 4. Use the app update UI to check, download, and install.
 
 Keep the feed server running until the packaged app finishes downloading.
+
+The feed server validates the directory before it listens, so a missing `latest.yml`, installer `.exe`, or installer `.exe.blockmap` should be fixed in the build output before retrying the updater smoke.
 
 Updater behavior to verify in packaged tests:
 

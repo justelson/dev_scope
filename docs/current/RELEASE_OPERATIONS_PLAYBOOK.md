@@ -1,6 +1,6 @@
 # Release Operations Playbook
 
-Last updated: April 29, 2026
+Last updated: April 30, 2026
 
 This document explains how DevScope desktop releases should be prepared, verified, recovered, and organized.
 
@@ -89,6 +89,11 @@ Current packaging scripts:
   - requires a clean `main` branch checkout, a local tag `v<package-version>`, and release assets already built in `dist/releases/v<package-version>/`
   - pushes `main` and the version tag, creates or updates the GitHub release directly with the generated changelog body, and uploads `.exe`, `.blockmap`, and `latest.yml` without relying on GitHub Actions
   - deletes and replaces conflicting release assets, then verifies the required uploaded assets are present
+- `npm run update:serve-feed`
+  - local-only packaged-update feed server
+  - defaults to `dist/releases/v<package-version>/`
+  - accepts `--dir`, `--host`, and `--port`
+  - refuses to start unless the feed directory contains `latest.yml`, an installer `.exe`, and an installer `.exe.blockmap`
 
 ## Release Verification Checklist
 
@@ -142,6 +147,16 @@ The local publisher script can be used as the preferred recovery path when GitHu
 3. ensure `v<package-version>` exists locally
 4. run `npm run release:publish:local`
 5. verify the GitHub release object, title, and all required assets
+
+## Local Update Feed Testing
+
+Use the local feed only for packaged updater validation, not as a release substitute.
+
+1. Build or keep release artifacts under `dist/releases/v<package-version>/`.
+2. Start the feed with `npm run update:serve-feed -- --dir dist/releases/v<package-version>`.
+3. Launch an older packaged build with `DEVSCOPE_DESKTOP_UPDATE_FEED_URL` pointed at the feed URL.
+4. Run the app's check/download/install path.
+5. Keep the feed process alive until the packaged app finishes downloading.
 
 ## Local Lock / Cleanup Rules
 
