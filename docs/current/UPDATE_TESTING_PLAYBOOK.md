@@ -1,6 +1,6 @@
 # Update Testing Playbook
 
-Last updated: April 30, 2026
+Last updated: May 1, 2026
 
 Use this flow to validate updater and release behavior without spamming real releases.
 
@@ -97,3 +97,7 @@ Only release from `main` after:
 - updater check/download/install logic tested on a packaged build
 - generated release notes match the tag compare range used in the GitHub release body
 - real release only after those pass
+
+## May 1 Verification Note
+
+No updater behavior changed after the April 30 docs pass. The current packaged-update smoke path remains the local feed from `dist/releases/v<version>/`, with required validation for `latest.yml`, the installer `.exe`, and the installer `.exe.blockmap` before serving.
