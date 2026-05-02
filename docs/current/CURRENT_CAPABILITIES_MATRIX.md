@@ -1,6 +1,6 @@
 # Current Capabilities Matrix
 
-Last validated against code on May 1, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, safe clipboard attachment references, stable streaming command/file-change activity updates, MCP progress/fuzzy-search activity rows, compact path-aware preview links, installed package-runtime detection, Git clone/progress events, release-note generation/local publishing helpers, local update-feed testing, update-success toast state, resilient updater loading, and the terminal-only `/tasks` redirect.
+Last validated against code on May 2, 2026. Current coverage includes assistant session hydration, session title generation, connection recovery, guided lab setup, no-lab terminal access, queue reordering and preview flags, safe clipboard attachment references, stable streaming command/file-change activity updates, MCP progress/fuzzy-search activity rows, compact path-aware preview links, installed package-runtime detection, Git clone/progress events, release-note generation/local publishing helpers, local update-feed testing, update-success toast state, resilient updater loading, and the terminal-only `/tasks` redirect.
 
 ## Status Legend
 
@@ -128,7 +128,7 @@ For exact operation signatures and current surface area, use:
 - `src/main/ipc/handlers.ts`
 - `src/renderer/src/App.tsx`
 
-## May 1 Current-State Additions
+## May 2 Current-State Additions
 
-- Revalidated: no additional desktop runtime surface changes landed after the April 30 docs sync.
+- Revalidated: no additional desktop runtime surface changes landed after the May 1 docs sync.
 - Current release/update testing still includes `npm run update:serve-feed`, which can serve a local packaged update feed from `dist/releases/v<package-version>/` after checking for `latest.yml`, the installer `.exe`, and the installer `.exe.blockmap`.

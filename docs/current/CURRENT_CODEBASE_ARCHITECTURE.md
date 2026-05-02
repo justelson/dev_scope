@@ -1,6 +1,6 @@
 # Current Codebase Architecture
 
-Last validated against code on May 1, 2026.
+Last validated against code on May 2, 2026.
 
 ## Runtime Layers
 
@@ -99,7 +99,7 @@ The intended architecture direction remains contract-first: define shared contra
 
 The current assistant event path also now recognizes turn-diff updates, live command/file-change output deltas, fuzzy file-search result activity, and stable item IDs for long-running tool cards so the renderer can keep those streams pinned to the correct history row.
 
-May 1 verification note: current route, IPC, assistant, file-preview, Git, and update boundaries still match the April 30 architecture snapshot. The release/update helper surface remains centered on versioned `dist/releases/v<package-version>/` output, generated release notes, local release publishing, resilient updater loading, and a local update-feed server that validates `latest.yml`, installer, and installer blockmap assets before starting.
+May 2 verification note: current route, IPC, assistant, file-preview, Git, and update boundaries still match the May 1 architecture snapshot. No newer runtime/app commits landed after the previous docs sync. The release/update helper surface remains centered on versioned `dist/releases/v<package-version>/` output, generated release notes, local release publishing, resilient updater loading, and a local update-feed server that validates `latest.yml`, installer, and installer blockmap assets before starting.
 
 ## Current Boundary Rules
 

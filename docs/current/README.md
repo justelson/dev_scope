@@ -4,7 +4,7 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
-Snapshot alignment: May 1, 2026 current-state pass.
+Snapshot alignment: May 2, 2026 current-state pass.
 
 ## Core References
 
@@ -47,7 +47,7 @@ Snapshot alignment: May 1, 2026 current-state pass.
 - Desktop update and release flows now cover the `1.6.5-beta.1` package line, resilient `electron-updater` loading, update-success toast state, generated release-note bodies, and local GitHub release publishing from versioned assets.
 - Settings include installed package-runtime detection for project scripts, official runtime icons, imported dark theme presets, assistant pricing/service-tier display, live tool-output defaults, no-lab Playground terminal defaults, and the current assistant defaults/behavior surfaces.
 
-May 1 verification note: no additional desktop runtime surface changes landed after the April 30 docs pass. The current app state remains the `1.6.5-beta.1` release/update line with generated release notes, local release publishing, local update-feed testing, resilient updater loading, and one-time update-success toast state.
+May 2 verification note: no additional desktop runtime surface changes landed after the May 1 docs pass. The current app state remains the `1.6.5-beta.1` release/update line with generated release notes, local release publishing, local update-feed testing, resilient updater loading, and one-time update-success toast state.
 
 ## Task-Specific Skills
 
