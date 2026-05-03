@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { FileCode2, Loader2, X } from 'lucide-react'
-import { FilePreviewModal, useFilePreview } from '@/components/ui/FilePreviewModal'
+import { useFilePreview } from '@/components/ui/file-preview/useFilePreview'
 import QuickPreviewTitleBar from './QuickPreviewTitleBar'
+
+const FilePreviewModal = lazy(() => import('@/components/ui/FilePreviewModal'))
 
 function parseFilePathFromSearch(search: string): string | null {
     const params = new URLSearchParams(search)
@@ -60,23 +62,10 @@ export default function QuickOpen() {
         window.devscope.window.close()
     }
 
-    const quickPreviewName = useMemo(() => {
-        if (previewFile?.name) return previewFile.name
-        if (!filePath) return 'Quick Preview'
-        return splitFileNameAndExtension(filePath).fileName
-    }, [filePath, previewFile?.name])
-    const quickPreviewExtension = useMemo(() => {
-        if (previewFile?.name) {
-            return splitFileNameAndExtension(previewFile.name).extension
-        }
-        if (!filePath) return ''
-        return splitFileNameAndExtension(filePath).extension
-    }, [filePath, previewFile?.name])
-
     if (!filePath) {
         return (
             <div className="flex h-screen flex-col overflow-hidden bg-sparkle-bg text-sparkle-text">
-                <QuickPreviewTitleBar fileName="Quick Preview" filePath="" extension="" />
+                <QuickPreviewTitleBar />
                 <div className="flex flex-1 items-center justify-center p-6">
                     <div className="max-w-xl w-full rounded-2xl border border-white/10 bg-black/20 p-6">
                         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -92,7 +81,7 @@ export default function QuickOpen() {
 
     return (
         <div className="flex h-screen flex-col overflow-hidden bg-sparkle-bg text-sparkle-text">
-            <QuickPreviewTitleBar fileName={quickPreviewName} filePath={filePath} extension={quickPreviewExtension} />
+            <QuickPreviewTitleBar />
             {loadingPreview && !previewFile && (
                 <div className="flex flex-1 items-center justify-center">
                     <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-4 py-2 text-sm text-white/80">
@@ -122,19 +111,31 @@ export default function QuickOpen() {
             )}
 
             {previewFile && (
-                <FilePreviewModal
-                    file={previewFile}
-                    content={previewContent}
-                    loading={loadingPreview}
-                    truncated={previewTruncated}
-                    size={previewSize}
-                    previewBytes={previewBytes}
-                    modifiedAt={previewModifiedAt}
-                    projectPath={undefined}
-                    shellMode="window"
-                    onOpenLinkedPreview={openPreview}
-                    onClose={closeWindow}
-                />
+                <Suspense
+                    fallback={
+                        <div className="flex flex-1 items-center justify-center">
+                            <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-4 py-2 text-sm text-white/80">
+                                <Loader2 size={14} className="animate-spin text-[var(--accent-primary)]" />
+                                Loading preview...
+                            </div>
+                        </div>
+                    }
+                >
+                    <FilePreviewModal
+                        file={previewFile}
+                        content={previewContent}
+                        loading={loadingPreview}
+                        truncated={previewTruncated}
+                        size={previewSize}
+                        previewBytes={previewBytes}
+                        modifiedAt={previewModifiedAt}
+                        projectPath={undefined}
+                        shellMode="window"
+                        disableFullscreen
+                        onOpenLinkedPreview={openPreview}
+                        onClose={closeWindow}
+                    />
+                </Suspense>
             )}
         </div>
     )

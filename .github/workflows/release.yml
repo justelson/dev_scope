@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -39,12 +41,25 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
-          echo "release_name=DevScope Air ${VERSION}" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-([A-Za-z]+)\.[0-9]+)?$ ]]; then
+            DISPLAY_VERSION="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+            CHANNEL="$(echo "${BASH_REMATCH[5]}" | tr '[:upper:]' '[:lower:]')"
+            if [[ -n "$CHANNEL" ]]; then
+              echo "release_name=DevScope Air ${DISPLAY_VERSION} ${CHANNEL}" >> "$GITHUB_OUTPUT"
+            else
+              echo "release_name=DevScope Air ${DISPLAY_VERSION}" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "release_name=DevScope Air ${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
           if [[ "$TAG" == *"-alpha."* || "$TAG" == *"-beta."* ]]; then
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Generate release notes
+        run: node scripts/maint/generate-release-notes.mjs > release-notes.md
 
       - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v2
@@ -52,7 +67,8 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ steps.release_meta.outputs.release_name }}
           prerelease: ${{ steps.release_meta.outputs.prerelease }}
-          generate_release_notes: true
+          body_path: release-notes.md
+          generate_release_notes: false
           files: |
             dist/releases/**/*.exe
             dist/releases/**/*.yml

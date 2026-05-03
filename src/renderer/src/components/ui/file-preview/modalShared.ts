@@ -41,7 +41,12 @@ export const TERMINAL_PANEL_ANIMATION_MS = 220
 
 export function countLines(value: string): number {
     if (!value) return 0
-    return value.split(/\r?\n/).length
+
+    let count = 1
+    for (let index = 0; index < value.length; index += 1) {
+        if (value.charCodeAt(index) === 10) count += 1
+    }
+    return count
 }
 
 export function createPythonPreviewSessionId(): string {
