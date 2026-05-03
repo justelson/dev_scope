@@ -20,6 +20,21 @@ interface TextPreviewContentProps {
     isExpanded?: boolean
 }
 
+function exceedsLineLimit(value: string, limit: number): boolean {
+    if (!value || limit <= 0) return false
+
+    let lineCount = 1
+    for (let index = 0; index < value.length; index += 1) {
+        const charCode = value.charCodeAt(index)
+        if (charCode !== 10) continue
+
+        lineCount += 1
+        if (lineCount > limit) return true
+    }
+
+    return false
+}
+
 function TextPreviewContent({
     file,
     content,
@@ -33,8 +48,7 @@ function TextPreviewContent({
 }: TextPreviewContentProps) {
     const isMarkdown = file.type === 'md'
     const isLargeTextPreview = useMemo(() => {
-        const lineCount = content.split(/\r?\n/).length
-        return content.length > HIGHLIGHT_MAX_CHARS || lineCount > HIGHLIGHT_MAX_LINES
+        return content.length > HIGHLIGHT_MAX_CHARS || exceedsLineLimit(content, HIGHLIGHT_MAX_LINES)
     }, [content])
 
     const [jsonState, setJsonState] = useState<{

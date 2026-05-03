@@ -12,6 +12,8 @@ import type { PreviewFile } from './types'
 export function useFilePreviewModalAnalysis(input: {
     file: PreviewFile
     mode: 'preview' | 'edit'
+    isExpanded: boolean
+    rightPanelOpen: boolean
     viewport: 'responsive' | string
     presetWidth: number
     sourceContent: string
@@ -23,6 +25,8 @@ export function useFilePreviewModalAnalysis(input: {
     const {
         file,
         mode,
+        isExpanded,
+        rightPanelOpen,
         viewport,
         presetWidth,
         sourceContent,
@@ -33,10 +37,11 @@ export function useFilePreviewModalAnalysis(input: {
     } = input
 
     const activeContent = mode === 'edit' ? draftContent : sourceContent
-    const totalFileLines = countLines(activeContent)
     const isHtml = file.type === 'html'
     const isCompactHtmlViewport = isHtml && viewport !== 'responsive' && presetWidth <= 768
     const isHtmlRenderedPreview = isHtml && mode === 'preview'
+    const shouldBuildOutline = isExpanded && (file.type === 'md' || file.type === 'text' || file.type === 'code' || file.type === 'html')
+    const shouldBuildInspectorStats = isExpanded && rightPanelOpen
     const previewResetKey = isMediaPreviewType(file.type)
         ? `media:${viewport}:${mode}`
         : `${file.path}:${file.type}:${viewport}:${mode}`
@@ -46,19 +51,28 @@ export function useFilePreviewModalAnalysis(input: {
         return buildLocalDiffPreview(sourceContent, draftContent)
     }, [draftContent, isDirty, mode, sourceContent])
 
+    const totalFileLines = useMemo(
+        () => shouldBuildInspectorStats ? countLines(activeContent) : 0,
+        [activeContent, shouldBuildInspectorStats]
+    )
     const outlineItems = useMemo(
-        () => extractOutlineItems(activeContent, file.type),
-        [activeContent, file.type]
+        () => shouldBuildOutline ? extractOutlineItems(activeContent, file.type) : [],
+        [activeContent, file.type, shouldBuildOutline]
     )
     const longLineCount = useMemo(
-        () => activeContent.split(/\r?\n/).filter((line) => line.length > 120).length,
-        [activeContent]
+        () => shouldBuildInspectorStats
+            ? activeContent.split(/\r?\n/).filter((line) => line.length > 120).length
+            : 0,
+        [activeContent, shouldBuildInspectorStats]
     )
     const trailingWhitespaceCount = useMemo(
-        () => activeContent.split(/\r?\n/).filter((line) => /[ \t]+$/.test(line)).length,
-        [activeContent]
+        () => shouldBuildInspectorStats
+            ? activeContent.split(/\r?\n/).filter((line) => /[ \t]+$/.test(line)).length
+            : 0,
+        [activeContent, shouldBuildInspectorStats]
     )
     const jsonDiagnostic = useMemo(() => {
+        if (!shouldBuildInspectorStats) return null
         if (file.type !== 'json') return null
         try {
             JSON.parse(activeContent)
@@ -66,7 +80,7 @@ export function useFilePreviewModalAnalysis(input: {
         } catch (error: any) {
             return { ok: false, message: error?.message || 'Invalid JSON syntax' }
         }
-    }, [activeContent, file.type])
+    }, [activeContent, file.type, shouldBuildInspectorStats])
 
     const isEditorToolsEnabled = mode === 'edit'
     const getEditorToolButtonClass = useCallback((isActive = false) => cn(

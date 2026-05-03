@@ -322,6 +322,8 @@ export function FilePreviewModal({
     } = useFilePreviewModalAnalysis({
         file,
         mode,
+        isExpanded: effectiveIsExpanded,
+        rightPanelOpen,
         viewport,
         presetWidth: presetConfig.width,
         sourceContent,
