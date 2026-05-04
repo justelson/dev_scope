@@ -4,7 +4,7 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
-Snapshot alignment: May 2, 2026 current-state pass.
+Snapshot alignment: May 4, 2026 current-state pass.
 
 ## Core References
 
@@ -41,13 +41,13 @@ Snapshot alignment: May 2, 2026 current-state pass.
 
 - Assistant session hydration, deletion fallback, connection recovery, streaming tool cards, stable raw-response activity IDs, MCP progress, fuzzy file-search activity, turn-diff updates, live command/file-change output deltas, and safe clipboard attachment references are part of the live runtime.
 - Playground chats can start detached from a lab, then use per-chat terminal access or escalate into terminal-access/lab-setup guided turns only when the prompt actually needs command or workspace access.
-- File preview now includes the IDE-style full-screen shell, HTML preview loading through the app file protocol, compact file-link chips, line-focused markdown/file-reference navigation, sibling media navigation, streamlined header/edit actions, Python run-mode controls, and an overlay terminal panel.
+- File preview now includes the IDE-style full-screen shell, HTML preview loading through the app file protocol, compact file-link chips, line-focused markdown/file-reference navigation, sibling media navigation, streamlined header/edit actions, Python run-mode controls, an overlay terminal panel, and a lighter quick-preview window for shell/file-association launches.
 - Folder/project browsing emphasizes compact headers, root-relative paths, indexed deep search, folder-level repository cloning with streamed progress, and project Git summaries that show actual addition/deletion counts where available.
 - Git surfaces include status/diff/history stats, pull/push refresh flows, current-branch PR lookup, and one-click commit/push/create-or-open PR actions backed by shared contracts.
-- Desktop update and release flows now cover the `1.6.5-beta.1` package line, resilient `electron-updater` loading, update-success toast state, generated release-note bodies, and local GitHub release publishing from versioned assets.
+- Desktop update and release flows now cover the `1.6.6-beta.1` package line, resilient `electron-updater` loading, update-success toast state, generated release-note bodies, GitHub Actions release names derived from SemVer display labels, and local GitHub release publishing from versioned assets.
 - Settings include installed package-runtime detection for project scripts, official runtime icons, imported dark theme presets, assistant pricing/service-tier display, live tool-output defaults, no-lab Playground terminal defaults, and the current assistant defaults/behavior surfaces.
 
-May 2 verification note: no additional desktop runtime surface changes landed after the May 1 docs pass. The current app state remains the `1.6.5-beta.1` release/update line with generated release notes, local release publishing, local update-feed testing, resilient updater loading, and one-time update-success toast state.
+May 4 verification note: current app state includes the `1.6.6-beta.1` release line, generated GitHub release notes in the release workflow, simplified quick-preview title chrome, lazy-loaded quick-preview modal content, fullscreen disabled inside the dedicated quick-preview window, and file-preview analysis work gated to expanded/visible inspector states.
 
 ## Task-Specific Skills
 

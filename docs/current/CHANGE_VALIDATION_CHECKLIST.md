@@ -1,6 +1,6 @@
 # Change Validation Checklist
 
-Last updated: April 28, 2026
+Last updated: May 4, 2026
 
 Use this checklist for PRs/patches in the current DevScope desktop codebase.
 
@@ -38,6 +38,7 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 - Verify compatibility redirects still resolve cleanly instead of throwing renderer errors.
 - Verify no-lab Playground terminal-access prompts show the dedicated modal, honor the per-chat/default setting, and reconnect the runtime when cwd mode changes.
 - Verify file-preview header controls remain compact at narrow widths, including edit/save menus, Python run-mode controls, and close-button hit area.
+- Verify quick-preview shell/file-association windows keep the minimal title bar, lazy-load the preview body, and do not expose fullscreen controls inside the dedicated preview window.
 - Verify sibling media navigation works without breaking image/media fit and zoom controls.
 - Verify package-runtime settings show installed/uninstalled state for Node.js, npm, pnpm, Yarn, and Bun after refresh.
 - Verify folder-browse repository clone shows progress, success, and error states without freezing the browser.

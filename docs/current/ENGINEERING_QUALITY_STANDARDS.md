@@ -1,6 +1,6 @@
 # Engineering Quality Standards
 
-Last updated: April 28, 2026
+Last updated: May 4, 2026
 
 This document defines engineering quality expectations for the current DevScope desktop codebase.
 
@@ -61,6 +61,7 @@ This document defines engineering quality expectations for the current DevScope 
 - Prefer cache + in-flight dedupe over repeated expensive calls.
 - Keep startup work deferred/background where possible.
 - Avoid repeated indexing/scans from UI interactions when index exists.
+- Avoid whole-file split/allocation work in preview hot paths when direct scanning or gated analysis is enough.
 - Preserve stable activity IDs for streamed assistant tool work so command output, file-change output, MCP progress, raw response completions, and fuzzy-search updates merge instead of remounting rows.
 - Chunk expensive Git status/stat reads and cancel stale renderer requests when project path, branch, or selection changes.
 
