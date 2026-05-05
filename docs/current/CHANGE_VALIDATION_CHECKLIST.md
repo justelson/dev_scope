@@ -1,6 +1,6 @@
 # Change Validation Checklist
 
-Last updated: May 4, 2026
+Last updated: May 5, 2026
 
 Use this checklist for PRs/patches in the current DevScope desktop codebase.
 
@@ -78,3 +78,4 @@ bun run build
 - Update `docs/current/*` for behavior/architecture changes.
 - If replacing older guidance, move it into the archive flow documented under `docs/archive/`.
 - Keep the live docs tree limited to current guidance plus supporting reference docs.
+- For docs-refresh automation with no app commits since the prior snapshot, record the verification date and the lack of behavior delta instead of inventing a new capability change.

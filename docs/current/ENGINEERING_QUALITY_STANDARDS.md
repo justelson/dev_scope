@@ -1,6 +1,6 @@
 # Engineering Quality Standards
 
-Last updated: May 4, 2026
+Last updated: May 5, 2026
 
 This document defines engineering quality expectations for the current DevScope desktop codebase.
 
@@ -82,3 +82,4 @@ A change is quality-complete when:
 3. No known regression in current capability matrix.
 4. Validation evidence is captured (see checklist document).
 5. Relevant docs in `docs/current/*` are updated.
+6. Documentation-only refreshes clearly separate verified unchanged app state from actual behavior changes.
