@@ -1,6 +1,6 @@
 # Desktop Release Versioning
 
-Last updated: May 5, 2026
+Last updated: May 6, 2026
 
 DevScope Air desktop releases use SemVer so Electron auto-updates can compare versions correctly.
 
@@ -70,4 +70,4 @@ The app formats prerelease versions for UI display using a simplified label:
 - Current package version: `1.6.6-beta.1`
 - Current tag format: `v1.6.6-beta.1`
 - Current human-facing release title: `DevScope Air v1.6.6 beta`
-- Current-state note: no desktop app commits landed on `dev` after the May 4 `1.6.6-beta.1` docs refresh.
+- Current-state note: no desktop app commits landed on `dev` after the May 5 docs refresh commit `65136bb`; the package line remains `1.6.6-beta.1`.

@@ -1,6 +1,6 @@
 # Current Codebase Architecture
 
-Last validated against code on May 5, 2026.
+Last validated against code on May 6, 2026.
 
 ## Runtime Layers
 
@@ -99,7 +99,7 @@ The intended architecture direction remains contract-first: define shared contra
 
 The current assistant event path also now recognizes turn-diff updates, live command/file-change output deltas, fuzzy file-search result activity, and stable item IDs for long-running tool cards so the renderer can keep those streams pinned to the correct history row.
 
-May 5 verification note: current route, IPC, assistant, file-preview, Git, and update boundaries still match the May 4 architecture snapshot. No desktop app commits landed on `dev` after `b9bab59`; the release/update helper surface remains on package version `1.6.6-beta.1`, GitHub Actions generates release bodies through `scripts/maint/generate-release-notes.mjs`, quick-preview chrome is intentionally minimal, and preview analysis work is gated behind expanded/visible inspector state to avoid unnecessary file-content scans.
+May 6 verification note: current route, IPC, assistant, file-preview, Git, and update boundaries still match the May 5 architecture snapshot. No desktop app commits landed on `dev` after `65136bb`; the release/update helper surface remains on package version `1.6.6-beta.1`, GitHub Actions generates release bodies through `scripts/maint/generate-release-notes.mjs`, quick-preview chrome is intentionally minimal, and preview analysis work is gated behind expanded/visible inspector state to avoid unnecessary file-content scans.
 
 ## Current Boundary Rules
 
