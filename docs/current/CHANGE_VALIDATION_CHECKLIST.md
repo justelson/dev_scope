@@ -1,6 +1,6 @@
 # Change Validation Checklist
 
-Last updated: May 6, 2026
+Last updated: May 9, 2026
 
 Use this checklist for PRs/patches in the current DevScope desktop codebase.
 

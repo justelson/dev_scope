@@ -1,6 +1,6 @@
 # Release Operations Playbook
 
-Last updated: May 6, 2026
+Last updated: May 9, 2026
 
 This document explains how DevScope desktop releases should be prepared, verified, recovered, and organized.
 
@@ -194,6 +194,6 @@ Update this playbook when:
 - updater asset requirements change
 - manual recovery process changes
 
-## May 6 Verification Note
+## May 9 Verification Note
 
-Release-operation behavior is unchanged since the May 5 refresh. The current package line remains `1.6.6-beta.1`, with versioned output under `dist/releases/v<package-version>/`, generated release notes, local GitHub release publishing, GitHub Actions release bodies generated from `scripts/maint/generate-release-notes.mjs`, and local packaged update-feed testing.
+Release-operation behavior is unchanged since the May 6 refresh. The current package line remains `1.6.6-beta.1`, with versioned output under `dist/releases/v<package-version>/`, generated release notes, local GitHub release publishing, GitHub Actions release bodies generated from `scripts/maint/generate-release-notes.mjs`, and local packaged update-feed testing.
