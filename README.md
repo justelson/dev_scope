@@ -152,7 +152,7 @@ Unpacked desktop bundles are written to `dist/unpacked/v<package-version>/win-un
 Use `bun run dist:organize` to move older flat `dist` artifacts into that versioned layout.
 Use `bun run release:notes` to generate the GitHub release body for the current package version.
 Use `bun run update:serve-feed -- --dir dist/releases/v<package-version>` to serve a local packaged update feed for updater smoke tests.
-Current documentation snapshot: May 12, 2026. The app remains on the `1.6.6-beta.1` release/update line, with no desktop app commits after the May 11 docs refresh (`bc3d0a3`) on `dev`.
+Current documentation snapshot: May 13, 2026. The app remains on the `1.6.6-beta.1` release/update line, with no desktop app commits after the May 12 docs refresh (`f694718`) on `dev`.
 
 ## Project Structure
 
