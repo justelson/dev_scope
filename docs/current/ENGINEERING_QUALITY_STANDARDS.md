@@ -1,6 +1,6 @@
 # Engineering Quality Standards
 
-Last updated: May 14, 2026
+Last updated: May 15, 2026
 
 This document defines engineering quality expectations for the current DevScope desktop codebase.
 

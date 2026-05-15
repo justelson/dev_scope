@@ -4,7 +4,7 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
-Snapshot alignment: May 14, 2026 current-state verification pass.
+Snapshot alignment: May 15, 2026 current-state verification pass.
 
 ## Core References
 
@@ -47,7 +47,7 @@ Snapshot alignment: May 14, 2026 current-state verification pass.
 - Desktop update and release flows now cover the `1.6.6-beta.1` package line, resilient `electron-updater` loading, update-success toast state, generated release-note bodies, GitHub Actions release names derived from SemVer display labels, and local GitHub release publishing from versioned assets.
 - Settings include installed package-runtime detection for project scripts, official runtime icons, imported dark theme presets, assistant pricing/service-tier display, live tool-output defaults, no-lab Playground terminal defaults, and the current assistant defaults/behavior surfaces.
 
-May 14 verification note: no desktop app commits landed on `dev` after the May 13 docs refresh (`918b6ef`). Current app state remains the `1.6.6-beta.1` release line with generated GitHub release notes, simplified quick-preview title chrome, lazy-loaded quick-preview modal content, fullscreen disabled inside the dedicated quick-preview window, and file-preview analysis work gated to expanded/visible inspector states.
+May 15 verification note: no desktop app commits landed on `dev` after the May 14 docs refresh (`e9c00d7`). Current app state remains the `1.6.6-beta.1` release line with generated GitHub release notes, simplified quick-preview title chrome, lazy-loaded quick-preview modal content, fullscreen disabled inside the dedicated quick-preview window, and file-preview analysis work gated to expanded/visible inspector states.
 
 ## Task-Specific Skills
 
