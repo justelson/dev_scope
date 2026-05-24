@@ -4,7 +4,7 @@ This folder is the active documentation set for the current DevScope Air codebas
 
 The source-of-truth runtime is the Windows Electron app at the repository root. The landing site in `apps/landing/devscope-web` is a separate package and should be documented as a separate client.
 
-Snapshot alignment: May 22, 2026 current-state verification pass.
+Snapshot alignment: May 24, 2026 current-state verification pass.
 
 ## Core References
 
@@ -45,9 +45,9 @@ Snapshot alignment: May 22, 2026 current-state verification pass.
 - Folder/project browsing emphasizes compact headers, root-relative paths, indexed deep search, folder-level repository cloning with streamed progress, and project Git summaries that show actual addition/deletion counts where available.
 - Git surfaces include status/diff/history stats, pull/push refresh flows, current-branch PR lookup, and one-click commit/push/create-or-open PR actions backed by shared contracts.
 - Desktop update and release flows now cover the `1.6.6-beta.1` package line, resilient `electron-updater` loading, update-success toast state, generated release-note bodies, GitHub Actions release names derived from SemVer display labels, and local GitHub release publishing from versioned assets.
-- Settings include installed package-runtime detection for project scripts, official runtime icons, imported dark theme presets, assistant pricing/service-tier display, live tool-output defaults, no-lab Playground terminal defaults, and the current assistant defaults/behavior surfaces.
+- Settings include installed package-runtime detection for project scripts, official runtime icons, imported dark theme presets, assistant pricing/service-tier display, live tool-output defaults, no-lab Playground terminal defaults, the current assistant defaults/behavior surfaces, and Windows startup settings that report the actual persisted login-item state. Development builds explicitly keep startup launch disabled and surface the reason in Behavior settings so Electron.exe is not registered as a Windows login item.
 
-May 22 verification note: no desktop app/runtime commits landed on `dev` after the May 21 docs refresh (`91217bc`). Current app state remains the `1.6.6-beta.1` release line with generated GitHub release notes, simplified quick-preview title chrome, lazy-loaded quick-preview modal content, fullscreen disabled inside the dedicated quick-preview window, and file-preview analysis work gated to expanded/visible inspector states.
+May 24 verification note: the desktop app now keeps startup/login-item settings contract-driven through `DevScopeStartupSettings`. Main-process settings IPC returns actual `openAtLogin`/`openAsHidden` state, while dev builds clear and disable startup launch with an explicit disabled reason. Current app state otherwise remains the `1.6.6-beta.1` release line with generated GitHub release notes, simplified quick-preview title chrome, lazy-loaded quick-preview modal content, fullscreen disabled inside the dedicated quick-preview window, and file-preview analysis work gated to expanded/visible inspector states.
 
 ## Task-Specific Skills
 

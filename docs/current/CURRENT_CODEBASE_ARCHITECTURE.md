@@ -1,6 +1,6 @@
 # Current Codebase Architecture
 
-Last validated against code on May 22, 2026.
+Last validated against code on May 24, 2026.
 
 ## Runtime Layers
 
@@ -38,7 +38,7 @@ Windows shell folder launches route into `/explorer/:folderPath` with a transien
 
 `src/main/ipc/handlers.ts` registers handlers for:
 
-- startup settings and AI provider utilities
+- startup settings and AI provider utilities, including contract-shaped Windows login-item reads/writes and dev-build startup disablement
 - installed package runtime detection for Node.js, npm, pnpm, Yarn, and Bun
 - assistant sessions, assistant event streaming, explicit session hydration, and Playground lab flows
 - session title generation, selected-session deletion fallback, assistant message/thread lifecycle, no-lab terminal-access request routing, and streaming tool-output activity merges
@@ -81,7 +81,7 @@ When the selected assistant session is deleted, the runtime now routes through a
 Two contract groups matter most:
 
 - `src/shared/contracts/devscope-api.ts`
-  General desktop API surface for projects, files, Git, updates, terminals, and settings.
+  General desktop API surface for projects, files, Git, updates, terminals, and settings, including `DevScopeStartupSettings` for Windows startup/login-item state.
 - `src/shared/assistant/contracts/*`
   Assistant IPC names, runtime/session types, and streamed read-model events.
 
@@ -90,7 +90,7 @@ The intended architecture direction remains contract-first: define shared contra
 ## Caching and Performance Shape
 
 - Project discovery, Git clone orchestration, and deep file/folder indexing are centralized in main-process services with cache/dedupe behavior; the persistent file index now backs command-palette file search, folder-browse search, and project file-tree search instead of rebuilding large recursive search structures in the renderer.
-- Package runtime detection is main-process owned through IPC, while renderer settings choose either auto lockfile detection or an installed explicit runtime for project script buttons. The behavior settings UI displays the installed Node.js, npm, pnpm, Yarn, and Bun state with official runtime icons and refreshable detection.
+- Package runtime detection is main-process owned through IPC, while renderer settings choose either auto lockfile detection or an installed explicit runtime for project script buttons. The behavior settings UI displays the installed Node.js, npm, pnpm, Yarn, and Bun state with official runtime icons and refreshable detection. Windows startup settings are also main-process owned: production writes use Electron login-item settings and return the persisted state, while development builds clear the login item, force startup off, and return a disabled reason for the renderer to display.
 - Renderer route state persists key navigation state in local storage and gates optional tabs through settings.
 - File preview and project details flows use narrower read operations to avoid unnecessary full reloads; the fullscreen preview sidebar now caches per-directory listings and expands folders one level at a time instead of pulling full subtrees on every toggle, line references can focus the preview editor, sibling media files can be browsed in-place, quick-preview file-association windows lazy-load the heavy preview module, and the project file tree now opens shallow by default while indexed search supplies filtered deep results without forcing a full recursive tree load on each search.
 - Git status stats are loaded through chunked, cancellable renderer requests so large working trees can show staged/unstaged addition and deletion counts without blocking the project details surface.
@@ -99,7 +99,7 @@ The intended architecture direction remains contract-first: define shared contra
 
 The current assistant event path also now recognizes turn-diff updates, live command/file-change output deltas, fuzzy file-search result activity, and stable item IDs for long-running tool cards so the renderer can keep those streams pinned to the correct history row.
 
-May 22 verification note: current route, IPC, assistant, file-preview, Git, and update boundaries still match the May 21 architecture snapshot. No desktop app/runtime commits landed on `dev` after `91217bc`; the release/update helper surface remains on package version `1.6.6-beta.1`, GitHub Actions generates release bodies through `scripts/maint/generate-release-notes.mjs`, quick-preview chrome is intentionally minimal, and preview analysis work is gated behind expanded/visible inspector state to avoid unnecessary file-content scans.
+May 24 verification note: current route, assistant, file-preview, Git, and update boundaries still match the May 22 architecture snapshot. The settings IPC contract changed for Windows startup behavior: `getStartupSettings` and `setStartupSettings` now return `{ settings }` with `openAtLogin`, `openAsHidden`, and optional `disabledReason`, keeping renderer Behavior settings aligned with the real Electron login-item state. The release/update helper surface remains on package version `1.6.6-beta.1`, GitHub Actions generates release bodies through `scripts/maint/generate-release-notes.mjs`, quick-preview chrome is intentionally minimal, and preview analysis work is gated behind expanded/visible inspector state to avoid unnecessary file-content scans.
 
 ## Current Boundary Rules
 

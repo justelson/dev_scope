@@ -1,6 +1,6 @@
 # Change Validation Checklist
 
-Last updated: May 22, 2026
+Last updated: May 24, 2026
 
 Use this checklist for PRs/patches in the current DevScope desktop codebase.
 
@@ -41,6 +41,7 @@ Use this checklist for PRs/patches in the current DevScope desktop codebase.
 - Verify quick-preview shell/file-association windows keep the minimal title bar, lazy-load the preview body, and do not expose fullscreen controls inside the dedicated preview window.
 - Verify sibling media navigation works without breaking image/media fit and zoom controls.
 - Verify package-runtime settings show installed/uninstalled state for Node.js, npm, pnpm, Yarn, and Bun after refresh.
+- Verify Behavior startup settings reflect the real `getStartupSettings`/`setStartupSettings` response shape, and in dev builds show the disabled reason while keeping both startup toggles off.
 - Verify folder-browse repository clone shows progress, success, and error states without freezing the browser.
 - Verify project Git pull/push/PR actions refresh status and reuse an existing current-branch PR when available.
 
