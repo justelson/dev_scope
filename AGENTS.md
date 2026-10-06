@@ -1,6 +1,8 @@
-# Agent Session Constraints
+# DevScope Agent Instructions
 
-These constraints were explicitly set by the user and should be treated as active defaults in this repo.
+DevScope Air is the active Windows Electron desktop app in this repository. It is a projects-first developer workspace with project discovery, file browsing, Git workflows, assistant sessions, terminal management, settings, and release/update flows.
+
+Treat this repo as a real desktop runtime, not a landing site or prototype. Protect assistant/runtime reliability, app-shell performance, and the Electron boundary split before cosmetic changes.
 
 ## Project Snapshot
 
@@ -8,6 +10,13 @@ These constraints were explicitly set by the user and should be treated as activ
 - The repository root is the desktop app and release target.
 - `apps/landing/devscope-web` is a separate landing site, not the desktop runtime.
 - This repo is still evolving. Strong maintainability refactors are encouraged when they reduce duplication or improve reliability.
+
+## Operating Contract
+
+- Trace source of truth before changing behavior: main/preload/shared/renderer boundary -> store/hook -> component -> rendered state.
+- Keep assistant/session work grounded in the Codex app-server integration and persisted assistant state, not only renderer presentation.
+- For project/file browsing, Git, assistant runtime, settings, updater, or terminal behavior, verify the real runtime path before calling the work done.
+- Prefer compact, durable desktop UI over marketing-style layout or decorative helper copy.
 
 ## Required Context Routing
 

@@ -68,6 +68,12 @@ export type DevScopeOk<T = Record<string, unknown>> = { success: true } & T
 export type DevScopeErr = { success: false; error: string }
 export type DevScopeResult<T = Record<string, unknown>> = DevScopeOk<T> | DevScopeErr
 
+export type DevScopeStartupSettings = {
+    openAtLogin: boolean
+    openAsHidden: boolean
+    disabledReason?: string
+}
+
 export type DevScopePreviewTerminalEvent = {
     sessionId: string
     type: 'started' | 'output' | 'exit' | 'error' | 'title'
@@ -228,8 +234,8 @@ export interface DevScopeAssistantApi {
 
 export interface DevScopeApi {
     // Settings + AI
-    setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) => Promise<DevScopeResult>
-    getStartupSettings: () => Promise<DevScopeResult>
+    setStartupSettings: (settings: { openAtLogin: boolean; openAsHidden: boolean }) => Promise<DevScopeResult<{ settings: DevScopeStartupSettings }>>
+    getStartupSettings: () => Promise<DevScopeResult<{ settings: DevScopeStartupSettings }>>
     listInstalledPackageRuntimes: () => Promise<DevScopeResult<{ runtimes: DevScopeInstalledPackageRuntime[] }>>
     getAiDebugLogs: (limit?: number) => Promise<DevScopeResult>
     clearAiDebugLogs: () => Promise<DevScopeResult>

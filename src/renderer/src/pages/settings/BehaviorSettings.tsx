@@ -70,9 +70,10 @@ export default function BehaviorSettings() {
             .then((result: any) => {
                 if (!isMounted || !result?.success) return
                 updateSettings({
-                    startWithWindows: Boolean(result.openAtLogin),
-                    startMinimized: Boolean(result.openAsHidden)
+                    startWithWindows: Boolean(result.settings?.openAtLogin),
+                    startMinimized: Boolean(result.settings?.openAsHidden)
                 })
+                if (result.settings?.disabledReason) setStartupStatus(result.settings.disabledReason)
             })
             .catch(() => {})
 
@@ -113,10 +114,15 @@ export default function BehaviorSettings() {
                 openAsHidden: settings.startMinimized
             })
             if (result?.success) {
-                updateSettings({ startWithWindows: enabled })
-                setStartupStatus(enabled ? 'Startup enabled' : 'Startup disabled')
+                const actualSettings = result.settings || { openAtLogin: enabled, openAsHidden: settings.startMinimized }
+                updateSettings({
+                    startWithWindows: Boolean(actualSettings.openAtLogin),
+                    startMinimized: Boolean(actualSettings.openAsHidden)
+                })
+                setStartupStatus(actualSettings.disabledReason || (actualSettings.openAtLogin ? 'Startup enabled' : 'Startup disabled'))
             } else {
-                setStartupStatus('Failed to update')
+                updateSettings({ startWithWindows: false })
+                setStartupStatus(result?.error || 'Failed to update')
             }
         } catch {
             setStartupStatus('Failed to update')
@@ -127,10 +133,20 @@ export default function BehaviorSettings() {
     const handleMinimizedToggle = async (minimized: boolean) => {
         updateSettings({ startMinimized: minimized })
         if (settings.startWithWindows) {
-            await (window.devscope as any).setStartupSettings?.({
+            const result = await (window.devscope as any).setStartupSettings?.({
                 openAtLogin: true,
                 openAsHidden: minimized
             })
+            if (result?.success && result.settings) {
+                updateSettings({
+                    startWithWindows: Boolean(result.settings.openAtLogin),
+                    startMinimized: Boolean(result.settings.openAsHidden)
+                })
+                if (result.settings.disabledReason) setStartupStatus(result.settings.disabledReason)
+            } else if (result?.error) {
+                updateSettings({ startWithWindows: false })
+                setStartupStatus(result.error)
+            }
         }
     }
 

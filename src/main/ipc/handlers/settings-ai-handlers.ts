@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { execFile } from 'child_process'
 import log from 'electron-log'
 import { promisify } from 'util'
+import { is } from '../../utils'
 import { clearAiDebugLogs, getAiDebugLogs } from '../../ai/ai-debug-log'
 import { generateGitCommitMessageWithProvider, testGitTextProviderConnection } from '../../ai/git-text'
 import type { DevScopeInstalledPackageRuntime, DevScopePackageRuntimeId } from '../../../shared/contracts/devscope-api'
@@ -18,15 +19,51 @@ const PACKAGE_RUNTIME_DEFINITIONS: Array<{ id: DevScopePackageRuntimeId; name: s
     { id: 'bun', name: 'Bun', command: 'bun' }
 ]
 
+const DEV_STARTUP_DISABLED_REASON = 'Launch with Windows is disabled in development builds to avoid registering Electron.exe as a login item.'
+
+type StartupSettings = {
+    openAtLogin: boolean
+    openAsHidden: boolean
+    disabledReason?: string
+}
+
+function readStartupSettings(): StartupSettings {
+    const startupSettings = app.getLoginItemSettings()
+    return {
+        openAtLogin: startupSettings.openAtLogin,
+        openAsHidden: startupSettings.openAsHidden
+    }
+}
+
+function clearStartupLoginItem(): StartupSettings {
+    app.setLoginItemSettings({
+        openAtLogin: false,
+        openAsHidden: false
+    })
+
+    return {
+        openAtLogin: false,
+        openAsHidden: false
+    }
+}
+
 export async function handleSetStartupSettings(_event: Electron.IpcMainInvokeEvent, settings: { openAtLogin: boolean; openAsHidden: boolean }) {
     log.info('IPC: setStartupSettings', settings)
 
     try {
+        if (is.dev) {
+            const clearedSettings = clearStartupLoginItem()
+            if (settings.openAtLogin) {
+                return { success: false, error: DEV_STARTUP_DISABLED_REASON, settings: { ...clearedSettings, disabledReason: DEV_STARTUP_DISABLED_REASON } }
+            }
+            return { success: true, settings: { ...clearedSettings, disabledReason: DEV_STARTUP_DISABLED_REASON } }
+        }
+
         app.setLoginItemSettings({
             openAtLogin: settings.openAtLogin,
             openAsHidden: settings.openAsHidden
         })
-        return { success: true }
+        return { success: true, settings: readStartupSettings() }
     } catch (err: any) {
         log.error('Failed to set startup settings:', err)
         return { success: false, error: err.message }
@@ -37,13 +74,19 @@ export async function handleGetStartupSettings() {
     log.info('IPC: getStartupSettings')
 
     try {
-        const startupSettings = app.getLoginItemSettings()
+        if (is.dev) {
+            return {
+                success: true,
+                settings: {
+                    ...clearStartupLoginItem(),
+                    disabledReason: DEV_STARTUP_DISABLED_REASON
+                }
+            }
+        }
+
         return {
             success: true,
-            settings: {
-                openAtLogin: startupSettings.openAtLogin,
-                openAsHidden: startupSettings.openAsHidden
-            }
+            settings: readStartupSettings()
         }
     } catch (err: any) {
         log.error('Failed to get startup settings:', err)
